@@ -14,7 +14,7 @@ import {
   WORKFLOWS,
   leaseTenantNames,
   leaseUnitLabel,
-  propertyById,
+
 } from "@/lib/demo/data";
 import { euros, eurosWhole, formatDate, RENT_STATUS_META } from "@/lib/types";
 import { vacancyClock } from "@/domain/compliance/deadlines";

@@ -6,6 +6,7 @@
  */
 
 import { cents } from "@/domain/money";
+import { leaseRF } from "@/domain/banking/rf";
 import type { CapitalComponent } from "@/domain/indexation/engine";
 import type { AcquisitionFacts } from "@/domain/fiscal/amortisation";
 import type { BankTransaction, IbanBinding, OpenInvoice } from "@/domain/banking/matching";
@@ -236,6 +237,8 @@ export interface DemoLease {
   rfReference: string;
   lastAdjustmentOn: string | null;
   previousRentCents: number | null;
+  furnitureSupplementCents?: number;
+  furnitureInvoiceTotalCents?: number;
   capitalComponents: CapitalComponent[];
   vatRegime: "exempt" | "opted";
   vatOption?: { aedApprovalRef: string; decisionDate: string; effectiveFrom: string; tenantDeductionRatioPct: number };
@@ -305,6 +308,7 @@ export const LEASES: DemoLease[] = [
     rentCents: cents(1180), chargesCents: cents(150), chargesRegime: "forfait",
     depositMonths: 2, depositForm: "insurance", paymentDay: 1,
     rfReference: "", lastAdjustmentOn: null, previousRentCents: null,
+    furnitureSupplementCents: cents(140), furnitureInvoiceTotalCents: cents(11_200),
     capitalComponents: [
       { year: 2008, amount: cents(52_000), kind: "land" },
       { year: 2008, amount: cents(160_000), kind: "construction" },
@@ -347,6 +351,11 @@ export const LEASES: DemoLease[] = [
     vatRegime: "exempt",
   },
 ];
+
+// Permanent per-lease creditor references, engine-generated (ISO 11649).
+for (const l of LEASES) {
+  if (!l.rfReference) l.rfReference = leaseRF(1, l.seq);
+}
 
 export const leaseById = (id: string) => LEASES.find((l) => l.id === id)!;
 
@@ -469,8 +478,8 @@ export const IBAN_BINDINGS: IbanBinding[] = [
 export const BANK_TXS: DemoBankTx[] = [
   {
     id: "tx-01", bookedAt: "2026-08-03", amount: cents(1670),
-    counterpartyName: "JEAN MULLER", counterpartyIban: "LU120010001234567891",
-    remittanceInfo: "LOYER AOUT RF48 0001 0000 0001", endToEndId: null,
+    counterpartyName: "JEAN MULLER", counterpartyIban: "LU120001234567891",
+    remittanceInfo: `LOYER AOUT ${LEASES[0].rfReference}`, endToEndId: null,
     status: "auto", matchTier: "rf", matchExplain: "Référence RF — rapprochement déterministe. Montant = ancien loyer : INDEXATION_LAG détecté, ordre permanent non mis à jour (manque 70,00 €).",
     matchedLeaseId: "l-3b",
   },

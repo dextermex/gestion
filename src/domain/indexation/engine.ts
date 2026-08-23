@@ -17,7 +17,7 @@
 
 import { Cents, roundCents } from "@/domain/money";
 import { ISODate, fullMonthsBetween, fullYearsBetween } from "@/domain/dates";
-import { getParamValue, getParam } from "@/domain/legal/params";
+import { getParamValue } from "@/domain/legal/params";
 
 // ─── Revaluation coefficients (ingested, versioned) ─────────────────────────
 
