@@ -5,8 +5,8 @@ below is enforced in `src/app/globals.css` (tokens) and `src/components/pro/ui.t
 
 ## Design read
 
-- **Artifact**: dense B2B admin portal (SaaS) for property managers — plus a marketing-free,
-  French-only app surface.
+- **Artifact**: dense B2B admin portal (SaaS) for property managers — a marketing-free
+  app surface in FR/EN/DE/LU (see Language below).
 - **Visual language**: Morada's warm editorial identity — teal brand, terracotta accent,
   sand neutrals, ink text. Quiet-luxury real estate, not fintech-blue.
 - **Dials**: variance 3 (Morada fidelity beats novelty) · motion 4 (micro-interactions,
@@ -67,10 +67,27 @@ App shell: fixed `w-60` white sidebar (`border-sand-100`), sticky `h-14` header
 
 ## Language
 
-The Gestion app UI is **French-only** (deliberate, matching Morada gestion). Legal terms
-stay French (bail, décompte, état des lieux, mise en demeure). Tone: calm, precise,
-concrete — the em-dash clause adds the consequence ("Les impayés sont détectés et les
-rappels préparés — plus rien ne passe entre les mailles.").
+The Gestion app UI ships in **four languages — français (default), English, Deutsch,
+Lëtzebuergesch** — switched via the globe menu (cookie `morada_locale`, shared with the
+Morada ecosystem; `lu` renders as `lang="lb"`). Implementation rules:
+
+- One typed dictionary per locale in `src/lib/i18n/` — `fr.ts` is the reference and
+  `Dict = typeof fr` makes any missing key in EN/DE/LU a **compile error**.
+- Status labels come from the meta factories in `src/lib/types.ts`
+  (`rentStatusMeta(d)`…); money/dates/percentages through the locale-aware formatters
+  (`fr-LU`, `en-GB`, `de-LU`, `lb-LU` number formats; FR keeps the space before %).
+- Engine outputs render from **stable codes** (lease-issue codes, settlement line
+  statuses, amortisation reasons, deadline kinds) via `src/lib/i18n/engine.ts` — the
+  engines' English `note` strings are internals and never shown.
+- **Legal terms of art stay French in every language** (bail, décompte, état des lieux,
+  mise en demeure, garantie, CPE) — they are the words of the statutes and of daily
+  Luxembourg practice; EN/DE/LU copy carries them as proper nouns.
+- Demo data (addresses, remittance lines, stored notes) represents records of a
+  French-speaking cabinet and deliberately stays French in all languages.
+
+Tone (all four languages): calm, precise, concrete — the em-dash clause adds the
+consequence ("Les impayés sont détectés et les rappels préparés — plus rien ne passe
+entre les mailles.").
 
 ## Hard rules
 
@@ -79,3 +96,9 @@ rappels préparés — plus rien ne passe entre les mailles.").
 3. Every animation uses the house easing and has a reduced-motion escape.
 4. No emoji as icons; inline SVG at `strokeWidth 1.8`, `aria-hidden` when decorative.
 5. Wordmark lowercase: `morada gestion` — qualifier in `text-brand-500`.
+6. **No opacity-modified text tokens** (`text-ink-soft/70`, `text-red-700/80`…) — they
+   fail WCAG contrast on sand backgrounds. Use the full token; hierarchy comes from
+   size and weight, not extra transparency.
+7. Responsive grids declare their `grid-cols-1` base explicitly; stat rows step
+   `grid-cols-1 → sm:grid-cols-2/3 → lg:grid-cols-4`; wide tables live inside
+   `overflow-x-auto`.

@@ -400,7 +400,8 @@ begin
   end loop;
 end $$;
 
--- Finance family
+-- Finance family — per-command policies: SELECT needs the view permission,
+-- every mutation (incl. DELETE, which has no WITH CHECK) needs edit.
 do $$
 declare t text;
 begin
@@ -411,30 +412,75 @@ begin
     'g_charge_periods','g_charge_lines','g_syndic_decomptes'
   ] loop
     execute format(
-      'create policy %I_all on public.%I for all to authenticated
-         using (public.g_can(org_id, ''gestion.finance.view''))
+      'create policy %I_select on public.%I for select to authenticated
+         using (public.g_can(org_id, ''gestion.finance.view''))', t, t);
+    execute format(
+      'create policy %I_insert on public.%I for insert to authenticated
          with check (public.g_can(org_id, ''gestion.finance.edit''))', t, t);
+    execute format(
+      'create policy %I_update on public.%I for update to authenticated
+         using (public.g_can(org_id, ''gestion.finance.edit''))
+         with check (public.g_can(org_id, ''gestion.finance.edit''))', t, t);
+    execute format(
+      'create policy %I_delete on public.%I for delete to authenticated
+         using (public.g_can(org_id, ''gestion.finance.edit''))', t, t);
   end loop;
 end $$;
 
 -- Maintenance family
-create policy g_tickets_all on public.g_tickets for all to authenticated
-  using (public.g_can(org_id, 'gestion.maintenance.view'))
+create policy g_tickets_select on public.g_tickets for select to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.view'));
+create policy g_tickets_insert on public.g_tickets for insert to authenticated
   with check (public.g_can(org_id, 'gestion.maintenance.edit'));
-create policy g_work_orders_all on public.g_work_orders for all to authenticated
-  using (public.g_can(org_id, 'gestion.maintenance.view'))
+create policy g_tickets_update on public.g_tickets for update to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.edit'))
   with check (public.g_can(org_id, 'gestion.maintenance.edit'));
-create policy g_recharge_decisions_all on public.g_recharge_decisions for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
+create policy g_tickets_delete on public.g_tickets for delete to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.edit'));
+create policy g_work_orders_select on public.g_work_orders for select to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.view'));
+create policy g_work_orders_insert on public.g_work_orders for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.maintenance.edit'));
+create policy g_work_orders_update on public.g_work_orders for update to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.edit'))
+  with check (public.g_can(org_id, 'gestion.maintenance.edit'));
+create policy g_work_orders_delete on public.g_work_orders for delete to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.edit'));
+create policy g_recharge_decisions_select on public.g_recharge_decisions for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_recharge_decisions_insert on public.g_recharge_decisions for insert to authenticated
   with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_recharge_decisions_update on public.g_recharge_decisions for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_recharge_decisions_delete on public.g_recharge_decisions for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
 
 -- Workflows & messaging
-create policy g_workflows_all on public.g_workflows for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_workflows_select on public.g_workflows for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_workflows_insert on public.g_workflows for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_conversations_all on public.g_conversations for all to authenticated
-  using (public.g_can(org_id, 'gestion.tenants.view'))
+create policy g_workflows_update on public.g_workflows for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_workflows_delete on public.g_workflows for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_conversations_select on public.g_conversations for select to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.view'));
+create policy g_conversations_insert on public.g_conversations for insert to authenticated
   with check (public.g_can(org_id, 'gestion.tenants.edit'));
-create policy g_messages_all on public.g_messages for all to authenticated
-  using (public.g_can(org_id, 'gestion.tenants.view'))
+create policy g_conversations_update on public.g_conversations for update to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.edit'))
   with check (public.g_can(org_id, 'gestion.tenants.edit'));
+create policy g_conversations_delete on public.g_conversations for delete to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.edit'));
+create policy g_messages_select on public.g_messages for select to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.view'));
+create policy g_messages_insert on public.g_messages for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.tenants.edit'));
+create policy g_messages_update on public.g_messages for update to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.edit'))
+  with check (public.g_can(org_id, 'gestion.tenants.edit'));
+create policy g_messages_delete on public.g_messages for delete to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.edit'));

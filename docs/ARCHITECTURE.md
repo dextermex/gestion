@@ -4,7 +4,7 @@
 
 A pure, fully-tested TypeScript domain layer encodes Luxembourg letting law and fiscality
 as *data-driven engines*; a Supabase schema with row-level security persists the domain;
-a French-only Next.js admin portal in the Morada design language renders everything
+a four-language (FR/EN/DE/LU) Next.js admin portal in the Morada design language renders everything
 **through the engines** — never around them.
 
 ## Layers

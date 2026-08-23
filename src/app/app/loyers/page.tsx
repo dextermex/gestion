@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import {
   LEASES,
@@ -9,8 +10,10 @@ import {
   leaseTenantNames,
   leaseUnitLabel,
 } from "@/lib/demo/data";
-import { RENT_STATUS_META, euros, formatMonth } from "@/lib/types";
-import { assessArrears } from "@/domain/arrears/ladder";
+import { euros, formatDate, formatMonth, rentStatusMeta } from "@/lib/types";
+import { getI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n/config";
+import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
 
 const MONTHS = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
 
@@ -20,21 +23,38 @@ export default async function LoyersPage({
   searchParams: Promise<{ mois?: string }>;
 }) {
   const params = await searchParams;
+  const { locale, d } = await getI18n();
+  const rentMeta = rentStatusMeta(d);
   const month = MONTHS.includes(params.mois ?? "") ? params.mois! : "2026-08";
   const rows = RENT_PERIODS.filter((rp) => rp.period === month);
   const expected = rows.reduce((a, r) => a + r.totalCents, 0);
   const collected = rows.reduce((a, r) => a + r.allocatedCents, 0);
+  const open = expected - collected;
+
+  const stageLabel: Record<Exclude<ArrearsStage, "none">, string> = {
+    friendly: d.legal.arrears.stageFriendly,
+    formal: d.legal.arrears.stageFormal,
+    mise_en_demeure: d.legal.arrears.stageMed,
+    justice_dossier: d.legal.arrears.stageJustice,
+  };
+  const stageDescription: Record<Exclude<ArrearsStage, "none">, string> = {
+    friendly: d.legal.arrears.friendly,
+    formal: d.legal.arrears.formal,
+    mise_en_demeure: d.legal.arrears.mise_en_demeure,
+    justice_dossier: d.legal.arrears.justice_dossier,
+  };
 
   // Arrears ladder — the engine drives every relance, aligned with law.
   const arrearsCases = RENT_PERIODS.filter(
     (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= "2026-08",
   ).map((rp) => {
-    const executedByPeriod: Record<string, Partial<Record<"friendly" | "formal" | "mise_en_demeure" | "justice_dossier", string>>> = {
+    const executedByPeriod: Record<string, Partial<Record<Exclude<ArrearsStage, "none">, string>>> = {
       "rp-l-2a-2026-07": { friendly: "2026-07-07", formal: "2026-07-14" },
       "rp-l-2a-2026-08": {},
       "rp-l-3b-2026-08": {},
       "rp-l-1a-2026-08": {},
     };
+    const arDate = rp.id === "rp-l-2a-2026-07" ? "2026-08-12" : null;
     const assessment = assessArrears(
       {
         invoiceId: rp.id,
@@ -42,19 +62,24 @@ export default async function LoyersPage({
         openAmount: rp.totalCents - rp.allocatedCents,
         paymentPlanActive: false,
         executed: executedByPeriod[rp.id] ?? {},
-        miseEnDemeureArDate: rp.id === "rp-l-2a-2026-07" ? "2026-08-12" : null,
+        miseEnDemeureArDate: arDate,
       },
       TODAY,
     );
-    return { rp, assessment };
+    // Localized notes, derived from the structured assessment — never from
+    // the engine's English internals.
+    const notes: string[] = [];
+    if (assessment.paused) notes.push(d.legal.arrears.notePaused);
+    if (assessment.nextStep?.stage === "mise_en_demeure") notes.push(d.legal.arrears.noteMedManual);
+    if (assessment.nextStep === null && !assessment.paused && assessment.daysOverdue >= 45 && !arDate) {
+      notes.push(d.legal.arrears.noteNeedAr);
+    }
+    return { rp, assessment, notes };
   });
 
   return (
     <div>
-      <PageHeader
-        title="Loyers"
-        subtitle="Le rent roll du mois — chaque échéance, son statut et son solde. Le statut est toujours dérivé du registre d'allocations, jamais saisi à la main."
-      />
+      <PageHeader title={d.loyers.title} subtitle={d.loyers.subtitle} />
 
       <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">
         {MONTHS.map((m) => (
@@ -63,30 +88,44 @@ export default async function LoyersPage({
             href={`/app/loyers?mois=${m}`}
             aria-current={m === month ? "page" : undefined}
             className={
-              "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition " +
+              "flex shrink-0 items-center rounded-full px-3.5 py-1.5 text-sm font-medium transition max-sm:min-h-11 " +
               (m === month
-                ? "bg-brand-700 text-white"
+                ? "bg-brand-600 text-white"
                 : "bg-white text-ink-soft border border-sand-200 hover:border-brand-200 hover:text-brand-700")
             }
           >
-            {formatMonth(m)}
+            {formatMonth(m, locale)}
           </Link>
         ))}
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">Attendu</p>
-          <p className="mt-1 font-display text-2xl font-bold tabular-nums text-ink">{euros(expected)}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.loyers.expected}</p>
+          <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">
+            {euros(expected, locale)}
+          </p>
         </Card>
         <Card className="p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">Encaissé</p>
-          <p className="mt-1 font-display text-2xl font-bold tabular-nums text-emerald-700">{euros(collected)}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.loyers.collected}</p>
+          <p
+            className={
+              "mt-1 font-display text-2xl font-bold tracking-tight tabular-nums " +
+              (collected >= expected ? "text-emerald-700" : "text-ink")
+            }
+          >
+            {euros(collected, locale)}
+          </p>
         </Card>
         <Card className="p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">Solde ouvert</p>
-          <p className={"mt-1 font-display text-2xl font-bold tabular-nums " + (expected - collected > 0 ? "text-red-600" : "text-ink")}>
-            {euros(expected - collected)}
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.loyers.openBalance}</p>
+          <p
+            className={
+              "mt-1 font-display text-2xl font-bold tracking-tight tabular-nums " +
+              (open > 0 ? "text-red-700" : "text-ink")
+            }
+          >
+            {euros(open, locale)}
           </p>
         </Card>
       </div>
@@ -95,19 +134,19 @@ export default async function LoyersPage({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft/70">
-                <th className="px-4 py-2.5 font-semibold">Logement · Locataire</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Attendu</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Encaissé</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Solde</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Échéance</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Statut</th>
+              <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
+                <th className="px-4 py-2.5 font-semibold">{d.loyers.colUnit}</th>
+                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colExpected}</th>
+                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colCollected}</th>
+                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colBalance}</th>
+                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colDue}</th>
+                <th className="px-4 py-2.5 text-right font-semibold">{d.loyers.colStatus}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((rp) => {
                 const l = leaseById(rp.leaseId);
-                const open = rp.totalCents - rp.allocatedCents;
+                const rowOpen = rp.totalCents - rp.allocatedCents;
                 return (
                   <tr key={rp.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50">
                     <td className="px-4 py-3">
@@ -116,14 +155,19 @@ export default async function LoyersPage({
                       </Link>
                       <p className="text-xs text-ink-soft">{leaseTenantNames(l).join(", ")}</p>
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.totalCents)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.allocatedCents)}</td>
-                    <td className={"px-3 py-3 text-right tabular-nums " + (open > 0 ? "font-semibold text-red-600" : "text-ink-soft")}>
-                      {euros(open)}
+                    <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.totalCents, locale)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.allocatedCents, locale)}</td>
+                    <td
+                      className={
+                        "px-3 py-3 text-right tabular-nums " +
+                        (rowOpen > 0 ? "font-semibold text-red-700" : "text-ink-soft")
+                      }
+                    >
+                      {euros(rowOpen, locale)}
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{rp.dueDate.slice(8)}/{rp.dueDate.slice(5, 7)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{formatDate(rp.dueDate, locale)}</td>
                     <td className="px-4 py-3 text-right">
-                      <MetaBadge meta={RENT_STATUS_META[rp.status]} />
+                      <MetaBadge meta={rentMeta[rp.status]} />
                     </td>
                   </tr>
                 );
@@ -133,59 +177,64 @@ export default async function LoyersPage({
         </div>
       </Card>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <Panel title="Échelle de relance (impayés)">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title={d.loyers.arrearsTitle}>
           <ul className="space-y-4">
-            {arrearsCases.map(({ rp, assessment }) => {
+            {arrearsCases.map(({ rp, assessment, notes }) => {
               const l = leaseById(rp.leaseId);
               return (
                 <li key={rp.id} className="rounded-xl border border-sand-200 p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">
-                        {leaseUnitLabel(l)} — {formatMonth(rp.period)}
+                        {leaseUnitLabel(l)} — {formatMonth(rp.period, locale)}
                       </p>
                       <p className="text-xs text-ink-soft">
-                        {euros(rp.totalCents - rp.allocatedCents)} ouverts · {assessment.daysOverdue} j de retard
+                        {fmt(d.legal.arrears.openAmount, { amount: euros(rp.totalCents - rp.allocatedCents, locale) })}{" "}
+                        · {fmt(d.legal.arrears.daysLate, { n: assessment.daysOverdue })}
                       </p>
                     </div>
                     {assessment.currentStage !== "none" && (
-                      <Badge className="bg-orange-100 text-orange-800">
-                        {assessment.currentStage === "mise_en_demeure" ? "Mise en demeure" : assessment.currentStage === "formal" ? "Relance formelle" : assessment.currentStage === "friendly" ? "Relance amiable" : "Dossier justice"}
-                      </Badge>
+                      <Badge className="bg-orange-100 text-orange-800">{stageLabel[assessment.currentStage]}</Badge>
                     )}
                   </div>
                   {assessment.nextStep && (
-                    <div className="mt-2.5 flex items-center justify-between gap-3 rounded-lg bg-sand-50 px-3 py-2">
+                    <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-sand-50 px-3 py-2">
                       <p className="text-xs text-ink-soft">
-                        <span className="font-semibold text-ink">Prochaine étape :</span> {assessment.nextStep.description}
+                        <span className="font-semibold text-ink">{d.legal.arrears.nextStep}</span>{" "}
+                        {stageDescription[assessment.nextStep.stage]}
+                        {assessment.nextStep.dueFrom > TODAY &&
+                          " " + fmt(d.legal.arrears.fromDate, { date: formatDate(assessment.nextStep.dueFrom, locale) })}
                       </p>
                       {assessment.nextStep.requiresRegisteredLetter && (
-                        <Badge className="bg-accent-50 text-accent-700">LRAR</Badge>
+                        <Badge className="bg-accent-50 text-accent-700">{d.loyers.arrearsLrar}</Badge>
                       )}
                     </div>
                   )}
-                  {assessment.notes.map((n) => (
-                    <p key={n} className="mt-1.5 text-[11px] text-ink-soft/80">{n}</p>
+                  {notes.map((n) => (
+                    <p key={n} className="mt-1.5 text-[11px] text-ink-soft">
+                      {n}
+                    </p>
                   ))}
+                  {assessment.nextStep?.stage === "mise_en_demeure" && (
+                    <div className="mt-2.5">
+                      <DemoAction label={d.loyers.arrearsConfirmMed} doneMessage={d.loyers.arrearsConfirmed} />
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
-          <LegalNote>
-            J+3 amiable → J+10 formelle → J+24 mise en demeure (LRAR, confirmée par le gestionnaire —
-            l&apos;effet légal court de la date de l&apos;AR) → J+45 export du dossier justice de paix. Un plan
-            de paiement suspend l&apos;échelle. Aucune coupure de service n&apos;existe dans le produit — c&apos;est illégal.
-          </LegalNote>
+          <LegalNote>{d.loyers.arrearsLegal}</LegalNote>
         </Panel>
 
-        <Panel title="Références & avis d'échéance">
+        <Panel title={d.loyers.refsTitle}>
           <ul className="divide-y divide-sand-100 text-sm">
             {LEASES.filter((l) => l.status === "active" || l.status === "notice").map((l) => (
               <li key={l.id} className="flex items-center gap-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-ink">{leaseUnitLabel(l)}</p>
-                  <p className="text-xs text-ink-soft">Avis mensuel avec QR EPC — IBAN, nom VoP, montant et référence pré-remplis</p>
+                  <p className="text-xs text-ink-soft">{d.loyers.refsSub}</p>
                 </div>
                 <code className="rounded-md bg-sand-50 px-2 py-1 text-[11px] font-semibold tabular-nums text-brand-800">
                   {l.rfReference}
@@ -193,11 +242,7 @@ export default async function LoyersPage({
               </li>
             ))}
           </ul>
-          <LegalNote>
-            Référence créancier RF permanente par bail (ISO 11649). Les apps bancaires
-            luxembourgeoises n&apos;ont pas de champ structuré : le moteur retrouve la référence dans le
-            libellé libre, somme de contrôle vérifiée.
-          </LegalNote>
+          <LegalNote>{d.loyers.refsLegal}</LegalNote>
         </Panel>
       </div>
     </div>

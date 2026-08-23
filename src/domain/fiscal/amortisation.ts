@@ -24,7 +24,7 @@
 
 import { Cents, pct, roundCents } from "@/domain/money";
 import { ISODate } from "@/domain/dates";
-import { getParamValue } from "@/domain/legal/params";
+import { LegalParamError, getParamValue } from "@/domain/legal/params";
 
 export type AmortRegime =
   | "normal_2"
@@ -86,12 +86,22 @@ export function computeDepreciationBase(facts: AcquisitionFacts, onDate: ISODate
   return { base: Math.max(0, base), landShare, landRule, energyBase };
 }
 
+export type RegimeReason =
+  | "normal"
+  | "accelerated"
+  | "slots_exhausted"
+  | "grandfathered"
+  | "vefa2024";
+
 export interface RegimeResolution {
   regime: AmortRegime;
   ratePct: number;
   /** Whether this regime consumes a slot under the max-2-buildings rule. */
   consumesAcceleratedSlot: boolean;
   cappedBase: Cents;
+  /** Stable code — the UI translates from this, never from `note`. */
+  reason: RegimeReason;
+  /** English internal note for logs/audit; not user-facing. */
   note: string;
 }
 
@@ -121,22 +131,33 @@ export function resolveRegime(
         ratePct: getParamValue("amort.rate_vefa2024_pct", jan1),
         consumesAcceleratedSlot: false,
         cappedBase: Math.min(base.base, capEuros * 100),
+        reason: "vefa2024",
         note: `2024 housing package — 6%/6 yrs, base capped €${capEuros.toLocaleString("en")}/yr. Closed cohort (deeds to 30.06.2025); keeps computing at 6% through ${deedYear + duration - 1}.`,
       };
     }
   }
 
   // Grandfathered 6%: acquired before 1.1.2021, completion < 6 years ago.
+  // Rates/window/expiry come from the registry: the param's effective range
+  // (open until 2027-01-01) IS the transitional cutoff — a legislative
+  // extension is a data change, never a release.
   if (facts.acquiredOn < "2021-01-01") {
-    const windowYears = 6;
-    if (yearsSinceCompletion < windowYears && taxYear <= 2026) {
-      return {
-        regime: "grandfathered_6",
-        ratePct: 6,
-        consumesAcceleratedSlot: false,
-        cappedBase: base.base,
-        note: "Transitional pre-2021 regime — exhausted after tax year 2026.",
-      };
+    try {
+      const gRate = getParamValue("amort.rate_grandfathered_pct", jan1);
+      const gWindow = getParamValue("amort.grandfathered_window_years", jan1);
+      if (yearsSinceCompletion < gWindow) {
+        return {
+          regime: "grandfathered_6",
+          ratePct: gRate,
+          consumesAcceleratedSlot: false,
+          cappedBase: base.base,
+          reason: "grandfathered",
+          note: "Transitional pre-2021 regime — exhausted after tax year 2026.",
+        };
+      }
+    } catch (e) {
+      if (!(e instanceof LegalParamError)) throw e;
+      // Param no longer in force for this tax year → regime expired.
     }
   }
 
@@ -151,6 +172,7 @@ export function resolveRegime(
           ratePct: getParamValue("amort.rate_accelerated_pct", jan1),
           consumesAcceleratedSlot: true,
           cappedBase: base.base,
+          reason: "accelerated",
           note: `Accelerated 4% (slot ${acceleratedSlotsUsed + 1}/${maxBuildings} for this taxpayer).`,
         };
       }
@@ -159,6 +181,7 @@ export function resolveRegime(
         ratePct: getParamValue("amort.rate_normal_pct", jan1),
         consumesAcceleratedSlot: false,
         cappedBase: base.base,
+        reason: "slots_exhausted",
         note: `Eligible for 4% but the taxpayer's ${maxBuildings}-building limit is exhausted — falls back to 2%.`,
       };
     }
@@ -169,15 +192,20 @@ export function resolveRegime(
     ratePct: getParamValue("amort.rate_normal_pct", jan1),
     consumesAcceleratedSlot: false,
     cappedBase: base.base,
+    reason: "normal",
     note: "Normal 2% — building completed ≥ 5 years ago.",
   };
 }
+
+export type EnergyReason = "ok" | "no_klimabonus" | "window_closed" | "none";
 
 export interface EnergyAmortisation {
   applicable: boolean;
   ratePct: number;
   amount: Cents;
   yearsRemaining: number;
+  /** Stable code — the UI translates from this, never from `note`. */
+  reason: EnergyReason;
   note: string;
 }
 
@@ -197,6 +225,7 @@ export function computeEnergyAmortisation(
       ratePct: 0,
       amount: 0,
       yearsRemaining: 0,
+      reason: facts.energyWorksCost > 0 && facts.klimabonusReceived <= 0 ? "no_klimabonus" : "none",
       note: facts.energyWorksCost > 0 && facts.klimabonusReceived <= 0
         ? "Energy works present but no Klimabonus aid recorded — special rate requires the subsidy."
         : "No qualifying energy renovation.",
@@ -212,6 +241,7 @@ export function computeEnergyAmortisation(
       ratePct: getParamValue("amort.rate_normal_pct", jan1),
       amount: pct(base.energyBase, getParamValue("amort.rate_normal_pct", jan1)),
       yearsRemaining: 0,
+      reason: "window_closed",
       note: "9-year energy window closed — works base reverts to 2%.",
     };
   }
@@ -221,6 +251,7 @@ export function computeEnergyAmortisation(
     ratePct: rate,
     amount: pct(base.energyBase, rate),
     yearsRemaining: windowYears - yearsSince,
+    reason: "ok",
     note: `Energy renovation at ${rate}% (Klimabonus deducted from base); ${windowYears - yearsSince} year(s) left in the window.`,
   };
 }

@@ -236,11 +236,17 @@ export type TerminationGround =
   | "landlord_sale"; // never valid — blocked in product
 
 /**
- * Art. 12(3) verbatim text — a besoin-personnel notice must reproduce it on
- * pain of nullity. Stored as data (a legislative rewording is a data change),
- * rendered as a locked template partial no manager can edit.
+ * Art. 12(3) — a besoin-personnel notice must reproduce the STATUTORY TEXT
+ * verbatim on pain of nullity.
+ *
+ * ⚠ UNCERTAIN / PLACEHOLDER. The string below DESCRIBES the obligation; it is
+ * NOT the article text. Before any notice-generation flow renders a letter,
+ * the real art. 12(3) wording must be sourced from Legilux and stored as a
+ * `legal_params` text row (versioned, status "verified"), and this constant
+ * retired. The engine only uses the boolean gate (`art12VerbatimIncluded`);
+ * nothing renders this placeholder into a legal document.
  */
-export const ART_12_3_VERBATIM =
+export const ART_12_3_VERBATIM_PLACEHOLDER =
   "Le congé pour besoin personnel doit, sous peine de nullité, indiquer le motif " +
   "invoqué et reproduire le texte de l'article 12 (3) de la loi modifiée du 21 " +
   "septembre 2006 sur le bail à usage d'habitation. Le locataire peut contester " +

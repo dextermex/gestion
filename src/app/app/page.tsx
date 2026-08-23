@@ -6,6 +6,7 @@ import {
   BANK_TXS,
   DEPOSITS,
   EDLS,
+  ENDED_LEASES,
   LEASES,
   RENT_PERIODS,
   TICKETS,
@@ -14,14 +15,18 @@ import {
   WORKFLOWS,
   leaseTenantNames,
   leaseUnitLabel,
-
 } from "@/lib/demo/data";
-import { euros, eurosWhole, formatDate, RENT_STATUS_META } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatPct, rentStatusMeta, workflowStateLabel } from "@/lib/types";
+import { getI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n/config";
+import { settlementNotes } from "@/lib/i18n/engine";
 import { vacancyClock } from "@/domain/compliance/deadlines";
 import { computeSettlement } from "@/domain/deposits/settlement";
-import { ENDED_LEASES } from "@/lib/demo/data";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const { locale, d } = await getI18n();
+  const rentMeta = rentStatusMeta(d);
+
   // ── KPIs computed from the ledger, never hand-written ──
   const august = RENT_PERIODS.filter((rp) => rp.period === "2026-08");
   const expected = august.reduce((a, rp) => a + rp.totalCents, 0);
@@ -43,102 +48,115 @@ export default function DashboardPage() {
   const gareUnit = UNITS.find((u) => u.id === "u-gare")!;
   const gareVacancy = vacancyClock("Studio 4A", gareUnit.vacantSince!, TODAY);
 
-  const settlementDeposit = DEPOSITS.find((d) => d.id === "dep-gare")!;
-  const settlement = computeSettlement({
+  const settlementDeposit = DEPOSITS.find((x) => x.id === "dep-gare")!;
+  const settlementInput = {
     depositAmount: settlementDeposit.amountCents,
     depositForm: settlementDeposit.form,
     monthlyRent: ENDED_LEASES[0].rentCents,
     keyHandoverDate: settlementDeposit.keyHandoverOn!,
     decompteIssuedAt: settlementDeposit.decompteIssuedOn ?? null,
     entryEdlExists: settlementDeposit.entryEdlExists,
-    deductions: settlementDeposit.deductions.map((d) => ({
-      id: d.id,
-      kind: d.kind,
-      label: d.label,
-      amount: d.amountCents,
-      justificationDocRef: d.justificationDocRef,
-      justifiedAt: d.justifiedAt,
+    deductions: settlementDeposit.deductions.map((x) => ({
+      id: x.id,
+      kind: x.kind,
+      label: x.label,
+      amount: x.amountCents,
+      justificationDocRef: x.justificationDocRef,
+      justifiedAt: x.justifiedAt,
     })),
     miseEnDemeureArDate: settlementDeposit.miseEnDemeureArOn ?? null,
     releasedFirstTranche: settlementDeposit.releasedFirstTrancheCents,
     releasedBalance: settlementDeposit.releasedBalanceCents,
     asOf: TODAY,
-  });
+  };
+  const settlement = computeSettlement(settlementInput);
+  const settlementWarn = settlementNotes(d, locale, settlementInput, settlement);
 
   const consentAccount = BANK_ACCOUNTS.find((b) => b.consentExpiresAt);
 
   const todo: Array<{ href: string; title: string; sub: string; badge: { label: string; color: string } }> = [
     {
       href: "/app/banque",
-      title: `${reviewQueue.length} paiements à vérifier dans la file de rapprochement`,
-      sub: "Dont un tiers payeur (aide au logement CNAP) — lier l'IBAN automatise les mois suivants.",
-      badge: { label: "Banque", color: "bg-amber-100 text-amber-800" },
+      title: fmt(d.dash.todoReview, { n: reviewQueue.length }),
+      sub: d.dash.todoReviewSub,
+      badge: { label: d.dash.badgeBank, color: "bg-amber-100 text-amber-800" },
     },
     {
       href: "/app/indexation",
-      title: "Ordre permanent non mis à jour — Apt 3B (écart 70,00 €/mois)",
-      sub: "Paiement d'août reçu à l'ancien loyer. Courrier pré-rempli prêt à envoyer.",
-      badge: { label: "Indexation", color: "bg-sky-100 text-sky-800" },
+      title: d.dash.todoLag,
+      sub: d.dash.todoLagSub,
+      badge: { label: d.dash.badgeIndexation, color: "bg-sky-100 text-sky-800" },
     },
     {
       href: "/app/loyers",
-      title: "Apt 2A — juillet impayé : mise en demeure à confirmer (J+24)",
-      sub: "Lettre recommandée avec AR — confirmation gestionnaire requise, jamais d'envoi automatique.",
-      badge: { label: "Impayés", color: "bg-red-100 text-red-700" },
+      title: d.dash.todoMed,
+      sub: d.dash.todoMedSub,
+      badge: { label: d.dash.badgeArrears, color: "bg-red-100 text-red-700" },
     },
     {
       href: "/app/garanties",
-      title: "Restitution Studio 4A — 1 déduction sans justificatif",
-      sub: settlement.warnings[0] ?? "Justificatif à joindre avant l'expiration du délai d'un mois.",
-      badge: { label: "Garantie", color: "bg-orange-100 text-orange-800" },
+      title: d.dash.todoDeposit,
+      sub: settlementWarn[0] ?? "",
+      badge: { label: d.dash.badgeDeposit, color: "bg-orange-100 text-orange-800" },
     },
     {
       href: "/app/banque",
-      title: `Consentement bancaire BGL expire le ${formatDate(consentAccount?.consentExpiresAt ?? null)}`,
-      sub: "Échelle de relance T-14/7/2/0 — renouveler pour éviter la coupure du flux.",
-      badge: { label: "Connexion", color: "bg-sand-100 text-ink-soft" },
+      title: fmt(d.dash.todoConsent, { date: formatDate(consentAccount?.consentExpiresAt ?? null, locale) }),
+      sub: d.dash.todoConsentSub,
+      badge: { label: d.dash.badgeConnection, color: "bg-sand-100 text-ink-soft" },
     },
     {
       href: "/app/conformite",
-      title: "AG Résidence Beaulieu du 20 oct. — convocations à envoyer avant le 5 oct.",
-      sub: "Délai légal : 15 jours avant l'assemblée (RGD 13.6.1975, art. 3).",
-      badge: { label: "Syndic", color: "bg-violet-100 text-violet-800" },
+      title: d.dash.todoAg,
+      sub: d.dash.todoAgSub,
+      badge: { label: d.dash.badgeSyndic, color: "bg-violet-100 text-violet-800" },
     },
   ];
 
   const endingLeases = LEASES.filter((l) => l.status === "notice");
 
+  // Newest first — the feed reads top-down like an inbox.
   const activity = [
-    { kind: "payment", label: "Loyer Kirchberg encaissé — 9 009,00 € (TVA 17 % incluse)", sub: "Rapprochement automatique · IBAN lié", at: "5 août" },
-    { kind: "letter", label: "Mise en demeure Apt 2A — AR reçu", sub: "Le délai légal court depuis la date de l'AR", at: "12 août" },
-    { kind: "ticket", label: "INT-2026-0141 chaudière — créneau accepté par Krier & Fils", sub: "Vendredi 8 h–10 h", at: "21 août" },
-    { kind: "document", label: "Attestation de logement générée (Apt 2A)", sub: "Libre-service locataire · QR de vérification", at: "20 août" },
-    { kind: "lease", label: "Préavis reçu — Apt 1A (Claire Dubois)", sub: "Fin licite calculée : 14 nov. 2026 (date AR + 3 mois)", at: "14 août" },
-  ];
+    { kind: "ticket", label: d.dash.activityTicket, sub: d.dash.activityTicketSub, atIso: "2026-08-21" },
+    { kind: "document", label: d.dash.activityAttestation, sub: d.dash.activityAttestationSub, atIso: "2026-08-20" },
+    { kind: "lease", label: d.dash.activityNotice, sub: d.dash.activityNoticeSub, atIso: "2026-08-14" },
+    { kind: "letter", label: d.dash.activityMed, sub: d.dash.activityMedSub, atIso: "2026-08-12" },
+    { kind: "payment", label: d.dash.activityKirchberg, sub: d.dash.activityKirchbergSub, atIso: "2026-08-05" },
+  ].map((e) => ({ ...e, at: formatDate(e.atIso, locale) }));
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold text-ink">Bonjour Alex</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Voici l&apos;état de Cabinet Reuter aujourd&apos;hui — samedi 23 août 2026.
-        </p>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{d.dash.greeting}</h1>
+        <p className="mt-1 text-sm text-ink-soft">{d.dash.subtitle}</p>
       </div>
 
-      <div className="stagger-rise grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="stagger-rise grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
-          label="Encaissé — août"
-          value={eurosWhole(collected)}
-          sub={`sur ${eurosWhole(expected)} attendus`}
+          label={d.dash.kpiCollected}
+          value={eurosWhole(collected, locale)}
+          sub={fmt(d.dash.kpiCollectedSub, { expected: eurosWhole(expected, locale) })}
           tone={collected >= expected ? "good" : "default"}
         />
-        <Kpi label="Taux d'occupation" value={`${occupancyPct} %`} sub={`${lettable.filter((u) => occupied.has(u.id)).length} lots sur ${lettable.length}`} />
-        <Kpi label="Solde en retard" value={euros(lateAmount)} sub="2 baux concernés" tone={lateAmount > 0 ? "bad" : "good"} />
-        <Kpi label="Interventions ouvertes" value={String(openTickets.length)} sub="dont 1 urgente" />
+        <Kpi
+          label={d.dash.kpiOccupancy}
+          value={formatPct(occupancyPct, locale)}
+          sub={fmt(d.dash.kpiOccupancySub, {
+            occupied: lettable.filter((u) => occupied.has(u.id)).length,
+            total: lettable.length,
+          })}
+        />
+        <Kpi
+          label={d.dash.kpiLate}
+          value={eurosWhole(lateAmount, locale)}
+          sub={d.dash.kpiLateSub}
+          tone={lateAmount > 0 ? "bad" : "good"}
+        />
+        <Kpi label={d.dash.kpiTickets} value={String(openTickets.length)} sub={d.dash.kpiTicketsSub} />
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        <Panel title="À faire aujourd'hui" className="lg:col-span-2">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <Panel title={d.dash.todoTitle} className="lg:col-span-2">
           <ul className="divide-y divide-sand-100">
             {todo.map((t) => (
               <li key={t.title}>
@@ -149,14 +167,21 @@ export default function DashboardPage() {
         </Panel>
 
         <div className="flex flex-col gap-5">
-          <Panel title="Activité récente">
+          <Panel title={d.dash.activityTitle}>
             <Timeline entries={activity} />
           </Panel>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        <Panel title="Loyers du mois" action={<Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline">Tout voir</Link>}>
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <Panel
+          title={d.dash.rentMonthTitle}
+          action={
+            <Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline">
+              {d.common.seeAll}
+            </Link>
+          }
+        >
           <ul className="divide-y divide-sand-100">
             {august.slice(0, 5).map((rp) => {
               const l = LEASES.find((x) => x.id === rp.leaseId)!;
@@ -166,17 +191,17 @@ export default function DashboardPage() {
                     <p className="truncate text-sm font-semibold text-ink">{leaseUnitLabel(l)}</p>
                     <p className="truncate text-xs text-ink-soft">{leaseTenantNames(l).join(", ")}</p>
                   </div>
-                  <p className="tabular-nums text-sm text-ink">{euros(rp.totalCents)}</p>
-                  <MetaBadge meta={RENT_STATUS_META[rp.status]} />
+                  <p className="tabular-nums text-sm text-ink">{euros(rp.totalCents, locale)}</p>
+                  <MetaBadge meta={rentMeta[rp.status]} />
                 </li>
               );
             })}
           </ul>
         </Panel>
 
-        <Panel title="Fins de bail & sorties">
+        <Panel title={d.dash.endingTitle}>
           {endingLeases.length === 0 ? (
-            <p className="text-sm text-ink-soft">Aucun préavis en cours.</p>
+            <p className="text-sm text-ink-soft">{d.dash.endingNone}</p>
           ) : (
             <ul className="divide-y divide-sand-100">
               {endingLeases.map((l) => (
@@ -184,77 +209,86 @@ export default function DashboardPage() {
                   <LinkRow
                     href={`/app/baux/${l.id}`}
                     title={leaseUnitLabel(l)}
-                    sub={`Préavis ${l.noticeInfo?.direction === "tenant" ? "locataire" : "bailleur"} — fin licite le ${formatDate(l.noticeInfo?.earliestEnd ?? null)}`}
-                    right={<Badge className="bg-orange-100 text-orange-800">Préavis</Badge>}
+                    sub={fmt(d.dash.endingNotice, {
+                      who: l.noticeInfo?.direction === "tenant" ? d.dash.endingTenant : d.dash.endingLandlord,
+                      date: formatDate(l.noticeInfo?.earliestEnd ?? null, locale),
+                    })}
+                    right={<Badge className="bg-orange-100 text-orange-800">{d.status.lease.notice}</Badge>}
                   />
                 </li>
               ))}
               <li>
                 <LinkRow
                   href="/app/garanties"
-                  title="Studio 4A — restitution de garantie en cours"
-                  sub={`50 % versés · solde ${euros(settlement.balanceAmount)} après décompte`}
-                  right={<Badge className="bg-amber-100 text-amber-800">En cours</Badge>}
+                  title={d.dash.endingDepositRow}
+                  sub={fmt(d.dash.endingDepositSub, { amount: euros(settlement.balanceAmount, locale) })}
+                  right={<Badge className="bg-amber-100 text-amber-800">{d.dash.inProgress}</Badge>}
                 />
               </li>
             </ul>
           )}
         </Panel>
 
-        <Panel title="Vigilance Luxembourg">
+        <Panel title={d.dash.vigilanceTitle}>
           <ul className="space-y-3 text-sm">
             <li className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-ink">Vacance Studio 4A — {gareVacancy.monthsVacant} mois</p>
-                <p className="text-xs text-ink-soft">
-                  Seuil INOL (6 mois) franchi — le dossier de défense (annonces, travaux, offres) se
-                  constitue automatiquement. Réforme non votée [incertain].
+                <p className="font-semibold text-ink">
+                  {fmt(d.dash.vigilanceVacancy, { months: gareVacancy.monthsVacant })}
                 </p>
+                <p className="text-xs text-ink-soft">{d.dash.vigilanceVacancySub}</p>
               </div>
               <Badge className="bg-red-100 text-red-700">INOL</Badge>
             </li>
             <li className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-ink">CPE Résidence Beaulieu</p>
-                <p className="text-xs text-ink-soft">Expire le 1 mars 2027 — classe obligatoire dans toute annonce.</p>
+                <p className="font-semibold text-ink">{d.dash.vigilanceCpe}</p>
+                <p className="text-xs text-ink-soft">{d.dash.vigilanceCpeSub}</p>
               </div>
               <Badge className="bg-amber-100 text-amber-800">CPE</Badge>
             </li>
             <li className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-ink">Assurance RC pro du cabinet</p>
-                <p className="text-xs text-ink-soft">Échéance 30 nov. 2026 — obligatoire pour l&apos;autorisation d&apos;établissement.</p>
+                <p className="font-semibold text-ink">{d.dash.vigilanceRc}</p>
+                <p className="text-xs text-ink-soft">{d.dash.vigilanceRcSub}</p>
               </div>
-              <Badge className="bg-amber-100 text-amber-800">RC pro</Badge>
+              <Badge className="bg-amber-100 text-amber-800">RC</Badge>
             </li>
             <li className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-ink">Détecteurs de fumée — Studio 4A</p>
-                <p className="text-xs text-ink-soft">Pose à confirmer avant relocation (obligatoire depuis le 1.1.2023).</p>
+                <p className="font-semibold text-ink">{d.dash.vigilanceSmoke}</p>
+                <p className="text-xs text-ink-soft">{d.dash.vigilanceSmokeSub}</p>
               </div>
-              <Badge className="bg-red-100 text-red-700">À poser</Badge>
+              <Badge className="bg-red-100 text-red-700">{d.dash.vigilanceSmokeBadge}</Badge>
             </li>
           </ul>
           <Link href="/app/conformite" className="mt-4 block text-sm font-semibold text-brand-700 hover:underline">
-            Ouvrir le calendrier de conformité →
+            {d.dash.openCompliance}
           </Link>
         </Panel>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <Panel title="Workflows en cours" action={<Link href="/app/workflows" className="text-sm font-semibold text-brand-700 hover:underline">Tout voir</Link>}>
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel
+          title={d.dash.workflowsTitle}
+          action={
+            <Link href="/app/workflows" className="text-sm font-semibold text-brand-700 hover:underline">
+              {d.common.seeAll}
+            </Link>
+          }
+        >
           <ul className="divide-y divide-sand-100">
             {WORKFLOWS.slice(0, 4).map((w) => (
               <li key={w.id}>
                 <LinkRow
                   href="/app/workflows"
                   title={w.label}
-                  sub={w.blockedReason ?? `Étape : ${w.currentState}`}
+                  sub={w.blockedReason ?? fmt(d.dash.workflowsStep, { state: workflowStateLabel(d, w.currentState) })}
                   right={
                     w.blockedReason ? (
-                      <Badge className="bg-amber-100 text-amber-800">Bloqué</Badge>
+                      <Badge className="bg-amber-100 text-amber-800">{d.status.blocked}</Badge>
                     ) : (
-                      <Badge className="bg-sky-100 text-sky-800">{w.currentState}</Badge>
+                      <Badge className="bg-sky-100 text-sky-800">{workflowStateLabel(d, w.currentState)}</Badge>
                     )
                   }
                 />
@@ -263,24 +297,21 @@ export default function DashboardPage() {
           </ul>
         </Panel>
 
-        <Panel title="États des lieux à venir">
+        <Panel title={d.dash.edlTitle}>
           <ul className="divide-y divide-sand-100">
             {EDLS.filter((e) => e.status === "draft").map((e) => (
               <li key={e.id}>
                 <LinkRow
                   href="/app/workflows"
-                  title={`EDL ${e.kind === "entry" ? "d'entrée" : e.kind === "exit" ? "de sortie" : "intermédiaire"} — ${e.unitLabel}`}
-                  sub={`Prévu le ${formatDate(e.scheduledAt)} · remise des clés bloquée tant que l'EDL contradictoire n'est pas signé`}
-                  right={<Badge className="bg-sand-100 text-ink-soft">Planifié</Badge>}
+                  title={`${e.kind === "entry" ? d.dash.edlEntry : e.kind === "exit" ? d.dash.edlExit : d.dash.edlIntermediate} — ${e.unitLabel}`}
+                  sub={fmt(d.dash.edlScheduled, { date: formatDate(e.scheduledAt, locale) })}
+                  right={<Badge className="bg-sand-100 text-ink-soft">{d.status.planned}</Badge>}
                 />
               </li>
             ))}
           </ul>
           <Card className="mt-3 border-dashed bg-sand-50/50 p-3">
-            <p className="text-xs leading-relaxed text-ink-soft">
-              Sans EDL d&apos;entrée, la garantie ne peut couvrir aucun dégât — le parcours de remise des
-              clés est verrouillé en conséquence (impossible par construction).
-            </p>
+            <p className="text-xs leading-relaxed text-ink-soft">{d.dash.edlFooter}</p>
           </Card>
         </Panel>
       </div>

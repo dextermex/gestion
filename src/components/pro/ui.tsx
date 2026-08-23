@@ -1,8 +1,8 @@
 "use client";
 
 import { clsx } from "clsx";
-import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef } from "react";
 import { Icon } from "./icons";
 
 /* ---------------------------------- Button --------------------------------- */
@@ -33,6 +33,7 @@ export function Button({
         className
       )}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
       {loading && <Spinner size={16} className="text-current" />}
@@ -44,7 +45,7 @@ export function Button({
 /* ---------------------------------- Inputs --------------------------------- */
 
 const fieldClass =
-  "w-full rounded-xl border border-sand-200 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/50 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50";
+  "w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
@@ -62,9 +63,16 @@ export function Select({
   ...rest
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={clsx(fieldClass, "appearance-none pr-8", className)} {...rest}>
-      {children}
-    </select>
+    <span className="relative block">
+      <select className={clsx(fieldClass, "appearance-none pr-8", className)} {...rest}>
+        {children}
+      </select>
+      <Icon
+        name="chevron-down"
+        size={16}
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft"
+      />
+    </span>
   );
 }
 
@@ -83,7 +91,7 @@ export function Field({
         {label}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-ink-soft/70">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-ink-soft">{hint}</span>}
     </label>
   );
 }
@@ -117,7 +125,7 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="font-display text-2xl font-bold text-ink">{title}</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
@@ -165,7 +173,15 @@ export function Avatar({ name, size = 32 }: { name: string; size?: number }) {
 
 /* ----------------------------- Async state UI ------------------------------ */
 
-export function Spinner({ size = 20, className }: { size?: number; className?: string }) {
+export function Spinner({
+  size = 20,
+  className,
+  label = "Chargement",
+}: {
+  size?: number;
+  className?: string;
+  label?: string;
+}) {
   return (
     <svg
       className={clsx("animate-spin", className ?? "text-brand-600")}
@@ -173,7 +189,7 @@ export function Spinner({ size = 20, className }: { size?: number; className?: s
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      aria-label="Loading"
+      aria-label={label}
     >
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.2" strokeWidth="4" />
       <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
@@ -181,7 +197,7 @@ export function Spinner({ size = 20, className }: { size?: number; className?: s
   );
 }
 
-export function Loading({ label = "Loading…" }: { label?: string }) {
+export function Loading({ label = "Chargement…" }: { label?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-ink-soft">
       <Spinner size={28} />
@@ -218,13 +234,15 @@ export function EmptyState({
 }
 
 export function ErrorState({
-  title = "Something went wrong",
+  title = "Une erreur est survenue",
   body,
   retry,
+  retryLabel = "Réessayer",
 }: {
   title?: string;
   body?: string;
   retry?: () => void;
+  retryLabel?: string;
 }) {
   return (
     <div
@@ -238,7 +256,7 @@ export function ErrorState({
       {body && <p className="max-w-md text-sm text-ink-soft">{body}</p>}
       {retry && (
         <Button variant="secondary" size="sm" className="mt-3" onClick={retry}>
-          Try again
+          {retryLabel}
         </Button>
       )}
     </div>
@@ -262,18 +280,51 @@ export function Modal({
   title,
   children,
   wide,
+  closeLabel = "Fermer",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   wide?: boolean;
+  closeLabel?: string;
 }) {
+  const reduced = useReducedMotion();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard contract: Escape closes; focus moves into the dialog on open,
+  // Tab wraps inside it, and focus returns to the trigger on close. The page
+  // behind stops scrolling while the dialog is up.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    document.documentElement.style.overflow = "hidden";
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "Tab" && panelRef.current) {
+        const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.documentElement.style.overflow = "";
+      previouslyFocused?.focus();
+    };
   }, [open, onClose]);
 
   return (
@@ -284,27 +335,30 @@ export function Modal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+          transition={reduced ? { duration: 0.15 } : undefined}
+          onPointerDown={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
+            ref={panelRef}
             role="dialog"
             aria-modal
             aria-label={title}
+            tabIndex={-1}
             className={clsx(
-              "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl",
+              "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl outline-none sm:rounded-2xl",
               wide ? "sm:max-w-2xl" : "sm:max-w-md"
             )}
-            initial={{ y: 24, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 24, opacity: 0, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 380, damping: 32 }}
+            initial={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}
+            animate={reduced ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 }}
+            exit={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}
+            transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 380, damping: 32 }}
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
               <button
                 onClick={onClose}
-                className="rounded-lg p-1.5 text-ink-soft hover:bg-sand-100"
-                aria-label="Close"
+                className="-m-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100"
+                aria-label={closeLabel}
               >
                 <Icon name="x" size={18} />
               </button>
@@ -335,8 +389,8 @@ export function StatCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
-          <p className="mt-1 font-display text-2xl font-bold tabular-nums text-ink">{value}</p>
-          {hint && <p className="mt-0.5 text-xs text-ink-soft/80">{hint}</p>}
+          <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">{value}</p>
+          {hint && <p className="mt-0.5 text-xs text-ink-soft">{hint}</p>}
         </div>
         {icon && (
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110 motion-reduce:group-hover:scale-100">
@@ -346,35 +400,4 @@ export function StatCard({
       </div>
     </Card>
   );
-}
-
-/* --------------------------------- Formatting ------------------------------ */
-
-export function formatEur(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return new Intl.NumberFormat("fr-LU", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
-export function formatDate(iso: string | null | undefined, withTime = false): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
-    ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
-  });
-}
-
-export function timeAgo(iso: string): string {
-  const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 86400 * 7) return `${Math.floor(s / 86400)}d ago`;
-  return formatDate(iso);
 }

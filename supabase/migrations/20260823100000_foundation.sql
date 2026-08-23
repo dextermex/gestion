@@ -314,9 +314,15 @@ create policy g_contacts_update on public.g_contacts for update to authenticated
 create policy g_contacts_delete on public.g_contacts for delete to authenticated
   using (public.g_can(org_id, 'gestion.properties.delete'));
 
-create policy g_contact_roles_all on public.g_contact_roles for all to authenticated
-  using (public.g_can(org_id, 'gestion.tenants.view'))
+create policy g_contact_roles_select on public.g_contact_roles for select to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.view'));
+create policy g_contact_roles_insert on public.g_contact_roles for insert to authenticated
   with check (public.g_can(org_id, 'gestion.tenants.edit'));
+create policy g_contact_roles_update on public.g_contact_roles for update to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.edit'))
+  with check (public.g_can(org_id, 'gestion.tenants.edit'));
+create policy g_contact_roles_delete on public.g_contact_roles for delete to authenticated
+  using (public.g_can(org_id, 'gestion.tenants.edit'));
 
 create policy g_field_defs_all on public.g_field_definitions for all to authenticated
   using (public.g_can(org_id, 'gestion.settings.edit'))
@@ -326,19 +332,29 @@ create policy g_field_options_all on public.g_field_options for all to authentic
                  where d.id = field_id and public.g_can(d.org_id, 'gestion.settings.edit')))
   with check (exists (select 1 from public.g_field_definitions d
                       where d.id = field_id and public.g_can(d.org_id, 'gestion.settings.edit')));
-create policy g_field_values_all on public.g_field_values for all to authenticated
+create policy g_field_values_select on public.g_field_values for select to authenticated
   using (exists (select 1 from public.g_field_definitions d
-                 where d.id = field_id and public.g_can(d.org_id, 'gestion.tenants.view')))
+                 where d.id = field_id and public.g_can(d.org_id, 'gestion.tenants.view')));
+create policy g_field_values_insert on public.g_field_values for insert to authenticated
   with check (exists (select 1 from public.g_field_definitions d
                       where d.id = field_id and public.g_can(d.org_id, 'gestion.tenants.edit')));
+create policy g_field_values_update on public.g_field_values for update to authenticated
+  using (exists (select 1 from public.g_field_definitions d
+                 where d.id = field_id and public.g_can(d.org_id, 'gestion.tenants.edit')))
+  with check (exists (select 1 from public.g_field_definitions d
+                      where d.id = field_id and public.g_can(d.org_id, 'gestion.tenants.edit')));
+create policy g_field_values_delete on public.g_field_values for delete to authenticated
+  using (exists (select 1 from public.g_field_definitions d
+                 where d.id = field_id and public.g_can(d.org_id, 'gestion.tenants.edit')));
 
 create policy g_activity_select on public.g_activity for select to authenticated
   using (public.g_can(org_id, 'gestion.properties.view'));
 create policy g_activity_insert on public.g_activity for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.view'));
+-- Any member may log activity; only editors (or the author) may modify it.
 create policy g_activity_update on public.g_activity for update to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
-  with check (public.g_can(org_id, 'gestion.properties.view'));
+  using (created_by = auth.uid() or public.g_can(org_id, 'gestion.tenants.edit'))
+  with check (created_by = auth.uid() or public.g_can(org_id, 'gestion.tenants.edit'));
 
 create policy g_events_select on public.g_events for select to authenticated
   using (public.g_can(org_id, 'gestion.settings.edit'));

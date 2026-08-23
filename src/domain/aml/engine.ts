@@ -35,7 +35,21 @@ export interface AmlTriggerResult {
   triggers: string[];
 }
 
-export function resolveCddTier(input: AmlTriggerInput): AmlTriggerResult {
+export interface AmlPolicy {
+  /**
+   * Uncertainty register #9: whether pure property managers/syndics are in
+   * scope is unresolved — counsel flips this org-level default. When
+   * "full_cdd", every relationship starts at full CDD regardless of triggers.
+   */
+  defaultTier: CddTier;
+}
+
+export const DEFAULT_AML_POLICY: AmlPolicy = { defaultTier: "light" };
+
+export function resolveCddTier(
+  input: AmlTriggerInput,
+  policy: AmlPolicy = DEFAULT_AML_POLICY,
+): AmlTriggerResult {
   const triggers: string[] = [];
   const rentThreshold = getParamValue("aml.letting_monthly_rent_threshold_eur", input.onDate) * 100;
   const cashThreshold = getParamValue("aml.cash_threshold_eur", input.onDate) * 100;
@@ -58,7 +72,13 @@ export function resolveCddTier(input: AmlTriggerInput): AmlTriggerResult {
     triggers.push("Non-natural-person counterparty — UBO resolution and RBE cross-check required.");
   }
 
-  return { tier: triggers.length > 0 ? "full_cdd" : "light", triggers };
+  if (policy.defaultTier === "full_cdd" && triggers.length === 0) {
+    triggers.push("Org policy: full CDD by default (manager/syndic scope resolved by counsel).");
+  }
+  return {
+    tier: policy.defaultTier === "full_cdd" || triggers.length > 0 ? "full_cdd" : "light",
+    triggers,
+  };
 }
 
 export interface RiskFactorInput {

@@ -43,9 +43,9 @@ src/
                    INOL vacancy clock
     aml/           Two-tier CDD triggers, UBO chain resolution (>25%), risk scoring,
                    5-years-from-end retention
-  app/             Next.js App Router — French-only admin UI in the Morada design language
+  app/             Next.js App Router — admin UI in FR/EN/DE/LU, Morada design language
   components/      pro/ui.tsx (ported verbatim from Morada), gestion bits, shell
-  lib/             Types + status metas, demo dataset, hooks
+  lib/             Types + status metas, i18n dictionaries (fr/en/de/lu), demo dataset, hooks
 supabase/
   migrations/      Full schema: org spine with g_can() RLS, ownership graph, leases with
                    rule-pack fields, derived rent-period status, EDL hash chain,

@@ -2,51 +2,64 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
+import { LEASES, METERS, PROPERTIES, TODAY, UNITS, leaseTenantNames } from "@/lib/demo/data";
+import { METER_UNITS, euros, formatDate, formatNumber, leaseStatusMeta } from "@/lib/types";
+import { getI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n/config";
 import {
-  LEASES,
-  METERS,
-  PROPERTIES,
-  TODAY,
-  UNITS,
-  leaseTenantNames,
-} from "@/lib/demo/data";
-import { LEASE_STATUS_META, METER_KIND_META, euros, formatDate } from "@/lib/types";
-import { cpeExpiryDeadline, deadlineStatus, syndicMandateDeadline, vacancyClock } from "@/domain/compliance/deadlines";
+  cpeExpiryDeadline,
+  deadlineStatus,
+  syndicMandateDeadline,
+  vacancyClock,
+} from "@/domain/compliance/deadlines";
 
-export function generateStaticParams() {
-  return PROPERTIES.map((p) => ({ id: p.id }));
-}
+// No generateStaticParams: the page reads the locale cookie, so it must be
+// request-rendered — a build-time prerender would bake one language in.
 
 export default async function BienDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { locale, d } = await getI18n();
   const property = PROPERTIES.find((p) => p.id === id);
   if (!property) notFound();
   const p = property!;
   const units = UNITS.filter((u) => u.propertyId === p.id);
   const meters = METERS.filter((m) => m.propertyId === p.id);
+  const statusMeta = leaseStatusMeta(d);
 
   const cpe = cpeExpiryDeadline(p.name, p.cpeIssuedOn);
   const cpeStatus = deadlineStatus(cpe, TODAY);
-  const syndic = p.syndicMandateStart ? syndicMandateDeadline(p.syndicName ?? "Syndic", p.syndicMandateStart) : null;
+  const syndic = p.syndicMandateStart
+    ? syndicMandateDeadline(p.syndicName ?? "Syndic", p.syndicMandateStart)
+    : null;
 
   return (
     <div>
       <div className="mb-2">
-        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline">← Biens</Link>
+        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline">
+          {d.biens.backToList}
+        </Link>
       </div>
       <PageHeader
         title={p.name}
         subtitle={`${p.address} · ${p.cadastralRef}`}
         actions={
-          <Badge className={cpeStatus === "overdue" ? "bg-red-100 text-red-700" : cpeStatus === "due_soon" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
-            CPE {p.energyClass} — expire {formatDate(cpe.dueAt)}
+          <Badge
+            className={
+              cpeStatus === "overdue"
+                ? "bg-red-100 text-red-700"
+                : cpeStatus === "due_soon"
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-emerald-100 text-emerald-800"
+            }
+          >
+            {fmt(d.biens.cpeBadge, { cls: p.energyClass, date: formatDate(cpe.dueAt, locale) })}
           </Badge>
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Panel title="Lots">
+          <Panel title={d.biens.unitsTitle}>
             <ul className="divide-y divide-sand-100">
               {units.map((u) => {
                 const lease = LEASES.find(
@@ -62,28 +75,34 @@ export default async function BienDetailPage({ params }: { params: Promise<{ id:
                       <p className="text-sm font-semibold text-ink">
                         {u.label}
                         <span className="ml-2 text-xs font-normal text-ink-soft">
-                          {u.floor} · {u.areaSqm} m²{u.rooms > 0 ? ` · ${u.rooms} ch.` : ""}{u.furnished ? " · meublé" : ""}
+                          {fmt(d.biens.unitMeta, { floor: u.floor, area: u.areaSqm })}
+                          {u.rooms > 0 ? fmt(d.biens.unitRooms, { n: u.rooms }) : ""}
+                          {u.furnished ? d.biens.unitFurnished : ""}
                         </span>
                       </p>
                       {lease ? (
                         <Link href={`/app/baux/${lease.id}`} className="text-xs text-ink-soft hover:text-brand-700">
-                          {leaseTenantNames(lease).join(", ")} · {euros(lease.rentCents)}/mois
+                          {leaseTenantNames(lease).join(", ")} · {euros(lease.rentCents, locale)}
+                          {d.common.perMonth}
                         </Link>
                       ) : vacancy ? (
-                        <p className="text-xs text-red-600">
-                          Vacant depuis {formatDate(u.vacantSince ?? null)} — {vacancy.monthsVacant} mois
-                          {vacancy.triggered ? " · seuil INOL franchi, dossier de défense actif" : ""}
+                        <p className="text-xs text-red-700">
+                          {fmt(d.biens.unitVacantSince, {
+                            date: formatDate(u.vacantSince ?? null, locale),
+                            months: vacancy.monthsVacant,
+                          })}
+                          {vacancy.triggered ? d.biens.unitVacantInol : ""}
                         </p>
                       ) : (
-                        <p className="text-xs text-ink-soft">Libre</p>
+                        <p className="text-xs text-ink-soft">{d.biens.unitFree}</p>
                       )}
                     </div>
                     {lease ? (
-                      <MetaBadge meta={LEASE_STATUS_META[lease.status]} />
+                      <MetaBadge meta={statusMeta[lease.status]} />
                     ) : u.kind === "parking" ? (
-                      <Badge className="bg-sand-100 text-ink-soft">Parking</Badge>
+                      <Badge className="bg-sand-100 text-ink-soft">{d.biens.unitParking}</Badge>
                     ) : (
-                      <Badge className="bg-amber-100 text-amber-800">Vacant</Badge>
+                      <Badge className="bg-amber-100 text-amber-800">{d.biens.unitVacantBadge}</Badge>
                     )}
                   </li>
                 );
@@ -91,31 +110,34 @@ export default async function BienDetailPage({ params }: { params: Promise<{ id:
             </ul>
           </Panel>
 
-          <Panel title="Compteurs du bien" className="mt-5">
+          <Panel title={d.biens.metersTitle} className="mt-5">
             {meters.length === 0 ? (
-              <p className="text-sm text-ink-soft">Aucun compteur enregistré.</p>
+              <p className="text-sm text-ink-soft">{d.biens.metersNone}</p>
             ) : (
               <ul className="divide-y divide-sand-100">
                 {meters.map((m) => {
-                  const meta = METER_KIND_META[m.kind];
                   const unit = m.unitId ? units.find((u) => u.id === m.unitId) : null;
                   return (
                     <li key={m.id} className="flex items-center gap-3 py-2.5 text-sm">
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-ink">
-                          {meta.label} <span className="text-xs font-normal text-ink-soft">· {m.serial}{unit ? ` · ${unit.label}` : " · communs"}</span>
+                          {d.status.meter[m.kind]}{" "}
+                          <span className="text-xs font-normal text-ink-soft">
+                            · {m.serial}
+                            {unit ? ` · ${unit.label}` : ` · ${d.biens.metersCommon}`}
+                          </span>
                         </p>
                         <p className="text-xs text-ink-soft">{m.supplier}</p>
                       </div>
                       {m.lastReading ? (
                         <div className="text-right">
                           <p className="tabular-nums text-ink">
-                            {m.lastReading.value.toLocaleString("fr-LU")} {meta.unit}
+                            {formatNumber(m.lastReading.value, locale)} {METER_UNITS[m.kind]}
                           </p>
-                          <p className="text-[11px] text-ink-soft/70">{formatDate(m.lastReading.date)}</p>
+                          <p className="text-[11px] text-ink-soft">{formatDate(m.lastReading.date, locale)}</p>
                         </div>
                       ) : (
-                        <Badge className="bg-amber-100 text-amber-800">Aucun relevé</Badge>
+                        <Badge className="bg-amber-100 text-amber-800">{d.compteurs.kpiNoReading}</Badge>
                       )}
                     </li>
                   );
@@ -126,69 +148,73 @@ export default async function BienDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         <div className="flex flex-col gap-5">
-          <Panel title="Propriété">
+          <Panel title={d.biens.ownershipTitle}>
             <p className="text-sm leading-relaxed text-ink">{p.ownershipNote}</p>
             <ul className="mt-3 space-y-2 text-sm">
               <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">Construction</span>
+                <span className="text-ink-soft">{d.biens.construction}</span>
                 <span className="font-semibold tabular-nums text-ink">{p.constructionYear}</span>
               </li>
               <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">Achèvement</span>
-                <span className="font-semibold tabular-nums text-ink">{formatDate(p.completionDate)}</span>
+                <span className="text-ink-soft">{d.biens.completion}</span>
+                <span className="font-semibold tabular-nums text-ink">{formatDate(p.completionDate, locale)}</span>
               </li>
               <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">Type</span>
+                <span className="text-ink-soft">{d.biens.type}</span>
                 <span className="font-semibold text-ink">{p.type}</span>
               </li>
             </ul>
-            <LegalNote>
-              Le graphe de propriété (bien → véhicule → personnes physiques, avec parts et dates)
-              alimente le plafond « 2 immeubles » de l&apos;amortissement 4 % et l&apos;abattement de
-              10 000 € — des règles qui mordent au niveau du contribuable, pas du bien.
-            </LegalNote>
+            <LegalNote>{d.biens.ownershipLegal}</LegalNote>
           </Panel>
 
           {p.isCopropriete && (
-            <Panel title="Copropriété">
+            <Panel title={d.biens.coproTitle}>
               <ul className="space-y-2 text-sm">
                 <li className="flex justify-between gap-3">
-                  <span className="text-ink-soft">Syndic</span>
+                  <span className="text-ink-soft">{d.biens.syndic}</span>
                   <span className="font-semibold text-ink">{p.syndicName}</span>
                 </li>
                 {syndic && (
                   <li className="flex justify-between gap-3">
-                    <span className="text-ink-soft">Fin de mandat (max 3 ans)</span>
-                    <span className="font-semibold tabular-nums text-ink">{formatDate(syndic.dueAt)}</span>
+                    <span className="text-ink-soft">{d.biens.mandateEnd}</span>
+                    <span className="font-semibold tabular-nums text-ink">{formatDate(syndic.dueAt, locale)}</span>
                   </li>
                 )}
                 {p.nextAgDate && (
                   <li className="flex justify-between gap-3">
-                    <span className="text-ink-soft">Prochaine AG</span>
-                    <span className="font-semibold tabular-nums text-ink">{formatDate(p.nextAgDate)}</span>
+                    <span className="text-ink-soft">{d.biens.nextAg}</span>
+                    <span className="font-semibold tabular-nums text-ink">{formatDate(p.nextAgDate, locale)}</span>
                   </li>
                 )}
               </ul>
-              <LegalNote>
-                RGD 13.6.1975 : fonds du syndicat versés sans délai sur un compte AU NOM du syndicat
-                (art. 28) — jamais de compte commun. Convocations AG ≥ 15 jours (art. 3), 8 jours en
-                seconde convocation (art. 11).
-              </LegalNote>
+              <LegalNote>{d.biens.coproLegal}</LegalNote>
             </Panel>
           )}
 
-          <Panel title="Conformité du bien">
+          <Panel title={d.biens.complianceTitle}>
             <ul className="space-y-2.5 text-sm">
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">CPE (validité 10 ans)</span>
-                <Badge className={cpeStatus === "due_soon" ? "bg-amber-100 text-amber-800" : cpeStatus === "overdue" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-800"}>
-                  {formatDate(cpe.dueAt)}
+                <span className="text-ink-soft">{d.biens.cpeRow}</span>
+                <Badge
+                  className={
+                    cpeStatus === "due_soon"
+                      ? "bg-amber-100 text-amber-800"
+                      : cpeStatus === "overdue"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-emerald-100 text-emerald-800"
+                  }
+                >
+                  {formatDate(cpe.dueAt, locale)}
                 </Badge>
               </li>
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">Détecteurs de fumée</span>
-                <Badge className={p.smokeDetectorsConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}>
-                  {p.smokeDetectorsConfirmed ? "Confirmés" : "À poser"}
+                <span className="text-ink-soft">{d.biens.smokeRow}</span>
+                <Badge
+                  className={
+                    p.smokeDetectorsConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
+                  }
+                >
+                  {p.smokeDetectorsConfirmed ? d.biens.smokeOk : d.biens.smokeKo}
                 </Badge>
               </li>
             </ul>

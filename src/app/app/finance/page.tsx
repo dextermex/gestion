@@ -2,10 +2,14 @@ import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { RENT_PERIODS, leaseById, leaseUnitLabel } from "@/lib/demo/data";
 import { euros } from "@/lib/types";
+import { getI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n/config";
 import { managementFeeVat } from "@/domain/fiscal/vat";
 import { splitExact } from "@/domain/money";
 
-export default function FinancePage() {
+export default async function FinancePage() {
+  const { locale, d } = await getI18n();
+
   // Décompte de gérance — juillet 2026, mandat SCI Beaulieu (engine-computed).
   const july = RENT_PERIODS.filter((rp) => rp.period === "2026-07");
   const beaulieuLeases = ["l-3b", "l-3c", "l-2a", "l-1a", "l-rdc"];
@@ -24,142 +28,130 @@ export default function FinancePage() {
 
   return (
     <div>
-      <PageHeader
-        title="Finance"
-        subtitle="Comptes rendus de gérance, honoraires et reversements — l'argent des propriétaires sans jamais y toucher : fichiers pain.001 que le gestionnaire dépose dans sa propre banque."
-      />
+      <PageHeader title={d.finance.title} subtitle={d.finance.subtitle} />
 
-      <div className="grid gap-5 lg:grid-cols-5">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">
         <div className="lg:col-span-3">
-          <Panel title="Décompte de gérance — juillet 2026 · Mandat SCI Beaulieu">
+          <Panel title={d.finance.statementTitle}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft/70">
-                    <th className="px-3 py-2.5 font-semibold">Écriture</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Montant</th>
+                  <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
+                    <th className="px-3 py-2.5 font-semibold">{d.finance.colEntry}</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">{d.finance.colAmount}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {collectedRows.map(({ rp, lease }) => (
                     <tr key={rp.id} className="border-b border-sand-50">
                       <td className="px-3 py-2.5 text-ink">
-                        Loyer encaissé — {leaseUnitLabel(lease)}
+                        {fmt(d.finance.rentCollected, { unit: leaseUnitLabel(lease) })}
                         {rp.allocatedCents === 0 && (
-                          <span className="ml-2 text-xs text-red-600">(impayé — relance en cours)</span>
+                          <span className="ml-2 text-xs text-red-700">{d.finance.rentUnpaid}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-ink">{euros(rp.allocatedCents)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-ink">
+                        {euros(rp.allocatedCents, locale)}
+                      </td>
                     </tr>
                   ))}
                   <tr className="border-b border-sand-50">
                     <td className="px-3 py-2.5 text-ink">
-                      Honoraires de gérance 4 %
-                      <span className="ml-2 text-xs text-ink-soft">({euros(fee.net)} + TVA 17 % {euros(fee.vat)})</span>
+                      {d.finance.feeLine}
+                      <span className="ml-2 text-xs text-ink-soft">
+                        {fmt(d.finance.feeDetail, { net: euros(fee.net, locale), vat: euros(fee.vat, locale) })}
+                      </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-red-600">− {euros(fee.gross)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-red-700">− {euros(fee.gross, locale)}</td>
                   </tr>
                   <tr className="border-b border-sand-50">
                     <td className="px-3 py-2.5 text-ink">
-                      Facture Krier & Fils — chaudière Apt 3B
-                      <span className="ml-2 text-xs text-ink-soft">(grosse réparation — charge propriétaire)</span>
+                      {d.finance.invoiceLine}
+                      <span className="ml-2 text-xs text-ink-soft">{d.finance.invoiceDetail}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-red-600">− {euros(krierInvoice)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-red-700">
+                      − {euros(krierInvoice, locale)}
+                    </td>
                   </tr>
                   <tr className="bg-sand-50/60">
-                    <td className="px-3 py-2.5 font-bold text-ink">Net reversé au mandant</td>
+                    <td className="px-3 py-2.5 font-bold text-ink">{d.finance.netToOwner}</td>
                     <td className="px-3 py-2.5 text-right font-display font-bold tabular-nums text-emerald-700">
-                      {euros(netToOwner)}
+                      {euros(netToOwner, locale)}
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-sand-200 p-3.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">
-                  Répartition SCI (transparente, art. 175 LIR)
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+                  {d.finance.sciSplit}
                 </p>
                 <ul className="mt-2 space-y-1.5 text-sm">
                   <li className="flex justify-between">
                     <span className="text-ink-soft">Marie Faber — 60 %</span>
-                    <span className="font-semibold tabular-nums text-ink">{euros(faberShare)}</span>
+                    <span className="font-semibold tabular-nums text-ink">{euros(faberShare, locale)}</span>
                   </li>
                   <li className="flex justify-between">
                     <span className="text-ink-soft">Pierre Faber — 40 %</span>
-                    <span className="font-semibold tabular-nums text-ink">{euros(pierreShare)}</span>
+                    <span className="font-semibold tabular-nums text-ink">{euros(pierreShare, locale)}</span>
                   </li>
                 </ul>
-                <p className="mt-2 text-[11px] text-ink-soft/70">
-                  Répartition exacte au centime (méthode du plus fort reste) — un registre ne perd
-                  jamais un centime d&apos;arrondi.
-                </p>
+                <p className="mt-2 text-[11px] text-ink-soft">{d.finance.sciSplitNote}</p>
               </div>
               <div className="rounded-xl border border-sand-200 p-3.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">Reversement</p>
-                <p className="mt-2 text-sm text-ink">
-                  Fichier <span className="font-semibold">pain.001</span> généré le 5 août — déposé
-                  par le gestionnaire dans son e-banking, rapproché au retour sur le relevé sortant.
-                </p>
-                <Badge className="mt-2 bg-emerald-100 text-emerald-800">Rapproché</Badge>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.finance.payout}</p>
+                <p className="mt-2 text-sm text-ink">{d.finance.payoutBody}</p>
+                <Badge className="mt-2 bg-emerald-100 text-emerald-800">{d.finance.payoutDone}</Badge>
               </div>
             </div>
 
-            <LegalNote>
-              Les honoraires de gérance sont TOUJOURS facturés + 17 % de TVA — la prestation du
-              gérant est taxable même quand la location est exonérée. Pour un bailleur résidentiel
-              sans droit à déduction, cette TVA est un coût sec, déductible seulement comme frais
-              d&apos;obtention. Période verrouillée après émission du décompte.
-            </LegalNote>
+            <LegalNote>{d.finance.feeLegal}</LegalNote>
           </Panel>
         </div>
 
-        <div className="lg:col-span-2 flex flex-col gap-5">
-          <Panel title="Comptes de tiers">
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <Panel title={d.finance.trustTitle}>
             <ul className="space-y-2.5 text-sm">
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">Compte de réception dédié (fonds de tiers)</span>
-                <Badge className="bg-emerald-100 text-emerald-800">Actif</Badge>
+                <span className="text-ink-soft">{d.finance.trustReceiving}</span>
+                <Badge className="bg-emerald-100 text-emerald-800">{d.finance.trustActive}</Badge>
               </li>
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">Comptes par syndicat (jamais de pool)</span>
+                <span className="text-ink-soft">{d.finance.trustSyndicat}</span>
                 <Badge className="bg-sand-100 text-ink-soft">RGD 1975 art. 28</Badge>
               </li>
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">Grand livre par mandant</span>
-                <Badge className="bg-emerald-100 text-emerald-800">Tenu</Badge>
+                <span className="text-ink-soft">{d.finance.trustLedger}</span>
+                <Badge className="bg-emerald-100 text-emerald-800">{d.finance.trustHeld}</Badge>
               </li>
             </ul>
-            <LegalNote>
-              Aucun régime Hoguet n&apos;existe pour l&apos;argent des clients d&apos;agents locatifs [incertain —
-              conseil juridique] : la ségrégation est ici un engagement produit et contractuel, pas
-              seulement réglementaire.
-            </LegalNote>
+            <LegalNote>{d.finance.trustLegal}</LegalNote>
           </Panel>
 
-          <Panel title="Exports comptables">
+          <Panel title={d.finance.exportsTitle}>
             <ul className="space-y-2.5 text-sm">
               <li className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-ink">FAIA (SAF-T Luxembourg, v2.01)</p>
-                  <p className="text-xs text-ink-soft">L&apos;export que toute fiduciaire comprend — obligation légale.</p>
+                  <p className="font-semibold text-ink">{d.finance.exportFaia}</p>
+                  <p className="text-xs text-ink-soft">{d.finance.exportFaiaSub}</p>
                 </div>
-                <Badge className="bg-brand-100 text-brand-800">Prêt</Badge>
+                <Badge className="bg-brand-100 text-brand-800">{d.finance.ready}</Badge>
               </li>
               <li className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-ink">Peppol / UBL (EN 16931)</p>
-                  <p className="text-xs text-ink-soft">B2G obligatoire ; B2B pas encore — natif dès le premier jour.</p>
+                  <p className="font-semibold text-ink">{d.finance.exportPeppol}</p>
+                  <p className="text-xs text-ink-soft">{d.finance.exportPeppolSub}</p>
                 </div>
-                <Badge className="bg-brand-100 text-brand-800">Prêt</Badge>
+                <Badge className="bg-brand-100 text-brand-800">{d.finance.ready}</Badge>
               </li>
               <li className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-ink">Plan comptable normalisé (PCN 2019)</p>
-                  <p className="text-xs text-ink-soft">Classes 2/4/6/7 alignées pour consommation fiduciaire directe.</p>
+                  <p className="font-semibold text-ink">{d.finance.exportPcn}</p>
+                  <p className="text-xs text-ink-soft">{d.finance.exportPcnSub}</p>
                 </div>
-                <Badge className="bg-sand-100 text-ink-soft">Mappé</Badge>
+                <Badge className="bg-sand-100 text-ink-soft">{d.finance.mapped}</Badge>
               </li>
             </ul>
           </Panel>

@@ -35,10 +35,12 @@ export interface VatOptionAssessment {
   effectiveFrom: ISODate | null;
 }
 
-export function assessVatOption(req: VatOptionRequest): VatOptionAssessment {
+export function assessVatOption(req: VatOptionRequest, asOf?: ISODate): VatOptionAssessment {
   const issues: ValidationIssue[] = [];
-  const today = req.aedDecisionDate ?? "2026-01-01";
-  const minRatio = getParamValue("vat.option_min_tenant_deduction_pct", today);
+  // Param resolution date: the AED decision date when known, else the
+  // caller-supplied assessment date — never a hard-coded literal.
+  const resolutionDate = req.aedDecisionDate ?? asOf ?? new Date().toISOString().slice(0, 10);
+  const minRatio = getParamValue("vat.option_min_tenant_deduction_pct", resolutionDate);
 
   if (req.leaseType === "residential") {
     issues.push({

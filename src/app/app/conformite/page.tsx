@@ -1,7 +1,10 @@
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { ORG, PROPERTIES, TODAY, UNITS } from "@/lib/demo/data";
-import { DEADLINE_STATUS_META, formatDate } from "@/lib/types";
+import { deadlineStatusMeta, formatDate, formatNumber } from "@/lib/types";
+import { getI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n/config";
+import type { Dict } from "@/lib/i18n/fr";
 import {
   agConvocationDeadline,
   communeArrivalDeadline,
@@ -13,27 +16,65 @@ import {
   vacancyClock,
   type Deadline,
 } from "@/domain/compliance/deadlines";
-import { paramsInForce } from "@/domain/legal/params";
+import { getParamValue, paramsInForce } from "@/domain/legal/params";
 
-export default function ConformitePage() {
+/** Deadline label from its stable kind — never from the engine's English label. */
+function deadlineLabel(d: Dict, dl: Deadline, what?: string): string {
+  switch (dl.kind) {
+    case "cpe_expiry":
+      return d.legal.deadlineKind.cpe_expiry;
+    case "commune_arrival_declaration":
+      return fmt(d.legal.deadlineKind.commune_arrival_declaration, {
+        days: getParamValue("compliance.commune_arrival_declaration_days", TODAY),
+      });
+    case "syndic_mandate_expiry":
+      return fmt(d.legal.deadlineKind.syndic_mandate_expiry, {
+        years: getParamValue("syndic.mandate_max_years", TODAY),
+      });
+    case "ag_convocation":
+      return fmt(d.legal.deadlineKind.ag_convocation, {
+        days: getParamValue("syndic.ag_convocation_min_days", TODAY),
+        repeat: "",
+      });
+    case "defect_window_end":
+      return fmt(d.legal.deadlineKind.defect_window_end, {
+        days: getParamValue("compliance.defect_window_default_days", TODAY),
+      });
+    case "licence_expiry":
+      return fmt(d.legal.deadlineKind.licence_expiry, { what: what ?? dl.relatedLabel });
+    default:
+      return dl.label;
+  }
+}
+
+export default async function ConformitePage() {
+  const { locale, d } = await getI18n();
+  const statusMeta = deadlineStatusMeta(d);
+
   // The calendar is GENERATED from data — every deadline is an engine output.
-  const deadlines: Array<{ d: Deadline; done?: string | null }> = [
-    { d: licenceExpiryDeadline(ORG.name, ORG.piInsuranceExpiry, "Assurance RC professionnelle") },
-    { d: licenceExpiryDeadline(ORG.name, ORG.autorisationExpiry, "Autorisation d'établissement (administrateur de biens)") },
-    ...PROPERTIES.map((p) => ({ d: cpeExpiryDeadline(p.name, p.cpeIssuedOn) })),
+  const deadlines: Array<{ dl: Deadline; what?: string; done?: string | null }> = [
+    {
+      dl: licenceExpiryDeadline(ORG.name, ORG.piInsuranceExpiry, d.legal.deadlineKind.pi_insurance),
+      what: d.legal.deadlineKind.pi_insurance,
+    },
+    {
+      dl: licenceExpiryDeadline(ORG.name, ORG.autorisationExpiry, d.legal.deadlineKind.autorisation),
+      what: d.legal.deadlineKind.autorisation,
+    },
+    ...PROPERTIES.map((p) => ({ dl: cpeExpiryDeadline(p.name, p.cpeIssuedOn) })),
     ...PROPERTIES.filter((p) => p.syndicMandateStart).map((p) => ({
-      d: syndicMandateDeadline(`${p.name} — ${p.syndicName}`, p.syndicMandateStart!),
+      dl: syndicMandateDeadline(`${p.name} — ${p.syndicName}`, p.syndicMandateStart!),
     })),
     ...PROPERTIES.filter((p) => p.nextAgDate).map((p) => ({
-      d: agConvocationDeadline(p.name, p.nextAgDate!, false),
+      dl: agConvocationDeadline(p.name, p.nextAgDate!, false),
     })),
-    { d: communeArrivalDeadline("Lucas Weber (Apt 2A)", "2026-08-18") },
-    { d: defectWindowEnd("Maison Bertrange", "2026-12-01") },
+    { dl: communeArrivalDeadline("Lucas Weber (Apt 2A)", "2026-08-18") },
+    { dl: defectWindowEnd("Maison Bertrange", "2026-12-01") },
   ];
 
   const sorted = deadlines
-    .map((x) => ({ ...x, status: deadlineStatus(x.d, TODAY, x.done) }))
-    .sort((a, b) => (a.d.dueAt < b.d.dueAt ? -1 : 1));
+    .map((x) => ({ ...x, status: deadlineStatus(x.dl, TODAY, x.done) }))
+    .sort((a, b) => (a.dl.dueAt < b.dl.dueAt ? -1 : 1));
 
   const vacantUnits = UNITS.filter((u) => u.vacantSince).map((u) => ({
     unit: u,
@@ -45,53 +86,57 @@ export default function ConformitePage() {
 
   return (
     <div>
-      <PageHeader
-        title="Conformité"
-        subtitle="Le calendrier se génère depuis les données — jamais saisi à la main. Chaque échéance cite sa base légale."
-      />
+      <PageHeader title={d.conformite.title} subtitle={d.conformite.subtitle} />
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Panel title="Calendrier des échéances">
+          <Panel title={d.conformite.calendarTitle}>
             <ul className="divide-y divide-sand-100">
-              {sorted.map(({ d, status }) => (
-                <li key={`${d.kind}-${d.relatedLabel}-${d.dueAt}`} className="flex items-start gap-3 py-3">
+              {sorted.map(({ dl, what, status }) => (
+                <li key={`${dl.kind}-${dl.relatedLabel}-${dl.dueAt}`} className="flex items-start gap-3 py-3">
                   <div
                     className={
                       "mt-1 h-2 w-2 shrink-0 rounded-full " +
-                      (status === "overdue" ? "bg-red-500" : status === "due_soon" ? "bg-amber-500" : status === "done" ? "bg-emerald-500" : "bg-sand-300")
+                      (status === "overdue"
+                        ? "bg-red-500"
+                        : status === "due_soon"
+                          ? "bg-amber-500"
+                          : status === "done"
+                            ? "bg-emerald-500"
+                            : "bg-sand-300")
                     }
                     aria-hidden
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-ink">{d.label}</p>
+                    <p className="text-sm font-semibold text-ink">{deadlineLabel(d, dl, what)}</p>
                     <p className="text-xs text-ink-soft">
-                      {d.relatedLabel} · {d.legalBasis}
+                      {dl.relatedLabel} · {dl.legalBasis}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="tabular-nums text-sm font-semibold text-ink">{formatDate(d.dueAt)}</p>
-                    <MetaBadge meta={DEADLINE_STATUS_META[status]} />
+                    <p className="tabular-nums text-sm font-semibold text-ink">{formatDate(dl.dueAt, locale)}</p>
+                    <MetaBadge meta={statusMeta[status]} />
                   </div>
                 </li>
               ))}
             </ul>
           </Panel>
 
-          <Panel title="Horloge de vacance (INOL)" className="mt-5">
+          <Panel title={d.conformite.vacancyTitle} className="mt-5">
             {vacantUnits.map(({ unit, clock }) => (
               <div key={unit.id} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-ink">
-                    {clock.unitLabel} — vacant depuis le {formatDate(clock.vacantSince)} ({clock.monthsVacant} mois)
+                    {fmt(d.conformite.vacancyRow, {
+                      unit: clock.unitLabel,
+                      date: formatDate(clock.vacantSince, locale),
+                      months: clock.monthsVacant,
+                    })}
                   </p>
-                  <Badge className="bg-red-100 text-red-700">Seuil 6 mois franchi</Badge>
+                  <Badge className="bg-red-100 text-red-700">{d.conformite.vacancyBadge}</Badge>
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
-                  Si la réforme INOL est adoptée : {clock.projectedTaxYear1Eur.toLocaleString("fr-LU")} € la
-                  1re année, +900 €/an jusqu&apos;à 7 500 €. Statut d&apos;adoption non confirmé [incertain] —
-                  le dossier de défense (annonces publiées, travaux, offres reçues) se constitue dès
-                  maintenant, à toutes fins utiles.
+                  {fmt(d.conformite.vacancyBody, { y1: formatNumber(clock.projectedTaxYear1Eur, locale) })}
                 </p>
               </div>
             ))}
@@ -99,40 +144,35 @@ export default function ConformitePage() {
         </div>
 
         <div className="flex flex-col gap-5">
-          <Panel title="Cabinet — périmètre réglementaire">
+          <Panel title={d.conformite.orgTitle}>
             <ul className="space-y-2.5 text-sm">
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">Autorisation d&apos;établissement</span>
+                <span className="text-ink-soft">{d.conformite.orgAutorisation}</span>
                 <span className="font-semibold tabular-nums text-ink">{ORG.autorisationNumber}</span>
               </li>
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">Échéance</span>
-                <span className="font-semibold tabular-nums text-ink">{formatDate(ORG.autorisationExpiry)}</span>
+                <span className="text-ink-soft">{d.conformite.orgExpiry}</span>
+                <span className="font-semibold tabular-nums text-ink">
+                  {formatDate(ORG.autorisationExpiry, locale)}
+                </span>
               </li>
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">RC professionnelle</span>
+                <span className="text-ink-soft">{d.conformite.orgRc}</span>
                 <span className="font-semibold text-ink">{ORG.piInsuranceProvider}</span>
               </li>
               <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">Échéance RC pro</span>
-                <Badge className="bg-amber-100 text-amber-800">{formatDate(ORG.piInsuranceExpiry)}</Badge>
+                <span className="text-ink-soft">{d.conformite.orgRcExpiry}</span>
+                <Badge className="bg-amber-100 text-amber-800">{formatDate(ORG.piInsuranceExpiry, locale)}</Badge>
               </li>
             </ul>
-            <LegalNote>
-              Administrateur de biens : autorisation du Ministère de l&apos;Économie (loi du 2.9.2011),
-              House of Training ou 3 ans d&apos;expérience de direction, RC pro obligatoire. Alarmes
-              croissantes à l&apos;approche des échéances.
-            </LegalNote>
+            <LegalNote>{d.conformite.orgLegal}</LegalNote>
           </Panel>
 
-          <Panel title={`Paramètres légaux — ${params.length} en vigueur`}>
-            <p className="text-sm leading-relaxed text-ink-soft">
-              Chaque constante légale est une DONNÉE datée et sourcée — jamais du code. Un changement
-              législatif est une mise à jour de table avec file de validation, pas une release.
-            </p>
+          <Panel title={fmt(d.conformite.paramsTitle, { n: params.length })}>
+            <p className="text-sm leading-relaxed text-ink-soft">{d.conformite.paramsBody}</p>
             <div className="mt-3 rounded-xl bg-sand-50 p-3.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
-                {uncertain.length} paramètres marqués [incertain]
+                {fmt(d.conformite.paramsUncertain, { n: uncertain.length })}
               </p>
               <ul className="mt-2 space-y-1.5">
                 {uncertain.slice(0, 5).map((p) => (
@@ -142,10 +182,7 @@ export default function ConformitePage() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 text-[11px] text-ink-soft/70">
-                Les moteurs qui consomment un paramètre incertain le signalent à l&apos;opérateur —
-                registre d&apos;incertitudes du brief fiscal.
-              </p>
+              <p className="mt-2 text-[11px] text-ink-soft">{d.conformite.paramsFoot}</p>
             </div>
           </Panel>
         </div>

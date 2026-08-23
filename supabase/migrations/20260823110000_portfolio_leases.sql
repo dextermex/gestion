@@ -421,14 +421,29 @@ begin
   end loop;
 end $$;
 
-create policy g_vehicles_all on public.g_ownership_vehicles for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_vehicles_select on public.g_ownership_vehicles for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_vehicles_insert on public.g_ownership_vehicles for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_vehicle_members_all on public.g_vehicle_members for all to authenticated
+create policy g_vehicles_update on public.g_ownership_vehicles for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_vehicles_delete on public.g_ownership_vehicles for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_vehicle_members_select on public.g_vehicle_members for select to authenticated
   using (exists (select 1 from public.g_ownership_vehicles v
-                 where v.id = vehicle_id and public.g_can(v.org_id, 'gestion.properties.view')))
+                 where v.id = vehicle_id and public.g_can(v.org_id, 'gestion.properties.view')));
+create policy g_vehicle_members_insert on public.g_vehicle_members for insert to authenticated
   with check (exists (select 1 from public.g_ownership_vehicles v
                       where v.id = vehicle_id and public.g_can(v.org_id, 'gestion.properties.edit')));
+create policy g_vehicle_members_update on public.g_vehicle_members for update to authenticated
+  using (exists (select 1 from public.g_ownership_vehicles v
+                 where v.id = vehicle_id and public.g_can(v.org_id, 'gestion.properties.edit')))
+  with check (exists (select 1 from public.g_ownership_vehicles v
+                      where v.id = vehicle_id and public.g_can(v.org_id, 'gestion.properties.edit')));
+create policy g_vehicle_members_delete on public.g_vehicle_members for delete to authenticated
+  using (exists (select 1 from public.g_ownership_vehicles v
+                 where v.id = vehicle_id and public.g_can(v.org_id, 'gestion.properties.edit')));
 
 create policy g_properties_select on public.g_properties for select to authenticated
   using (public.g_can(org_id, 'gestion.properties.view'));
@@ -440,28 +455,70 @@ create policy g_properties_update on public.g_properties for update to authentic
 create policy g_properties_delete on public.g_properties for delete to authenticated
   using (public.g_can(org_id, 'gestion.properties.delete'));
 
-create policy g_ownership_all on public.g_property_ownership for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_ownership_select on public.g_property_ownership for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_ownership_insert on public.g_property_ownership for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_acquisitions_all on public.g_property_acquisitions for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
+create policy g_ownership_update on public.g_property_ownership for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_ownership_delete on public.g_property_ownership for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_acquisitions_select on public.g_property_acquisitions for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_acquisitions_insert on public.g_property_acquisitions for insert to authenticated
   with check (public.g_can(org_id, 'gestion.finance.edit'));
-create policy g_capital_all on public.g_capital_investments for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
+create policy g_acquisitions_update on public.g_property_acquisitions for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
   with check (public.g_can(org_id, 'gestion.finance.edit'));
-create policy g_amort_all on public.g_amortisation_schedules for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
+create policy g_acquisitions_delete on public.g_property_acquisitions for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_capital_select on public.g_capital_investments for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_capital_insert on public.g_capital_investments for insert to authenticated
   with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_capital_update on public.g_capital_investments for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_capital_delete on public.g_capital_investments for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_amort_select on public.g_amortisation_schedules for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_amort_insert on public.g_amortisation_schedules for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_amort_update on public.g_amortisation_schedules for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_amort_delete on public.g_amortisation_schedules for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
 
-create policy g_units_all on public.g_units for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_units_select on public.g_units for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_units_insert on public.g_units for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_meters_all on public.g_meters for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_units_update on public.g_units for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_meter_readings_all on public.g_meter_readings for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_units_delete on public.g_units for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_meters_select on public.g_meters for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_meters_insert on public.g_meters for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_meters_update on public.g_meters for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_meters_delete on public.g_meters for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_meter_readings_select on public.g_meter_readings for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_meter_readings_insert on public.g_meter_readings for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_meter_readings_update on public.g_meter_readings for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_meter_readings_delete on public.g_meter_readings for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
 
 do $$
 declare t text;
@@ -476,36 +533,100 @@ end $$;
 
 create policy g_leases_select on public.g_leases for select to authenticated
   using (public.g_can(org_id, 'gestion.leases.view'));
-create policy g_leases_write on public.g_leases for all to authenticated
+create policy g_leases_insert on public.g_leases for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_leases_update on public.g_leases for update to authenticated
   using (public.g_can(org_id, 'gestion.leases.edit'))
   with check (public.g_can(org_id, 'gestion.leases.edit'));
-create policy g_lease_parties_all on public.g_lease_parties for all to authenticated
-  using (public.g_can(org_id, 'gestion.leases.view'))
+create policy g_leases_delete on public.g_leases for delete to authenticated
+  using (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_lease_parties_select on public.g_lease_parties for select to authenticated
+  using (public.g_can(org_id, 'gestion.leases.view'));
+create policy g_lease_parties_insert on public.g_lease_parties for insert to authenticated
   with check (public.g_can(org_id, 'gestion.leases.edit'));
-create policy g_rent_periods_all on public.g_rent_periods for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
-  with check (public.g_can(org_id, 'gestion.finance.edit'));
-create policy g_deposits_all on public.g_deposits for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
-  with check (public.g_can(org_id, 'gestion.finance.edit'));
-create policy g_deposit_deductions_all on public.g_deposit_deductions for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
-  with check (public.g_can(org_id, 'gestion.finance.edit'));
-create policy g_registered_letters_all on public.g_registered_letters for all to authenticated
-  using (public.g_can(org_id, 'gestion.leases.view'))
+create policy g_lease_parties_update on public.g_lease_parties for update to authenticated
+  using (public.g_can(org_id, 'gestion.leases.edit'))
   with check (public.g_can(org_id, 'gestion.leases.edit'));
-create policy g_notice_records_all on public.g_notice_records for all to authenticated
-  using (public.g_can(org_id, 'gestion.leases.view'))
+create policy g_lease_parties_delete on public.g_lease_parties for delete to authenticated
+  using (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_rent_periods_select on public.g_rent_periods for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_rent_periods_insert on public.g_rent_periods for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_rent_periods_update on public.g_rent_periods for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_rent_periods_delete on public.g_rent_periods for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_deposits_select on public.g_deposits for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_deposits_insert on public.g_deposits for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_deposits_update on public.g_deposits for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_deposits_delete on public.g_deposits for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_deposit_deductions_select on public.g_deposit_deductions for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_deposit_deductions_insert on public.g_deposit_deductions for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_deposit_deductions_update on public.g_deposit_deductions for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_deposit_deductions_delete on public.g_deposit_deductions for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_registered_letters_select on public.g_registered_letters for select to authenticated
+  using (public.g_can(org_id, 'gestion.leases.view'));
+create policy g_registered_letters_insert on public.g_registered_letters for insert to authenticated
   with check (public.g_can(org_id, 'gestion.leases.edit'));
-create policy g_edl_sessions_all on public.g_edl_sessions for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_registered_letters_update on public.g_registered_letters for update to authenticated
+  using (public.g_can(org_id, 'gestion.leases.edit'))
+  with check (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_registered_letters_delete on public.g_registered_letters for delete to authenticated
+  using (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_notice_records_select on public.g_notice_records for select to authenticated
+  using (public.g_can(org_id, 'gestion.leases.view'));
+create policy g_notice_records_insert on public.g_notice_records for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_notice_records_update on public.g_notice_records for update to authenticated
+  using (public.g_can(org_id, 'gestion.leases.edit'))
+  with check (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_notice_records_delete on public.g_notice_records for delete to authenticated
+  using (public.g_can(org_id, 'gestion.leases.edit'));
+create policy g_edl_sessions_select on public.g_edl_sessions for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_edl_sessions_insert on public.g_edl_sessions for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_edl_items_all on public.g_edl_items for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_edl_sessions_update on public.g_edl_sessions for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_edl_media_all on public.g_edl_media for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_edl_sessions_delete on public.g_edl_sessions for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_edl_items_select on public.g_edl_items for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_edl_items_insert on public.g_edl_items for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
-create policy g_defects_all on public.g_defects for all to authenticated
-  using (public.g_can(org_id, 'gestion.maintenance.view'))
+create policy g_edl_items_update on public.g_edl_items for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_edl_items_delete on public.g_edl_items for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_edl_media_select on public.g_edl_media for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_edl_media_insert on public.g_edl_media for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_edl_media_update on public.g_edl_media for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_edl_media_delete on public.g_edl_media for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_defects_select on public.g_defects for select to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.view'));
+create policy g_defects_insert on public.g_defects for insert to authenticated
   with check (public.g_can(org_id, 'gestion.maintenance.edit'));
+create policy g_defects_update on public.g_defects for update to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.edit'))
+  with check (public.g_can(org_id, 'gestion.maintenance.edit'));
+create policy g_defects_delete on public.g_defects for delete to authenticated
+  using (public.g_can(org_id, 'gestion.maintenance.edit'));

@@ -191,20 +191,42 @@ begin
   end loop;
 end $$;
 
-create policy g_deadlines_all on public.g_legal_deadlines for all to authenticated
-  using (public.g_can(org_id, 'gestion.compliance.view'))
+create policy g_deadlines_select on public.g_legal_deadlines for select to authenticated
+  using (public.g_can(org_id, 'gestion.compliance.view'));
+create policy g_deadlines_insert on public.g_legal_deadlines for insert to authenticated
   with check (public.g_can(org_id, 'gestion.compliance.edit'));
-create policy g_vacancy_all on public.g_vacancy_periods for all to authenticated
-  using (public.g_can(org_id, 'gestion.properties.view'))
+create policy g_deadlines_update on public.g_legal_deadlines for update to authenticated
+  using (public.g_can(org_id, 'gestion.compliance.edit'))
+  with check (public.g_can(org_id, 'gestion.compliance.edit'));
+create policy g_deadlines_delete on public.g_legal_deadlines for delete to authenticated
+  using (public.g_can(org_id, 'gestion.compliance.edit'));
+create policy g_vacancy_select on public.g_vacancy_periods for select to authenticated
+  using (public.g_can(org_id, 'gestion.properties.view'));
+create policy g_vacancy_insert on public.g_vacancy_periods for insert to authenticated
   with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_vacancy_update on public.g_vacancy_periods for update to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'))
+  with check (public.g_can(org_id, 'gestion.properties.edit'));
+create policy g_vacancy_delete on public.g_vacancy_periods for delete to authenticated
+  using (public.g_can(org_id, 'gestion.properties.edit'));
 create policy g_documents_select on public.g_documents for select to authenticated
   using (public.g_can(org_id, 'gestion.documents.view'));
-create policy g_documents_write on public.g_documents for all to authenticated
+create policy g_documents_insert on public.g_documents for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.documents.edit'));
+create policy g_documents_update on public.g_documents for update to authenticated
   using (public.g_can(org_id, 'gestion.documents.edit'))
   with check (public.g_can(org_id, 'gestion.documents.edit'));
-create policy g_tax_packs_all on public.g_tax_packs for all to authenticated
-  using (public.g_can(org_id, 'gestion.finance.view'))
+create policy g_documents_delete on public.g_documents for delete to authenticated
+  using (public.g_can(org_id, 'gestion.documents.edit'));
+create policy g_tax_packs_select on public.g_tax_packs for select to authenticated
+  using (public.g_can(org_id, 'gestion.finance.view'));
+create policy g_tax_packs_insert on public.g_tax_packs for insert to authenticated
   with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_tax_packs_update on public.g_tax_packs for update to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'))
+  with check (public.g_can(org_id, 'gestion.finance.edit'));
+create policy g_tax_packs_delete on public.g_tax_packs for delete to authenticated
+  using (public.g_can(org_id, 'gestion.finance.edit'));
 
 -- AML family — dedicated permission; STR filings admin-only.
 do $$
@@ -217,18 +239,42 @@ begin
   end loop;
 end $$;
 
-create policy g_aml_parties_all on public.g_aml_parties for all to authenticated
-  using (public.g_can(org_id, 'gestion.aml.view'))
+create policy g_aml_parties_select on public.g_aml_parties for select to authenticated
+  using (public.g_can(org_id, 'gestion.aml.view'));
+create policy g_aml_parties_insert on public.g_aml_parties for insert to authenticated
   with check (public.g_can(org_id, 'gestion.aml.edit'));
-create policy g_id_documents_all on public.g_id_documents for all to authenticated
-  using (public.g_can(org_id, 'gestion.aml.view'))
+create policy g_aml_parties_update on public.g_aml_parties for update to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'))
   with check (public.g_can(org_id, 'gestion.aml.edit'));
-create policy g_ubo_links_all on public.g_ubo_links for all to authenticated
-  using (public.g_can(org_id, 'gestion.aml.view'))
+create policy g_aml_parties_delete on public.g_aml_parties for delete to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_id_documents_select on public.g_id_documents for select to authenticated
+  using (public.g_can(org_id, 'gestion.aml.view'));
+create policy g_id_documents_insert on public.g_id_documents for insert to authenticated
   with check (public.g_can(org_id, 'gestion.aml.edit'));
-create policy g_screening_events_all on public.g_screening_events for all to authenticated
-  using (public.g_can(org_id, 'gestion.aml.view'))
+create policy g_id_documents_update on public.g_id_documents for update to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'))
   with check (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_id_documents_delete on public.g_id_documents for delete to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_ubo_links_select on public.g_ubo_links for select to authenticated
+  using (public.g_can(org_id, 'gestion.aml.view'));
+create policy g_ubo_links_insert on public.g_ubo_links for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_ubo_links_update on public.g_ubo_links for update to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'))
+  with check (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_ubo_links_delete on public.g_ubo_links for delete to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_screening_events_select on public.g_screening_events for select to authenticated
+  using (public.g_can(org_id, 'gestion.aml.view'));
+create policy g_screening_events_insert on public.g_screening_events for insert to authenticated
+  with check (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_screening_events_update on public.g_screening_events for update to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'))
+  with check (public.g_can(org_id, 'gestion.aml.edit'));
+create policy g_screening_events_delete on public.g_screening_events for delete to authenticated
+  using (public.g_can(org_id, 'gestion.aml.edit'));
 -- No tipping-off: STR filings visible only to settings-level admins.
 create policy g_str_filings_all on public.g_str_filings for all to authenticated
   using (public.g_can(org_id, 'gestion.settings.edit'))

@@ -51,7 +51,8 @@ export interface SettlementInput {
 export interface SettlementLineResult extends DeductionLine {
   status: "justified" | "pending" | "expired_forfeited" | "blocked_no_entry_edl";
   retained: Cents;
-  justificationDeadline: ISODate;
+  /** Null for a charge reserve while the décompte does not exist yet. */
+  justificationDeadline: ISODate | null;
 }
 
 export interface SettlementResult {
@@ -82,18 +83,28 @@ export function computeSettlement(input: SettlementInput): SettlementResult {
   const warnings: string[] = [];
 
   const lines: SettlementLineResult[] = input.deductions.map((line) => {
-    const deadline = addMonths(input.keyHandoverDate, justificationMonths);
+    // Damage/arrears run on the keys+1-month clock. A charge reserve runs on
+    // the DÉCOMPTE clock — the statutory "balance at M+1 of the décompte"
+    // mechanism means the reserve cannot forfeit before the décompte exists.
+    const deadline: ISODate | null =
+      line.kind === "charge_reserve"
+        ? input.decompteIssuedAt
+          ? addMonths(input.decompteIssuedAt, justificationMonths)
+          : null
+        : addMonths(input.keyHandoverDate, justificationMonths);
 
     // Hard gate: no entry EDL → the deposit cannot cover damage at all.
     if (line.kind === "damage" && !input.entryEdlExists) {
       return { ...line, status: "blocked_no_entry_edl", retained: 0, justificationDeadline: deadline };
     }
 
-    const justified = Boolean(line.justificationDocRef && line.justifiedAt && line.justifiedAt <= deadline);
+    const justified = Boolean(
+      line.justificationDocRef && line.justifiedAt && (deadline === null || line.justifiedAt <= deadline),
+    );
     if (justified) {
       return { ...line, status: "justified", retained: line.amount, justificationDeadline: deadline };
     }
-    if (d > deadline) {
+    if (deadline !== null && d > deadline) {
       return { ...line, status: "expired_forfeited", retained: 0, justificationDeadline: deadline };
     }
     return { ...line, status: "pending", retained: line.amount, justificationDeadline: deadline };

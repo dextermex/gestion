@@ -16,11 +16,11 @@ export function Kpi({
 }) {
   return (
     <Card className="p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
       <p
         className={
-          "mt-1 font-display text-2xl font-bold tabular-nums " +
-          (tone === "good" ? "text-emerald-700" : tone === "bad" ? "text-red-600" : "text-ink")
+          "mt-1 font-display text-2xl font-bold tracking-tight tabular-nums " +
+          (tone === "good" ? "text-emerald-700" : tone === "bad" ? "text-red-700" : "text-ink")
         }
       >
         {value}
@@ -81,7 +81,7 @@ export function Timeline({
             <p className="text-sm text-ink">{e.label}</p>
             {e.sub && <p className="text-xs text-ink-soft">{e.sub}</p>}
           </div>
-          <p className="shrink-0 text-[11px] text-ink-soft/70">{e.at}</p>
+          <p className="shrink-0 text-[11px] text-ink-soft">{e.at}</p>
         </li>
       ))}
     </ul>
@@ -117,7 +117,7 @@ export function LinkRow({
 /** Inline legal-basis note — every enforced rule names its statute. */
 export function LegalNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-soft/80">
+    <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-soft">
       <svg className="mt-0.5 h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 3 4 6v5c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-3Z" />
       </svg>

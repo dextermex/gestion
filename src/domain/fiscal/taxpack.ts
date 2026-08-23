@@ -257,8 +257,11 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
   const flatRaw = pct(totalTaxable, getParamValue("tax.flat_deduction_pct_of_gross_rent", jan1));
   const flatCap = getParamValue("tax.flat_deduction_cap_eur", jan1) * 100;
   const flatAmount = flatEligible ? Math.min(flatRaw, flatCap) : 0;
-  const itemisedReplaceable = deductedThisYear + priorInstalments + otherFrais + amortAmount + insurance + permanentCharges;
-  const alwaysDeductible = debtInterest + impotFoncier + managementFees;
+  // The forfait replaces maintenance, other frais, insurance and amortisation.
+  // Communal charges join interest, impôt foncier and management fees as
+  // ALWAYS separately deductible on top (brief §1.3).
+  const itemisedReplaceable = deductedThisYear + priorInstalments + otherFrais + amortAmount + insurance;
+  const alwaysDeductible = debtInterest + impotFoncier + managementFees + permanentCharges;
   const recommendation: FlatDeductionComparison["recommendation"] =
     flatEligible && flatAmount > itemisedReplaceable ? "flat" : "itemise";
   const flatComparison: FlatDeductionComparison = {

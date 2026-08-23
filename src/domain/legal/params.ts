@@ -155,10 +155,10 @@ export const LEGAL_PARAMS: LegalParam<number>[] = [
   // Residential — loi du 21 septembre 2006 as amended by loi du 23 juillet 2024
   P("residential.deposit_max_months", 3, "verified", "loi 21.9.2006 (pre-2024)", "2006-11-01", "2024-08-01"),
   P("residential.deposit_max_months", 2, "verified", "loi 23.7.2024, in force 1.8.2024"),
-  P("residential.notice_tenant_months", 3, "verified", "loi 21.9.2006 art. 12"),
-  P("residential.notice_landlord_months", 3, "verified", "loi 21.9.2006 art. 12"),
-  P("residential.notice_landlord_personal_need_months", 6, "verified", "loi 21.9.2006 art. 12(3)"),
-  P("residential.rent_ceiling_pct_of_capital", 5, "verified", "loi 21.9.2006 art. 3 (capital investi)"),
+  P("residential.notice_tenant_months", 3, "verified", "loi 21.9.2006 art. 12", "2006-11-01"),
+  P("residential.notice_landlord_months", 3, "verified", "loi 21.9.2006 art. 12", "2006-11-01"),
+  P("residential.notice_landlord_personal_need_months", 6, "verified", "loi 21.9.2006 art. 12(3)", "2006-11-01"),
+  P("residential.rent_ceiling_pct_of_capital", 5, "verified", "loi 21.9.2006 art. 3 (capital investi)", "2006-11-01"),
   P("residential.rent_adjustment_min_interval_months", 24, "verified", "loi 23.7.2024"),
   P("residential.rent_adjustment_max_step_pct", 10, "verified", "loi 23.7.2024 (replaces rule of thirds)"),
   P("residential.agency_fee_split_tenant_share_pct", 50, "verified", "loi 23.7.2024 — 50/50 split by operation of law"),
@@ -171,9 +171,9 @@ export const LEGAL_PARAMS: LegalParam<number>[] = [
   P("residential.deposit_penalty_pct_of_monthly_rent_per_month", 10, "verified", "loi 23.7.2024 — +10% of monthly rent per commenced month after mise en demeure"),
   P("residential.first_refusal_occupancy_years", 18, "verified", "loi 21.9.2006 (2024 rev.)"),
   P("residential.first_refusal_breach_min_indemnity_months_rent", 12, "verified", "≥ 1 year's rent"),
-  P("residential.commission_loyers_inadmissible_first_months", 6, "verified", "commission des loyers — contestation inadmissible in first 6 months"),
-  P("residential.decote_vetuste_pct_per_2y_beyond_15y", 2, "verified", "décote de vétusté on construction component"),
-  P("residential.cohabitant_lease_continuation_min_months", 6, "verified", "lease continues for registered cohabitants ≥ 6 months"),
+  P("residential.commission_loyers_inadmissible_first_months", 6, "verified", "commission des loyers — contestation inadmissible in first 6 months", "2006-11-01"),
+  P("residential.decote_vetuste_pct_per_2y_beyond_15y", 2, "verified", "décote de vétusté on construction component", "2006-11-01"),
+  P("residential.cohabitant_lease_continuation_min_months", 6, "verified", "lease continues for registered cohabitants ≥ 6 months", "2006-11-01"),
 
   // Commercial — loi du 3 février 2018, Art. 1762-3 → 1762-13 C. civ.
   P("commercial.deposit_max_months", 6, "verified", "loi 3.2.2018 — garantie locative cap", "2018-03-01"),
@@ -186,7 +186,7 @@ export const LEGAL_PARAMS: LegalParam<number>[] = [
   P("commercial.termination_notice_min_months", 6, "verified", "loi 3.2.2018 — registered letter with AR", "2018-03-01"),
   P("commercial.sublet_refusal_window_days", 30, "verified", "loi 3.2.2018", "2018-03-01"),
   P("commercial.sursis_max_months", 9, "verified", "loi 3.2.2018 — stay of eviction, not appealable", "2018-03-01"),
-  P("commercial.min_lease_duration_for_scope_months", 12, "verified", "leases < 1 year (pop-ups) excluded from scope", "2018-03-01"),
+  P("commercial.min_lease_duration_for_scope_months", 12, "uncertain", "leases < 1 year (pop-ups) excluded from scope (Molitor commentary; exact statutory month-threshold formulation to confirm on the 2018 law's text)", "2018-03-01"),
 
   // Amortisation — Art. 106(3)(4) LIR, RGD 19.11.1999 as amended, circ. 106/2
   P("amort.rate_normal_pct", 2, "verified", "circ. L.I.R. 106/2 — building completed ≥ 5 years ago", "2021-01-01"),
@@ -195,7 +195,7 @@ export const LEGAL_PARAMS: LegalParam<number>[] = [
   P("amort.accelerated_max_buildings_per_taxpayer", 2, "verified", "max 2 buildings or parts, residential letting, per taxpayer", "2021-01-01", null, "Open item #2: per-taxpayer vs household / lifetime vs per-year — circ. 106/2 12.08.2025"),
   P("amort.rate_grandfathered_pct", 6, "verified", "pre-2021 acquisitions, completion < 6 years; exhausted after tax year 2026", "2015-01-01", "2027-01-01"),
   P("amort.grandfathered_window_years", 6, "verified", "circ. 106/2 (2022)", "2015-01-01", "2027-01-01"),
-  P("amort.rate_vefa2024_pct", 6, "verified", "2024 housing package — notarial deed in 2024, extended to 30.06.2025", "2024-01-01"),
+  P("amort.rate_vefa2024_pct", 6, "verified", "2024 housing package — notarial deed in 2024, extended to 30.06.2025", "2024-01-01", null, "Uncertainty register #1: closed-cohort eligibility dates (transitional window to 30.09.2025?) — read loi du 22 mai 2024 + 2025 transitional bill; qualifying owners keep 6% for their full 6 years"),
   P("amort.vefa2024_duration_years", 6, "verified", "6 years on capped base", "2024-01-01"),
   P("amort.vefa2024_base_cap_eur_per_year", 250_000, "verified", "depreciation base capped at €250,000/year", "2024-01-01"),
   P("amort.rate_energy_pct", 6, "verified", "sustainable energy renovation — 6% up to tax year 2025", "2021-01-01", "2026-01-01"),
@@ -220,7 +220,7 @@ export const LEGAL_PARAMS: LegalParam<number>[] = [
   P("vat.intermediate_rate_pct", 14, "verified", "Annexes A/B/C loi TVA", "2024-01-01"),
   P("vat.reduced_rate_pct", 8, "verified", "Annexes A/B/C loi TVA", "2024-01-01"),
   P("vat.super_reduced_rate_pct", 3, "verified", "TVA logement", "2024-01-01"),
-  P("vat.option_min_tenant_deduction_pct", 50, "verified", "Art. 45 + RGD 7.3.1980 — tenant deducts ≥ 50%"),
+  P("vat.option_min_tenant_deduction_pct", 50, "verified", "Art. 45 + RGD 7.3.1980 — tenant deducts ≥ 50%", "2024-08-01", null, "Uncertainty register #4: option granularity (per building/lot/lease) and treatment when the ratio later falls below 50% — read RGD 7.3.1980 directly"),
   P("vat.logement_max_advantage_eur", 50_000, "uncertain", "AED states €50,000; press claims €100,000 — verify before hard use", "2024-01-01", null, "Uncertainty register #6"),
   P("vat.logement_mixed_use_min_residential_pct", 75, "verified", "mixed-use qualifies fully if residential > 75%"),
   P("vat.logement_clawback_years", 2, "verified", "clawback if residential use lost within 2 years"),
@@ -243,7 +243,7 @@ export const LEGAL_PARAMS: LegalParam<number>[] = [
   P("syndic.ag_convocation_min_days", 15, "verified", "Art. 3", "1975-06-13"),
   P("syndic.ag_repeat_convocation_min_days", 8, "verified", "Art. 11 — repeat assembly on same agenda", "1975-06-13"),
   P("syndic.quarterly_provision_max_fraction_of_budget", 0.25, "verified", "Art. 25 — ≤ ¼ of annual budget", "1975-06-13"),
-  P("syndic.provision_max_fraction_no_permanent_advance", 0.5, "verified", "Art. 25 — ≤ ½ where no permanent advance stipulated", "1975-06-13"),
+  P("syndic.provision_max_fraction_no_permanent_advance", 0.5, "uncertain", "Art. 25 — ≤ ½ where no permanent advance stipulated (fiscal brief §7.2; confirm on the consolidated RGD text)", "1975-06-13"),
 
   // Compliance calendar
   P("compliance.cpe_validity_years", 10, "verified", "CPE 10-year validity; class must appear in every ad", "2008-01-01"),

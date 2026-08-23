@@ -2,16 +2,16 @@ import Link from "next/link";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LEASES, PROPERTIES, UNITS } from "@/lib/demo/data";
 import { euros } from "@/lib/types";
+import { getI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n/config";
 
-export default function BiensPage() {
+export default async function BiensPage() {
+  const { locale, d } = await getI18n();
   return (
     <div>
-      <PageHeader
-        title="Biens"
-        subtitle="Le patrimoine sous mandat — immeubles, lots, propriétaires et données cadastrales."
-      />
+      <PageHeader title={d.biens.title} subtitle={d.biens.subtitle} />
 
-      <div className="stagger-rise grid gap-5 sm:grid-cols-2">
+      <div className="stagger-rise grid grid-cols-1 gap-5 sm:grid-cols-2">
         {PROPERTIES.map((p) => {
           const units = UNITS.filter((u) => u.propertyId === p.id);
           const lettable = units.filter((u) => u.kind !== "parking");
@@ -42,7 +42,9 @@ export default function BiensPage() {
                           ? "bg-amber-100 text-amber-800"
                           : "bg-red-100 text-red-700")
                     }
-                    title={`Classe énergétique ${p.energyClass}`}
+                    role="img"
+                    aria-label={fmt(d.biens.energyAria, { cls: p.energyClass })}
+                    title={fmt(d.biens.energyAria, { cls: p.energyClass })}
                   >
                     {p.energyClass}
                   </span>
@@ -50,27 +52,35 @@ export default function BiensPage() {
 
                 <div className="mt-4 grid grid-cols-3 gap-3">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">Lots</p>
-                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">{units.length}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.biens.lots}</p>
+                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">{lettable.length}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">Occupés</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.biens.occupied}</p>
                     <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
                       {occupied.length}/{lettable.length}
                     </p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">Loyers/mois</p>
-                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">{euros(monthlyRent)}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+                      {d.biens.rentPerMonth}
+                    </p>
+                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
+                      {euros(monthlyRent, locale)}
+                    </p>
                   </div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-1.5">
-                  {p.isCopropriete && <Badge className="bg-sand-100 text-ink-soft">Copropriété</Badge>}
-                  {vacant > 0 && <Badge className="bg-amber-100 text-amber-800">{vacant} vacant{vacant > 1 ? "s" : ""}</Badge>}
-                  {!p.smokeDetectorsConfirmed && <Badge className="bg-red-100 text-red-700">Détecteurs à poser</Badge>}
+                  {p.isCopropriete && <Badge className="bg-sand-100 text-ink-soft">{d.biens.copro}</Badge>}
+                  {vacant > 0 && (
+                    <Badge className="bg-amber-100 text-amber-800">{fmt(d.biens.vacant, { n: vacant })}</Badge>
+                  )}
+                  {!p.smokeDetectorsConfirmed && (
+                    <Badge className="bg-red-100 text-red-700">{d.biens.smokeMissing}</Badge>
+                  )}
                 </div>
-                <p className="mt-3 truncate text-[11px] text-ink-soft/70">{p.ownershipNote}</p>
+                <p className="mt-3 truncate text-[11px] text-ink-soft">{p.ownershipNote}</p>
               </Card>
             </Link>
           );
