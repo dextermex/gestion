@@ -1,60 +1,41 @@
-# Deploying Morada Gestion to Cloudflare (`app.morada.lu`)
+# Deploying Morada Gestion — Vercel
 
-The app is a Next.js 15 App Router site rendered per-request (it reads the
-`morada_locale` cookie on every page), packaged for Cloudflare Workers with the
-**OpenNext** adapter. The `morada.lu` zone already lives on the target
-Cloudflare account, so the custom hostname is created by the deploy itself — no
-manual DNS record needed.
+Morada Gestion is hosted on **Vercel**, next to the other Morada properties
+(`morada.lu` and `www` already run there). It is a standard Next.js 15 App
+Router app rendered per-request (it reads the `morada_locale` cookie on every
+page) — zero-config on Vercel, no adapter needed.
 
-## What's committed
+## Production domain
 
-- `open-next.config.ts` — OpenNext Cloudflare config (no incremental cache: every
-  route is dynamic, so there's nothing to persist in KV/R2).
-- `wrangler.jsonc` — Worker name `morada-gestion`, `nodejs_compat`, minified
-  bundle, `ASSETS` binding, and the production route:
-  `{ "pattern": "app.morada.lu", "custom_domain": true }`.
-- `deploy/` — a snapshot of the exact published artifact (bundled `worker.js`,
-  the 50 static assets, and the Workers asset `manifest.json`). Handy for a
-  direct-upload deploy; regenerate it with `npm run build:cf` first.
+`app.morada.lu` — the DNS is already in place on the Cloudflare-managed
+`morada.lu` zone:
 
-## Finish the publish — pick one
-
-### A. Connect the repo in the Cloudflare dashboard (recommended)
-
-Workers Builds (Cloudflare's first-party CI) is already enabled on the account.
-
-1. Dashboard → **Workers & Pages → Create → Import a repository**.
-2. Pick **`dextermex/gestion`**, branch `claude/morada-property-management-ve2hla`
-   (or `main` once merged).
-3. It auto-detects `wrangler.jsonc`. Build command `npm run build:cf`,
-   deploy command `npx wrangler deploy`.
-4. Deploy. The route in `wrangler.jsonc` binds `app.morada.lu` automatically.
-
-Every push to the watched branch then redeploys.
-
-### B. One command locally
-
-```bash
-npm install
-npx wrangler login          # once, opens the browser
-npm run deploy:cf           # builds with OpenNext + wrangler deploy
+```
+CNAME  app  →  cname.vercel-dns.com   (proxied, like www and gestion)
 ```
 
-`wrangler` reads `wrangler.jsonc`, uploads the Worker + assets, and creates the
-`app.morada.lu` custom domain on the `morada.lu` zone.
+The zone also carries a pre-existing `gestion.morada.lu → Vercel` record, so
+that hostname works as an alternative or an alias.
 
-### C. Scoped API token (CI without the dashboard)
+## Setup (once, in the Morada Vercel account)
 
-Create a token with **Account → Workers Scripts → Edit**, **Account → Workers
-Routes → Edit**, **Zone → DNS → Edit** and **Zone → Workers Routes → Edit** on
-the `morada.lu` zone, then:
+1. **Add New → Project → Import Git Repository** → `dextermex/gestion`.
+   Framework auto-detects as Next.js; no custom settings needed.
+   Set the production branch (currently `claude/morada-property-management-ve2hla`,
+   or `main` once merged).
+2. Project → **Settings → Domains** → add `app.morada.lu` (and optionally
+   `gestion.morada.lu`). Since `morada.lu` is already verified in this
+   account, the domain attaches instantly — DNS is pre-pointed, nothing else
+   to change.
+3. Done. Every push to the production branch deploys; previews per PR.
 
-```bash
-CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… npm run deploy:cf
-```
+## Notes
 
-## After first deploy
-
-- `https://app.morada.lu` serves the app; the language follows the
-  `morada_locale` cookie (FR default, EN/DE/LU via the globe menu).
-- The bundle is ~3.4 MB / ~0.9 MB gzip — well within Workers limits.
+- An interim `morada-gestion` project exists in the AURA SOCIETY LLC team
+  (created via direct upload before the account question was settled). Once
+  the project lives in the Morada account, delete that interim one to keep
+  the separation between Morada and Aura clean.
+- No environment variables are required for the demo build. When Supabase is
+  wired for production, add `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Project → Settings → Environment
+  Variables (see docs/ARCHITECTURE.md).
