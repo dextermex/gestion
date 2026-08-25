@@ -1,7 +1,7 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote } from "@/components/gestion/bits";
 import { MessagesPanel } from "@/components/gestion/MessagesPanel";
-import { CONVERSATIONS } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { INTL_LOCALE, type Locale } from "@/lib/i18n/config";
 
@@ -16,6 +16,7 @@ function timeOf(iso: string, locale: Locale): string {
 
 export default async function MessagesPage() {
   const { locale, d } = await getI18n();
+  const { CONVERSATIONS } = await getDemo();
   const conversations = CONVERSATIONS.map((conv) => ({
     id: conv.id,
     subject: conv.subject,

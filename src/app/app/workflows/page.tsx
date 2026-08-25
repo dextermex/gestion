@@ -1,6 +1,6 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { TICKETS, WORKFLOWS } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import {
   WORKFLOW_STATES,
   euros,
@@ -40,6 +40,7 @@ function Stepper({ states, current, d }: { states: string[]; current: string; d:
 
 export default async function WorkflowsPage() {
   const { locale, d } = await getI18n();
+  const { TICKETS, WORKFLOWS } = await getDemo();
   const severityMeta = ticketSeverityMeta(d);
   const statusMeta = ticketStatusMeta(d);
   const moveIns = WORKFLOWS.filter((w) => w.kind === "move_in");

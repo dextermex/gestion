@@ -1,6 +1,7 @@
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
-import { RENT_PERIODS, leaseById, leaseUnitLabel } from "@/lib/demo/data";
+import BillUpload from "@/components/gestion/BillUpload";
+import { getDemo } from "@/lib/demo";
 import { euros } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -9,8 +10,10 @@ import { splitExact } from "@/domain/money";
 
 export default async function FinancePage() {
   const { locale, d } = await getI18n();
+  const { ORG, RENT_PERIODS, TICKETS, UNITS, contactById, leaseById, leaseUnitLabel, propertyById, unitById } =
+    await getDemo();
 
-  // Décompte de gérance — juillet 2026, mandat SCI Beaulieu (engine-computed).
+  // Décompte de gérance — juillet 2026, mandat de la SCI (engine-computed).
   const july = RENT_PERIODS.filter((rp) => rp.period === "2026-07");
   const beaulieuLeases = ["l-3b", "l-3c", "l-2a", "l-1a", "l-rdc"];
   const collectedRows = july
@@ -26,13 +29,45 @@ export default async function FinancePage() {
   // Co-owner split through the SCI (60/40) — exact to the cent.
   const [faberShare, pierreShare] = splitExact(netToOwner, [60, 40]);
 
+  const sci = contactById("c-sci-bealieu");
+  const ownerA = contactById("c-faber");
+  const ownerB = contactById("c-faber-p");
+  const artisan = contactById("c-krier");
+  const boilerTicket = TICKETS.find((t) => t.id === "t-1")!;
+  const unit3b = unitById("u-b-3b").label;
+
   return (
     <div>
-      <PageHeader title={d.finance.title} subtitle={d.finance.subtitle} />
+      <PageHeader
+        title={d.finance.title}
+        subtitle={d.finance.subtitle}
+        actions={
+          <BillUpload
+            d={d}
+            inbox={ORG.billInbox}
+            suppliers={[artisan, contactById("c-da-silva"), contactById("c-elektro")].map((c) => ({
+              id: c.id,
+              name: c.name,
+            }))}
+            unitOptions={UNITS.map((u) => ({
+              id: u.id,
+              label: `${u.label} — ${propertyById(u.propertyId).name}`,
+            }))}
+            ocr={{
+              supplierId: artisan.id,
+              subject: boilerTicket.title,
+              docNo: "2026-0812",
+              docDate: "2026-08-08",
+              amountLabel: "1 240,00",
+              unitId: "u-b-3b",
+            }}
+          />
+        }
+      />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">
         <div className="lg:col-span-3">
-          <Panel title={d.finance.statementTitle}>
+          <Panel title={fmt(d.finance.statementTitle, { sci: sci.name })}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -66,7 +101,7 @@ export default async function FinancePage() {
                   </tr>
                   <tr className="border-b border-sand-50">
                     <td className="px-3 py-2.5 text-ink">
-                      {d.finance.invoiceLine}
+                      {fmt(d.finance.invoiceLine, { artisan: artisan.name, unit: unit3b })}
                       <span className="ml-2 text-xs text-ink-soft">{d.finance.invoiceDetail}</span>
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-red-700">
@@ -90,11 +125,11 @@ export default async function FinancePage() {
                 </p>
                 <ul className="mt-2 space-y-1.5 text-sm">
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">Marie Faber — 60 %</span>
+                    <span className="text-ink-soft">{ownerA.name} — 60 %</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(faberShare, locale)}</span>
                   </li>
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">Pierre Faber — 40 %</span>
+                    <span className="text-ink-soft">{ownerB.name} — 40 %</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(pierreShare, locale)}</span>
                   </li>
                 </ul>

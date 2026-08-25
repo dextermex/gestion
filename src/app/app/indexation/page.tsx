@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, Panel } from "@/components/gestion/bits";
-import { LEASES, TODAY, leaseTenantNames, leaseUnitLabel } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { euros, formatDate, formatNumber } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -14,6 +14,7 @@ import {
 
 export default async function IndexationPage() {
   const { locale, d } = await getI18n();
+  const { LEASES, TODAY, leaseTenantNames, leaseUnitLabel, unitById } = await getDemo();
 
   const residential = LEASES.filter(
     (l) =>
@@ -106,7 +107,7 @@ export default async function IndexationPage() {
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Panel title={d.indexation.lagTitle}>
           <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
-            <p className="text-sm font-semibold text-sky-800">{d.indexation.lagCase}</p>
+            <p className="text-sm font-semibold text-sky-800">{fmt(d.indexation.lagCase, { unit: unitById("u-b-3b").label, tenant: leaseTenantNames(LEASES.find((l) => l.id === "l-3b")!)[0] })}</p>
             <p className="mt-1 text-xs leading-relaxed text-sky-800">{d.indexation.lagBody}</p>
             <div className="mt-2.5 flex flex-wrap gap-2">
               <DemoAction label={d.indexation.lagSend} doneMessage={d.indexation.lagSent} />

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { LEASES, TODAY, leaseTenantNames, leaseUnitLabel } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { euros, formatDate, leaseStatusMeta, leaseTypeMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -12,6 +12,7 @@ import { cents } from "@/domain/money";
 
 export default async function ContratsPage() {
   const { locale, d } = await getI18n();
+  const { LEASES, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const statusMeta = leaseStatusMeta(d);
   const typeMeta = leaseTypeMeta(d);
 

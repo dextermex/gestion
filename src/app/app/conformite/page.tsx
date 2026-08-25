@@ -1,6 +1,6 @@
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { ORG, PROPERTIES, TODAY, UNITS } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { deadlineStatusMeta, formatDate, formatNumber } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -19,26 +19,26 @@ import {
 import { getParamValue, paramsInForce } from "@/domain/legal/params";
 
 /** Deadline label from its stable kind — never from the engine's English label. */
-function deadlineLabel(d: Dict, dl: Deadline, what?: string): string {
+function deadlineLabel(d: Dict, dl: Deadline, today: string, what?: string): string {
   switch (dl.kind) {
     case "cpe_expiry":
       return d.legal.deadlineKind.cpe_expiry;
     case "commune_arrival_declaration":
       return fmt(d.legal.deadlineKind.commune_arrival_declaration, {
-        days: getParamValue("compliance.commune_arrival_declaration_days", TODAY),
+        days: getParamValue("compliance.commune_arrival_declaration_days", today),
       });
     case "syndic_mandate_expiry":
       return fmt(d.legal.deadlineKind.syndic_mandate_expiry, {
-        years: getParamValue("syndic.mandate_max_years", TODAY),
+        years: getParamValue("syndic.mandate_max_years", today),
       });
     case "ag_convocation":
       return fmt(d.legal.deadlineKind.ag_convocation, {
-        days: getParamValue("syndic.ag_convocation_min_days", TODAY),
+        days: getParamValue("syndic.ag_convocation_min_days", today),
         repeat: "",
       });
     case "defect_window_end":
       return fmt(d.legal.deadlineKind.defect_window_end, {
-        days: getParamValue("compliance.defect_window_default_days", TODAY),
+        days: getParamValue("compliance.defect_window_default_days", today),
       });
     case "licence_expiry":
       return fmt(d.legal.deadlineKind.licence_expiry, { what: what ?? dl.relatedLabel });
@@ -49,6 +49,8 @@ function deadlineLabel(d: Dict, dl: Deadline, what?: string): string {
 
 export default async function ConformitePage() {
   const { locale, d } = await getI18n();
+  const demo = await getDemo();
+  const { ORG, PROPERTIES, TODAY, UNITS } = demo;
   const statusMeta = deadlineStatusMeta(d);
 
   // The calendar is GENERATED from data — every deadline is an engine output.
@@ -68,8 +70,13 @@ export default async function ConformitePage() {
     ...PROPERTIES.filter((p) => p.nextAgDate).map((p) => ({
       dl: agConvocationDeadline(p.name, p.nextAgDate!, false),
     })),
-    { dl: communeArrivalDeadline("Lucas Weber (Apt 2A)", "2026-08-18") },
-    { dl: defectWindowEnd("Maison Bertrange", "2026-12-01") },
+    {
+      dl: communeArrivalDeadline(
+        `${demo.contactById("c-weber").name} (${demo.unitById("u-b-2a").label})`,
+        "2026-08-18",
+      ),
+    },
+    { dl: defectWindowEnd(demo.propertyById("p-bertrange").name, "2026-12-01") },
   ];
 
   const sorted = deadlines
@@ -108,7 +115,7 @@ export default async function ConformitePage() {
                     aria-hidden
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-ink">{deadlineLabel(d, dl, what)}</p>
+                    <p className="text-sm font-semibold text-ink">{deadlineLabel(d, dl, TODAY, what)}</p>
                     <p className="text-xs text-ink-soft">
                       {dl.relatedLabel} · {dl.legalBasis}
                     </p>

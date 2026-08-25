@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { MetaBadge } from "@/components/gestion/bits";
-import { CONTACTS } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { amlTierMeta, contactRoleMeta, initials, type ContactRole } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -13,6 +13,7 @@ export default async function ContactsPage({
 }) {
   const params = await searchParams;
   const { d } = await getI18n();
+  const { CONTACTS } = await getDemo();
   const roleMeta = contactRoleMeta(d);
   const amlMeta = amlTierMeta(d);
 

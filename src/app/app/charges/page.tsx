@@ -1,13 +1,6 @@
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
-import {
-  LEASE_TANTIEMES,
-  RENT_PERIODS,
-  SYNDIC_DECOMPTE_2025,
-  leaseById,
-  leaseTenantNames,
-  leaseUnitLabel,
-} from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { euros } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -15,6 +8,7 @@ import { mapSyndicDecompte } from "@/domain/charges/recharge";
 
 export default async function ChargesPage() {
   const { locale, d } = await getI18n();
+  const { LEASE_TANTIEMES, RENT_PERIODS, SYNDIC_DECOMPTE_2025, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
 
   // Blocked categories are stable engine codes — labels come from the dict.
   const blockLabel: Record<string, string> = {

@@ -10,17 +10,19 @@ import NavigationProgress from "@/components/NavigationProgress";
 import GestionLogo from "./GestionLogo";
 import type { Dict } from "@/lib/i18n/fr";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
-import {
-  BANK_TXS,
-  CONTACTS,
-  CONVERSATIONS,
-  LEASES,
-  PROPERTIES,
-  UNITS,
-  leaseTenantNames,
-  leaseUnitLabel,
-  propertyById,
-} from "@/lib/demo/data";
+import type { SearchHit } from "@/lib/demo/search";
+
+/** Everything the shell needs from the active demo dataset, precomputed
+ *  server-side in the layout — the client bundle never ships the datasets. */
+export interface ShellData {
+  datasetId: "fr" | "lu";
+  orgShortName: string;
+  userName: string;
+  userEmail: string;
+  badges: { review: number; unread: number };
+  searchIndex: SearchHit[];
+  unitOptions: Array<{ id: string; label: string }>;
+}
 
 /* --------------------------------- nav model --------------------------------
    The immocloud workflow set (Dashboard, Workflows, Objects, Tenancies,
@@ -97,27 +99,26 @@ function quickAdd(d: Dict): Array<{ kind: CreateKind; label: string }> {
 export default function GestionShell({
   locale,
   dict,
+  shell,
   children,
 }: {
   locale: Locale;
   dict: Dict;
+  shell: ShellData;
   children: React.ReactNode;
 }) {
   const d = dict;
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [createKind, setCreateKind] = useState<CreateKind | null>(null);
   const reduced = useReducedMotion();
 
-  const badges = useMemo(
-    () => ({
-      review: BANK_TXS.filter((t) => t.status === "review").length,
-      unread: CONVERSATIONS.reduce((a, c) => a + c.unread, 0),
-    }),
-    [],
+  const NAV = useMemo(
+    () => navGroups(d, shell.badges),
+    [d, shell.badges],
   );
-  const NAV = useMemo(() => navGroups(d, badges), [d, badges]);
   const QUICK_ADD = useMemo(() => quickAdd(d), [d]);
 
   // ⌘K / Ctrl-K
@@ -174,11 +175,14 @@ export default function GestionShell({
           ))}
         </div>
       ))}
-      <div className="mt-auto border-t border-sand-100 pt-3 text-[11px] text-ink-soft">
-        <p className="px-3">{d.nav.ecosystem}</p>
-        <div className="flex gap-3 px-3 pt-1">
-          <a href="https://morada.lu" className="hover:text-brand-700">Morada</a>
-          <a href="https://morada.lu/pro" className="hover:text-brand-700">Pro</a>
+      <div className="mt-auto border-t border-sand-100 pt-3">
+        <DatasetSwitch d={d} datasetId={shell.datasetId} />
+        <div className="pt-3 text-[11px] text-ink-soft">
+          <p className="px-3">{d.nav.ecosystem}</p>
+          <div className="flex gap-3 px-3 pt-1">
+            <a href="https://morada.lu" className="hover:text-brand-700">Morada</a>
+            <a href="https://morada.lu/pro" className="hover:text-brand-700">Pro</a>
+          </div>
         </div>
       </div>
     </nav>
@@ -217,7 +221,7 @@ export default function GestionShell({
               </svg>
             </button>
 
-            <p className="truncate text-sm font-semibold text-ink">Cabinet Reuter</p>
+            <p className="truncate text-sm font-semibold text-ink">{shell.orgShortName}</p>
             <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-700">
               {d.common.demo}
             </span>
@@ -249,8 +253,12 @@ export default function GestionShell({
             </button>
 
             <LanguageMenu locale={locale} label={d.common.language} />
-            <QuickAddMenu items={QUICK_ADD} label={d.shell.newButton} onPick={(k) => setCreateKind(k)} />
-            <UserMenu email="alex@cabinet-reuter.lu" name="Alex Reuter" d={d} />
+            <QuickAddMenu
+              items={QUICK_ADD}
+              label={d.shell.newButton}
+              onPick={(k) => (k === "property" ? router.push("/app/biens/nouveau") : setCreateKind(k))}
+            />
+            <UserMenu email={shell.userEmail} name={shell.userName} d={d} />
           </header>
 
           <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">{children}</main>
@@ -262,14 +270,21 @@ export default function GestionShell({
           d={d}
           nav={NAV}
           quickAdd={QUICK_ADD}
+          index={shell.searchIndex}
           onCreate={(k) => {
             setPaletteOpen(false);
-            setCreateKind(k);
+            if (k === "property") router.push("/app/biens/nouveau");
+            else setCreateKind(k);
           }}
           reduced={Boolean(reduced)}
         />
 
-        <CreateDialog kind={createKind} onClose={() => setCreateKind(null)} d={d} />
+        <CreateDialog
+          kind={createKind}
+          onClose={() => setCreateKind(null)}
+          d={d}
+          unitOptions={shell.unitOptions}
+        />
       </div>
     </MotionConfig>
   );
@@ -504,47 +519,59 @@ function UserMenu({ email, name, d }: { email: string; name: string; d: Dict }) 
   );
 }
 
-/* ------------------------------ command palette ----------------------------- */
+/* ----------------------------- dataset switch ------------------------------- */
 
-interface SearchHit {
-  type: "property" | "unit" | "tenant" | "lease" | "contact";
-  label: string;
-  sub: string;
-  href: string;
+function DatasetSwitch({ d, datasetId }: { d: Dict; datasetId: "fr" | "lu" }) {
+  const router = useRouter();
+  const pick = (id: "fr" | "lu") => {
+    if (id === datasetId) return;
+    document.cookie = `morada_dataset=${id}; path=/; max-age=31536000; samesite=lax`;
+    router.refresh();
+  };
+  return (
+    <div className="px-3">
+      <div className="flex items-center gap-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+          {d.shell.datasetTitle}
+        </p>
+        <span className="rounded-full bg-accent-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-accent-700">
+          {d.shell.datasetBeta}
+        </span>
+      </div>
+      <div
+        role="radiogroup"
+        aria-label={d.shell.datasetAria}
+        className="mt-2 grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1"
+      >
+        {(["fr", "lu"] as const).map((id) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={id === datasetId}
+            onClick={() => pick(id)}
+            title={id === "fr" ? d.shell.datasetFr : d.shell.datasetLu}
+            className={
+              "rounded-lg px-2 py-1.5 text-xs font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+              (id === datasetId ? "bg-white text-brand-800 shadow-sm" : "text-ink-soft hover:text-ink")
+            }
+          >
+            {id.toUpperCase()}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[10px] leading-snug text-ink-soft">
+        {datasetId === "fr" ? d.shell.datasetFr : d.shell.datasetLu}
+      </p>
+    </div>
+  );
 }
 
-function searchDemo(q: string): SearchHit[] {
+/* ------------------------------ command palette ----------------------------- */
+
+function searchDemo(q: string, index: SearchHit[]): SearchHit[] {
   const needle = q.trim().toLowerCase();
   if (needle.length < 2) return [];
-  const hits: SearchHit[] = [];
-  for (const p of PROPERTIES) {
-    if (`${p.name} ${p.address}`.toLowerCase().includes(needle)) {
-      hits.push({ type: "property", label: p.name, sub: p.address, href: `/app/biens/${p.id}` });
-    }
-  }
-  for (const u of UNITS) {
-    const p = propertyById(u.propertyId);
-    if (`${u.label} ${p.name}`.toLowerCase().includes(needle)) {
-      hits.push({ type: "unit", label: `${u.label} — ${p.name}`, sub: p.address, href: `/app/biens/${p.id}` });
-    }
-  }
-  for (const c of CONTACTS) {
-    if (`${c.name} ${c.email ?? ""}`.toLowerCase().includes(needle)) {
-      hits.push({ type: "contact", label: c.name, sub: c.email ?? c.phone ?? "", href: `/app/contacts/${c.id}` });
-    }
-  }
-  for (const l of LEASES) {
-    const label = `${leaseUnitLabel(l)} · ${leaseTenantNames(l).join(", ")}`;
-    if (label.toLowerCase().includes(needle)) {
-      hits.push({
-        type: "lease",
-        label: leaseUnitLabel(l),
-        sub: leaseTenantNames(l).join(", "),
-        href: `/app/baux/${l.id}`,
-      });
-    }
-  }
-  return hits.slice(0, 12);
+  return index.filter((h) => h.hay.includes(needle)).slice(0, 12);
 }
 
 type PaletteItem =
@@ -558,6 +585,7 @@ function CommandPalette({
   d,
   nav,
   quickAdd,
+  index,
   onCreate,
   reduced,
 }: {
@@ -566,6 +594,7 @@ function CommandPalette({
   d: Dict;
   nav: NavGroup[];
   quickAdd: Array<{ kind: CreateKind; label: string }>;
+  index: SearchHit[];
   onCreate: (k: CreateKind) => void;
   reduced: boolean;
 }) {
@@ -585,7 +614,7 @@ function CommandPalette({
     }
   }, [open]);
 
-  const hits = searchDemo(q);
+  const hits = searchDemo(q, index);
   const needle = q.trim().toLowerCase();
   const createMatches = needle
     ? quickAdd.filter((i) => `${d.shell.createPrefix} ${i.label}`.toLowerCase().includes(needle) || i.label.toLowerCase().includes(needle))
@@ -778,10 +807,12 @@ function CreateDialog({
   kind,
   onClose,
   d,
+  unitOptions,
 }: {
   kind: CreateKind | null;
   onClose: () => void;
   d: Dict;
+  unitOptions: Array<{ id: string; label: string }>;
 }) {
   const [submitted, setSubmitted] = useState(false);
   useEffect(() => setSubmitted(false), [kind]);
@@ -833,10 +864,10 @@ function CreateDialog({
           {(kind === "lease" || kind === "payment" || kind === "ticket") && (
             <>
               <Field label={d.shell.fieldUnit}>
-                <Select defaultValue={UNITS[0].id}>
-                  {UNITS.map((u) => (
+                <Select defaultValue={unitOptions[0]?.id}>
+                  {unitOptions.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.label} — {propertyById(u.propertyId).name}
+                      {u.label}
                     </option>
                   ))}
                 </Select>

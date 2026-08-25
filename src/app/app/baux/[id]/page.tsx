@@ -2,18 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import {
-  DEPOSITS,
-  LEASES,
-  RENT_PERIODS,
-  TODAY,
-  contactById,
-  leaseById,
-  leaseTenantNames,
-  leaseUnitLabel,
-  propertyById,
-  unitById,
-} from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import {
   depositFormLabels,
   euros,
@@ -38,6 +27,7 @@ import { getParamValue } from "@/domain/legal/params";
 export default async function BailDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
+  const { DEPOSITS, LEASES, RENT_PERIODS, TODAY, contactById, leaseById, leaseTenantNames, leaseUnitLabel, propertyById, unitById } = await getDemo();
   const lease = LEASES.find((l) => l.id === id);
   if (!lease) notFound();
   const l = leaseById(id);

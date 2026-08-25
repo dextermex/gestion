@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel, Timeline } from "@/components/gestion/bits";
-import { CONTACTS, LEASES, TICKETS, leaseTenantNames, leaseUnitLabel } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import {
   amlTierMeta,
   contactRoleMeta,
@@ -21,6 +21,7 @@ import { fmt } from "@/lib/i18n/config";
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
+  const { CONTACTS, LEASES, TICKETS, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const contact = CONTACTS.find((c) => c.id === id);
   if (!contact) notFound();
   const c = contact!;
@@ -43,7 +44,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     ...(c.id === "c-sci-bealieu"
       ? [
           { kind: "payment", label: d.contacts.tlSciStatement, sub: d.contacts.tlSciStatementSub, at: formatDate("2026-08-05", locale) },
-          { kind: "document", label: d.contacts.tlSciCdd, sub: d.contacts.tlSciCddSub, at: formatDate("2026-02-10", locale) },
+          { kind: "document", label: d.contacts.tlSciCdd, sub: fmt(d.contacts.tlSciCddSub, { u1: CONTACTS.find((x) => x.id === "c-faber")!.name, u2: CONTACTS.find((x) => x.id === "c-faber-p")!.name }), at: formatDate("2026-02-10", locale) },
         ]
       : []),
     ...(c.id === "c-lambert"

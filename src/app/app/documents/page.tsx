@@ -1,6 +1,6 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
-import { DOCUMENTS } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { formatDate } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { INTL_LOCALE, fmt, type Locale } from "@/lib/i18n/config";
@@ -59,6 +59,7 @@ function sizeLabel(kb: number, locale: Locale): string {
 
 export default async function DocumentsPage() {
   const { locale, d } = await getI18n();
+  const { DOCUMENTS } = await getDemo();
   const cls = classLabels(d);
   const ret = retentionLabels(d);
 

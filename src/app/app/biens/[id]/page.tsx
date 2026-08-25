@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { LEASES, METERS, PROPERTIES, TODAY, UNITS, leaseTenantNames } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { METER_UNITS, euros, formatDate, formatNumber, leaseStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -19,6 +19,7 @@ import {
 export default async function BienDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
+  const { LEASES, METERS, PROPERTIES, TODAY, UNITS, leaseTenantNames } = await getDemo();
   const property = PROPERTIES.find((p) => p.id === id);
   if (!property) notFound();
   const p = property!;

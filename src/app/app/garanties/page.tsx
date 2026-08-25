@@ -1,14 +1,7 @@
 import Link from "next/link";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import {
-  DEPOSITS,
-  ENDED_LEASES,
-  TODAY,
-  leaseById,
-  leaseTenantNames,
-  leaseUnitLabel,
-} from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { depositFormLabels, depositStatusMeta, euros, formatDate } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -17,6 +10,7 @@ import { computeSettlement } from "@/domain/deposits/settlement";
 
 export default async function GarantiesPage() {
   const { locale, d } = await getI18n();
+  const { DEPOSITS, ENDED_LEASES, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const formLabels = depositFormLabels(d);
   const statusMeta = depositStatusMeta(d);
   const showcase = DEPOSITS.find((x) => x.id === "dep-gare")!;

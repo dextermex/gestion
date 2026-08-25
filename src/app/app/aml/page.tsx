@@ -1,6 +1,6 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { CONTACTS, TODAY } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { amlTierMeta, initials, riskBandMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -9,6 +9,8 @@ import { cents } from "@/domain/money";
 
 export default async function AmlPage() {
   const { d } = await getI18n();
+  const { CONTACTS, TODAY } = await getDemo();
+  const sciName = CONTACTS.find((c) => c.id === "c-sci-bealieu")!.name;
   const amlMeta = amlTierMeta(d);
   const riskMeta = riskBandMeta(d);
 
@@ -64,7 +66,7 @@ export default async function AmlPage() {
             </div>
             <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-ink">{d.aml.caseSci}</p>
+                <p className="text-sm font-semibold text-ink">{fmt(d.aml.caseSci, { sci: sciName })}</p>
                 <MetaBadge meta={amlMeta[sciTier.tier]} />
               </div>
               <ul className="mt-1.5 space-y-1">
@@ -79,7 +81,7 @@ export default async function AmlPage() {
           <LegalNote>{d.aml.triggersLegal}</LegalNote>
         </Panel>
 
-        <Panel title={d.aml.uboTitle}>
+        <Panel title={fmt(d.aml.uboTitle, { sci: sciName })}>
           <div className="rounded-xl border border-sand-200 p-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-800">

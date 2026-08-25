@@ -1,15 +1,9 @@
 import Link from "next/link";
-import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import {
-  LEASES,
-  RENT_PERIODS,
-  TODAY,
-  leaseById,
-  leaseTenantNames,
-  leaseUnitLabel,
-} from "@/lib/demo/data";
+import { CountCard } from "@/components/gestion/filters";
+import { getDemo } from "@/lib/demo";
 import { euros, formatDate, formatMonth, rentStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -20,16 +14,32 @@ const MONTHS = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
 export default async function LoyersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mois?: string }>;
+  searchParams: Promise<{ mois?: string; vue?: string }>;
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
+  const { LEASES, RENT_PERIODS, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const rentMeta = rentStatusMeta(d);
   const month = MONTHS.includes(params.mois ?? "") ? params.mois! : "2026-08";
-  const rows = RENT_PERIODS.filter((rp) => rp.period === month);
-  const expected = rows.reduce((a, r) => a + r.totalCents, 0);
-  const collected = rows.reduce((a, r) => a + r.allocatedCents, 0);
+  const view = params.vue === "impayes" || params.vue === "payes" ? params.vue : undefined;
+
+  const monthRows = RENT_PERIODS.filter((rp) => rp.period === month);
+  const expected = monthRows.reduce((a, r) => a + r.totalCents, 0);
+  const collected = monthRows.reduce((a, r) => a + r.allocatedCents, 0);
   const open = expected - collected;
+
+  const rows =
+    view === "impayes"
+      ? monthRows.filter((rp) => rp.status === "late" || rp.status === "partial")
+      : view === "payes"
+        ? monthRows.filter((rp) => rp.status === "paid")
+        : monthRows;
+
+  const withView = (vue?: string) => {
+    const q = new URLSearchParams({ mois: month });
+    if (vue) q.set("vue", vue);
+    return `/app/loyers?${q.toString()}`;
+  };
 
   const stageLabel: Record<Exclude<ArrearsStage, "none">, string> = {
     friendly: d.legal.arrears.stageFriendly,
@@ -85,7 +95,7 @@ export default async function LoyersPage({
         {MONTHS.map((m) => (
           <Link
             key={m}
-            href={`/app/loyers?mois=${m}`}
+            href={`/app/loyers?mois=${m}${view ? `&vue=${view}` : ""}`}
             aria-current={m === month ? "page" : undefined}
             className={
               "flex shrink-0 items-center rounded-full px-3.5 py-1.5 text-sm font-medium transition max-sm:min-h-11 " +
@@ -99,83 +109,88 @@ export default async function LoyersPage({
         ))}
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.loyers.expected}</p>
-          <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">
-            {euros(expected, locale)}
-          </p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.loyers.collected}</p>
-          <p
-            className={
-              "mt-1 font-display text-2xl font-bold tracking-tight tabular-nums " +
-              (collected >= expected ? "text-emerald-700" : "text-ink")
-            }
-          >
-            {euros(collected, locale)}
-          </p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.loyers.openBalance}</p>
-          <p
-            className={
-              "mt-1 font-display text-2xl font-bold tracking-tight tabular-nums " +
-              (open > 0 ? "text-red-700" : "text-ink")
-            }
-          >
-            {euros(open, locale)}
-          </p>
-        </Card>
+      {/* Overdue / expected / paid — the immocloud triple, wired as views */}
+      <div className="stagger-rise mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <CountCard
+          href={withView(view === "impayes" ? undefined : "impayes")}
+          value={euros(open, locale)}
+          label={`${d.loyers.openBalance} · ${d.loyers.viewOpen}`}
+          selected={view === "impayes"}
+          tone={open > 0 ? "bad" : "good"}
+        />
+        <CountCard
+          href={withView(undefined)}
+          value={euros(expected, locale)}
+          label={`${d.loyers.expected} · ${d.loyers.viewAll}`}
+          selected={view === undefined}
+        />
+        <CountCard
+          href={withView(view === "payes" ? undefined : "payes")}
+          value={euros(collected, locale)}
+          label={`${d.loyers.collected} · ${d.loyers.viewPaid}`}
+          selected={view === "payes"}
+          tone={collected >= expected && expected > 0 ? "good" : "default"}
+        />
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
-                <th className="px-4 py-2.5 font-semibold">{d.loyers.colUnit}</th>
-                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colExpected}</th>
-                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colCollected}</th>
-                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colBalance}</th>
-                <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colDue}</th>
-                <th className="px-4 py-2.5 text-right font-semibold">{d.loyers.colStatus}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((rp) => {
-                const l = leaseById(rp.leaseId);
-                const rowOpen = rp.totalCents - rp.allocatedCents;
-                return (
-                  <tr key={rp.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50">
-                    <td className="px-4 py-3">
-                      <Link href={`/app/baux/${l.id}`} className="font-semibold text-ink hover:text-brand-700">
-                        {leaseUnitLabel(l)}
-                      </Link>
-                      <p className="text-xs text-ink-soft">{leaseTenantNames(l).join(", ")}</p>
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.totalCents, locale)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.allocatedCents, locale)}</td>
-                    <td
-                      className={
-                        "px-3 py-3 text-right tabular-nums " +
-                        (rowOpen > 0 ? "font-semibold text-red-700" : "text-ink-soft")
-                      }
-                    >
-                      {euros(rowOpen, locale)}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{formatDate(rp.dueDate, locale)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <MetaBadge meta={rentMeta[rp.status]} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {rows.length === 0 ? (
+        <EmptyState
+          title={d.loyers.emptyTitle}
+          body={d.loyers.emptyBody}
+          action={
+            <Link href={withView(undefined)} className="text-sm font-semibold text-brand-700 hover:underline">
+              {d.common.resetFilters}
+            </Link>
+          }
+        />
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
+                  <th className="px-4 py-2.5 font-semibold">{d.loyers.colUnit}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colExpected}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colCollected}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colBalance}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colDue}</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">{d.loyers.colStatus}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((rp) => {
+                  const l = leaseById(rp.leaseId);
+                  const rowOpen = rp.totalCents - rp.allocatedCents;
+                  return (
+                    <tr key={rp.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50">
+                      <td className="px-4 py-3">
+                        <Link href={`/app/baux/${l.id}`} className="font-semibold text-ink hover:text-brand-700">
+                          {leaseUnitLabel(l)}
+                        </Link>
+                        <p className="text-xs text-ink-soft">{leaseTenantNames(l).join(", ")}</p>
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.totalCents, locale)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.allocatedCents, locale)}</td>
+                      <td
+                        className={
+                          "px-3 py-3 text-right tabular-nums " +
+                          (rowOpen > 0 ? "font-semibold text-red-700" : "text-ink-soft")
+                        }
+                      >
+                        {euros(rowOpen, locale)}
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{formatDate(rp.dueDate, locale)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <MetaBadge meta={rentMeta[rp.status]} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Panel title={d.loyers.arrearsTitle}>

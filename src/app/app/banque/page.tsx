@@ -1,15 +1,23 @@
-import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import Link from "next/link";
+import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { ReviewQueue } from "@/components/gestion/ReviewQueue";
-import { BANK_ACCOUNTS, BANK_TXS, TODAY } from "@/lib/demo/data";
+import { DemoAction } from "@/components/gestion/DemoAction";
+import { getDemo } from "@/lib/demo";
 import { bankTxStatusMeta, euros, formatDate, formatPct, matchTierMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { diffDays } from "@/domain/dates";
 import { vopNameCheck } from "@/domain/banking/rf";
 
-export default async function BanquePage() {
+export default async function BanquePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vue?: string }>;
+}) {
+  const params = await searchParams;
   const { locale, d } = await getI18n();
+  const { BANK_ACCOUNTS, BANK_TXS, TODAY } = await getDemo();
   const txMeta = bankTxStatusMeta(d);
   const tierMeta = matchTierMeta(d);
 
@@ -17,6 +25,23 @@ export default async function BanquePage() {
   const inCount = BANK_TXS.filter((t) => t.amount > 0).length;
   const autoRate = Math.round((100 * autoCount) / inCount);
   const review = BANK_TXS.filter((t) => t.status === "review");
+
+  // Transaction views — the immocloud tab pills, URL-driven.
+  const views = [
+    { slug: undefined, label: d.banque.viewAll, count: BANK_TXS.length },
+    { slug: "averifier", label: d.banque.viewReview, count: review.length },
+    { slug: "auto", label: d.banque.viewAuto, count: BANK_TXS.filter((t) => t.status === "auto" || t.status === "manual").length },
+    { slug: "ignorees", label: d.banque.viewIgnored, count: BANK_TXS.filter((t) => t.status === "ignored").length },
+  ] as const;
+  const vue = views.some((v) => v.slug === params.vue) ? params.vue : undefined;
+  const txRows =
+    vue === "averifier"
+      ? review
+      : vue === "auto"
+        ? BANK_TXS.filter((t) => t.status === "auto" || t.status === "manual")
+        : vue === "ignorees"
+          ? BANK_TXS.filter((t) => t.status === "ignored")
+          : BANK_TXS;
 
   const cascade: Array<[string, string]> = [
     [d.banque.cascade0, d.banque.cascade0Body],
@@ -29,7 +54,7 @@ export default async function BanquePage() {
     <div>
       <PageHeader title={d.banque.title} subtitle={d.banque.subtitle} />
 
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card className="p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.banque.kpiAuto}</p>
           <p
@@ -72,6 +97,16 @@ export default async function BanquePage() {
             )}
           </Card>
         ))}
+        {/* Connect a new account — the calm dashed slot, PSD2 read-only */}
+        <Card className="flex flex-col items-start justify-between border-dashed bg-sand-50/50 p-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+              {d.banque.accountsTitle}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-soft">{d.banque.connectBody}</p>
+          </div>
+          <DemoAction label={`+ ${d.banque.connectAccount}`} doneMessage={d.banque.connectDone} className="mt-3" />
+        </Card>
       </div>
 
       {review.length > 0 && (
@@ -96,6 +131,49 @@ export default async function BanquePage() {
         </Panel>
       )}
 
+      {/* Status pills + refresh — the immocloud banking toolbar */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto">
+          {views.map((v) => (
+            <Link
+              key={v.label}
+              href={v.slug ? `/app/banque?vue=${v.slug}` : "/app/banque"}
+              aria-current={vue === v.slug ? "page" : undefined}
+              className={
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition max-sm:min-h-11 " +
+                (vue === v.slug
+                  ? "bg-brand-600 text-white"
+                  : "border border-sand-200 bg-white text-ink-soft hover:border-brand-200 hover:text-brand-700")
+              }
+            >
+              {v.label}
+              <span
+                className={
+                  "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums " +
+                  (vue === v.slug ? "bg-white/20 text-white" : "bg-sand-100 text-ink-soft")
+                }
+              >
+                {v.count}
+              </span>
+            </Link>
+          ))}
+        </div>
+        <div className="ml-auto">
+          <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
+        </div>
+      </div>
+
+      {txRows.length === 0 ? (
+        <EmptyState
+          title={d.banque.emptyTitle}
+          body={d.banque.emptyBody}
+          action={
+            <Link href="/app/banque" className="text-sm font-semibold text-brand-700 hover:underline">
+              {d.common.resetFilters}
+            </Link>
+          }
+        />
+      ) : (
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -109,7 +187,7 @@ export default async function BanquePage() {
               </tr>
             </thead>
             <tbody>
-              {BANK_TXS.map((t) => (
+              {txRows.map((t) => (
                 <tr key={t.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50">
                   <td className="max-w-md px-4 py-3">
                     <p className="font-semibold text-ink">{t.counterpartyName}</p>
@@ -137,6 +215,7 @@ export default async function BanquePage() {
           </table>
         </div>
       </Card>
+      )}
 
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Panel title={d.banque.cascadeTitle}>

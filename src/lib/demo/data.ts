@@ -28,6 +28,10 @@ export const TODAY = "2026-08-23";
 export const ORG = {
   id: "org-1",
   name: "Morada Gestion — Cabinet Reuter",
+  shortName: "Cabinet Reuter",
+  managerName: "Alex Reuter",
+  managerEmail: "alex@cabinet-reuter.lu",
+  billInbox: "factures@cabinet-reuter.morada.lu",
   kind: "manager",
   autorisationNumber: "10123456/2",
   autorisationExpiry: "2028-03-31",

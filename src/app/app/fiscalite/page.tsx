@@ -1,6 +1,6 @@
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
-import { LAMBERT_PORTFOLIO, SCI_BEAULIEU_PORTFOLIO } from "@/lib/demo/data";
+import { getDemo } from "@/lib/demo";
 import { euros, eurosWhole } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -12,6 +12,9 @@ import { cents } from "@/domain/money";
 
 export default async function FiscalitePage() {
   const { locale, d } = await getI18n();
+  const { LAMBERT_PORTFOLIO, SCI_BEAULIEU_PORTFOLIO, contactById, propertyById } = await getDemo();
+  const lambertName = contactById("c-lambert").name;
+  const faberName = contactById("c-faber").name;
 
   // Taxpayer-level amortisation plans — the max-2-buildings rule in action.
   const lambertPlan = planTaxpayerYear(LAMBERT_PORTFOLIO, 2026, { jointlyTaxed: false });
@@ -69,7 +72,7 @@ export default async function FiscalitePage() {
       <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-        <Panel title={d.fiscalite.lambertTitle}>
+        <Panel title={fmt(d.fiscalite.lambertTitle, { owner: lambertName })}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -126,7 +129,7 @@ export default async function FiscalitePage() {
           <LegalNote>{d.fiscalite.lambertLegal}</LegalNote>
         </Panel>
 
-        <Panel title={d.fiscalite.faberTitle}>
+        <Panel title={fmt(d.fiscalite.faberTitle, { owner: faberName })}>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge className="bg-emerald-100 text-emerald-800">
               {fmt(d.fiscalite.slotsUsed, { used: faberPlan.acceleratedSlotsUsed })}
@@ -175,7 +178,7 @@ export default async function FiscalitePage() {
         </Panel>
       </div>
 
-      <Panel title={d.fiscalite.packTitle} className="mt-5">
+      <Panel title={fmt(d.fiscalite.packTitle, { property: propertyById("p-kirchberg").name, owner: lambertName })} className="mt-5">
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

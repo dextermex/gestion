@@ -75,7 +75,7 @@ button:focus-visible,
 [role="button"]:focus-visible,
 [role="tab"]:focus-visible,
 summary:focus-visible,
-[tabindex]:focus-visible {
+[tabindex]:not([tabindex="-1"]):focus-visible {
   outline: 2px solid var(--color-brand-600);
   outline-offset: 2px;
   /* No border-radius override: the outline follows each element's own
@@ -269,4 +269,18 @@ button:not(:disabled),
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Dashboard ring KPIs — draw from empty to value on load. The global
+   prefers-reduced-motion block above collapses this to an instant render. */
+@keyframes morada-ring {
+  from {
+    stroke-dashoffset: var(--ring-c);
+  }
+  to {
+    stroke-dashoffset: var(--ring-target);
+  }
+}
+.ring-draw {
+  animation: morada-ring 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
