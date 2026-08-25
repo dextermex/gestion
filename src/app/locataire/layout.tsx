@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const { d } = await getI18n();
   const demo = await getDemo();
-  const { tenant } = tenantPersona(demo);
+  const tenant = tenantPersona(demo)?.tenant ?? null;
 
   const tabs = [
     { href: "/locataire", label: d.tenant.navHome },
@@ -32,8 +32,12 @@ export default async function TenantLayout({ children }: { children: React.React
             {d.tenant.space}
           </span>
           <div className="flex-1" />
-          <span className="hidden text-sm font-semibold text-ink sm:block">{tenant.name}</span>
-          <Avatar name={tenant.name} size={32} />
+          {tenant && (
+            <>
+              <span className="hidden text-sm font-semibold text-ink sm:block">{tenant.name}</span>
+              <Avatar name={tenant.name} size={32} />
+            </>
+          )}
         </div>
         <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
           <TenantTabs tabs={tabs} />

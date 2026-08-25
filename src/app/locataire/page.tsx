@@ -3,6 +3,7 @@ import { Badge, Card } from "@/components/pro/ui";
 import { LinkRow, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { tenantPersona } from "@/lib/demo/tenant";
+import TenantEmpty from "@/components/gestion/TenantEmpty";
 import { euros, formatDate, ticketStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -10,7 +11,9 @@ import { fmt } from "@/lib/i18n/config";
 export default async function TenantHomePage() {
   const { locale, d } = await getI18n();
   const demo = await getDemo();
-  const { lease, tenant, unit, property, unitLabel } = tenantPersona(demo);
+  const persona = tenantPersona(demo);
+  if (!persona) return <TenantEmpty d={d} />;
+  const { lease, tenant, unit, property, unitLabel } = persona;
   const ticketMeta = ticketStatusMeta(d);
 
   const nextPeriod = demo.RENT_PERIODS.filter(

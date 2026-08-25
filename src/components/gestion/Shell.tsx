@@ -18,6 +18,8 @@ import type { SearchHit } from "@/lib/demo/search";
  *  server-side in the layout — the client bundle never ships the datasets. */
 export interface ShellData {
   datasetId: "fr" | "lu";
+  /** True once a real Morada session is driving the screen. */
+  signedIn: boolean;
   orgShortName: string;
   userName: string;
   userEmail: string;
@@ -178,7 +180,9 @@ export default function GestionShell({
         </div>
       ))}
       <div className="mt-auto border-t border-sand-100 pt-3">
-        <DatasetSwitch d={d} datasetId={shell.datasetId} />
+        {/* The demonstration switch cannot be reached by a signed-in
+            account: real data and sample data never share a screen. */}
+        {!shell.signedIn && <DatasetSwitch d={d} datasetId={shell.datasetId} />}
         <div className="pt-3 text-[11px] text-ink-soft">
           <p className="px-3">{d.nav.ecosystem}</p>
           <div className="flex gap-3 px-3 pt-1">
@@ -260,7 +264,7 @@ export default function GestionShell({
               label={d.shell.newButton}
               onPick={(k) => (k === "property" ? router.push("/app/biens/nouveau") : setCreateKind(k))}
             />
-            <UserMenu email={shell.userEmail} name={shell.userName} d={d} />
+            <UserMenu email={shell.userEmail} name={shell.userName} d={d} signedIn={shell.signedIn} />
           </header>
 
           <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">{children}</main>
@@ -475,9 +479,29 @@ function QuickAddMenu({
 
 /* -------------------------------- user menu --------------------------------- */
 
-function UserMenu({ email, name, d }: { email: string; name: string; d: Dict }) {
+function UserMenu({
+  email,
+  name,
+  d,
+  signedIn,
+}: {
+  email: string;
+  name: string;
+  d: Dict;
+  signedIn: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [signedOutNote, setSignedOutNote] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  // A real sign-out: the Supabase session is revoked and the cookie shared
+  // with morada.lu is erased, so no account stays visible to the next one.
+  const signOut = async () => {
+    setLeaving(true);
+    const { signOutEverywhere } = await import("@/lib/supabase/browser");
+    await signOutEverywhere();
+    window.location.assign("/connexion");
+  };
   const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
   const initials = name
     .split(" ")
@@ -511,14 +535,15 @@ function UserMenu({ email, name, d }: { email: string; name: string; d: Dict }) 
           {d.shell.switchSpace}
         </a>
         <div className="mt-1 border-t border-sand-100 pt-1">
-          {signedOutNote ? (
+          {!signedIn && signedOutNote ? (
             <p role="status" className="rounded-lg px-3 py-2 text-xs font-semibold text-emerald-800">
               {d.common.demoNotice}
             </p>
           ) : (
             <button
-              onClick={() => setSignedOutNote(true)}
-              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+              onClick={signedIn ? signOut : () => setSignedOutNote(true)}
+              disabled={leaving}
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               {d.shell.signOut}
             </button>

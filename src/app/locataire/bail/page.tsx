@@ -2,13 +2,16 @@ import { Panel } from "@/components/gestion/bits";
 import { MetaBadge } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { tenantPersona } from "@/lib/demo/tenant";
+import TenantEmpty from "@/components/gestion/TenantEmpty";
 import { euros, formatDate, leaseTypeMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 
 export default async function TenantLeasePage() {
   const { locale, d } = await getI18n();
   const demo = await getDemo();
-  const { lease, unit } = tenantPersona(demo);
+  const persona = tenantPersona(demo);
+  if (!persona) return <TenantEmpty d={d} />;
+  const { lease, unit } = persona;
   const typeMeta = leaseTypeMeta(d);
 
   const rows: Array<[string, React.ReactNode]> = [

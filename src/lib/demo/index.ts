@@ -7,12 +7,19 @@
  * `getDemo()` and never import a dataset module directly.
  */
 
+import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import * as frData from "./data";
 import * as luData from "./data-lu";
+import { buildEmptyData, orgFromWorkspace } from "./data-empty";
+import { getIdentity } from "@/lib/workspace";
 
 export type DatasetId = "fr" | "lu";
-export type DemoData = typeof frData;
+// `TODAY` is widened: the demo pins a date so its figures stay stable, while a
+// real account is simply "today". Everything else keeps its exact shape, so
+// the structural-parity check below still catches a missing collection.
+export type DemoData = Omit<typeof frData, "TODAY"> & { TODAY: string };
 
 export const DATASET_COOKIE = "morada_dataset";
 
@@ -25,6 +32,29 @@ export async function getDatasetId(): Promise<DatasetId> {
   return jar.get(DATASET_COOKIE)?.value === "lu" ? "lu" : "fr";
 }
 
-export async function getDemo(): Promise<DemoData> {
+/**
+ * The data every page reads.
+ *
+ * Signed in, it is the real account: the workspace comes from `agencies` and
+ * `crm_members`, and every collection starts empty because no gestion data
+ * exists yet. Each domain that gets connected fills its own collection here,
+ * and the pages need no change — they were always reading through this seam.
+ *
+ * Signed out, it is the demonstration. A demo dataset can therefore never be
+ * served to a real account: the two branches are exclusive, and the signed-in
+ * one is checked first.
+ */
+export const getDemo = cache(async (): Promise<DemoData> => {
+  const identity = await getIdentity();
+  if (identity) {
+    return buildEmptyData(
+      orgFromWorkspace(identity.active ?? { id: "", name: "", kind: "manager" }),
+    );
+  }
   return DATASETS[await getDatasetId()];
+});
+
+/** True when the demonstration is what is on screen. */
+export async function isDemo(): Promise<boolean> {
+  return (await getIdentity()) === null;
 }

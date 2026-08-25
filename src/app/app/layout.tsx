@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
+import NoWorkspace from "@/components/gestion/NoWorkspace";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { buildSearchIndex } from "@/lib/demo/search";
+import { getIdentity } from "@/lib/workspace";
 
 export const metadata: Metadata = {
   title: "Morada Gestion",
@@ -11,16 +14,23 @@ export const metadata: Metadata = {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { locale, d } = await getI18n();
+
+  // The management space is never public. Signing in happens with the Morada
+  // account: same project, same auth.users, no second identity.
+  const identity = await getIdentity();
+  if (!identity) redirect("/connexion?next=/app");
+  if (!identity.active) return <NoWorkspace d={d} email={identity.email} />;
+
   const [demo, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
 
-  // Everything the client shell needs from the active dataset, serialized —
-  // badges, search corpus, quick-add options, org identity. The datasets
-  // themselves stay server-side.
+  // Everything the client shell needs, serialized. Identity comes from the
+  // session; the dataset only ever supplies figures.
   const shellData = {
     datasetId,
-    orgShortName: demo.ORG.shortName,
-    userName: demo.ORG.managerName,
-    userEmail: demo.ORG.managerEmail,
+    signedIn: true,
+    orgShortName: identity.active.name,
+    userName: identity.displayName,
+    userEmail: identity.email,
     badges: {
       review: demo.BANK_TXS.filter((t) => t.status === "review").length,
       unread: demo.CONVERSATIONS.reduce((a, c) => a + c.unread, 0),
@@ -28,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     searchIndex: buildSearchIndex(demo),
     unitOptions: demo.UNITS.map((u) => ({
       id: u.id,
-      label: `${u.label} — ${demo.propertyById(u.propertyId).name}`,
+      label: `${u.label} \u2014 ${demo.propertyById(u.propertyId).name}`,
     })),
   };
 

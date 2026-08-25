@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/pro/ui";
 import TenantRequests, { type RequestKind } from "@/components/gestion/TenantRequests";
 import { getDemo } from "@/lib/demo";
 import { tenantPersona } from "@/lib/demo/tenant";
+import TenantEmpty from "@/components/gestion/TenantEmpty";
 import { formatDate, ticketStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 
@@ -13,7 +14,9 @@ export default async function TenantRequestsPage({
   const params = await searchParams;
   const { locale, d } = await getI18n();
   const demo = await getDemo();
-  const { lease } = tenantPersona(demo);
+  const persona = tenantPersona(demo);
+  if (!persona) return <TenantEmpty d={d} />;
+  const { lease } = persona;
   const ticketMeta = ticketStatusMeta(d);
 
   const initial: RequestKind | undefined =

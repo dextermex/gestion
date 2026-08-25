@@ -3,13 +3,16 @@ import { DemoAction } from "@/components/gestion/DemoAction";
 import { MetaBadge } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { tenantPersona } from "@/lib/demo/tenant";
+import TenantEmpty from "@/components/gestion/TenantEmpty";
 import { euros, formatDate, formatMonth, rentStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 
 export default async function TenantPaymentsPage() {
   const { locale, d } = await getI18n();
   const demo = await getDemo();
-  const { lease } = tenantPersona(demo);
+  const persona = tenantPersona(demo);
+  if (!persona) return <TenantEmpty d={d} />;
+  const { lease } = persona;
   const rentMeta = rentStatusMeta(d);
   const account = demo.BANK_ACCOUNTS[0];
 
