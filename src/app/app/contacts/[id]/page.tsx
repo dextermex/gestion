@@ -126,7 +126,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-ink">
-                        {t.ref} — {t.title}
+                        {t.ref} · {t.title}
                       </p>
                       <p className="text-xs text-ink-soft">{t.unitLabel}</p>
                     </div>

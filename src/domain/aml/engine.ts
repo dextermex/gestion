@@ -55,21 +55,21 @@ export function resolveCddTier(
   const cashThreshold = getParamValue("aml.cash_threshold_eur", input.onDate) * 100;
 
   if (input.relationship === "sale_mandate") {
-    triggers.push("Sale mandate — agents immobiliers are obliged entities for purchase and sale.");
+    triggers.push("Sale mandate, agents immobiliers are obliged entities for purchase and sale.");
   }
   if (
     (input.relationship === "letting_mandate" || input.relationship === "tenancy") &&
     input.monthlyRent !== null &&
     input.monthlyRent >= rentThreshold
   ) {
-    triggers.push(`Letting with monthly rent ≥ €${rentThreshold / 100} — in AML scope.`);
+    triggers.push(`Letting with monthly rent ≥ €${rentThreshold / 100}, in AML scope.`);
   }
   const cashTotal = input.cashMovements.reduce((a, b) => a + b, 0);
   if (cashTotal >= cashThreshold) {
     triggers.push(`Cash movements of €${(cashTotal / 100).toFixed(0)} (single or linked) ≥ €${cashThreshold / 100}.`);
   }
   if (input.counterpartyIsLegalEntity) {
-    triggers.push("Non-natural-person counterparty — UBO resolution and RBE cross-check required.");
+    triggers.push("Non-natural-person counterparty, UBO resolution and RBE cross-check required.");
   }
 
   if (policy.defaultTier === "full_cdd" && triggers.length === 0) {
@@ -110,7 +110,7 @@ export function assessRisk(input: RiskFactorInput): RiskAssessment {
   if (input.clientType === "natural_non_resident") add(1, "Non-resident natural person");
   if (input.clientType === "legal_lux") add(1, "Luxembourg legal entity");
   if (input.clientType === "legal_foreign") add(3, "Foreign legal entity");
-  if (input.isPep) add(4, "Politically exposed person — enhanced due diligence");
+  if (input.isPep) add(4, "Politically exposed person, enhanced due diligence");
   if (input.complexOwnership) add(2, "Complex ownership chain");
   if (input.cashIntensive) add(2, "Cash-intensive pattern");
 
@@ -157,7 +157,7 @@ export function resolveUbo(root: UboNode[], onDate: ISODate): UboResolution {
         walk(n.children, eff);
       } else {
         complete = false;
-        issues.push(`Chain ends at legal entity “${n.name}” — obtain its shareholder register / RBE extract.`);
+        issues.push(`Chain ends at legal entity “${n.name}”, obtain its shareholder register / RBE extract.`);
       }
     }
   };
@@ -169,7 +169,7 @@ export function resolveUbo(root: UboNode[], onDate: ISODate): UboResolution {
     .sort((a, b) => b.effectivePct - a.effectivePct);
 
   if (ubos.length === 0 && complete) {
-    issues.push("No natural person above the threshold — apply the senior-managing-official fallback.");
+    issues.push("No natural person above the threshold, apply the senior-managing-official fallback.");
   }
   return { ubos, thresholdPct: threshold, complete, issues };
 }

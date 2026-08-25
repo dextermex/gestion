@@ -112,12 +112,12 @@ export function computeSettlement(input: SettlementInput): SettlementResult {
 
   if (!input.entryEdlExists && input.deductions.some((l) => l.kind === "damage")) {
     warnings.push(
-      "No entry EDL exists — damage deductions are legally unavailable and have been zeroed.",
+      "No entry EDL exists, damage deductions are legally unavailable and have been zeroed.",
     );
   }
   for (const l of lines) {
     if (l.status === "expired_forfeited") {
-      warnings.push(`Deduction “${l.label}” passed its 1-month justification window unjustified — forfeited.`);
+      warnings.push(`Deduction “${l.label}” passed its 1-month justification window unjustified, forfeited.`);
     }
     if (l.status === "pending") {
       warnings.push(`Deduction “${l.label}” still needs an invoice/estimate before ${l.justificationDeadline}.`);

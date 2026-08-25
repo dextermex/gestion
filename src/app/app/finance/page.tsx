@@ -51,7 +51,7 @@ export default async function FinancePage() {
             }))}
             unitOptions={UNITS.map((u) => ({
               id: u.id,
-              label: `${u.label} — ${propertyById(u.propertyId).name}`,
+              label: `${u.label} · ${propertyById(u.propertyId).name}`,
             }))}
             ocr={{
               supplierId: artisan.id,
@@ -125,11 +125,11 @@ export default async function FinancePage() {
                 </p>
                 <ul className="mt-2 space-y-1.5 text-sm">
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">{ownerA.name} — 60 %</span>
+                    <span className="text-ink-soft">{ownerA.name} · 60 %</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(faberShare, locale)}</span>
                   </li>
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">{ownerB.name} — 40 %</span>
+                    <span className="text-ink-soft">{ownerB.name} · 40 %</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(pierreShare, locale)}</span>
                   </li>
                 </ul>

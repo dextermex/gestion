@@ -25,7 +25,7 @@ export const TODAY = fr.TODAY;
 
 export const ORG = {
   ...fr.ORG,
-  name: "Morada Gestion — Cabinet Majerus",
+  name: "Morada Gestion · Cabinet Majerus",
   shortName: "Cabinet Majerus",
   managerName: "Anne Majerus",
   managerEmail: "anne@cabinet-majerus.lu",
@@ -41,13 +41,13 @@ export const CONTACTS: DemoContact[] = overlay(fr.CONTACTS, {
   "c-weber": { name: "Luc Wagener", email: "l.wagener@education.lu" },
   "c-dubois": { name: "Chantal Kremer", email: "chantal.kremer@outlook.com" },
   "c-hoffmann": { name: "Marco Steffen", email: "marco.steffen@pt.lu" },
-  "c-krier": { name: "Pol Kirsch", email: "p.kirsch@kirsch-jong.lu", notes: "Heizung a Sanitär — kënnt bannent 48 Stonnen" },
+  "c-krier": { name: "Pol Kirsch", email: "p.kirsch@kirsch-jong.lu", notes: "Heizung a Sanitär, kënnt bannent 48 Stonnen" },
   "c-da-silva": { name: "José Da Silva", email: "contact@dasilva-molerei.lu", notes: "Molerei, Buedem" },
   "c-elektro": { name: "Elektro Wagener Sàrl", email: "info@elektrowagener.lu" },
   "c-sci-bealieu": {
     name: "SCI Uelzecht",
     email: "sci.uelzecht@fiduciaire-majerus.lu",
-    notes: "Société civile immobilière — transparent (Art. 175 LIR), Modell 200",
+    notes: "Société civile immobilière, transparent (Art. 175 LIR), Modell 200",
   },
   "c-faber": { name: "Marie-Josée Kieffer", email: "mj.kieffer@pt.lu" },
   "c-faber-p": { name: "Pierre Kieffer", email: "pierre.kieffer@pt.lu" },
@@ -55,7 +55,7 @@ export const CONTACTS: DemoContact[] = overlay(fr.CONTACTS, {
     name: "Sabine Peeters",
     email: "sabine.peeters@skynet.be",
     country: "Belsch",
-    notes: "Net-Residentin (BE) — duebele Steierpack: Modell 100 LU + Cadre III BE",
+    notes: "Net-Residentin (BE), duebele Steierpack: Modell 100 LU + Cadre III BE",
   },
   "c-bock": { name: "Bäckerei Kremer Sàrl", email: "info@baeckerei-kremer.lu" },
   "c-wagner": { name: "Lynn Wampach", email: "lynn.wampach@gmail.com" },
@@ -74,7 +74,7 @@ export const PROPERTIES: DemoProperty[] = overlay(fr.PROPERTIES, {
     cadastralRef: "Esch-sur-Alzette / Sektioun A vun Esch-Nord / n° 372/1145",
     type: "Wunn- a Geschäftshaus",
     syndicName: "Syndic Minett Gestioun SA",
-    ownershipNote: "SCI Uelzecht (Marie-Josée Kieffer 60 %, Pierre Kieffer 40 %) — transparent",
+    ownershipNote: "SCI Uelzecht (Marie-Josée Kieffer 60 %, Pierre Kieffer 40 %), transparent",
   },
   "p-bertrange": {
     name: "Haus Miersch",
@@ -82,7 +82,7 @@ export const PROPERTIES: DemoProperty[] = overlay(fr.PROPERTIES, {
     commune: "Mersch",
     cadastralRef: "Miersch / Sektioun C vu Miersch / n° 214/889",
     type: "Eefamilljenhaus",
-    ownershipNote: "Marie-Josée & Pierre Kieffer — 50/50, kollektiv Besteierung",
+    ownershipNote: "Marie-Josée & Pierre Kieffer, 50/50, kollektiv Besteierung",
   },
   "p-kirchberg": {
     name: "Büroen Nordstad",
@@ -91,7 +91,7 @@ export const PROPERTIES: DemoProperty[] = overlay(fr.PROPERTIES, {
     cadastralRef: "Ettelbréck / Sektioun E vun Ettelbréck / n° 501/2231",
     type: "Bürosgebai",
     syndicName: "Syndic Nordstad Facilities",
-    ownershipNote: "Sabine Peeters (Net-Residentin BE) — 100 %",
+    ownershipNote: "Sabine Peeters (Net-Residentin BE), 100 %",
   },
   "p-gare": {
     name: "Studio Diddeleng",
@@ -99,7 +99,7 @@ export const PROPERTIES: DemoProperty[] = overlay(fr.PROPERTIES, {
     commune: "Dudelange",
     cadastralRef: "Diddeleng / Sektioun HoB / n° 388/2020",
     type: "Appartement",
-    ownershipNote: "Sabine Peeters — VEFA 2024 (Amortissement 6 %, Basis plafonéiert)",
+    ownershipNote: "Sabine Peeters, VEFA 2024 (Amortissement 6 %, Basis plafonéiert)",
   },
 });
 
@@ -130,7 +130,7 @@ export function leaseTenantNames(l: DemoLease): string[] {
 export function leaseUnitLabel(l: DemoLease): string {
   const u = unitById(l.unitId);
   const p = propertyById(u.propertyId);
-  return `${u.label} — ${p.name}`;
+  return `${u.label} · ${p.name}`;
 }
 
 export const RENT_PERIODS = fr.RENT_PERIODS;
@@ -142,7 +142,7 @@ export const LEASE_TANTIEMES = fr.LEASE_TANTIEMES;
 export const BANK_ACCOUNTS = fr.BANK_ACCOUNTS.map((b) =>
   b.id === "ba-op"
     ? { ...b, label: "Gérance-Konto (Drëttfongen)", holderNameVerbatim: "CABINET MAJERUS GESTIOUN SARL" }
-    : { ...b, label: "BGL — API-Flux (Enable Banking)", holderNameVerbatim: "CABINET MAJERUS GESTIOUN SARL" },
+    : { ...b, label: "BGL · API-Flux (Enable Banking)", holderNameVerbatim: "CABINET MAJERUS GESTIOUN SARL" },
 );
 
 export const BANK_TXS: DemoBankTx[] = overlay(fr.BANK_TXS, {
@@ -150,7 +150,7 @@ export const BANK_TXS: DemoBankTx[] = overlay(fr.BANK_TXS, {
     counterpartyName: "JANG WEIS",
     remittanceInfo: `LOYER AUGUST ${fr.LEASES[0].rfReference}`,
     matchExplain:
-      "RF-Referenz — deterministescht Rapprochement. Betrag = alen Loyer: INDEXATION_LAG erkannt, Daueroptrag net aktualiséiert (et feelen 70,00 €).",
+      "RF-Referenz: deterministescht Rapprochement. Betrag = alen Loyer: INDEXATION_LAG erkannt, Daueroptrag net aktualiséiert (et feelen 70,00 €).",
   },
   "tx-02": {
     counterpartyName: "NATHALIE KLEIN",
@@ -160,7 +160,7 @@ export const BANK_TXS: DemoBankTx[] = overlay(fr.BANK_TXS, {
   "tx-03": {
     counterpartyName: "BAECKEREI KREMER SARL",
     remittanceInfo: "LOYER + CHARGEN PLATEAU NORDSTAD TVA",
-    matchExplain: "Bezuelt-IBAN mam Bail verbonnen — FIFO-Allocatioun (Loyer 6 800 + Chargen 900 + TVA 17 %).",
+    matchExplain: "Bezuelt-IBAN mam Bail verbonnen: FIFO-Allocatioun (Loyer 6 800 + Chargen 900 + TVA 17 %).",
   },
   "tx-04": {
     counterpartyName: "M STEFFEN",
@@ -172,23 +172,23 @@ export const BANK_TXS: DemoBankTx[] = overlay(fr.BANK_TXS, {
     counterpartyName: "CNAP PRESTATIONS",
     remittanceInfo: "AIDE LOGEMENT STEFFEN MARCO 08-2026",
     matchExplain:
-      "Drëttbezueler (Wunnhëllef) — Kandidat Studio Rez 0,71. CNAP-IBAN verbannen fir déi nächst Méint ze automatiséieren.",
+      "Drëttbezueler (Wunnhëllef): Kandidat Studio Rez 0,71. CNAP-IBAN verbannen fir déi nächst Méint ze automatiséieren.",
   },
   "tx-06": {
     counterpartyName: "C KREMER",
-    remittanceInfo: "Loyer August partiell — Solde no Regularisatioun",
-    matchExplain: "Score 0,86: bekannten IBAN + Numm. Deelzuelung — FIFO alloziert, Rescht op (Preavis am Gaang).",
+    remittanceInfo: "Loyer August partiell - Solde no Regularisatioun",
+    matchExplain: "Score 0,86: bekannten IBAN + Numm. Deelzuelung: FIFO alloziert, Rescht op (Preavis am Gaang).",
   },
   "tx-07": {
     counterpartyName: "KIRSCH & JONG",
     remittanceInfo: "RECHNUNG 2026-0812 HEIZKESSEL UELZECHT",
-    matchExplain: "Ausgang — Handwierker-Rechnung (op der Rechnungssäit rapprochéiert).",
+    matchExplain: "Ausgang: Handwierker-Rechnung (op der Rechnungssäit rapprochéiert).",
   },
   "tx-08": {
     counterpartyName: "MME SANTOS PAULA",
     remittanceInfo: "loyer ana + luc august",
     matchExplain:
-      "Bezuelt-IBAN (Mamm vun der Ana Santos) mam Colocatiouns-Bail 2A verbonnen — Juli nach op, Relance am Gaang.",
+      "Bezuelt-IBAN (Mamm vun der Ana Santos) mam Colocatiouns-Bail 2A verbonnen; Juli nach op, Relance am Gaang.",
   },
 });
 
@@ -211,39 +211,39 @@ export const DEPOSITS: DemoDeposit[] = fr.DEPOSITS.map((dep) =>
 
 export const ENDED_LEASES = fr.ENDED_LEASES.map((l) => ({
   ...l,
-  label: "Studio 4A — Studio Diddeleng",
+  label: "Studio 4A · Studio Diddeleng",
   tenant: "Nora Antony",
 }));
 
 // ─── EDL ────────────────────────────────────────────────────────────────────
 
 export const EDLS: DemoEdl[] = overlay(fr.EDLS, {
-  "edl-1": { unitLabel: "Studio Rez — Residenz Uelzecht" },
-  "edl-2": { unitLabel: "Studio 4A — Studio Diddeleng" },
-  "edl-3": { unitLabel: "Apt 1A — Residenz Uelzecht" },
-  "edl-4": { unitLabel: "Haus — Haus Miersch" },
-  "edl-5": { unitLabel: "Apt 2A — Residenz Uelzecht" },
+  "edl-1": { unitLabel: "Studio Rez · Residenz Uelzecht" },
+  "edl-2": { unitLabel: "Studio 4A · Studio Diddeleng" },
+  "edl-3": { unitLabel: "Apt 1A · Residenz Uelzecht" },
+  "edl-4": { unitLabel: "Haus · Haus Miersch" },
+  "edl-5": { unitLabel: "Apt 2A · Residenz Uelzecht" },
 });
 
 // ─── Tickets ────────────────────────────────────────────────────────────────
 
 export const TICKETS: DemoTicket[] = overlay(fr.TICKETS, {
   "t-1": {
-    unitLabel: "Apt 3B — Residenz Uelzecht",
-    title: "Heizkessel am Feeler — Drock op 0,4 Bar",
-    rechargeDecision: { decision: "owner", note: "Grouss Reparatur — ni op de Locataire refakturéierbar (legale Blockage)." },
+    unitLabel: "Apt 3B · Residenz Uelzecht",
+    title: "Heizkessel am Feeler, Drock op 0,4 Bar",
+    rechargeDecision: { decision: "owner", note: "Grouss Reparatur: ni op de Locataire refakturéierbar (legale Blockage)." },
   },
-  "t-2": { unitLabel: "Apt 2A — Residenz Uelzecht", title: "Fiichtegkeetsspuren op der Mauer, Schlofkummer 2" },
+  "t-2": { unitLabel: "Apt 2A · Residenz Uelzecht", title: "Fiichtegkeetsspuren op der Mauer, Schlofkummer 2" },
   "t-3": {
-    unitLabel: "Plateau 1. — Büroen Nordstad",
+    unitLabel: "Plateau 1. · Büroen Nordstad",
     title: "Netzwierk-Priis defekt am Open Space",
-    rechargeDecision: { decision: "tenant", note: "Kommerzielle Bail — Refakturatioun no der Chargen-Klausel (Equipement vum Preneur)." },
+    rechargeDecision: { decision: "tenant", note: "Kommerzielle Bail: Refakturatioun no der Chargen-Klausel (Equipement vum Preneur)." },
   },
-  "t-4": { unitLabel: "Studio Rez — Residenz Uelzecht", title: "Silikon-Fuge an der Dusch nei ze maachen (EDL-Defekt Nr. 17)" },
+  "t-4": { unitLabel: "Studio Rez · Residenz Uelzecht", title: "Silikon-Fuge an der Dusch nei ze maachen (EDL-Defekt Nr. 17)" },
   "t-5": {
-    unitLabel: "Studio 4A — Studio Diddeleng",
+    unitLabel: "Studio 4A · Studio Diddeleng",
     title: "Nei ustrachen virun der Neiverlounung",
-    rechargeDecision: { decision: "owner", note: "Vetusté / Remise en état tëscht zwee Locatairen — Charge Proprietär." },
+    rechargeDecision: { decision: "owner", note: "Vetusté / Remise en état tëscht zwee Locatairen: Charge Proprietär." },
   },
 });
 
@@ -257,27 +257,27 @@ export const METERS: DemoMeter[] = overlay(fr.METERS, {
 // ─── Workflows ──────────────────────────────────────────────────────────────
 
 export const WORKFLOWS: DemoWorkflow[] = overlay(fr.WORKFLOWS, {
-  "wf-1": { label: "Haus Miersch — Chantal Kremer" },
+  "wf-1": { label: "Haus Miersch · Chantal Kremer" },
   "wf-2": {
-    label: "Studio 4A Diddeleng — Neiverlounung",
-    blockedReason: "CPE do, Fotoe feelen nach — Publikatioun blockéiert soulaang d'Annonce net komplett ass",
+    label: "Studio 4A Diddeleng · Neiverlounung",
+    blockedReason: "CPE do, Fotoe feelen nach; Publikatioun blockéiert soulaang d'Annonce net komplett ass",
   },
-  "wf-3": { label: "Apt 1A — Chantal Kremer (Preavis)" },
+  "wf-3": { label: "Apt 1A · Chantal Kremer (Preavis)" },
   "wf-4": {
-    label: "Studio 4A — Nora Antony",
-    blockedReason: "1 Ofzuch ouni Justificatif — leeft de 15/07 of (duerno forfaitär)",
+    label: "Studio 4A · Nora Antony",
+    blockedReason: "1 Ofzuch ouni Justificatif, leeft de 15/07 of (duerno verfall)",
   },
-  "wf-5": { label: "Lokal Rez Nordstad — Bäckerei-Café" },
+  "wf-5": { label: "Lokal Rez Nordstad · Bäckerei-Café" },
 });
 
 // ─── Messaging ──────────────────────────────────────────────────────────────
 
 export const CONVERSATIONS: DemoConversation[] = overlay(fr.CONVERSATIONS, {
   "conv-1": {
-    subject: "Heizkessel — Interventioun freides",
+    subject: "Heizkessel: Interventioun freides",
     messages: [
       { from: "Jang Weis", kind: "tenant", body: "Moien, den Drock ass haut de Moien erëm op 0,4 gefall. Foto derbäi.", at: "2026-08-19T08:12:00" },
-      { from: "Cabinet Majerus", kind: "manager", body: "Merci — Kirsch & Jong komme freides tëscht 8 an 10 Auer. Passt Iech de Creneau?", at: "2026-08-19T09:05:00" },
+      { from: "Cabinet Majerus", kind: "manager", body: "Merci, Kirsch & Jong komme freides tëscht 8 an 10 Auer. Passt Iech de Creneau?", at: "2026-08-19T09:05:00" },
       { from: "Pol Kirsch", kind: "artisan", body: "Creneau ugeholl. W.e.g. den Zougang zum Keller virgesinn (Expansiounsgefäss).", at: "2026-08-21T16:40:00" },
     ],
   },
@@ -285,7 +285,7 @@ export const CONVERSATIONS: DemoConversation[] = overlay(fr.CONVERSATIONS, {
     subject: "Attestation de logement",
     messages: [
       { from: "Ana Santos", kind: "tenant", body: "Moien, ech brauch eng Attestatioun fir d'Gemeng (Arrivée-Deklaratioun vum Luc).", at: "2026-08-20T10:48:00" },
-      { from: "System", kind: "system", body: "Attestatioun am Self-Service generéiert (QR-Verifikatioun) — Gemengendelai: 8 Deeg nom Anzuch.", at: "2026-08-20T11:02:00" },
+      { from: "System", kind: "system", body: "Attestatioun am Self-Service generéiert (QR-Verifikatioun). Gemengendelai: 8 Deeg nom Anzuch.", at: "2026-08-20T11:02:00" },
     ],
   },
   "conv-3": {
@@ -325,7 +325,7 @@ export const SCI_BEAULIEU_PORTFOLIO = fr.SCI_BEAULIEU_PORTFOLIO.map((x) => ({
 
 const SYNDIC_LINE_LABELS: Record<string, string> = {
   heating: "Kollektiv Heizung (ista)",
-  water: "Kaalt Waasser — gemeinsam",
+  water: "Kaalt Waasser · gemeinsam",
   lift_maintenance: "Ascenseur-Entretien",
   cleaning_common: "Botze Gemeinschaftsraim",
   common_electricity: "Stroum Gemeinschaftsraim",
@@ -342,14 +342,14 @@ export const SYNDIC_DECOMPTE_2025 = {
 // ─── Documents ──────────────────────────────────────────────────────────────
 
 export const DOCUMENTS: DemoDocument[] = overlay(fr.DOCUMENTS, {
-  "d-1": { name: "Bail Apt 3B — Weis (signéiert AES).pdf" },
+  "d-1": { name: "Bail Apt 3B · Weis (signéiert AES).pdf" },
   "d-2": { name: "EDL Entrée Studio Rez (versigelt, SHA-256-Manifest).pdf", relatedLabel: "Studio Rez" },
-  "d-3": { name: "Rechnung Kirsch 2026-0812 — Heizkessel.pdf" },
+  "d-3": { name: "Rechnung Kirsch 2026-0812 · Heizkessel.pdf" },
   "d-4": { name: "Notariatsakt Studio Diddeleng (VEFA 2024).pdf", relatedLabel: "Studio Diddeleng" },
-  "d-5": { name: "Zënscertificat BCEE 2025 — SCI Uelzecht.pdf", relatedLabel: "SCI Uelzecht" },
-  "d-6": { name: "Mise en demeure Apt 2A — AR vum 12/08 (Scan).pdf" },
-  "d-7": { name: "CDD — SCI Uelzecht (RBE, Associés-Register, UBO).pdf", relatedLabel: "SCI Uelzecht" },
-  "d-8": { name: "Décompte Syndic 2025 — Residenz Uelzecht (AG approuvéiert).pdf", relatedLabel: "Residenz Uelzecht" },
+  "d-5": { name: "Zënscertificat BCEE 2025 · SCI Uelzecht.pdf", relatedLabel: "SCI Uelzecht" },
+  "d-6": { name: "Mise en demeure Apt 2A · AR vum 12/08 (Scan).pdf" },
+  "d-7": { name: "CDD · SCI Uelzecht (RBE, Associés-Register, UBO).pdf", relatedLabel: "SCI Uelzecht" },
+  "d-8": { name: "Décompte Syndic 2025 · Residenz Uelzecht (AG approuvéiert).pdf", relatedLabel: "Residenz Uelzecht" },
   "d-9": { name: "Kandidatur-Dossier T. Schmit (net zréckbehalen).zip", relatedLabel: "Lokal Rez Nordstad" },
 });
 

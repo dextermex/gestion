@@ -64,7 +64,7 @@ export function CashflowChart({
           return (
             <g key={m.month}>
               <title>
-                {`${formatMonth(m.month, locale)} — ${legendExpected}: ${eurosWhole(m.expectedCents, locale)} · ${legendCollected}: ${eurosWhole(m.collectedCents, locale)}`}
+                {`${formatMonth(m.month, locale)} · ${legendExpected}: ${eurosWhole(m.expectedCents, locale)} · ${legendCollected}: ${eurosWhole(m.collectedCents, locale)}`}
               </title>
               {/* Expected track */}
               <rect

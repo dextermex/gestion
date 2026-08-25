@@ -202,7 +202,7 @@ export default async function LoyersPage({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">
-                        {leaseUnitLabel(l)} — {formatMonth(rp.period, locale)}
+                        {leaseUnitLabel(l)} · {formatMonth(rp.period, locale)}
                       </p>
                       <p className="text-xs text-ink-soft">
                         {fmt(d.legal.arrears.openAmount, { amount: euros(rp.totalCents - rp.allocatedCents, locale) })}{" "}

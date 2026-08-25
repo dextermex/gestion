@@ -216,7 +216,7 @@ export function matchTransaction(
 ): MatchDecision {
   // Outgoing or zero amounts are not rent.
   if (tx.amount <= 0) {
-    return { kind: "ignore", reason: "Outgoing or zero amount — not a rent receipt." };
+    return { kind: "ignore", reason: "Outgoing or zero amount, not a rent receipt." };
   }
 
   // Tier 1 — deterministic RF.
@@ -232,7 +232,7 @@ export function matchTransaction(
         confidence: 1,
         margin: null,
         indexationLag: lag ? { shortfall: lag.shortfall } : null,
-        explain: `RF reference ${rf} — deterministic match.`,
+        explain: `RF reference ${rf}, deterministic match.`,
       };
     }
   }
@@ -257,7 +257,7 @@ export function matchTransaction(
           confidence: 0.95,
           margin: null,
           indexationLag: lag ? { shortfall: lag.shortfall } : null,
-          explain: `Known payer IBAN bound to lease ${binding.leaseId} — FIFO allocation.`,
+          explain: `Known payer IBAN bound to lease ${binding.leaseId}, FIFO allocation.`,
         };
       }
     }
@@ -315,7 +315,7 @@ export function matchTransaction(
     candidates: scored.slice(0, 5).map((s) => ({ invoiceId: s.invoiceId, score: s.score, explain: s.explain })),
     reason:
       top.score >= config.autoPostThreshold
-        ? `Top score ${top.score.toFixed(2)} but margin ${margin.toFixed(2)} < ${config.minMargin} — two candidates too close (identical rents?).`
+        ? `Top score ${top.score.toFixed(2)} but margin ${margin.toFixed(2)} < ${config.minMargin}, two candidates too close (identical rents?).`
         : `Best score ${top.score.toFixed(2)} below the ${config.autoPostThreshold} auto-post threshold.`,
     suggestBinding:
       tx.counterpartyIban && top.score >= 0.45

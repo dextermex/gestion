@@ -132,7 +132,7 @@ export function resolveRegime(
         consumesAcceleratedSlot: false,
         cappedBase: Math.min(base.base, capEuros * 100),
         reason: "vefa2024",
-        note: `2024 housing package — 6%/6 yrs, base capped €${capEuros.toLocaleString("en")}/yr. Closed cohort (deeds to 30.06.2025); keeps computing at 6% through ${deedYear + duration - 1}.`,
+        note: `2024 housing package, 6%/6 yrs, base capped €${capEuros.toLocaleString("en")}/yr. Closed cohort (deeds to 30.06.2025); keeps computing at 6% through ${deedYear + duration - 1}.`,
       };
     }
   }
@@ -152,7 +152,7 @@ export function resolveRegime(
           consumesAcceleratedSlot: false,
           cappedBase: base.base,
           reason: "grandfathered",
-          note: "Transitional pre-2021 regime — exhausted after tax year 2026.",
+          note: "Transitional pre-2021 regime, exhausted after tax year 2026.",
         };
       }
     } catch (e) {
@@ -182,7 +182,7 @@ export function resolveRegime(
         consumesAcceleratedSlot: false,
         cappedBase: base.base,
         reason: "slots_exhausted",
-        note: `Eligible for 4% but the taxpayer's ${maxBuildings}-building limit is exhausted — falls back to 2%.`,
+        note: `Eligible for 4% but the taxpayer's ${maxBuildings}-building limit is exhausted, falls back to 2%.`,
       };
     }
   }
@@ -193,7 +193,7 @@ export function resolveRegime(
     consumesAcceleratedSlot: false,
     cappedBase: base.base,
     reason: "normal",
-    note: "Normal 2% — building completed ≥ 5 years ago.",
+    note: "Normal 2%, building completed ≥ 5 years ago.",
   };
 }
 
@@ -227,7 +227,7 @@ export function computeEnergyAmortisation(
       yearsRemaining: 0,
       reason: facts.energyWorksCost > 0 && facts.klimabonusReceived <= 0 ? "no_klimabonus" : "none",
       note: facts.energyWorksCost > 0 && facts.klimabonusReceived <= 0
-        ? "Energy works present but no Klimabonus aid recorded — special rate requires the subsidy."
+        ? "Energy works present but no Klimabonus aid recorded, special rate requires the subsidy."
         : "No qualifying energy renovation.",
     };
   }
@@ -242,7 +242,7 @@ export function computeEnergyAmortisation(
       amount: pct(base.energyBase, getParamValue("amort.rate_normal_pct", jan1)),
       yearsRemaining: 0,
       reason: "window_closed",
-      note: "9-year energy window closed — works base reverts to 2%.",
+      note: "9-year energy window closed, works base reverts to 2%.",
     };
   }
   const rate = getParamValue("amort.rate_energy_pct", jan1);

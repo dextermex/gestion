@@ -65,7 +65,7 @@ export default async function ConformitePage() {
     },
     ...PROPERTIES.map((p) => ({ dl: cpeExpiryDeadline(p.name, p.cpeIssuedOn) })),
     ...PROPERTIES.filter((p) => p.syndicMandateStart).map((p) => ({
-      dl: syndicMandateDeadline(`${p.name} — ${p.syndicName}`, p.syndicMandateStart!),
+      dl: syndicMandateDeadline(`${p.name} · ${p.syndicName}`, p.syndicMandateStart!),
     })),
     ...PROPERTIES.filter((p) => p.nextAgDate).map((p) => ({
       dl: agConvocationDeadline(p.name, p.nextAgDate!, false),

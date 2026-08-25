@@ -40,7 +40,7 @@ export default async function CompteursPage({
       .filter((v, i, a) => a.indexOf(v) === i)
       .map((id) => {
         const u = unitById(id);
-        return { id, label: `${u.label} — ${propertyById(u.propertyId).name}` };
+        return { id, label: `${u.label} · ${propertyById(u.propertyId).name}` };
       }),
     ...PROPERTIES.map((p) => ({
       id: `common-${p.id}`,
@@ -131,7 +131,7 @@ export default async function CompteursPage({
                         {d.status.meter[m.kind]} · {m.serial}
                       </p>
                       <p className="text-xs text-ink-soft">
-                        {unit ? `${unit.label} — ` : `${d.biens.metersCommon} — `}
+                        {unit ? `${unit.label} · ` : `${d.biens.metersCommon} · `}
                         {property.name}
                       </p>
                     </td>

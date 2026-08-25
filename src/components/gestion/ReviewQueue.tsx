@@ -52,7 +52,7 @@ export function ReviewQueue({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-ink">
-                    {t.counterparty} — <span className="tabular-nums">{t.amountLabel}</span>
+                    {t.counterparty} · <span className="tabular-nums">{t.amountLabel}</span>
                   </p>
                   <p className="text-xs text-ink-soft">« {t.remittance} » · {t.dateLabel}</p>
                 </div>

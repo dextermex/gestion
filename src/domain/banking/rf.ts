@@ -138,6 +138,6 @@ export function vopNameCheck(registeredHolderName: string, displayedName: string
     normalizedDisplayed: b,
     message: ok
       ? null
-      : "Displayed beneficiary name differs from the registered account-holder name — VoP will flag or block the payer's transfer. Use the verbatim registered name.",
+      : "Displayed beneficiary name differs from the registered account-holder name, VoP will flag or block the payer's transfer. Use the verbatim registered name.",
   };
 }

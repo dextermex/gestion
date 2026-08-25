@@ -27,7 +27,7 @@ import type {
 export const TODAY = "2026-08-23";
 export const ORG = {
   id: "org-1",
-  name: "Morada Gestion — Cabinet Reuter",
+  name: "Morada Gestion · Cabinet Reuter",
   shortName: "Cabinet Reuter",
   managerName: "Alex Reuter",
   managerEmail: "alex@cabinet-reuter.lu",
@@ -66,20 +66,20 @@ export const CONTACTS: DemoContact[] = [
   { id: "c-weber", kind: "natural", name: "Lucas Weber", email: "l.weber@education.lu", phone: "+352 621 888 111", language: "lu", roles: ["tenant"] },
   { id: "c-dubois", kind: "natural", name: "Claire Dubois", email: "claire.dubois@outlook.com", phone: "+352 691 444 555", language: "fr", roles: ["tenant"] },
   { id: "c-hoffmann", kind: "natural", name: "Marc Hoffmann", email: "marc.hoffmann@pt.lu", phone: "+352 621 777 999", language: "de", roles: ["tenant"] },
-  { id: "c-krier", kind: "natural", name: "Paul Krier", email: "p.krier@krier-fils.lu", phone: "+352 621 300 200", language: "lu", roles: ["artisan"], notes: "Chauffage & sanitaire — intervient sous 48 h" },
+  { id: "c-krier", kind: "natural", name: "Paul Krier", email: "p.krier@krier-fils.lu", phone: "+352 621 300 200", language: "lu", roles: ["artisan"], notes: "Chauffage & sanitaire, intervient sous 48 h" },
   { id: "c-da-silva", kind: "natural", name: "José Da Silva", email: "contact@dasilva-peinture.lu", phone: "+352 691 600 700", language: "pt", roles: ["artisan"], notes: "Peinture, sols" },
   { id: "c-elektro", kind: "legal", name: "Elektro Thill Sàrl", email: "info@elektrothill.lu", phone: "+352 26 44 55 66", language: "de", roles: ["artisan"] },
   {
     id: "c-sci-bealieu", kind: "legal", name: "SCI Beaulieu", email: "sci.beaulieu@fiduciaire-reuter.lu", phone: null, language: "fr",
     roles: ["owner"], amlTier: "full_cdd", riskBand: "low",
-    notes: "Société civile immobilière — transparente (art. 175 LIR), modèle 200",
+    notes: "Société civile immobilière transparente (art. 175 LIR), modèle 200",
   },
   { id: "c-faber", kind: "natural", name: "Marie Faber", email: "marie.faber@pt.lu", phone: "+352 621 100 100", language: "fr", roles: ["owner"], residency: "resident" },
   { id: "c-faber-p", kind: "natural", name: "Pierre Faber", email: "pierre.faber@pt.lu", phone: "+352 621 100 101", language: "fr", roles: ["owner"], residency: "resident" },
   {
     id: "c-lambert", kind: "natural", name: "Sophie Lambert", email: "sophie.lambert@skynet.be", phone: "+32 475 12 34 56", language: "fr",
     roles: ["owner"], residency: "non_resident", country: "Belgique",
-    notes: "Non-résidente (BE) — pack fiscal double : modèle 100 LU + cadre III BE",
+    notes: "Non-résidente (BE), pack fiscal double : modèle 100 LU + cadre III BE",
     amlTier: "full_cdd", riskBand: "medium",
   },
   { id: "c-bock", kind: "legal", name: "Boulangerie Bock Sàrl", email: "info@bock.lu", phone: "+352 26 12 34 56", language: "lu", roles: ["tenant"], amlTier: "light" },
@@ -131,7 +131,7 @@ export const PROPERTIES: DemoProperty[] = [
     nextAgDate: "2026-10-20",
     smokeDetectorsConfirmed: true,
     ownerContactIds: ["c-sci-bealieu"],
-    ownershipNote: "SCI Beaulieu (Marie Faber 60 %, Pierre Faber 40 %) — transparente",
+    ownershipNote: "SCI Beaulieu (Marie Faber 60 %, Pierre Faber 40 %), transparente",
     unitsCount: 6,
   },
   {
@@ -148,7 +148,7 @@ export const PROPERTIES: DemoProperty[] = [
     isCopropriete: false,
     smokeDetectorsConfirmed: true,
     ownerContactIds: ["c-faber", "c-faber-p"],
-    ownershipNote: "Marie & Pierre Faber — 50/50, imposition collective",
+    ownershipNote: "Marie & Pierre Faber, 50/50, imposition collective",
     unitsCount: 1,
   },
   {
@@ -167,7 +167,7 @@ export const PROPERTIES: DemoProperty[] = [
     syndicMandateStart: "2025-01-15",
     smokeDetectorsConfirmed: true,
     ownerContactIds: ["c-lambert"],
-    ownershipNote: "Sophie Lambert (non-résidente BE) — 100 %",
+    ownershipNote: "Sophie Lambert (non-résidente BE), 100 %",
     unitsCount: 2,
   },
   {
@@ -186,7 +186,7 @@ export const PROPERTIES: DemoProperty[] = [
     syndicMandateStart: "2024-09-01",
     smokeDetectorsConfirmed: false,
     ownerContactIds: ["c-lambert"],
-    ownershipNote: "Sophie Lambert — VEFA 2024 (amortissement 6 %, base plafonnée)",
+    ownershipNote: "Sophie Lambert, VEFA 2024 (amortissement 6 %, base plafonnée)",
     unitsCount: 1,
   },
 ];
@@ -370,7 +370,7 @@ export function leaseTenantNames(l: DemoLease): string[] {
 export function leaseUnitLabel(l: DemoLease): string {
   const u = unitById(l.unitId);
   const p = propertyById(u.propertyId);
-  return `${u.label} — ${p.name}`;
+  return `${u.label} · ${p.name}`;
 }
 
 // ─── Rent periods (2026) ────────────────────────────────────────────────────
@@ -455,7 +455,7 @@ export const BANK_ACCOUNTS = [
   },
   {
     id: "ba-eb",
-    label: "BGL — flux API (Enable Banking)",
+    label: "BGL · flux API (Enable Banking)",
     iban: "LU12 0030 1234 5678 9000",
     bic: "BGLLLULL",
     holderNameVerbatim: "CABINET REUTER GESTION SARL",
@@ -484,7 +484,7 @@ export const BANK_TXS: DemoBankTx[] = [
     id: "tx-01", bookedAt: "2026-08-03", amount: cents(1670),
     counterpartyName: "JEAN MULLER", counterpartyIban: "LU120001234567891",
     remittanceInfo: `LOYER AOUT ${LEASES[0].rfReference}`, endToEndId: null,
-    status: "auto", matchTier: "rf", matchExplain: "Référence RF — rapprochement déterministe. Montant = ancien loyer : INDEXATION_LAG détecté, ordre permanent non mis à jour (manque 70,00 €).",
+    status: "auto", matchTier: "rf", matchExplain: "Référence RF : rapprochement déterministe. Montant = ancien loyer : INDEXATION_LAG détecté, ordre permanent non mis à jour (manque 70,00 €).",
     matchedLeaseId: "l-3b",
   },
   {
@@ -498,7 +498,7 @@ export const BANK_TXS: DemoBankTx[] = [
     id: "tx-03", bookedAt: "2026-08-05", amount: cents(9009),
     counterpartyName: "BOULANGERIE BOCK SARL", counterpartyIban: "LU550030001111222233",
     remittanceInfo: "LOYER + CHARGES PLATEAU KIRCHBERG TVA", endToEndId: null,
-    status: "auto", matchTier: "iban_binding", matchExplain: "IBAN payeur lié au bail — allocation FIFO (loyer 6 800 + charges 900 + TVA 17 %).",
+    status: "auto", matchTier: "iban_binding", matchExplain: "IBAN payeur lié au bail : allocation FIFO (loyer 6 800 + charges 900 + TVA 17 %).",
     matchedLeaseId: "l-k01",
   },
   {
@@ -511,26 +511,26 @@ export const BANK_TXS: DemoBankTx[] = [
     id: "tx-05", bookedAt: "2026-08-06", amount: cents(1220),
     counterpartyName: "CNAP PRESTATIONS", counterpartyIban: "LU160090008888777766",
     remittanceInfo: "AIDE LOGEMENT HOFFMANN MARC 08-2026", endToEndId: null,
-    status: "review", matchExplain: "Tiers payeur (aide au logement) — candidat Studio RDC 0,71. Lier l'IBAN CNAP pour automatiser les mois suivants.",
+    status: "review", matchExplain: "Tiers payeur (aide au logement) : candidat Studio RDC 0,71. Lier l'IBAN CNAP pour automatiser les mois suivants.",
   },
   {
     id: "tx-06", bookedAt: "2026-08-01", amount: cents(2240),
     counterpartyName: "C DUBOIS", counterpartyIban: "LU330010002222111100",
-    remittanceInfo: "Loyer aout partiel — solde apres regularisation", endToEndId: null,
-    status: "auto", matchTier: "fuzzy", matchExplain: "Score 0,86 : IBAN connu + nom. Paiement partiel — alloué FIFO, reliquat ouvert (préavis en cours).",
+    remittanceInfo: "Loyer aout partiel - solde apres regularisation", endToEndId: null,
+    status: "auto", matchTier: "fuzzy", matchExplain: "Score 0,86 : IBAN connu + nom. Paiement partiel : alloué FIFO, reliquat ouvert (préavis en cours).",
     matchedLeaseId: "l-1a",
   },
   {
     id: "tx-07", bookedAt: "2026-08-08", amount: -cents(1240),
     counterpartyName: "KRIER & FILS", counterpartyIban: "LU200020003333444455",
     remittanceInfo: "FACTURE 2026-0812 CHAUDIERE BEAULIEU", endToEndId: null,
-    status: "ignored", matchExplain: "Sortant — facture artisan (rapprochée côté factures).",
+    status: "ignored", matchExplain: "Sortant : facture artisan (rapprochée côté factures).",
   },
   {
     id: "tx-08", bookedAt: "2026-08-10", amount: cents(1980) + cents(260),
     counterpartyName: "MME SANTOS PAULA", counterpartyIban: "LU980020009876543210",
     remittanceInfo: "loyer ana + lucas aout", endToEndId: null,
-    status: "auto", matchTier: "iban_binding", matchExplain: "IBAN payeur (mère d'Ana Santos) lié au bail colocation 2A — juillet reste ouvert, relance en cours.",
+    status: "auto", matchTier: "iban_binding", matchExplain: "IBAN payeur (mère d'Ana Santos) lié au bail colocation 2A ; juillet reste ouvert, relance en cours.",
     matchedLeaseId: "l-2a",
   },
 ];
@@ -582,7 +582,7 @@ export const DEPOSITS: DemoDeposit[] = [
 
 // A synthetic ended lease backing the settlement showcase.
 export const ENDED_LEASES: Array<{ id: string; label: string; tenant: string; rentCents: number }> = [
-  { id: "l-gare-old", label: "Studio 4A — Studio Quartier Gare", tenant: "Nora Adam", rentCents: cents(1300) },
+  { id: "l-gare-old", label: "Studio 4A · Studio Quartier Gare", tenant: "Nora Adam", rentCents: cents(1300) },
 ];
 
 // ─── EDL ────────────────────────────────────────────────────────────────────
@@ -602,11 +602,11 @@ export interface DemoEdl {
 }
 
 export const EDLS: DemoEdl[] = [
-  { id: "edl-1", leaseId: "l-rdc", unitLabel: "Studio RDC — Résidence Beaulieu", kind: "entry", status: "sealed", scheduledAt: "2026-01-30", completedAt: "2026-01-30", itemsCount: 42, photosCount: 128, keyHandoverAt: "2026-01-30", hashSealed: true },
-  { id: "edl-2", leaseId: "l-gare-old", unitLabel: "Studio 4A — Studio Quartier Gare", kind: "exit", status: "signed", scheduledAt: "2026-06-15", completedAt: "2026-06-15", itemsCount: 38, photosCount: 96, keyHandoverAt: "2026-06-15", hashSealed: true },
-  { id: "edl-3", leaseId: "l-1a", unitLabel: "Apt 1A — Résidence Beaulieu", kind: "exit", status: "draft", scheduledAt: "2026-11-13", completedAt: null, itemsCount: 0, photosCount: 0, keyHandoverAt: null, hashSealed: false },
-  { id: "edl-4", leaseId: "l-bert", unitLabel: "Maison — Maison Bertrange", kind: "entry", status: "draft", scheduledAt: "2026-11-28", completedAt: null, itemsCount: 0, photosCount: 0, keyHandoverAt: null, hashSealed: false },
-  { id: "edl-5", leaseId: "l-2a", unitLabel: "Apt 2A — Résidence Beaulieu", kind: "entry", status: "sealed", scheduledAt: "2025-08-30", completedAt: "2025-08-30", itemsCount: 51, photosCount: 164, keyHandoverAt: "2025-08-30", hashSealed: true },
+  { id: "edl-1", leaseId: "l-rdc", unitLabel: "Studio RDC · Résidence Beaulieu", kind: "entry", status: "sealed", scheduledAt: "2026-01-30", completedAt: "2026-01-30", itemsCount: 42, photosCount: 128, keyHandoverAt: "2026-01-30", hashSealed: true },
+  { id: "edl-2", leaseId: "l-gare-old", unitLabel: "Studio 4A · Studio Quartier Gare", kind: "exit", status: "signed", scheduledAt: "2026-06-15", completedAt: "2026-06-15", itemsCount: 38, photosCount: 96, keyHandoverAt: "2026-06-15", hashSealed: true },
+  { id: "edl-3", leaseId: "l-1a", unitLabel: "Apt 1A · Résidence Beaulieu", kind: "exit", status: "draft", scheduledAt: "2026-11-13", completedAt: null, itemsCount: 0, photosCount: 0, keyHandoverAt: null, hashSealed: false },
+  { id: "edl-4", leaseId: "l-bert", unitLabel: "Maison · Maison Bertrange", kind: "entry", status: "draft", scheduledAt: "2026-11-28", completedAt: null, itemsCount: 0, photosCount: 0, keyHandoverAt: null, hashSealed: false },
+  { id: "edl-5", leaseId: "l-2a", unitLabel: "Apt 2A · Résidence Beaulieu", kind: "entry", status: "sealed", scheduledAt: "2025-08-30", completedAt: "2025-08-30", itemsCount: 51, photosCount: 164, keyHandoverAt: "2025-08-30", hashSealed: true },
 ];
 
 // ─── Tickets ────────────────────────────────────────────────────────────────
@@ -630,36 +630,36 @@ export interface DemoTicket {
 
 export const TICKETS: DemoTicket[] = [
   {
-    id: "t-1", ref: "INT-2026-0141", unitLabel: "Apt 3B — Résidence Beaulieu", leaseId: "l-3b",
+    id: "t-1", ref: "INT-2026-0141", unitLabel: "Apt 3B · Résidence Beaulieu", leaseId: "l-3b",
     source: "tenant", category: "heating", severity: "urgent", status: "scheduled",
-    title: "Chaudière en défaut — pression à 0,4 bar", createdAt: "2026-08-19", slaDueAt: "2026-08-25",
+    title: "Chaudière en défaut, pression à 0,4 bar", createdAt: "2026-08-19", slaDueAt: "2026-08-25",
     artisanContactId: "c-krier", amountCents: cents(1240),
-    rechargeDecision: { decision: "owner", note: "Grosse réparation — jamais refacturable au locataire (blocage légal)." },
+    rechargeDecision: { decision: "owner", note: "Grosse réparation : jamais refacturable au locataire (blocage légal)." },
   },
   {
-    id: "t-2", ref: "INT-2026-0142", unitLabel: "Apt 2A — Résidence Beaulieu", leaseId: "l-2a",
+    id: "t-2", ref: "INT-2026-0142", unitLabel: "Apt 2A · Résidence Beaulieu", leaseId: "l-2a",
     source: "tenant", category: "damp_mould", severity: "priority", status: "in_progress",
     title: "Trace d'humidité mur chambre 2", createdAt: "2026-08-12", slaDueAt: "2026-08-27",
     artisanContactId: "c-da-silva",
   },
   {
-    id: "t-3", ref: "INT-2026-0139", unitLabel: "Plateau 1er — Bureaux Kirchberg", leaseId: "l-k01",
+    id: "t-3", ref: "INT-2026-0139", unitLabel: "Plateau 1er · Bureaux Kirchberg", leaseId: "l-k01",
     source: "tenant", category: "electrics", severity: "routine", status: "done",
     title: "Prise réseau défectueuse open space", createdAt: "2026-08-02", slaDueAt: "2026-08-16",
     artisanContactId: "c-elektro", amountCents: cents(380),
-    rechargeDecision: { decision: "tenant", note: "Bail commercial — refacturation selon clause charges (équipement preneur)." },
+    rechargeDecision: { decision: "tenant", note: "Bail commercial : refacturation selon la clause charges (équipement preneur)." },
   },
   {
-    id: "t-4", ref: "INT-2026-0143", unitLabel: "Studio RDC — Résidence Beaulieu", leaseId: "l-rdc",
+    id: "t-4", ref: "INT-2026-0143", unitLabel: "Studio RDC · Résidence Beaulieu", leaseId: "l-rdc",
     source: "edl_defect", category: "plumbing", severity: "routine", status: "pending_tenant",
     title: "Joint silicone douche à refaire (défaut EDL n° 17)", createdAt: "2026-08-05", slaDueAt: null,
   },
   {
-    id: "t-5", ref: "INT-2026-0144", unitLabel: "Studio 4A — Studio Quartier Gare", leaseId: null,
+    id: "t-5", ref: "INT-2026-0144", unitLabel: "Studio 4A · Studio Quartier Gare", leaseId: null,
     source: "manager", category: "common_areas", severity: "routine", status: "offered",
     title: "Remise en peinture avant relocation", createdAt: "2026-08-18", slaDueAt: null,
     artisanContactId: "c-da-silva", amountCents: cents(2150),
-    rechargeDecision: { decision: "owner", note: "Vétusté / remise en état entre locataires — charge propriétaire." },
+    rechargeDecision: { decision: "owner", note: "Vétusté / remise en état entre locataires : charge propriétaire." },
   },
 ];
 
@@ -696,11 +696,11 @@ export interface DemoWorkflow {
 }
 
 export const WORKFLOWS: DemoWorkflow[] = [
-  { id: "wf-1", kind: "move_in", label: "Maison Bertrange — Claire Dubois", currentState: "PRE_MOVE_IN", startedAt: "2026-07-20", blockedReason: null },
-  { id: "wf-2", kind: "move_in", label: "Studio 4A Gare — relocation", currentState: "MARKETING", startedAt: "2026-06-20", blockedReason: "CPE présent, photos en attente — publication bloquée tant que l'annonce est incomplète" },
-  { id: "wf-3", kind: "move_out", label: "Apt 1A — Claire Dubois (préavis)", currentState: "PRE_EXIT", startedAt: "2026-08-14", blockedReason: null },
-  { id: "wf-4", kind: "move_out", label: "Studio 4A — Nora Adam", currentState: "SETTLEMENT", startedAt: "2026-06-15", blockedReason: "1 déduction sans justificatif — expire le 15/07 (forfaite ensuite)" },
-  { id: "wf-5", kind: "move_in", label: "Local RDC Kirchberg — Boulangerie-café", currentState: "LEASE", startedAt: "2026-08-01", blockedReason: null },
+  { id: "wf-1", kind: "move_in", label: "Maison Bertrange · Claire Dubois", currentState: "PRE_MOVE_IN", startedAt: "2026-07-20", blockedReason: null },
+  { id: "wf-2", kind: "move_in", label: "Studio 4A Gare · relocation", currentState: "MARKETING", startedAt: "2026-06-20", blockedReason: "CPE présent, photos en attente ; publication bloquée tant que l'annonce est incomplète" },
+  { id: "wf-3", kind: "move_out", label: "Apt 1A · Claire Dubois (préavis)", currentState: "PRE_EXIT", startedAt: "2026-08-14", blockedReason: null },
+  { id: "wf-4", kind: "move_out", label: "Studio 4A · Nora Adam", currentState: "SETTLEMENT", startedAt: "2026-06-15", blockedReason: "1 déduction sans justificatif, expire le 15/07 (forclose ensuite)" },
+  { id: "wf-5", kind: "move_in", label: "Local RDC Kirchberg · Boulangerie-café", currentState: "LEASE", startedAt: "2026-08-01", blockedReason: null },
 ];
 
 // ─── Messaging ──────────────────────────────────────────────────────────────
@@ -716,10 +716,10 @@ export interface DemoConversation {
 
 export const CONVERSATIONS: DemoConversation[] = [
   {
-    id: "conv-1", subject: "Chaudière — intervention vendredi", scopeLabel: "INT-2026-0141 · Apt 3B", lastMessageAt: "2026-08-21T16:40:00", unread: 1,
+    id: "conv-1", subject: "Chaudière : intervention vendredi", scopeLabel: "INT-2026-0141 · Apt 3B", lastMessageAt: "2026-08-21T16:40:00", unread: 1,
     messages: [
       { from: "Jean Muller", kind: "tenant", body: "Bonjour, la pression est retombée à 0,4 ce matin. Photo jointe.", at: "2026-08-19T08:12:00" },
-      { from: "Cabinet Reuter", kind: "manager", body: "Merci — Krier & Fils passe vendredi 8 h–10 h. Le créneau vous convient ?", at: "2026-08-19T09:05:00" },
+      { from: "Cabinet Reuter", kind: "manager", body: "Merci, Krier & Fils passe vendredi 8 h–10 h. Le créneau vous convient ?", at: "2026-08-19T09:05:00" },
       { from: "Paul Krier", kind: "artisan", body: "Créneau accepté. Prévoir accès à la cave (vase d'expansion).", at: "2026-08-21T16:40:00" },
     ],
   },
@@ -727,7 +727,7 @@ export const CONVERSATIONS: DemoConversation[] = [
     id: "conv-2", subject: "Attestation de logement", scopeLabel: "Bail Apt 2A", lastMessageAt: "2026-08-20T11:02:00", unread: 0,
     messages: [
       { from: "Ana Santos", kind: "tenant", body: "Bonjour, il me faut une attestation pour la commune (déclaration d'arrivée de Lucas).", at: "2026-08-20T10:48:00" },
-      { from: "Système", kind: "system", body: "Attestation générée en libre-service (QR de vérification) — délai commune : 8 jours après emménagement.", at: "2026-08-20T11:02:00" },
+      { from: "Système", kind: "system", body: "Attestation générée en libre-service (QR de vérification). Délai commune : 8 jours après emménagement.", at: "2026-08-20T11:02:00" },
     ],
   },
   {
@@ -855,14 +855,14 @@ export interface DemoDocument {
 }
 
 export const DOCUMENTS: DemoDocument[] = [
-  { id: "d-1", name: "Bail Apt 3B — Muller (signé AES).pdf", klass: "lease", retentionClass: "accounting_10y", retentionUntil: "2036-04-01", sealed: true, relatedLabel: "Apt 3B", sizeKb: 842, createdAt: "2023-03-20" },
+  { id: "d-1", name: "Bail Apt 3B · Muller (signé AES).pdf", klass: "lease", retentionClass: "accounting_10y", retentionUntil: "2036-04-01", sealed: true, relatedLabel: "Apt 3B", sizeKb: 842, createdAt: "2023-03-20" },
   { id: "d-2", name: "EDL entrée Studio RDC (scellé, manifeste SHA-256).pdf", klass: "edl", retentionClass: "accounting_10y", retentionUntil: "2036-02-01", sealed: true, relatedLabel: "Studio RDC", sizeKb: 12_400, createdAt: "2026-01-30" },
-  { id: "d-3", name: "Facture Krier 2026-0812 — chaudière.pdf", klass: "invoice", retentionClass: "accounting_10y", retentionUntil: "2036-08-08", sealed: false, relatedLabel: "INT-2026-0141", sizeKb: 210, createdAt: "2026-08-08" },
+  { id: "d-3", name: "Facture Krier 2026-0812 · chaudière.pdf", klass: "invoice", retentionClass: "accounting_10y", retentionUntil: "2036-08-08", sealed: false, relatedLabel: "INT-2026-0141", sizeKb: 210, createdAt: "2026-08-08" },
   { id: "d-4", name: "Acte notarié Studio Gare (VEFA 2024).pdf", klass: "deed", retentionClass: "permanent", retentionUntil: null, sealed: true, relatedLabel: "Studio Quartier Gare", sizeKb: 4_820, createdAt: "2024-06-01" },
-  { id: "d-5", name: "Certificat d'intérêts BCEE 2025 — SCI Beaulieu.pdf", klass: "tax", retentionClass: "accounting_10y", retentionUntil: "2036-01-15", sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 96, createdAt: "2026-01-15" },
-  { id: "d-6", name: "Mise en demeure Apt 2A — AR du 12/08 (scan).pdf", klass: "registered_letter", retentionClass: "accounting_10y", retentionUntil: "2036-08-12", sealed: true, relatedLabel: "Apt 2A", sizeKb: 380, createdAt: "2026-08-12" },
-  { id: "d-7", name: "CDD — SCI Beaulieu (RBE, registre associés, UBO).pdf", klass: "id_document", retentionClass: "aml_5y_from_end", retentionUntil: null, sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 1_240, createdAt: "2026-02-10" },
-  { id: "d-8", name: "Décompte syndic 2025 — Résidence Beaulieu (AG approuvé).pdf", klass: "decompte", retentionClass: "accounting_10y", retentionUntil: "2036-05-30", sealed: false, relatedLabel: "Résidence Beaulieu", sizeKb: 1_860, createdAt: "2026-05-30" },
+  { id: "d-5", name: "Certificat d'intérêts BCEE 2025 · SCI Beaulieu.pdf", klass: "tax", retentionClass: "accounting_10y", retentionUntil: "2036-01-15", sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 96, createdAt: "2026-01-15" },
+  { id: "d-6", name: "Mise en demeure Apt 2A · AR du 12/08 (scan).pdf", klass: "registered_letter", retentionClass: "accounting_10y", retentionUntil: "2036-08-12", sealed: true, relatedLabel: "Apt 2A", sizeKb: 380, createdAt: "2026-08-12" },
+  { id: "d-7", name: "CDD · SCI Beaulieu (RBE, registre associés, UBO).pdf", klass: "id_document", retentionClass: "aml_5y_from_end", retentionUntil: null, sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 1_240, createdAt: "2026-02-10" },
+  { id: "d-8", name: "Décompte syndic 2025 · Résidence Beaulieu (AG approuvé).pdf", klass: "decompte", retentionClass: "accounting_10y", retentionUntil: "2036-05-30", sealed: false, relatedLabel: "Résidence Beaulieu", sizeKb: 1_860, createdAt: "2026-05-30" },
   { id: "d-9", name: "Dossier candidature T. Schmit (non retenu).zip", klass: "other", retentionClass: "applicant_3m", retentionUntil: "2026-10-30", sealed: false, relatedLabel: "Local RDC Kirchberg", sizeKb: 3_100, createdAt: "2026-07-30" },
 ];
 

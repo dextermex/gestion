@@ -41,12 +41,12 @@ export interface HardBlock {
 
 /** Never rechargeable to a residential tenant. Non-overridable. */
 export const RESIDENTIAL_HARD_BLOCKS: HardBlock[] = [
-  { category: "management_fee", reason: "Frais de gérance are the owner's cost — recharging them to a residential tenant is unlawful." },
-  { category: "building_insurance", reason: "Building insurance protects the owner's asset — not rechargeable." },
-  { category: "impot_foncier", reason: "Impôt foncier is the owner's tax — not rechargeable." },
-  { category: "energy_passport", reason: "The CPE (energy passport) is an owner obligation — not rechargeable." },
+  { category: "management_fee", reason: "Frais de gérance are the owner's cost, recharging them to a residential tenant is unlawful." },
+  { category: "building_insurance", reason: "Building insurance protects the owner's asset, not rechargeable." },
+  { category: "impot_foncier", reason: "Impôt foncier is the owner's tax, not rechargeable." },
+  { category: "energy_passport", reason: "The CPE (energy passport) is an owner obligation, not rechargeable." },
   { category: "meter_rental", reason: "Meter rental/reading fees are not rechargeable." },
-  { category: "major_repair", reason: "Major repairs are the owner's capital burden — not rechargeable." },
+  { category: "major_repair", reason: "Major repairs are the owner's capital burden, not rechargeable." },
   { category: "vetuste_renewal", reason: "Normal wear-and-tear (vétusté) renewal is never the tenant's cost." },
 ];
 
@@ -69,7 +69,7 @@ export function decideRecharge(category: ChargeCategory, leaseType: LeaseType): 
         blocked: true,
         blockReason: block.reason,
         requiresInvoiceEvidence: false,
-        note: "Hard legal block — non-overridable in product.",
+        note: "Hard legal block, non-overridable in product.",
       };
     }
     return {
@@ -89,7 +89,7 @@ export function decideRecharge(category: ChargeCategory, leaseType: LeaseType): 
     blocked: false,
     blockReason: null,
     requiresInvoiceEvidence: true,
-    note: "Commercial lease — recharge per the contractual charges clause.",
+    note: "Commercial lease, recharge per the contractual charges clause.",
   };
 }
 

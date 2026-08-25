@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
+import { TenantPortalPanel } from "@/components/gestion/TenantPortalPanel";
 import { getDemo } from "@/lib/demo";
 import {
   depositFormLabels,
@@ -247,6 +248,23 @@ export default async function BailDetailPage({ params }: { params: Promise<{ id:
         </Panel>
 
         <div className="flex flex-col gap-5">
+          <TenantPortalPanel
+            leaseId={l.id}
+            tenantName={leaseTenantNames(l)[0] ?? ""}
+            strings={{
+              managerTitle: d.portal.managerTitle,
+              managerIntro: d.portal.managerIntro,
+              statusNotInvited: d.portal.statusNotInvited,
+              statusInvited: d.portal.statusInvited,
+              statusActive: d.portal.statusActive,
+              managerGenerate: d.portal.managerGenerate,
+              managerCopy: d.portal.managerCopy,
+              managerCopied: d.portal.managerCopied,
+              managerLinkLabel: d.portal.managerLinkLabel,
+              managerNote: d.portal.managerNote,
+              managerRevoke: d.portal.managerRevoke,
+            }}
+          />
           {renewal && (
             <Panel title={d.baux.commercialTitle}>
               <ul className="space-y-2.5 text-sm">

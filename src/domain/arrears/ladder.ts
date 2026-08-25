@@ -68,7 +68,7 @@ export function assessArrears(c: ArrearsCase, asOf: ISODate): ArrearsAssessment 
       currentStage: latestExecuted(c),
       nextStep: null,
       paused: true,
-      notes: ["Payment plan active — ladder paused. A missed instalment reactivates it."],
+      notes: ["Payment plan active, ladder paused. A missed instalment reactivates it."],
     };
   }
 
@@ -92,7 +92,7 @@ export function assessArrears(c: ArrearsCase, asOf: ISODate): ArrearsAssessment 
       };
       if (stage === "mise_en_demeure") {
         notes.push(
-          "Mise en demeure requires manager confirmation and a registered letter with AR — the legal effect date is the AR date, not the send date.",
+          "Mise en demeure requires manager confirmation and a registered letter with AR, the legal effect date is the AR date, not the send date.",
         );
       }
       if (stage === "justice_dossier" && !c.miseEnDemeureArDate) {
@@ -131,12 +131,12 @@ function latestExecuted(c: ArrearsCase): ArrearsStage {
 function describeStage(stage: Exclude<ArrearsStage, "none">): string {
   switch (stage) {
     case "friendly":
-      return "Friendly reminder — portal notification + email.";
+      return "Friendly reminder, portal notification + email.";
     case "formal":
-      return "Formal reminder — written demand with the account statement.";
+      return "Formal reminder, written demand with the account statement.";
     case "mise_en_demeure":
-      return "Mise en demeure — registered letter with AR (manager confirms before dispatch).";
+      return "Mise en demeure, registered letter with AR (manager confirms before dispatch).";
     case "justice_dossier":
-      return "Justice de paix dossier — export the complete evidence pack (lease, statement, letters, AR proofs).";
+      return "Justice de paix dossier, export the complete evidence pack (lease, statement, letters, AR proofs).";
   }
 }

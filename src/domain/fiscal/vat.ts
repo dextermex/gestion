@@ -47,7 +47,7 @@ export function assessVatOption(req: VatOptionRequest, asOf?: ISODate): VatOptio
       code: "VAT_OPTION_RESIDENTIAL",
       severity: "blocking",
       message:
-        "Residential letting is always VAT-exempt — a private tenant is not a taxable person with a right of deduction, so the option cannot be exercised.",
+        "Residential letting is always VAT-exempt, a private tenant is not a taxable person with a right of deduction, so the option cannot be exercised.",
       legalBasis: "Art. 44(1)(g) + Art. 45 loi TVA",
     });
   }
@@ -64,7 +64,7 @@ export function assessVatOption(req: VatOptionRequest, asOf?: ISODate): VatOptio
       code: "VAT_DEDUCTION_RATIO_LOW",
       severity: "blocking",
       message: `Tenant's input-VAT deduction ratio (${req.tenantDeductionRatioPct}%) is below the required ${minRatio}%.`,
-      legalBasis: "RGD 7.3.1980 — ratio ≥ 50% (option granularity per building/lot/lease: uncertainty register #4)",
+      legalBasis: "RGD 7.3.1980, ratio ≥ 50% (option granularity per building/lot/lease: uncertainty register #4)",
     });
   }
   if (!req.aedApprovalRef || !req.aedDecisionDate) {
@@ -73,7 +73,7 @@ export function assessVatOption(req: VatOptionRequest, asOf?: ISODate): VatOptio
       severity: "blocking",
       message:
         "Prior AED approval is mandatory (one month to decide from filing). Record the approval reference and decision date.",
-      legalBasis: "Art. 45 loi TVA — approbation préalable",
+      legalBasis: "Art. 45 loi TVA, approbation préalable",
     });
   }
 
@@ -112,7 +112,7 @@ export function rentVat(
       vat: 0,
       gross: net,
       exemptionMention:
-        "Exonération de TVA — location de biens immeubles, art. 44, §1, g) de la loi modifiée du 12 février 1979 concernant la TVA.",
+        "Exonération de TVA, location de biens immeubles, art. 44, §1, g) de la loi modifiée du 12 février 1979 concernant la TVA.",
     };
   }
   const rate = getParamValue("vat.standard_rate_pct", invoiceDate);
@@ -148,7 +148,7 @@ export interface InvoiceContent {
 export function validateInvoiceContent(inv: InvoiceContent): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const need = (cond: boolean, code: string, message: string) => {
-    if (!cond) issues.push({ code, severity: "blocking", message, legalBasis: "AED — mentions obligatoires des factures" });
+    if (!cond) issues.push({ code, severity: "blocking", message, legalBasis: "AED, mentions obligatoires des factures" });
   };
   need(Boolean(inv.sequentialNumber), "INV_SEQ", "Sequential invoice number is mandatory.");
   need(Boolean(inv.supplierVatNumber), "INV_VAT_NO", "Supplier VAT identification number is mandatory.");
@@ -167,8 +167,8 @@ export function validateInvoiceContent(inv: InvoiceContent): ValidationIssue[] {
     issues.push({
       code: "INV_SIMPLIFIED_OK",
       severity: "warning",
-      message: `Total ≤ €${cap / 100} incl. VAT — the simplified invoice content set is permitted (domestic only).`,
-      legalBasis: "Loi TVA — facture simplifiée",
+      message: `Total ≤ €${cap / 100} incl. VAT, the simplified invoice content set is permitted (domestic only).`,
+      legalBasis: "Loi TVA, facture simplifiée",
     });
   }
   return issues;

@@ -53,7 +53,7 @@ export function cpeExpiryDeadline(propertyLabel: string, cpeIssuedAt: ISODate): 
   const years = getParamValue("compliance.cpe_validity_years", cpeIssuedAt);
   return {
     kind: "cpe_expiry",
-    label: "CPE (energy passport) expires — class must appear in every ad; the listing builder fails closed without it",
+    label: "CPE (energy passport) expires, class must appear in every ad; the listing builder fails closed without it",
     dueAt: addYears(cpeIssuedAt, years),
     relatedLabel: propertyLabel,
     legalBasis: `CPE ${years}-year validity`,
@@ -68,7 +68,7 @@ export function communeArrivalDeadline(tenantLabel: string, moveInDate: ISODate)
     label: `Tenant must declare arrival at the commune within ${days} days of moving in`,
     dueAt: addDays(moveInDate, days),
     relatedLabel: tenantLabel,
-    legalBasis: "Déclaration d'arrivée — obligation within 8 days",
+    legalBasis: "Déclaration d'arrivée, obligation within 8 days",
     severity: "action",
   };
 }
@@ -76,7 +76,7 @@ export function communeArrivalDeadline(tenantLabel: string, moveInDate: ISODate)
 export function communeDepartureDeadline(tenantLabel: string, moveOutDate: ISODate): Deadline {
   return {
     kind: "commune_departure_declaration",
-    label: "Tenant departure declaration at the commune — due the day before leaving",
+    label: "Tenant departure declaration at the commune, due the day before leaving",
     dueAt: addDays(moveOutDate, -1),
     relatedLabel: tenantLabel,
     legalBasis: "Déclaration de départ",
@@ -88,7 +88,7 @@ export function syndicMandateDeadline(syndicatLabel: string, mandateStart: ISODa
   const years = getParamValue("syndic.mandate_max_years", mandateStart);
   return {
     kind: "syndic_mandate_expiry",
-    label: `Syndic mandate expires (max ${years} years, renewable) — schedule the AG vote`,
+    label: `Syndic mandate expires (max ${years} years, renewable), schedule the AG vote`,
     dueAt: addYears(mandateStart, years),
     relatedLabel: syndicatLabel,
     legalBasis: "RGD 13.6.1975 art. 18",
@@ -113,10 +113,10 @@ export function agConvocationDeadline(syndicatLabel: string, agDate: ISODate, is
 export function licenceExpiryDeadline(orgLabel: string, expiry: ISODate, what: string): Deadline {
   return {
     kind: "licence_expiry",
-    label: `${what} expires — escalating alarm`,
+    label: `${what} expires, escalating alarm`,
     dueAt: expiry,
     relatedLabel: orgLabel,
-    legalBasis: "Loi du 2.9.2011 — autorisation d'établissement + mandatory PI insurance",
+    legalBasis: "Loi du 2.9.2011, autorisation d'établissement + mandatory PI insurance",
     severity: "critical",
   };
 }
@@ -128,7 +128,7 @@ export function defectWindowEnd(unitLabel: string, keyHandover: ISODate, windowD
     label: `Move-in defect window closes (${days} days after key handover)`,
     dueAt: addDays(keyHandover, days),
     relatedLabel: unitLabel,
-    legalBasis: "Contractual defect window (configurable — not statutory)",
+    legalBasis: "Contractual defect window (configurable, not statutory)",
     severity: "info",
   };
 }
@@ -159,6 +159,6 @@ export function vacancyClock(unitLabel: string, vacantSince: ISODate, asOf: ISOD
     inolTriggerAt,
     triggered: asOf >= inolTriggerAt,
     projectedTaxYear1Eur: getParamValue("inol.year1_eur", asOf),
-    note: "INOL adoption status unconfirmed [U] — the clock builds the defence file (marketing efforts, works, offers) regardless.",
+    note: "INOL adoption status unconfirmed [U], the clock builds the defence file (marketing efforts, works, offers) regardless.",
   };
 }

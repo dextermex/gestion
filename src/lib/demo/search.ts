@@ -30,7 +30,7 @@ export function buildSearchIndex(demo: DemoData): SearchHit[] {
     const p = demo.propertyById(u.propertyId);
     hits.push({
       type: "unit",
-      label: `${u.label} — ${p.name}`,
+      label: `${u.label} · ${p.name}`,
       sub: p.address,
       href: `/app/biens/${p.id}`,
       hay: `${u.label} ${p.name}`.toLowerCase(),

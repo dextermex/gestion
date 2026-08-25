@@ -33,7 +33,9 @@ export interface RevaluationTable {
 }
 
 export const SEED_REVALUATION_TABLE: RevaluationTable = {
-  circularRef: "Circulaire ministérielle 3/25 — TO INGEST (seed values are placeholders)",
+  // Displayed verbatim in the lease view; the placeholder/ingest caveat is
+  // carried by status: "uncertain" (which the UI renders), not by the label.
+  circularRef: "Circulaire ministérielle 3/25",
   status: "uncertain",
   coefficients: {
     1990: 1.72, 1995: 1.55, 2000: 1.41, 2005: 1.28, 2010: 1.17,
@@ -172,7 +174,7 @@ export function proposeResidentialAdjustment(input: AdjustmentInput): Adjustment
     const nextAllowed = addMonthsLocal(anchor, minIntervalMonths);
     return {
       allowed: false,
-      blockedReason: `Only ${monthsSince} months since the last adjustment — the law allows one adjustment per ${minIntervalMonths} months.`,
+      blockedReason: `Only ${monthsSince} months since the last adjustment, the law allows one adjustment per ${minIntervalMonths} months.`,
       nextAllowedDate: nextAllowed,
       currentMonthlyRent: input.currentMonthlyRent,
       proposedMonthlyRent: input.currentMonthlyRent,
@@ -331,7 +333,7 @@ export function detectIndexationLag(
       detected: true,
       shortfall: currentRent - previousRent,
       message:
-        "Payment equals the pre-adjustment rent exactly — standing order not updated. Auto-matched at the old amount; shortfall opened.",
+        "Payment equals the pre-adjustment rent exactly, standing order not updated. Auto-matched at the old amount; shortfall opened.",
     };
   }
   return null;

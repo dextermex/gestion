@@ -73,7 +73,7 @@ export default async function ChargesPage() {
                         </p>
                         {line.blocked && (
                           <p className="text-[11px] text-red-700">
-                            {blockLabel[line.category] ?? line.category} — {d.charges.blockNever}
+                            {blockLabel[line.category] ?? line.category} · {d.charges.blockNever}
                           </p>
                         )}
                       </td>

@@ -26,7 +26,7 @@ export default async function FiscalitePage() {
   const taxYear = 2026;
   const pack = buildTaxPack({
     taxYear,
-    propertyLabel: "Bureaux Kirchberg — Plateau 1er",
+    propertyLabel: "Bureaux Kirchberg · Plateau 1er",
     cadastralRef: "Luxembourg / Section EiB / n° 501/2231",
     buildingCompletedOn: completedOn,
     monthsLet: 12,

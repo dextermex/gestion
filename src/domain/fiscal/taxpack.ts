@@ -28,11 +28,11 @@ import { YearAmortisation } from "@/domain/fiscal/amortisation";
 export type ExpenseBucket =
   | "maintenance_repairs" // §A
   | "other_frais" // §D
-  | "debt_interest" // §E — bank certificate required
+  | "debt_interest" // §E, bank certificate required
   | "impot_foncier" // §F
   | "management_fees" // §F
   | "insurance" // §F
-  | "permanent_charges"; // §F — communal charges not recharged
+  | "permanent_charges"; // §F, communal charges not recharged
 
 export interface ExpenseEntry {
   date: ISODate;
@@ -183,7 +183,7 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
     carryForward = maintenanceTotal - deductedThisYear;
   } else if (triggered) {
     warnings.push(
-      `Repairs (${(maintenanceTotal / 100).toFixed(0)} €) exceed ${thresholdPct}% of annual rent — the 2–5 year spreading election (form §B1) is available.`,
+      `Repairs (${(maintenanceTotal / 100).toFixed(0)} €) exceed ${thresholdPct}% of annual rent, the 2–5 year spreading election (form §B1) is available.`,
     );
   }
 
@@ -224,7 +224,7 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
       lines: input.amortisation
         ? [
             {
-              label: `${input.amortisation.regime.ratePct}% — ${input.amortisation.regime.note}`,
+              label: `${input.amortisation.regime.ratePct}%, ${input.amortisation.regime.note}`,
               amount: input.amortisation.buildingAmount,
             },
             ...(input.amortisation.energy.applicable || input.amortisation.energy.amount > 0
@@ -268,7 +268,7 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
     eligible: flatEligible,
     ineligibleReason: flatEligible
       ? null
-      : `Building completed ${buildingAge} year(s) before the tax year — the flat deduction requires ≥ ${minAge} years.`,
+      : `Building completed ${buildingAge} year(s) before the tax year, the flat deduction requires ≥ ${minAge} years.`,
     flatAmount,
     itemisedReplaceable,
     alwaysDeductible,
@@ -288,14 +288,14 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
   }
 
   if (debtInterest > 0) {
-    warnings.push("Debt interest deducted — attach the bank certificat d'intérêts to the return.");
+    warnings.push("Debt interest deducted, attach the bank certificat d'intérêts to the return.");
   }
 
   const nonResidentExport =
     input.ownerResidency === "non_resident"
       ? {
           note:
-            "No Luxembourg withholding on rent — taxation by assessment (modèle 100, due 31.12 of year N+1). " +
+            "No Luxembourg withholding on rent, taxation by assessment (modèle 100, due 31.12 of year N+1). " +
             "Residence state relieves by exemption-with-progression (BE, DE) or Luxembourg-tax credit (FR, 2018 treaty). " +
             "Luxembourg amortisation is reported separately: do NOT carry it into the residence-state return.",
           grossRents: totalTaxable,

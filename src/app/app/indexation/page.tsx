@@ -124,7 +124,7 @@ export default async function IndexationPage() {
 
         <Panel title={d.indexation.commercialTitle}>
           <div className="rounded-xl border border-sand-200 p-4">
-            <p className="text-sm font-semibold text-ink">{leaseUnitLabel(commercial)} — Boulangerie Bock</p>
+            <p className="text-sm font-semibold text-ink">{leaseUnitLabel(commercial)} · Boulangerie Bock</p>
             <ul className="mt-2 space-y-1.5 text-sm">
               <li className="flex justify-between gap-3">
                 <span className="text-ink-soft">{d.indexation.commercialSeries}</span>
@@ -133,7 +133,7 @@ export default async function IndexationPage() {
               <li className="flex justify-between gap-3">
                 <span className="text-ink-soft">{d.indexation.commercialIndex}</span>
                 <span className="font-semibold tabular-nums text-ink">
-                  {formatNumber(commercial.indexationClause!.baseIndexValue, locale)} →{" "}
+                  {formatNumber(commercial.indexationClause!.baseIndexValue, locale)} /{" "}
                   {formatNumber(934.1, locale)}
                 </span>
               </li>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/pro/ui";
 import { LinkRow, Panel, Timeline } from "@/components/gestion/bits";
+import { GettingStarted } from "@/components/gestion/GettingStarted";
 import { RingCard } from "@/components/gestion/Ring";
 import { CashflowChart } from "@/components/gestion/Cashflow";
 import { getDemo } from "@/lib/demo";
@@ -200,6 +201,25 @@ export default async function DashboardPage() {
           {fmt(d.dash.subtitle, { org: ORG.shortName, date: formatDate(TODAY, locale) })}
         </p>
       </div>
+
+      <GettingStarted
+        strings={{
+          title: d.gettingStarted.title,
+          subtitle: d.gettingStarted.subtitle,
+          progress: d.gettingStarted.progress,
+          help: d.gettingStarted.help,
+          ignoreAll: d.gettingStarted.ignoreAll,
+          doneAria: d.gettingStarted.doneAria,
+        }}
+        tasks={[
+          { id: "property", href: "/app/biens", label: d.gettingStarted.taskProperty, sub: d.gettingStarted.taskPropertySub },
+          { id: "contact", href: "/app/contacts", label: d.gettingStarted.taskContact, sub: d.gettingStarted.taskContactSub },
+          { id: "lease", href: "/app/baux", label: d.gettingStarted.taskLease, sub: d.gettingStarted.taskLeaseSub },
+          { id: "bank", href: "/app/banque", label: d.gettingStarted.taskBank, sub: d.gettingStarted.taskBankSub },
+          { id: "rent", href: "/app/loyers", label: d.gettingStarted.taskRent, sub: d.gettingStarted.taskRentSub },
+          { id: "tenant", href: "/app/baux/l-3b", label: d.gettingStarted.taskTenant, sub: d.gettingStarted.taskTenantSub },
+        ]}
+      />
 
       {/* Personal overview — three rings, one action each */}
       <div className="stagger-rise grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

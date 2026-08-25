@@ -101,8 +101,8 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
       message: `Deposit of ${draft.depositMonths} months exceeds the legal maximum of ${maxMonths} months for a ${draft.type} lease.`,
       legalBasis:
         draft.type === "residential"
-          ? "Loi du 21.9.2006 as amended 2024 — max 2 months (excl. charges)"
-          : "Loi du 3.2.2018 — garantie locative capped at 6 months",
+          ? "Loi du 21.9.2006 as amended 2024, max 2 months (excl. charges)"
+          : "Loi du 3.2.2018, garantie locative capped at 6 months",
     });
   }
 
@@ -116,7 +116,7 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
         code: "MENTIONS_INCOMPLETE",
         severity: "blocking",
         message: `Missing mandatory mention(s): ${missing.join(", ")}. A residential lease must be written with all 8 mentions on pain of nullity.`,
-        legalBasis: "Loi du 21.9.2006 (rev. 2024) — written lease with mandatory mentions",
+        legalBasis: "Loi du 21.9.2006 (rev. 2024), written lease with mandatory mentions",
       });
     }
 
@@ -127,7 +127,7 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
         severity: "blocking",
         message:
           "CPI/index escalation clauses are prohibited in residential leases (relative nullity). Use the statutory adjustment calendar instead.",
-        legalBasis: "Loi du 21.9.2006 (rev. 2024) — indexation clause nullifiable",
+        legalBasis: "Loi du 21.9.2006 (rev. 2024), indexation clause nullifiable",
       });
     }
 
@@ -142,7 +142,7 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
         severity: "blocking",
         message:
           "The tenant's share of the agency fee exceeds 50%. Since 1.8.2024 the fee is split 50/50 landlord/tenant by operation of law.",
-        legalBasis: "Loi du 23.7.2024 — agency commission split 50/50",
+        legalBasis: "Loi du 23.7.2024, agency commission split 50/50",
       });
     }
 
@@ -154,7 +154,7 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
           severity: "blocking",
           message:
             "Furnished supplement requires itemised furniture invoices (< 10 years old) on pain of nullity.",
-          legalBasis: "Loi du 23.7.2024 — furniture supplement itemised",
+          legalBasis: "Loi du 23.7.2024, furniture supplement itemised",
         });
       } else {
         const rate = getParamValue("residential.furnished_supplement_monthly_pct_of_furniture", date);
@@ -164,7 +164,7 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
             code: "FURNITURE_SUPPLEMENT_OVER_CAP",
             severity: "blocking",
             message: `Furniture supplement exceeds ${rate}% per month of the itemised furniture value.`,
-            legalBasis: "Loi du 23.7.2024 — max 1.5%/month of furniture invoices",
+            legalBasis: "Loi du 23.7.2024, max 1.5%/month of furniture invoices",
           });
         }
       }
@@ -177,7 +177,7 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
         severity: "blocking",
         message:
           "Colocation requires the written pacte de colocation in the same signing envelope as the lease.",
-        legalBasis: "Loi du 23.7.2024 — colocation regime (art. 2bis–2sexies map uncertain)",
+        legalBasis: "Loi du 23.7.2024, colocation regime (art. 2bis–2sexies map uncertain)",
       });
     }
   }
@@ -193,8 +193,8 @@ export function validateLeaseDraft(draft: LeaseDraft, onDate?: ISODate): Validat
           code: "COMMERCIAL_POPUP_OUT_OF_SCOPE",
           severity: "warning",
           message:
-            "Lease shorter than 1 year — outside the scope of the loi du 3.2.2018 (pop-up). Renewal and eviction-indemnity protections do not apply.",
-          legalBasis: "Loi du 3.2.2018 — scope excludes leases < 1 year",
+            "Lease shorter than 1 year, outside the scope of the loi du 3.2.2018 (pop-up). Renewal and eviction-indemnity protections do not apply.",
+          legalBasis: "Loi du 3.2.2018, scope excludes leases < 1 year",
         });
       }
     }
@@ -213,7 +213,7 @@ export function validatePasDePorte(leaseType: LeaseType, concludedOn: ISODate, a
         severity: "blocking",
         message:
           "Any rent supplement paid for the conclusion of a commercial lease (pas-de-porte) is void de plein droit, with mandatory reimbursement.",
-        legalBasis: "Loi du 3.2.2018 — pas-de-porte nul de plein droit",
+        legalBasis: "Loi du 3.2.2018, pas-de-porte nul de plein droit",
       },
     ];
   }
@@ -221,8 +221,8 @@ export function validatePasDePorte(leaseType: LeaseType, concludedOn: ISODate, a
     {
       code: "PAS_DE_PORTE_GRANDFATHERED",
       severity: "warning",
-      message: "Lease concluded before 1.3.2018 — pas-de-porte unaffected by the 2018 law.",
-      legalBasis: "Loi du 3.2.2018 — transitional",
+      message: "Lease concluded before 1.3.2018, pas-de-porte unaffected by the 2018 law.",
+      legalBasis: "Loi du 3.2.2018, transitional",
     },
   ];
 }
@@ -233,7 +233,7 @@ export type TerminationGround =
   | "tenant_notice"
   | "landlord_personal_need"
   | "landlord_serious_ground"
-  | "landlord_sale"; // never valid — blocked in product
+  | "landlord_sale"; // never valid, blocked in product
 
 /**
  * Art. 12(3) — a besoin-personnel notice must reproduce the STATUTORY TEXT
@@ -282,7 +282,7 @@ export function assessTermination(req: TerminationRequest): TerminationAssessmen
         severity: "blocking",
         message:
           "“Landlord is selling” is not a lawful termination ground for a residential lease. The grounds are exhaustive; a sale transfers the lease to the buyer.",
-        legalBasis: "Loi du 21.9.2006 — exhaustive termination grounds",
+        legalBasis: "Loi du 21.9.2006, exhaustive termination grounds",
       });
       return { valid: false, issues, noticeMonths: null, earliestLawfulEnd: null };
     }
@@ -313,7 +313,7 @@ export function assessTermination(req: TerminationRequest): TerminationAssessmen
         code: "FIXED_TERM_DATE_GUARD",
         severity: "warning",
         message: `Notice takes effect at the fixed-term expiry (${req.fixedTermEnd}); missing the exact expiry renews the lease indefinitely (prorogation légale).`,
-        legalBasis: "Loi du 21.9.2006 — prorogation légale",
+        legalBasis: "Loi du 21.9.2006, prorogation légale",
       });
     }
 
