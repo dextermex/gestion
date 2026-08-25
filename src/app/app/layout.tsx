@@ -36,10 +36,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Everything the client shell needs, serialized. Identity comes from the
   // session; the dataset only ever supplies figures.
+  // On sample data the header names the sample cabinet, not the real agency:
+  // the two must never be mistaken for each other on the same screen.
+  const sampleCabinet = datasetId === "real" ? null : demo.ORG.shortName;
+
   const shellData = {
     datasetId,
+    sampleCabinet,
     signedIn: true,
-    orgShortName: identity.active.name,
+    orgShortName: sampleCabinet ?? identity.active.name,
     userName: identity.displayName,
     userEmail: identity.email,
     badges: {

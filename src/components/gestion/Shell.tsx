@@ -11,13 +11,16 @@ import GestionLogo from "./GestionLogo";
 import GettingStarted from "./GettingStarted";
 import type { Dict } from "@/lib/i18n/fr";
 import { MORADA_URL, PRO_URL, WELCOME_URL } from "@/lib/constants";
-import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
+import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
+import type { DatasetId } from "@/lib/demo";
 
 /** Everything the shell needs from the active demo dataset, precomputed
  *  server-side in the layout — the client bundle never ships the datasets. */
 export interface ShellData {
-  datasetId: "fr" | "lu";
+  datasetId: DatasetId;
+  /** The sample cabinet on screen, or null when this is the account's own data. */
+  sampleCabinet: string | null;
   /** True once a real Morada session is driving the screen. */
   signedIn: boolean;
   orgShortName: string;
@@ -180,9 +183,7 @@ export default function GestionShell({
         </div>
       ))}
       <div className="mt-auto border-t border-sand-100 pt-3">
-        {/* The demonstration switch cannot be reached by a signed-in
-            account: real data and sample data never share a screen. */}
-        {!shell.signedIn && <DatasetSwitch d={d} datasetId={shell.datasetId} />}
+        <DatasetSwitch d={d} datasetId={shell.datasetId} />
         <div className="pt-3 text-[11px] text-ink-soft">
           <p className="px-3">{d.nav.ecosystem}</p>
           <div className="flex gap-3 px-3 pt-1">
@@ -228,9 +229,13 @@ export default function GestionShell({
             </button>
 
             <p className="truncate text-sm font-semibold text-ink">{shell.orgShortName}</p>
-            <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-700">
-              {d.common.demo}
-            </span>
+            {/* The badge marks sample data, so it must not sit next to a real
+                workspace name. */}
+            {shell.sampleCabinet && (
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">
+                {d.common.demo}
+              </span>
+            )}
 
             <div className="flex-1" />
 
@@ -267,6 +272,26 @@ export default function GestionShell({
             <UserMenu email={shell.userEmail} name={shell.userName} d={d} signedIn={shell.signedIn} />
           </header>
 
+          {/* Sample data announces itself on every screen. Nobody should ever
+              have to remember which mode they left the sidebar in. */}
+          {shell.sampleCabinet && (
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-semibold text-amber-900"
+            >
+              <span>{fmt(d.shell.sampleBanner, { cabinet: shell.sampleCabinet })}</span>
+              <button
+                onClick={() => {
+                  document.cookie = "morada_dataset=real; path=/; max-age=31536000; samesite=lax";
+                  router.refresh();
+                }}
+                className="underline underline-offset-2 hover:no-underline"
+              >
+                {d.shell.sampleBack}
+              </button>
+            </div>
+          )}
+
           <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">{children}</main>
         </div>
 
@@ -292,7 +317,9 @@ export default function GestionShell({
           unitOptions={shell.unitOptions}
         />
 
-        <GettingStarted d={d} />
+        {/* A "0% done" checklist on top of a full sample cabinet contradicts
+            itself. It belongs to the real account only. */}
+        {!shell.sampleCabinet && <GettingStarted d={d} />}
       </div>
     </MotionConfig>
   );
@@ -556,12 +583,17 @@ function UserMenu({
 
 /* ----------------------------- dataset switch ------------------------------- */
 
-function DatasetSwitch({ d, datasetId }: { d: Dict; datasetId: "fr" | "lu" }) {
+function DatasetSwitch({ d, datasetId }: { d: Dict; datasetId: DatasetId }) {
   const router = useRouter();
-  const pick = (id: "fr" | "lu") => {
+  const pick = (id: DatasetId) => {
     if (id === datasetId) return;
     document.cookie = `morada_dataset=${id}; path=/; max-age=31536000; samesite=lax`;
     router.refresh();
+  };
+  const describe: Record<DatasetId, string> = {
+    real: d.shell.datasetRealDesc,
+    fr: d.shell.datasetFr,
+    lu: d.shell.datasetLu,
   };
   return (
     <div className="px-3">
@@ -576,27 +608,25 @@ function DatasetSwitch({ d, datasetId }: { d: Dict; datasetId: "fr" | "lu" }) {
       <div
         role="radiogroup"
         aria-label={d.shell.datasetAria}
-        className="mt-2 grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1"
+        className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1"
       >
-        {(["fr", "lu"] as const).map((id) => (
+        {(["real", "fr", "lu"] as const).map((id) => (
           <button
             key={id}
             role="radio"
             aria-checked={id === datasetId}
             onClick={() => pick(id)}
-            title={id === "fr" ? d.shell.datasetFr : d.shell.datasetLu}
+            title={describe[id]}
             className={
               "rounded-lg px-2 py-1.5 text-xs font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] " +
               (id === datasetId ? "bg-white text-brand-800 shadow-sm" : "text-ink-soft hover:text-ink")
             }
           >
-            {id.toUpperCase()}
+            {id === "real" ? d.shell.datasetReal : id.toUpperCase()}
           </button>
         ))}
       </div>
-      <p className="mt-1.5 text-[10px] leading-snug text-ink-soft">
-        {datasetId === "fr" ? d.shell.datasetFr : d.shell.datasetLu}
-      </p>
+      <p className="mt-1.5 text-[10px] leading-snug text-ink-soft">{describe[datasetId]}</p>
     </div>
   );
 }
