@@ -26,7 +26,12 @@ export default function SignIn({ d, next }: { d: Dict; next: string }) {
     try {
       const { error } = await getSupabase().auth.signInWithPassword({ email, password });
       if (error) {
-        setState("failed");
+        // supabase-js does not throw when the network is the problem: it
+        // returns a retryable error instead. Reporting that as "wrong
+        // password" sends people hunting for a typo that isn't there, so the
+        // two cases are told apart here.
+        const unreachable = error.name === "AuthRetryableFetchError" || !error.status;
+        setState(unreachable ? "down" : "failed");
         return;
       }
       // A full reload, not a client transition: the server must re-read the
