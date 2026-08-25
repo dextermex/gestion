@@ -8,6 +8,7 @@ import { useDismiss } from "@/lib/useDismiss";
 import { Button, Field, InlineError, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import NavigationProgress from "@/components/NavigationProgress";
 import GestionLogo from "./GestionLogo";
+import GettingStarted from "./GettingStarted";
 import type { Dict } from "@/lib/i18n/fr";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
@@ -285,6 +286,8 @@ export default function GestionShell({
           d={d}
           unitOptions={shell.unitOptions}
         />
+
+        <GettingStarted d={d} />
       </div>
     </MotionConfig>
   );

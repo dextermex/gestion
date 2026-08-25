@@ -33,7 +33,9 @@ export interface RevaluationTable {
 }
 
 export const SEED_REVALUATION_TABLE: RevaluationTable = {
-  circularRef: "Circulaire ministérielle 3/25 — TO INGEST (seed values are placeholders)",
+  // Display-safe legal source name. The "uncertain" status below is what tells
+  // the UI these coefficients are seed values awaiting the ingested circular.
+  circularRef: "Circulaire ministérielle 3/25",
   status: "uncertain",
   coefficients: {
     1990: 1.72, 1995: 1.55, 2000: 1.41, 2005: 1.28, 2010: 1.17,

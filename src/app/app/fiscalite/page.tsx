@@ -126,7 +126,12 @@ export default async function FiscalitePage() {
               </tbody>
             </table>
           </div>
-          <LegalNote>{d.fiscalite.lambertLegal}</LegalNote>
+          <LegalNote>
+            {fmt(d.fiscalite.lambertLegal, {
+              p1: LAMBERT_PORTFOLIO[0].label,
+              p2: LAMBERT_PORTFOLIO[1].label,
+            })}
+          </LegalNote>
         </Panel>
 
         <Panel title={fmt(d.fiscalite.faberTitle, { owner: faberName })}>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
+import TenantInvite from "@/components/gestion/TenantInvite";
 import { getDemo } from "@/lib/demo";
 import {
   depositFormLabels,
@@ -317,6 +318,23 @@ export default async function BailDetailPage({ params }: { params: Promise<{ id:
             <p className="mt-3 text-xs text-ink-soft">
               {property.name} · {property.address} · {fmt(d.baux.cadastralRef, { ref: property.cadastralRef })}
             </p>
+          </Panel>
+
+          <Panel title={d.baux.portalTitle}>
+            <p className="mb-3 text-xs leading-relaxed text-ink-soft">{d.baux.portalBody}</p>
+            <div className="space-y-3">
+              {l.tenantContactIds.map((cid) => {
+                const c = contactById(cid);
+                return (
+                  <TenantInvite
+                    key={cid}
+                    d={d}
+                    tenantName={c.name}
+                    link={`https://app.morada.lu/locataire/onboarding?bail=${l.rfReference}`}
+                  />
+                );
+              })}
+            </div>
           </Panel>
 
           <Panel

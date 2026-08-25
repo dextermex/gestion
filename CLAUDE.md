@@ -37,6 +37,10 @@ FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
    demeure). Demo records stay in the cabinet's working language: French in `data.ts`,
    Lëtzebuergesch in `data-lu.ts` (legal terms still French). Pages that read the
    locale or dataset cookie must NOT use `generateStaticParams`.
+8. **Copy style** — NO em dashes and no "→" in UI strings or demo records (they read
+   as machine-written); use periods, commas, colons or parentheses. Entity labels join
+   with a middot ("Apt 3B · Résidence Beaulieu"). The lone "—" placeholder in table
+   cells (`common.none`) is the one exception.
 
 ## Key references
 - docs/STRATEGY.md — the product spec (authoritative on scope).
