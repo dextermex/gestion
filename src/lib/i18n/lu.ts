@@ -76,6 +76,7 @@ export const lu: Dict = {
     noResultsFor: "Keng Resultater fir « {q} ».",
     account: "Mäi Kont",
     moradaAccount: "Mäi Morada-Kont",
+    switchSpace: "Beräich wiesselen",
     signOut: "Ofmellen",
     menuLabel: "Menü",
     typeProperty: "Immobilie",

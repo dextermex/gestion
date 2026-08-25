@@ -1,0 +1,21 @@
+-- ===========================================================================
+-- MORADA GESTION — ROLLBACK COMPLET
+--
+-- Annule intégralement 0001 à 0006. Une seule instruction suffit parce que
+-- tout ce qui a été créé vit dans le schéma `gestion` : rien à démêler, rien
+-- à restaurer, aucun objet de `public` n'a été modifié à l'aller.
+--
+-- Après exécution, la base est exactement dans l'état d'avant 0001 :
+--   • les 12 comptes, 17 agences, 850 annonces et le CRM sont intacts ;
+--   • les 20 tables g_* de l'ancien Morada Gestion sont intactes ;
+--   • public.g_can, public.crm_* et leurs policies sont intactes.
+--
+-- Le seul geste manuel restant est de retirer `gestion` des « Exposed
+-- schemas » dans les réglages d'API Supabase.
+--
+-- ATTENTION : cette instruction supprime les données de gestion réelles
+-- éventuellement saisies depuis l'application. À n'exécuter que si le
+-- branchement est abandonné, ou avant toute donnée de production.
+-- ===========================================================================
+
+drop schema if exists gestion cascade;

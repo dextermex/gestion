@@ -75,6 +75,7 @@ export const fr = {
     noResultsFor: "Aucun résultat pour « {q} ».",
     account: "Mon compte",
     moradaAccount: "Mon compte Morada",
+    switchSpace: "Changer d'espace",
     signOut: "Se déconnecter",
     menuLabel: "Menu",
     typeProperty: "Bien",

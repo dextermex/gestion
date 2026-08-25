@@ -10,6 +10,7 @@ import NavigationProgress from "@/components/NavigationProgress";
 import GestionLogo from "./GestionLogo";
 import GettingStarted from "./GettingStarted";
 import type { Dict } from "@/lib/i18n/fr";
+import { MORADA_URL, PRO_URL, WELCOME_URL } from "@/lib/constants";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
 
@@ -181,8 +182,8 @@ export default function GestionShell({
         <div className="pt-3 text-[11px] text-ink-soft">
           <p className="px-3">{d.nav.ecosystem}</p>
           <div className="flex gap-3 px-3 pt-1">
-            <a href="https://morada.lu" className="hover:text-brand-700">Morada</a>
-            <a href="https://morada.lu/pro" className="hover:text-brand-700">Pro</a>
+            <a href={MORADA_URL} className="hover:text-brand-700">Morada</a>
+            <a href={PRO_URL} className="hover:text-brand-700">Pro</a>
           </div>
         </div>
       </div>
@@ -502,21 +503,27 @@ function UserMenu({ email, name, d }: { email: string; name: string; d: Dict }) 
           <p className="truncate text-sm font-semibold text-ink">{name}</p>
           <p className="truncate text-xs text-ink-soft">{email}</p>
         </div>
-        <a href="https://morada.lu" className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50">
+        <a href={MORADA_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50">
           {d.shell.moradaAccount}
         </a>
-        {signedOutNote ? (
-          <p role="status" className="rounded-lg px-3 py-2 text-xs font-semibold text-emerald-800">
-            {d.common.demoNotice}
-          </p>
-        ) : (
-          <button
-            onClick={() => setSignedOutNote(true)}
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
-          >
-            {d.shell.signOut}
-          </button>
-        )}
+        {/* Back to the gateway: one account, three spaces. */}
+        <a href={WELCOME_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50">
+          {d.shell.switchSpace}
+        </a>
+        <div className="mt-1 border-t border-sand-100 pt-1">
+          {signedOutNote ? (
+            <p role="status" className="rounded-lg px-3 py-2 text-xs font-semibold text-emerald-800">
+              {d.common.demoNotice}
+            </p>
+          ) : (
+            <button
+              onClick={() => setSignedOutNote(true)}
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+            >
+              {d.shell.signOut}
+            </button>
+          )}
+        </div>
       </Dropdown>
     </div>
   );

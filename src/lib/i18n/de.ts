@@ -71,6 +71,7 @@ export const de: Dict = {
     noResultsFor: "Keine Ergebnisse für „{q}“.",
     account: "Mein Konto",
     moradaAccount: "Mein Morada-Konto",
+    switchSpace: "Bereich wechseln",
     signOut: "Abmelden",
     menuLabel: "Menü",
     typeProperty: "Immobilie",

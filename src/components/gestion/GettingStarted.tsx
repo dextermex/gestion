@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Dict } from "@/lib/i18n/fr";
+import { MORADA_URL } from "@/lib/constants";
 
 /**
  * The new-account journey (the immocloud "getting started" card): a floating
@@ -167,7 +168,7 @@ export default function GettingStarted({ d }: { d: Dict }) {
             </ul>
 
             <div className="flex items-center justify-between border-t border-sand-100 px-4 py-2.5">
-              <a href="https://morada.lu" className="text-xs font-semibold text-brand-700 hover:underline">
+              <a href={MORADA_URL} className="text-xs font-semibold text-brand-700 hover:underline">
                 {d.onboarding.help}
               </a>
               <button
