@@ -5,6 +5,11 @@
  * the browser, and every table it can reach is protected by RLS.
  *
  * There is no service-role key anywhere in this application, by design.
+ *
+ * The environment wins when it is set, so a preview can be pointed at another
+ * Supabase project without touching the code (see `.env.example`). The
+ * literals below are the production defaults, kept so that a fresh deployment
+ * works before anything has been configured.
  */
 export const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://lgmoocvumiuqjcqnrlej.supabase.co";

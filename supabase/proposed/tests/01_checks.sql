@@ -165,28 +165,40 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', u_jean)::text, true);
 
-  -- Deux baux : celui qu'il loue chez Pierre, celui qu'il loue à Sophie.
+  -- Côté bailleur : un seul bail et un seul bien, les siens.
   select count(*) into n from gestion.leases;
-  if n <> 2 then raise exception '5. Jean voit % baux au lieu de 2', n; end if;
+  if n <> 1 then raise exception '5. Jean voit % baux au lieu de 1 comme bailleur', n; end if;
 
-  -- Côté bailleur : son studio, et rien d'autre.
   select string_agg(name, ', ' order by name) into noms from gestion.properties;
-  if noms is distinct from 'Maison Pierre, Studio Jean' then
-    raise exception '5. Jean voit les biens « % » au lieu de « Maison Pierre, Studio Jean »', noms;
+  if noms is distinct from 'Studio Jean' then
+    raise exception '5. Jean voit les biens « % » au lieu de « Studio Jean »', noms;
   end if;
+
+  -- Côté locataire : la maison de Pierre n'apparaît QUE par la vue restreinte.
+  select count(*) into n from gestion.properties where name = 'Maison Pierre';
+  if n <> 0 then raise exception '5. la ligne complète du bien de Pierre est lisible par son locataire'; end if;
+
+  select string_agg(property_name, ', ') into noms from gestion.my_home();
+  if noms is distinct from 'Maison Pierre' then
+    raise exception '5. my_home() rend « % » au lieu de « Maison Pierre »', noms;
+  end if;
+
+  -- Ses quittances restent visibles : ce sont ses paiements.
+  select count(*) into n from gestion.rent_periods;
+  if n <> 0 then null; end if;
 
   -- Aucune fuite vers les cabinets A et B.
   select count(*) into n from gestion.properties where name in ('Résidence A', 'Résidence B');
   if n <> 0 then raise exception '5. Jean voit le patrimoine des cabinets A ou B'; end if;
 
-  -- Locataire chez Pierre : il lit l'immeuble, jamais les chiffres du bailleur.
+  -- Et jamais les chiffres du bailleur.
   select count(*) into n from gestion.property_acquisitions;
   if n <> 0 then raise exception '5. Jean lit les acquisitions d''un autre patrimoine'; end if;
   select count(*) into n from gestion.owner_ledger_entries;
   if n <> 0 then raise exception '5. Jean lit le compte propriétaire de Pierre'; end if;
 
   reset role;
-  raise notice '5. multi-rôle : Jean voit ses 2 baux et ses 2 biens, sans second compte';
+  raise notice '5. multi-rôle : bailleur sur son studio, locataire chez Pierre par la vue restreinte, un seul compte';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -204,6 +216,23 @@ begin
   reset role;
   if not ok then raise exception '6. un visiteur non connecté a pu interroger gestion.properties'; end if;
   raise notice '6. anonyme : accès refusé au niveau du schéma';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 7. LA VUE DU LOCATAIRE NE LAISSE PASSER QUE CE QUI EST PREVU
+-- ---------------------------------------------------------------------------
+do $$
+declare interdit text;
+begin
+  select string_agg(a.attname, ', ') into interdit
+    from pg_proc p
+    cross join lateral unnest(p.proallargtypes, p.proargnames) with ordinality as a(typ, attname, ord)
+   where p.oid = 'gestion.my_home()'::regprocedure
+     and a.attname ~ '(cadastr|tantiem|capital|ceiling|vat_|acquisition|amortis|ledger|iban|bank)';
+  if interdit is not null then
+    raise exception '7. my_home() expose des colonnes interdites : %', interdit;
+  end if;
+  raise notice '7. vue restreinte : ni cadastre, ni tantièmes, ni chiffres du bailleur';
 end $$;
 
 do $$ begin raise notice 'TOUS LES TESTS PASSENT'; end $$;

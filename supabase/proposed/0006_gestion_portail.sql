@@ -102,19 +102,6 @@ as $$
   );
 $$;
 
-create or replace function gestion.portal_tenant_property(p_property uuid)
-returns boolean language sql stable security definer
-set search_path = ''
-as $$
-  select exists (
-    select 1
-      from gestion.units u
-      join gestion.leases l on l.unit_id = u.id
-     where u.property_id = p_property
-       and gestion.portal_tenant_lease(l.id)
-  );
-$$;
-
 create or replace function gestion.portal_owner_lease(p_lease uuid)
 returns boolean language sql stable security definer
 set search_path = ''
@@ -132,8 +119,6 @@ comment on function gestion.portal_tenant_lease(uuid) is
   'Vrai si l''utilisateur courant est partie au bail. Aucun rôle global n''est consulté.';
 comment on function gestion.portal_owner_property(uuid) is
   'Vrai si l''utilisateur courant détient le bien, en direct ou via une société dont il est membre.';
-comment on function gestion.portal_tenant_property(uuid) is
-  'Vrai si l''utilisateur courant est locataire d''une unité de ce bien.';
 
 -- ---------------------------------------------------------------------------
 -- 4. LECTURE SEULE POUR LE PORTAIL
@@ -142,23 +127,23 @@ comment on function gestion.portal_tenant_property(uuid) is
 -- cumulent en OU. Un gestionnaire garde donc exactement les droits que lui
 -- donne gestion.can(), et un locataire gagne la lecture de son seul bail.
 -- ---------------------------------------------------------------------------
+-- Le PROPRIETAIRE lit la ligne entière : c'est son bien, son bail, ses
+-- chiffres. Le LOCATAIRE, lui, n'obtient aucune ligne de ces trois tables :
+-- elles portent des informations qui ne le regardent pas (références
+-- cadastrales, tantièmes, capital investi du bailleur, contrôle du plafond de
+-- loyer). Il passe par gestion.my_home(), plus bas, qui ne rend que les
+-- colonnes dont il a besoin.
 create policy leases_portal on gestion.leases for select to authenticated
-  using (gestion.portal_tenant_lease(id) or gestion.portal_owner_lease(id));
+  using (gestion.portal_owner_lease(id));
 
 create policy units_portal on gestion.units for select to authenticated
-  using (
-    gestion.portal_owner_property(property_id)
-    or exists (select 1 from gestion.leases l
-                where l.unit_id = units.id and gestion.portal_tenant_lease(l.id))
-  );
+  using (gestion.portal_owner_property(property_id));
 
--- Le locataire lit la fiche de l'immeuble qu'il habite : nom, adresse, classe
--- énergétique, syndic. Les tables d'argent du propriétaire (acquisitions,
--- investissements, amortissements, écritures) n'ont, elles, aucune policy
--- portail : elles restent fermées au locataire.
 create policy properties_portal on gestion.properties for select to authenticated
-  using (gestion.portal_owner_property(id) or gestion.portal_tenant_property(id));
+  using (gestion.portal_owner_property(id));
 
+-- Les quittances et les co-titulaires, en revanche, concernent directement le
+-- locataire : ce sont ses paiements et les gens qui signent avec lui.
 create policy rent_periods_portal on gestion.rent_periods for select to authenticated
   using (gestion.portal_tenant_lease(lease_id) or gestion.portal_owner_lease(lease_id));
 
@@ -173,7 +158,70 @@ create policy tickets_portal_insert on gestion.tickets for insert to authenticat
   with check (lease_id is not null and gestion.portal_tenant_lease(lease_id));
 
 -- ---------------------------------------------------------------------------
--- 5. INVITER / ACCEPTER
+-- 5. « MON LOGEMENT » : LA VUE RESTREINTE DU LOCATAIRE
+--
+-- Une liste de colonnes fermée, décidée ici une fois pour toutes, plutôt
+-- qu'une ligne entière dont il faudrait espérer que l'application ne demande
+-- pas les mauvais champs. Ce qui n'est pas listé ci-dessous est inatteignable
+-- par le locataire, quelle que soit la requête qu'il construit.
+--
+-- Dedans  : nom de la résidence, adresse, commune, classe énergétique et date
+--           du CPE, syndic, détecteurs de fumée, photo, et son propre lot.
+--           Du bail : loyer, charges, régime, dates, jour de paiement, la
+--           référence de virement, meublé, colocation.
+-- Dehors  : références cadastrales, tantièmes, capital investi, contrôle du
+--           plafond de loyer, TVA, régime fiscal, acquisitions,
+--           amortissements, écritures propriétaire, banque.
+-- ---------------------------------------------------------------------------
+create or replace function gestion.my_home()
+returns table (
+  lease_id                  uuid,
+  lease_status              text,
+  start_date                date,
+  end_date                  date,
+  rent_cents                integer,
+  charges_cents             integer,
+  charges_regime            text,
+  payment_day               int,
+  rf_reference              text,
+  furnished                 boolean,
+  colocation                boolean,
+  unit_label                text,
+  unit_floor                text,
+  unit_area_sqm             numeric,
+  unit_rooms                numeric,
+  property_name             text,
+  property_address          jsonb,
+  property_commune          text,
+  energy_class              text,
+  cpe_issued_on             date,
+  syndic_name               text,
+  smoke_detectors_confirmed boolean,
+  photo_url                 text
+)
+language sql stable security definer
+set search_path = ''
+as $$
+  select l.id, l.status, l.start_date, l.end_date,
+         l.rent_cents, l.charges_cents, l.charges_regime, l.payment_day,
+         l.rf_reference, l.furnished, l.colocation,
+         u.label, u.floor, u.area_sqm, u.rooms,
+         p.name, p.address, p.commune, p.energy_class, p.cpe_issued_on,
+         p.syndic_name, p.smoke_detectors_confirmed, p.photo_url
+    from gestion.leases l
+    join gestion.units u on u.id = l.unit_id
+    join gestion.properties p on p.id = u.property_id
+   where gestion.portal_tenant_lease(l.id);
+$$;
+
+comment on function gestion.my_home() is
+  'Le logement du locataire, colonnes restreintes. Seule porte d''entrée du portail locataire vers properties, units et leases.';
+
+revoke all on function gestion.my_home() from public, anon;
+grant execute on function gestion.my_home() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 6. INVITER / ACCEPTER
 -- ---------------------------------------------------------------------------
 create or replace function gestion.portal_invite(p_contact uuid, p_role text)
 returns text
