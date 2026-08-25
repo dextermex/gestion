@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button, Field, Input } from "@/components/pro/ui";
 import GestionLogo from "@/components/gestion/GestionLogo";
 import { getSupabase } from "@/lib/supabase/browser";
@@ -15,10 +14,10 @@ import type { Dict } from "@/lib/i18n/fr";
  * signed-in visitor never reaches this screen at all.
  */
 export default function SignIn({ d, next }: { d: Dict; next: string }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [state, setState] = useState<"idle" | "working" | "failed" | "down">("idle");
+  const [forgot, setForgot] = useState<"idle" | "sending" | "sent" | "needEmail" | "failed">("idle");
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +39,26 @@ export default function SignIn({ d, next }: { d: Dict; next: string }) {
     } catch {
       setState("down");
     }
+  };
+
+  /**
+   * Ask Supabase for a recovery e-mail. The link lands on morada.lu, the page
+   * that already handles recovery for the whole ecosystem, so there is nothing
+   * to add to the project's allowed redirect URLs.
+   *
+   * The confirmation never says whether the address is known: telling an
+   * unauthenticated visitor which e-mails have accounts is a free directory.
+   */
+  const sendReset = async () => {
+    if (email.trim() === "") {
+      setForgot("needEmail");
+      return;
+    }
+    setForgot("sending");
+    const { error } = await getSupabase().auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${MORADA_URL}/auth/reset`,
+    });
+    setForgot(error ? "failed" : "sent");
   };
 
   return (
@@ -88,15 +107,37 @@ export default function SignIn({ d, next }: { d: Dict; next: string }) {
         </form>
 
         <div className="mt-5 flex items-center justify-between text-xs font-semibold">
-          <a href={`${MORADA_URL}/auth/reset`} className="text-ink-soft hover:text-brand-700">
-            {d.auth.forgot}
-          </a>
+          <button
+            type="button"
+            onClick={sendReset}
+            disabled={forgot === "sending"}
+            className="text-ink-soft hover:text-brand-700 disabled:opacity-60"
+          >
+            {forgot === "sending" ? d.auth.forgotSending : d.auth.forgot}
+          </button>
           <a href={MORADA_URL} className="text-ink-soft hover:text-brand-700">
             {d.auth.backToMorada}
           </a>
         </div>
+
+        {forgot !== "idle" && forgot !== "sending" && (
+          <p
+            role="status"
+            className={
+              "mt-3 rounded-xl px-4 py-3 text-xs leading-relaxed " +
+              (forgot === "sent"
+                ? "bg-emerald-50 font-semibold text-emerald-800"
+                : "bg-amber-50 font-semibold text-amber-800")
+            }
+          >
+            {forgot === "sent"
+              ? d.auth.forgotSent
+              : forgot === "needEmail"
+                ? d.auth.forgotNeedEmail
+                : d.auth.forgotFailed}
+          </p>
+        )}
       </div>
-      <button type="button" hidden onClick={() => router.refresh()} aria-hidden />
     </div>
   );
 }
