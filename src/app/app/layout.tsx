@@ -17,7 +17,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // The management space is never public. Signing in happens with the Morada
   // account: same project, same auth.users, no second identity.
-  const identity = await getIdentity();
+  // See src/lib/demo/index.ts: the same development harness, which stands in
+  // for a session so every screen can be walked in its empty state.
+  const identity =
+    process.env.MORADA_PREVIEW_EMPTY === "1"
+      ? {
+          userId: "preview",
+          email: "test@example.invalid",
+          displayName: "Compte de test",
+          workspaces: [],
+          active: { id: "preview", name: "Espace de test", kind: "manager", role: "owner" },
+        }
+      : await getIdentity();
   if (!identity) redirect("/connexion?next=/app");
   if (!identity.active) return <NoWorkspace d={d} email={identity.email} />;
 

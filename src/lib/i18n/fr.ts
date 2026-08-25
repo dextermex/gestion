@@ -6,6 +6,8 @@
 
 export const fr = {
   common: {
+    emptyTitle: "Rien dans {section} pour le moment",
+    emptyBody: "Cet écran se remplit dès que vos premiers biens et baux sont enregistrés. Rien ne s'affiche tant qu'il n'y a rien de réel à montrer.",
     demo: "Démo",
     seeAll: "Tout voir",
     open: "Ouvrir",

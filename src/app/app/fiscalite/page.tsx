@@ -1,4 +1,4 @@
-import { Badge, PageHeader } from "@/components/pro/ui";
+import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { euros, eurosWhole } from "@/lib/types";
@@ -13,6 +13,11 @@ import { cents } from "@/domain/money";
 export default async function FiscalitePage() {
   const { locale, d } = await getI18n();
   const { LAMBERT_PORTFOLIO, SCI_BEAULIEU_PORTFOLIO, contactById, propertyById } = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (LAMBERT_PORTFOLIO.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.tax })} body={d.common.emptyBody} />;
   const lambertName = contactById("c-lambert").name;
   const faberName = contactById("c-faber").name;
 

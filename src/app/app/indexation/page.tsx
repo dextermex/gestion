@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Badge, PageHeader } from "@/components/pro/ui";
+import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
@@ -15,6 +15,11 @@ import {
 export default async function IndexationPage() {
   const { locale, d } = await getI18n();
   const { LEASES, TODAY, leaseTenantNames, leaseUnitLabel, unitById } = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (LEASES.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.indexation })} body={d.common.emptyBody} />;
 
   const residential = LEASES.filter(
     (l) =>

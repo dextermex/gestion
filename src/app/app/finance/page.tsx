@@ -1,4 +1,4 @@
-import { Badge, PageHeader } from "@/components/pro/ui";
+import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import BillUpload from "@/components/gestion/BillUpload";
 import { getDemo } from "@/lib/demo";
@@ -12,6 +12,11 @@ export default async function FinancePage() {
   const { locale, d } = await getI18n();
   const { ORG, RENT_PERIODS, TICKETS, UNITS, contactById, leaseById, leaseUnitLabel, propertyById, unitById } =
     await getDemo();
+
+    // A real account with nothing in it: say so rather than reach for a
+    // showcase record that no longer exists.
+    if (RENT_PERIODS.length === 0)
+      return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.finance })} body={d.common.emptyBody} />;
 
   // Décompte de gérance — juillet 2026, mandat de la SCI (engine-computed).
   const july = RENT_PERIODS.filter((rp) => rp.period === "2026-07");

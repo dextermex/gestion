@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { depositFormLabels, depositStatusMeta, euros, formatDate } from "@/lib/types";
@@ -11,6 +11,11 @@ import { computeSettlement } from "@/domain/deposits/settlement";
 export default async function GarantiesPage() {
   const { locale, d } = await getI18n();
   const { DEPOSITS, ENDED_LEASES, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (ENDED_LEASES.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.deposits })} body={d.common.emptyBody} />;
   const formLabels = depositFormLabels(d);
   const statusMeta = depositStatusMeta(d);
   const showcase = DEPOSITS.find((x) => x.id === "dep-gare")!;

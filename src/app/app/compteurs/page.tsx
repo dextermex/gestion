@@ -24,6 +24,11 @@ export default async function CompteursPage({
   const params = await searchParams;
   const { locale, d } = await getI18n();
   const { METERS, PROPERTIES, propertyById, unitById } = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (METERS.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.meters })} body={d.common.emptyBody} />;
   const withoutReading = METERS.filter((m) => !m.lastReading);
   const pendingAck = METERS.filter(
     (m) => m.lastReading && (!m.lastReading.tenantAck || !m.lastReading.managerAck),

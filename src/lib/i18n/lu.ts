@@ -7,6 +7,8 @@ import type { Dict } from "./fr";
  */
 export const lu: Dict = {
   common: {
+    emptyTitle: "Nach näischt bei {section}",
+    emptyBody: "Dëse Bildschierm fëllt sech, soubal Är éischt Bien a Baile agedroe sinn. Soulaang et näischt Richteges gëtt, gëtt näischt gewisen.",
     demo: "Demo",
     seeAll: "Alles kucken",
     open: "Opmaachen",

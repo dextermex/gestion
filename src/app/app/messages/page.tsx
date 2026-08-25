@@ -1,9 +1,9 @@
-import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote } from "@/components/gestion/bits";
 import { MessagesPanel } from "@/components/gestion/MessagesPanel";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
-import { INTL_LOCALE, type Locale } from "@/lib/i18n/config";
+import { INTL_LOCALE, type Locale, fmt } from "@/lib/i18n/config";
 
 function timeOf(iso: string, locale: Locale): string {
   const d = new Date(iso);
@@ -17,6 +17,11 @@ function timeOf(iso: string, locale: Locale): string {
 export default async function MessagesPage() {
   const { locale, d } = await getI18n();
   const { CONVERSATIONS } = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (CONVERSATIONS.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.messages })} body={d.common.emptyBody} />;
   const conversations = CONVERSATIONS.map((conv) => ({
     id: conv.id,
     subject: conv.subject,

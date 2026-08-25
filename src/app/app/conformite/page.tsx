@@ -1,4 +1,4 @@
-import { Badge, PageHeader } from "@/components/pro/ui";
+import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { deadlineStatusMeta, formatDate, formatNumber } from "@/lib/types";
@@ -50,6 +50,11 @@ function deadlineLabel(d: Dict, dl: Deadline, today: string, what?: string): str
 export default async function ConformitePage() {
   const { locale, d } = await getI18n();
   const demo = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (demo.PROPERTIES.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.compliance })} body={d.common.emptyBody} />;
   const { ORG, PROPERTIES, TODAY, UNITS } = demo;
   const statusMeta = deadlineStatusMeta(d);
 

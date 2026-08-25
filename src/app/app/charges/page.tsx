@@ -1,4 +1,4 @@
-import { Badge, PageHeader } from "@/components/pro/ui";
+import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { euros } from "@/lib/types";
@@ -9,6 +9,11 @@ import { mapSyndicDecompte } from "@/domain/charges/recharge";
 export default async function ChargesPage() {
   const { locale, d } = await getI18n();
   const { LEASE_TANTIEMES, RENT_PERIODS, SYNDIC_DECOMPTE_2025, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (RENT_PERIODS.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.charges })} body={d.common.emptyBody} />;
 
   // Blocked categories are stable engine codes — labels come from the dict.
   const blockLabel: Record<string, string> = {

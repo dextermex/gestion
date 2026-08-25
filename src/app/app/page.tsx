@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Badge } from "@/components/pro/ui";
+import { Badge, EmptyState } from "@/components/pro/ui";
 import { LinkRow, Panel, Timeline } from "@/components/gestion/bits";
 import { RingCard } from "@/components/gestion/Ring";
 import { CashflowChart } from "@/components/gestion/Cashflow";
@@ -19,6 +19,11 @@ const CHART_MONTHS = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
 export default async function DashboardPage() {
   const { locale, d } = await getI18n();
   const demo = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (demo.UNITS.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.home })} body={d.common.emptyBody} />;
   const {
     BANK_ACCOUNTS,
     BANK_TXS,

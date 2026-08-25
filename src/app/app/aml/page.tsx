@@ -1,4 +1,4 @@
-import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { amlTierMeta, initials, riskBandMeta } from "@/lib/types";
@@ -10,6 +10,11 @@ import { cents } from "@/domain/money";
 export default async function AmlPage() {
   const { d } = await getI18n();
   const { CONTACTS, TODAY } = await getDemo();
+
+  // A real account with nothing in it: say so rather than reach for a
+  // showcase record that no longer exists.
+  if (CONTACTS.length === 0)
+    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.aml })} body={d.common.emptyBody} />;
   const sciName = CONTACTS.find((c) => c.id === "c-sci-bealieu")!.name;
   const amlMeta = amlTierMeta(d);
   const riskMeta = riskBandMeta(d);

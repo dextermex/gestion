@@ -45,6 +45,16 @@ export async function getDatasetId(): Promise<DatasetId> {
  * one is checked first.
  */
 export const getDemo = cache(async (): Promise<DemoData> => {
+  // Development harness. A brand-new account sees empty collections, and that
+  // state is impossible to render locally without a live Supabase session, so
+  // ten screens shipped crashing on it. `npm run check:empty` sets this to
+  // walk every route in exactly that state.
+  //
+  // NEVER set MORADA_PREVIEW_EMPTY in a deployed environment: it would hide
+  // real data behind empty screens.
+  if (process.env.MORADA_PREVIEW_EMPTY === "1") {
+    return buildEmptyData(orgFromWorkspace({ id: "preview", name: "Espace de test", kind: "manager" }));
+  }
   const identity = await getIdentity();
   if (identity) {
     return buildEmptyData(

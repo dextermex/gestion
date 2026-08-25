@@ -2,6 +2,8 @@ import type { Dict } from "./fr";
 
 export const en: Dict = {
   common: {
+    emptyTitle: "Nothing in {section} yet",
+    emptyBody: "This screen fills up once your first properties and leases are on file. Nothing is shown while there is nothing real to show.",
     demo: "Demo",
     seeAll: "See all",
     open: "Open",

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:empty": "MORADA_PREVIEW_EMPTY=1 PORT=4321 next start & sleep 8; bash scripts/check-empty.sh; s=$?; kill %1; exit $s"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
