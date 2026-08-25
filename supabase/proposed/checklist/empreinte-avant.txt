@@ -1,0 +1,34 @@
+Empreinte de la production, relevée le 25 août 2026 avant toute migration.
+Projet lgmoocvumiuqjcqnrlej (eu-central-1). Lecture seule, aucune écriture.
+
+Cette sortie est la référence. Après la migration, `empreinte.sql` doit
+rendre exactement les mêmes lignes, à une exception près et une seule :
+« schéma gestion » passe de absent à présent.
+
+ ord | domaine          | element                       | valeur
+-----+------------------+-------------------------------+----------------------------------
+   1 | Comptes          | auth.users                    | 12
+   1 | Comptes          | profiles                      | 12
+   2 | Marketplace      | listings                      | 850
+   3 | Agences          | agencies (total)              | 17
+   3 | Agences          | agencies kind=agency          | 17
+   4 | CRM              | crm_members                   | 10
+   4 | CRM              | crm_members actifs            | 10
+   5 | Permissions      | corps de crm_has_perm         | 1b9e092ab3e33ae5478b3734db0c4f83
+   5 | Permissions      | corps de crm_has_role         | 32e1eecf1d7badc1d2a3c9e2d4738524
+   5 | Permissions      | corps de crm_member_agencies  | cd2a8007a019267b4eb6e64c0b40c381
+   5 | Permissions      | corps de crm_role_defaults    | 62653ba42d71b0160e928653cb7ef7ff
+   5 | Permissions      | corps de gestion_onboard      | 930dc126c6fede69b4ec869609c10601
+   5 | Permissions      | corps de public.g_can         | 60d98f80cccaa74f02b4afb1ebd6b859
+   6 | Ancien /gestion  | lignes dans les g_*           | 0
+   6 | Ancien /gestion  | policies sur les g_*          | 69
+   6 | Ancien /gestion  | tables g_*                    | 20
+   7 | Structure public | empreinte des fonctions       | 27921edde329eb5e2d79ba89f0f9ad2f
+   7 | Structure public | empreinte des policies        | b77abd75ffa7dc65d35312d3f533a4af
+   7 | Structure public | empreinte des tables          | a16be60918e9443e4d756e932425bf83
+   7 | Structure public | tables sans RLS               | (aucune)
+   8 | Nouveau          | schéma gestion                | absent
+
+La ligne à surveiller en priorité est « corps de public.g_can » :
+60d98f80cccaa74f02b4afb1ebd6b859. Si cette empreinte change, la fonction a
+été écrasée et il faut arrêter immédiatement.

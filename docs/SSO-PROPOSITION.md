@@ -1,10 +1,14 @@
-# Session partagée sur `.morada.lu` — proposition, non déployée
+# Session partagée sur `.morada.lu`
 
 Objectif : je me connecte sur morada.lu, je clique sur Morada Gestion,
 `app.morada.lu` s'ouvre et me reconnaît. Et l'inverse.
 
-Rien de ce document n'est déployé. C'est le code exact, ses effets sur Morada
-et Morada Pro, et la marche arrière.
+**État au 25 août.** L'étape 1 est validée et l'adaptateur vit désormais dans
+`src/lib/sessionCookie.ts`, couvert par treize tests dans
+`src/lib/__tests__/sessionCookie.test.ts`. Le correctif à appliquer à Morada
+est prêt dans `patches/morada-sso-etape1.patch`, vérifié mais non poussé : ce
+dépôt n'a pas les droits d'écriture sur `dextermex/morada`. Les étapes 2 et 3
+restent en attente.
 
 ## Pourquoi ça ne marche pas aujourd'hui
 
@@ -45,9 +49,9 @@ et lui donner un `storage` maison qui écrit dans un cookie de domaine parent.
 bougent pas d'un caractère. Le seul changement est **l'endroit où la session
 est rangée**.
 
-### Fichier nouveau, identique dans les deux dépôts
+### Le fichier, identique dans les deux dépôts
 
-`src/lib/sessionCookie.ts`
+`src/lib/sessionCookie.ts` (déjà livré côté Gestion)
 
 ```ts
 /**

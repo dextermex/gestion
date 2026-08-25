@@ -18,9 +18,6 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
-      // Proposal-only: a plain Node harness for the shared-session adapter,
-      // not part of the app bundle. See docs/sso-check/README.md.
-      "docs/sso-check/**",
     ],
   },
 ];
