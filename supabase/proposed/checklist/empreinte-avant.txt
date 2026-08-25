@@ -1,9 +1,19 @@
 Empreinte de la production, relevée le 25 août 2026 avant toute migration.
 Projet lgmoocvumiuqjcqnrlej (eu-central-1). Lecture seule, aucune écriture.
 
-Cette sortie est la référence. Après la migration, `empreinte.sql` doit
-rendre exactement les mêmes lignes, à une exception près et une seule :
-« schéma gestion » passe de absent à présent.
+Cette sortie est un instantané, pas une référence figée. Morada est un produit
+vivant : les lignes « auth.users » et « profiles » montent à chaque inscription,
+sans que personne ait rien cassé. Au 25 août à 13 h elles étaient déjà passées
+de 12 à 13, sur une inscription légitime.
+
+La bonne façon de s'en servir est donc de relever l'empreinte JUSTE AVANT la
+migration, puis de la relever à nouveau juste après. Ce sont ces deux relevés-là
+qui doivent être identiques, à une exception près et une seule : « schéma
+gestion » passe de absent à présent.
+
+Les lignes qui, elles, ne doivent jamais bouger d'elles-mêmes sont les
+empreintes de fonctions, de tables et de policies, et surtout le corps de
+public.g_can.
 
  ord | domaine          | element                       | valeur
 -----+------------------+-------------------------------+----------------------------------

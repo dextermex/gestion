@@ -9,9 +9,10 @@ trois temps : l'empreinte avant, la migration, l'empreinte après.
 - [ ] **Sauvegarde Supabase du jour vérifiée** dans le tableau de bord du
       projet, avec sa date et son heure notées. On ne s'en servira pas, le
       rollback suffit, mais on ne migre pas sans filet.
-- [ ] **`empreinte.sql` exécutée**, sortie comparée à `empreinte-avant.txt`.
-      Si elle diffère déjà, quelque chose a bougé depuis le 25 août : on
-      comprend quoi avant d'aller plus loin.
+- [ ] **`empreinte.sql` exécutée et sa sortie mise de côté.** C'est elle, prise
+      à cet instant, qui sert de référence pour l'après. `empreinte-avant.txt`
+      n'est qu'un exemple daté : les comptes et les profils montent à chaque
+      inscription, et c'est normal.
 - [ ] **Aucune autre session Claude ne travaille sur le projet.** Deux
       sessions ont déjà poussé en parallèle sur ce dépôt une fois.
 
