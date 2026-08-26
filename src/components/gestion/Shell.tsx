@@ -150,9 +150,10 @@ export default function GestionShell({
 
   const sidebar = (
     <nav className="flex h-full flex-col gap-1 overflow-y-auto p-4" aria-label="Morada Gestion">
-      <Link href="/app" className="mb-4 block px-2">
+      {/* The logo is the way back to the ecosystem gateway, from every space. */}
+      <a href={WELCOME_URL} className="mb-4 block px-2">
         <GestionLogo />
-      </Link>
+      </a>
       {NAV.map((g) => (
         <div key={g.title ?? "top"} className="mb-2">
           {g.title && (

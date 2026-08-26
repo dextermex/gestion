@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Avatar } from "@/components/pro/ui";
 import GestionLogo from "@/components/gestion/GestionLogo";
+import { WELCOME_URL } from "@/lib/constants";
 import TenantTabs from "@/components/gestion/TenantTabs";
 import { getDemo } from "@/lib/demo";
 import { tenantPersona } from "@/lib/demo/tenant";
@@ -27,7 +28,9 @@ export default async function TenantLayout({ children }: { children: React.React
     <div className="min-h-dvh bg-sand-50">
       <header className="border-b border-sand-100 bg-white">
         <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-3 px-4 sm:px-6">
-          <GestionLogo />
+          <a href={WELCOME_URL} aria-label="Morada">
+            <GestionLogo />
+          </a>
           <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-700">
             {d.tenant.space}
           </span>
