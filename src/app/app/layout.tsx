@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
-import NoWorkspace from "@/components/gestion/NoWorkspace";
+import SpaceOnboarding from "@/components/gestion/SpaceOnboarding";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { buildSearchIndex } from "@/lib/demo/search";
@@ -26,11 +26,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           email: "test@example.invalid",
           displayName: "Compte de test",
           workspaces: [],
-          active: { id: "preview", name: "Espace de test", kind: "manager", role: "owner" },
+          active:
+            process.env.MORADA_PREVIEW_NO_WORKSPACE === "1"
+              ? null
+              : { id: "preview", name: "Espace de test", kind: "manager", role: "owner" },
         }
       : await getIdentity();
   if (!identity) redirect("/connexion?next=/app");
-  if (!identity.active) return <NoWorkspace d={d} email={identity.email} />;
+
+  // A Morada account that belongs to no management space yet gets the two
+  // real ways in (create its own space, or follow an invitation), never a
+  // dead end and never a sample workspace.
+  if (!identity.active) {
+    return <SpaceOnboarding d={d} name={identity.displayName} email={identity.email} />;
+  }
 
   const [demo, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
 
