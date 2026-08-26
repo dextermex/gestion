@@ -31,9 +31,20 @@ export default async function TenantLayout({ children }: { children: React.React
           <a href={WELCOME_URL} aria-label="Morada">
             <GestionLogo />
           </a>
-          <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-700">
+          <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-700 max-sm:hidden">
             {d.tenant.space}
           </span>
+          <nav
+            aria-label={d.shell.roleAria}
+            className="ml-1 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1"
+          >
+            <a href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
+              {d.shell.roleOwner}
+            </a>
+            <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
+              {d.shell.roleTenant}
+            </span>
+          </nav>
           <div className="flex-1" />
           {tenant && (
             <>

@@ -91,3 +91,69 @@ export const getIdentity = cache(async (): Promise<Identity | null> => {
     active: workspaces[0] ?? null,
   };
 });
+
+/**
+ * First entry of an account that belongs to no management space: give it one,
+ * silently, so signing in always lands in the dashboard. The space is created
+ * by `gestion_onboard`, the production function the ecosystem already ships:
+ * one `agencies` row (private, kind owner) plus the caller as its owner in
+ * `crm_members`. Named after the person; renameable later.
+ *
+ * Runs as the signed-in user, never as a service role, so the database's own
+ * checks apply. Two racing first requests could each create a space; the
+ * function deduplicates slugs so nothing fails, and the extra empty space is
+ * visible and deletable rather than silently corrupting anything.
+ */
+export async function provisionDefaultWorkspace(): Promise<Identity | null> {
+  const session = await getSession();
+  if (!session) return null;
+
+  const db = authedClient(session.accessToken);
+
+  // Re-check right before writing: another request may have won the race.
+  const existing = await db
+    .from("crm_members")
+    .select("agency_id")
+    .eq("user_id", session.userId)
+    .eq("status", "active")
+    .limit(1);
+  if ((existing.data ?? []).length === 0) {
+    const profile = await db
+      .from("profiles")
+      .select("first_name, last_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    const name = displayNameFrom(profile.data ?? null, session.email);
+    const { error } = await db.rpc("gestion_onboard", { p_name: name, p_kind: "owner" });
+    if (error) return null;
+  }
+
+  // Resolve again from scratch; getIdentity() is cached per request and would
+  // hand back the pre-provisioning answer.
+  const [profileRes, membershipRes] = await Promise.all([
+    db.from("profiles").select("first_name, last_name").eq("id", session.userId).maybeSingle(),
+    db.from("crm_members").select("agency_id, role").eq("user_id", session.userId).eq("status", "active"),
+  ]);
+  const memberships = membershipRes.data ?? [];
+  const displayName = displayNameFrom(profileRes.data ?? null, session.email);
+  if (memberships.length === 0) return null;
+
+  const ids = memberships.map((m) => m.agency_id as string);
+  const agenciesRes = await db.from("agencies").select("id, name, kind").in("id", ids);
+  const workspaces: Workspace[] = (agenciesRes.data ?? [])
+    .map((a) => ({
+      id: a.id as string,
+      name: (a.name as string) ?? "",
+      kind: (a.kind as string) ?? "manager",
+      role: memberships.find((m) => m.agency_id === a.id)?.role ?? "viewer",
+    }))
+    .sort((x, y) => x.name.localeCompare(y.name));
+
+  return {
+    userId: session.userId,
+    email: session.email,
+    displayName,
+    workspaces,
+    active: workspaces[0] ?? null,
+  };
+}

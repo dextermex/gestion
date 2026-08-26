@@ -238,6 +238,24 @@ export default function GestionShell({
               </span>
             )}
 
+            {/* One account, two roles: the owner space is this one, the
+                tenant space is /locataire. Switching is a navigation, never a
+                second sign-in. */}
+            <nav
+              aria-label={d.shell.roleAria}
+              className="ml-1 hidden gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 md:flex"
+            >
+              <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
+                {d.shell.roleOwner}
+              </span>
+              <Link
+                href="/locataire"
+                className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink"
+              >
+                {d.shell.roleTenant}
+              </Link>
+            </nav>
+
             <div className="flex-1" />
 
             <button

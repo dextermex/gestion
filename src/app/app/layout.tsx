@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
-import SpaceOnboarding from "@/components/gestion/SpaceOnboarding";
+import ProvisionError from "@/components/gestion/ProvisionError";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { buildSearchIndex } from "@/lib/demo/search";
-import { getIdentity } from "@/lib/workspace";
+import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 
 export const metadata: Metadata = {
   title: "Morada Gestion",
@@ -19,26 +19,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // account: same project, same auth.users, no second identity.
   // See src/lib/demo/index.ts: the same development harness, which stands in
   // for a session so every screen can be walked in its empty state.
-  const identity =
+  let identity =
     process.env.MORADA_PREVIEW_EMPTY === "1"
       ? {
           userId: "preview",
           email: "test@example.invalid",
           displayName: "Compte de test",
           workspaces: [],
-          active:
-            process.env.MORADA_PREVIEW_NO_WORKSPACE === "1"
-              ? null
-              : { id: "preview", name: "Espace de test", kind: "manager", role: "owner" },
+          active: { id: "preview", name: "Espace de test", kind: "manager", role: "owner" },
         }
       : await getIdentity();
   if (!identity) redirect("/connexion?next=/app");
 
-  // A Morada account that belongs to no management space yet gets the two
-  // real ways in (create its own space, or follow an invitation), never a
-  // dead end and never a sample workspace.
+  // A first-time account gets its management space silently and lands in the
+  // dashboard like everyone else: one continuous product, no onboarding
+  // screens between signing in and the existing Gestion page.
   if (!identity.active) {
-    return <SpaceOnboarding d={d} name={identity.displayName} email={identity.email} />;
+    const email = identity.email;
+    identity = await provisionDefaultWorkspace();
+    if (!identity?.active) return <ProvisionError d={d} email={email} />;
   }
 
   const [demo, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
