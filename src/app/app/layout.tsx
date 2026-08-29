@@ -62,7 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     searchIndex: buildSearchIndex(demo),
     unitOptions: demo.UNITS.map((u) => ({
       id: u.id,
-      label: `${u.label} \u2014 ${demo.propertyById(u.propertyId).name}`,
+      label: `${u.label} \u00b7 ${demo.propertyById(u.propertyId).name}`,
     })),
   };
 

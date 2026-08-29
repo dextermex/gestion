@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { MetaBadge } from "@/components/gestion/bits";
-import { CountCard } from "@/components/gestion/filters";
+import { ChipLink } from "@/components/gestion/filters";
 import { getDemo } from "@/lib/demo";
 import type { LeaseStatus } from "@/lib/types";
 import { euros, formatDate, leaseStatusMeta, leaseTypeMeta } from "@/lib/types";
@@ -44,22 +44,23 @@ export default async function BauxPage({
     <div>
       <PageHeader title={d.baux.title} subtitle={d.baux.subtitle} />
 
-      <div className="stagger-rise mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* Status filters as compact pills (the banking-page grammar); the
+          vacant-lots pill is a cross-link into Biens, set apart by a rule. */}
+      <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto">
         {cards.map((c) => (
-          <CountCard
+          <ChipLink
             key={c.label}
             href={c.slug ? `/app/baux?statut=${c.slug}` : "/app/baux"}
-            value={c.value}
-            label={c.label}
-            selected={(params.statut ?? "") === (c.slug ?? "")}
-          />
+            active={(params.statut ?? "") === (c.slug ?? "")}
+            count={c.value}
+          >
+            {c.label}
+          </ChipLink>
         ))}
-        <CountCard
-          href="/app/biens?occupation=vacants"
-          value={vacantUnits}
-          label={d.baux.cardVacant}
-          tone={vacantUnits > 0 ? "warn" : "default"}
-        />
+        <span className="my-1 w-px shrink-0 bg-sand-200" aria-hidden />
+        <ChipLink href="/app/biens?occupation=vacants" count={vacantUnits}>
+          {d.baux.cardVacant}
+        </ChipLink>
       </div>
 
       {rows.length === 0 ? (

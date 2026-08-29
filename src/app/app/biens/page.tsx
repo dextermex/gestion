@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
-import { ChipLink, CountCard } from "@/components/gestion/filters";
+import { ChipLink } from "@/components/gestion/filters";
 import { getDemo } from "@/lib/demo";
 import type { DemoProperty, DemoUnit } from "@/lib/demo/data";
 import { euros } from "@/lib/types";
@@ -94,19 +94,20 @@ export default async function BiensPage({
         }
       />
 
-      <div className="stagger-rise mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* One compact filter row (the banking-page grammar): counts stay
+          visible, the page leads with the portfolio itself. */}
+      <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto">
         {cards.map((c) => (
-          <CountCard
+          <ChipLink
             key={c.label}
             href={href(c.slug, vacantOnly)}
-            value={c.value}
-            label={c.label}
-            selected={(params.type ?? "") === (c.slug ?? "")}
-          />
+            active={(params.type ?? "") === (c.slug ?? "")}
+            count={c.value}
+          >
+            {c.label}
+          </ChipLink>
         ))}
-      </div>
-
-      <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto">
+        <span className="my-1 w-px shrink-0 bg-sand-200" aria-hidden />
         <ChipLink href={href(params.type, !vacantOnly)} active={vacantOnly}>
           {d.biens.filterVacant}
         </ChipLink>

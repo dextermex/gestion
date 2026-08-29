@@ -1,5 +1,5 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
-import { LegalNote, Panel } from "@/components/gestion/bits";
+import { CollapsiblePanel, LegalNote } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import BankWorkspace, { type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
 import { getDemo } from "@/lib/demo";
@@ -143,9 +143,11 @@ export default async function BanquePage() {
         <BankWorkspace d={d} rows={rows} review={review} todayISO={TODAY} />
       </div>
 
+      {/* How the engine decides — reference material, folded by default so the
+          screen ends where the work ends. */}
       {BANK_TXS.length > 0 && (
-        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Panel title={d.banque.cascadeTitle}>
+        <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+          <CollapsiblePanel title={d.banque.cascadeTitle}>
             <ol className="space-y-3 text-sm">
               {cascade.map(([title, body], i) => (
                 <li key={title} className="flex gap-3">
@@ -159,9 +161,9 @@ export default async function BanquePage() {
                 </li>
               ))}
             </ol>
-          </Panel>
+          </CollapsiblePanel>
 
-          <Panel title={d.banque.vopTitle}>
+          <CollapsiblePanel title={d.banque.vopTitle}>
             {BANK_ACCOUNTS.map((b) => {
               const check = vopNameCheck(b.holderNameVerbatim, b.holderNameVerbatim);
               return (
@@ -183,7 +185,7 @@ export default async function BanquePage() {
               <Badge className="bg-red-100 text-red-700">{d.banque.vopMismatch}</Badge>
             </div>
             <LegalNote>{d.banque.vopLegal}</LegalNote>
-          </Panel>
+          </CollapsiblePanel>
         </div>
       )}
     </div>

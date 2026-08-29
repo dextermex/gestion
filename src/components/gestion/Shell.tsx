@@ -149,15 +149,22 @@ export default function GestionShell({
     href === "/app" ? pathname === "/app" : pathname.startsWith(href);
 
   const sidebar = (
-    <nav className="flex h-full flex-col gap-1 overflow-y-auto p-4" aria-label="Morada Gestion">
+    // Two zones: the nav list scrolls when it must, the dataset switch and
+    // ecosystem links stay pinned below it — controls that change what the
+    // whole screen shows must never hide behind a scroll.
+    <div className="flex h-full flex-col">
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pt-2.5" aria-label="Morada Gestion">
       {/* The logo is the way back to the ecosystem gateway, from every space. */}
-      <a href={WELCOME_URL} className="mb-4 block px-2">
+      <a
+        href={WELCOME_URL}
+        className="mb-2 block rounded-lg px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      >
         <GestionLogo />
       </a>
       {NAV.map((g) => (
-        <div key={g.title ?? "top"} className="mb-2">
+        <div key={g.title ?? "top"} className="mb-1">
           {g.title && (
-            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+            <p className="px-3 pb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
               {g.title}
             </p>
           )}
@@ -167,7 +174,7 @@ export default function GestionShell({
               href={i.href}
               aria-current={isActivePath(i.href) ? "page" : undefined}
               className={
-                "flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition max-sm:min-h-11 " +
+                "flex items-center justify-between rounded-xl px-3 py-[5px] text-sm font-medium transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
                 (isActivePath(i.href)
                   ? "bg-brand-50 font-semibold text-brand-800"
                   : "text-ink-soft hover:bg-sand-50 hover:text-ink")
@@ -183,17 +190,18 @@ export default function GestionShell({
           ))}
         </div>
       ))}
-      <div className="mt-auto border-t border-sand-100 pt-3">
-        <DatasetSwitch d={d} datasetId={shell.datasetId} />
-        <div className="pt-3 text-[11px] text-ink-soft">
-          <p className="px-3">{d.nav.ecosystem}</p>
-          <div className="flex gap-3 px-3 pt-1">
-            <a href={MORADA_URL} className="hover:text-brand-700">Morada</a>
-            <a href={PRO_URL} className="hover:text-brand-700">Pro</a>
-          </div>
+    </nav>
+    <div className="shrink-0 border-t border-sand-100 px-3 pb-3 pt-2.5">
+      <DatasetSwitch d={d} datasetId={shell.datasetId} />
+      <div className="pt-2.5 text-[11px] text-ink-soft">
+        <p className="px-3">{d.nav.ecosystem}</p>
+        <div className="flex gap-3 px-3 pt-0.5">
+          <a href={MORADA_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">Morada</a>
+          <a href={PRO_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">Pro</a>
         </div>
       </div>
-    </nav>
+    </div>
+    </div>
   );
 
   return (
@@ -220,7 +228,7 @@ export default function GestionShell({
         <div className="flex min-h-dvh flex-col lg:pl-60">
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:gap-3 sm:px-6">
             <button
-              className="-ml-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 lg:hidden"
+              className="-ml-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:hidden"
               onClick={() => setMobileOpen(true)}
               aria-label={d.common.openMenu}
             >
@@ -250,7 +258,7 @@ export default function GestionShell({
               </span>
               <Link
                 href="/locataire"
-                className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink"
+                className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               >
                 {d.shell.roleTenant}
               </Link>
@@ -260,7 +268,7 @@ export default function GestionShell({
 
             <button
               onClick={() => setPaletteOpen(true)}
-              className="hidden items-center gap-2 rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-sm text-ink-soft transition hover:border-brand-200 hover:text-ink sm:flex"
+              className="hidden items-center gap-2 rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-sm text-ink-soft transition hover:border-brand-200 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:flex"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="11" cy="11" r="7" />
@@ -273,7 +281,7 @@ export default function GestionShell({
             </button>
             <button
               onClick={() => setPaletteOpen(true)}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 sm:hidden"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:hidden"
               aria-label={d.shell.searchAria}
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
@@ -304,7 +312,7 @@ export default function GestionShell({
                   document.cookie = "morada_dataset=real; path=/; max-age=31536000; samesite=lax";
                   router.refresh();
                 }}
-                className="underline underline-offset-2 hover:no-underline"
+                className="rounded underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               >
                 {d.shell.sampleBack}
               </button>
@@ -384,7 +392,7 @@ function MobileDrawer({
           >
             <button
               onClick={onClose}
-              className="absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100"
+              className="absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               aria-label={label}
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
@@ -444,7 +452,7 @@ function LanguageMenu({ locale, label }: { locale: Locale; label: string }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-sm font-semibold text-ink-soft transition hover:bg-sand-100 hover:text-ink"
+        className="flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-sm font-semibold text-ink-soft transition hover:bg-sand-100 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         aria-haspopup="true"
         aria-expanded={open}
         aria-label={label}
@@ -496,7 +504,7 @@ function QuickAddMenu({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 max-sm:min-h-11"
+        className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11"
         aria-haspopup="true"
         aria-expanded={open}
       >
@@ -559,7 +567,7 @@ function UserMenu({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-11 w-11 items-center justify-center rounded-full"
+        className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         aria-haspopup="true"
         aria-expanded={open}
         aria-label={d.shell.account}
@@ -637,7 +645,7 @@ function DatasetSwitch({ d, datasetId }: { d: Dict; datasetId: DatasetId }) {
             onClick={() => pick(id)}
             title={describe[id]}
             className={
-              "rounded-lg px-2 py-1.5 text-xs font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+              "rounded-lg px-2 py-1.5 text-xs font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 " +
               (id === datasetId ? "bg-white text-brand-800 shadow-sm" : "text-ink-soft hover:text-ink")
             }
           >

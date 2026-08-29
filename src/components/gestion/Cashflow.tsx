@@ -18,12 +18,15 @@ const TOP = 14;
 export function CashflowChart({
   data,
   locale,
+  currentMonth,
   legendExpected,
   legendCollected,
   ariaLabel,
 }: {
   data: CashflowMonth[];
   locale: Locale;
+  /** The month being lived right now — the one bar whose figure reads loud. */
+  currentMonth?: string;
   legendExpected: string;
   legendCollected: string;
   ariaLabel: string;
@@ -64,7 +67,7 @@ export function CashflowChart({
           return (
             <g key={m.month}>
               <title>
-                {`${formatMonth(m.month, locale)} — ${legendExpected}: ${eurosWhole(m.expectedCents, locale)} · ${legendCollected}: ${eurosWhole(m.collectedCents, locale)}`}
+                {`${formatMonth(m.month, locale)} · ${legendExpected}: ${eurosWhole(m.expectedCents, locale)} · ${legendCollected}: ${eurosWhole(m.collectedCents, locale)}`}
               </title>
               {/* Expected track */}
               <rect
@@ -91,18 +94,31 @@ export function CashflowChart({
                 x={cx}
                 y={H - 8}
                 textAnchor="middle"
-                className="fill-ink-soft text-[11px]"
+                className={
+                  m.month === currentMonth
+                    ? "fill-ink text-[11px] font-semibold"
+                    : "fill-ink-soft text-[11px]"
+                }
               >
                 {formatMonth(m.month, locale).split(" ")[0]}
               </text>
-              <text
-                x={cx}
-                y={y(Math.max(m.expectedCents, m.collectedCents)) - 6}
-                textAnchor="middle"
-                className="fill-ink text-[11px] font-semibold tabular-nums"
-              >
-                {eurosWhole(m.collectedCents, locale)}
-              </text>
+              {/* One loud figure (the live month); the rest whisper, and an
+                  empty bar says nothing — the tooltip keeps the exact values. */}
+              {m.collectedCents > 0 && (
+                <text
+                  x={cx}
+                  y={y(Math.max(m.expectedCents, m.collectedCents)) - 6}
+                  textAnchor="middle"
+                  className={
+                    "tabular-nums " +
+                    (m.month === currentMonth
+                      ? "fill-ink text-[11px] font-semibold"
+                      : "fill-ink-soft text-[10px] font-medium")
+                  }
+                >
+                  {eurosWhole(m.collectedCents, locale)}
+                </text>
+              )}
             </g>
           );
         })}

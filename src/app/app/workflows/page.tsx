@@ -16,25 +16,31 @@ import type { Dict } from "@/lib/i18n/fr";
 function Stepper({ states, current, d }: { states: string[]; current: string; d: Dict }) {
   const idx = states.indexOf(current);
   return (
-    <ol className="mt-3 flex items-center gap-1" aria-label={d.workflows.stepsAria}>
-      {states.map((s, i) => (
-        <li key={s} className="flex min-w-0 flex-1 flex-col gap-1" aria-current={i === idx ? "step" : undefined}>
-          <span
-            className={
-              "h-1 rounded-full " + (i < idx ? "bg-brand-300" : i === idx ? "bg-brand-600" : "bg-sand-200")
-            }
-            title={workflowStateLabel(d, s)}
-          />
-          {/* Only the active step carries a visible label — eight truncated
-              micro-labels are noise; the bar encodes progress. */}
-          {i === idx ? (
-            <span className="truncate text-[11px] font-bold text-brand-800">{workflowStateLabel(d, s)}</span>
-          ) : (
+    <div className="mt-3">
+      <ol className="flex items-center gap-1" aria-label={d.workflows.stepsAria}>
+        {states.map((s, i) => (
+          <li key={s} className="min-w-0 flex-1" aria-current={i === idx ? "step" : undefined}>
+            <span
+              className={
+                "block h-1 rounded-full " + (i < idx ? "bg-brand-300" : i === idx ? "bg-brand-600" : "bg-sand-200")
+              }
+              title={workflowStateLabel(d, s)}
+            />
             <span className="sr-only">{workflowStateLabel(d, s)}</span>
-          )}
-        </li>
-      ))}
-    </ol>
+          </li>
+        ))}
+      </ol>
+      {/* The active step gets the whole row to say its name — a label pinned
+          under its own segment truncated after four letters. */}
+      <div className="mt-1.5 flex items-baseline justify-between gap-2">
+        <span className="min-w-0 text-[11px] font-bold text-brand-800">
+          {workflowStateLabel(d, states[idx] ?? current)}
+        </span>
+        <span className="shrink-0 text-[10px] font-medium tabular-nums text-ink-soft">
+          {idx + 1}/{states.length}
+        </span>
+      </div>
+    </div>
   );
 }
 

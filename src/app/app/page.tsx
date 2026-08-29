@@ -95,12 +95,14 @@ export default async function DashboardPage() {
   const settlementWarn = settlementNotes(d, locale, settlementInput, settlement);
 
   // ── Recommended actions (top of the day, each linking into its module) ──
+  // The chip names the destination module, so it stays one calm neutral;
+  // colour is reserved for the single legally urgent row (mise en demeure).
   const todo: Array<{ href: string; title: string; sub: string; badge: { label: string; color: string } }> = [
     {
       href: "/app/banque",
       title: fmt(d.dash.todoReview, { n: reviewQueue.length }),
       sub: d.dash.todoReviewSub,
-      badge: { label: d.dash.badgeBank, color: "bg-amber-100 text-amber-800" },
+      badge: { label: d.dash.badgeBank, color: "bg-sand-100 text-ink-soft" },
     },
     {
       href: "/app/indexation",
@@ -109,7 +111,7 @@ export default async function DashboardPage() {
         amount: euros(lease3b.rentCents - (lease3b.previousRentCents ?? lease3b.rentCents), locale),
       }),
       sub: d.dash.todoLagSub,
-      badge: { label: d.dash.badgeIndexation, color: "bg-sky-100 text-sky-800" },
+      badge: { label: d.dash.badgeIndexation, color: "bg-sand-100 text-ink-soft" },
     },
     {
       href: "/app/loyers",
@@ -121,7 +123,7 @@ export default async function DashboardPage() {
       href: "/app/garanties",
       title: fmt(d.dash.todoDeposit, { unit: unitGare.label }),
       sub: settlementWarn[0] ?? "",
-      badge: { label: d.dash.badgeDeposit, color: "bg-orange-100 text-orange-800" },
+      badge: { label: d.dash.badgeDeposit, color: "bg-sand-100 text-ink-soft" },
     },
     {
       href: "/app/banque",
@@ -137,7 +139,7 @@ export default async function DashboardPage() {
         deadline: formatDate(beaulieu.nextAgDate ? addDays(beaulieu.nextAgDate, -15) : null, locale),
       }),
       sub: d.dash.todoAgSub,
-      badge: { label: d.dash.badgeSyndic, color: "bg-violet-100 text-violet-800" },
+      badge: { label: d.dash.badgeSyndic, color: "bg-sand-100 text-ink-soft" },
     },
   ];
 
@@ -249,7 +251,13 @@ export default async function DashboardPage() {
                   href={t.href}
                   title={t.title}
                   sub={t.sub}
-                  right={<Badge className={t.badge.color}>{t.badge.label}</Badge>}
+                  right={
+                    // On a phone the chip would squeeze the sentence it labels;
+                    // the row itself already says where it leads.
+                    <span className="max-sm:hidden">
+                      <Badge className={t.badge.color}>{t.badge.label}</Badge>
+                    </span>
+                  }
                 />
               </li>
             ))}
@@ -297,6 +305,7 @@ export default async function DashboardPage() {
           <CashflowChart
             data={cashflow}
             locale={locale}
+            currentMonth={LIVE_MONTH}
             legendExpected={d.dash.cashflowExpected}
             legendCollected={d.dash.cashflowCollected}
             ariaLabel={d.dash.cashflowAria}

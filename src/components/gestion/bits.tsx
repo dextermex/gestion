@@ -101,16 +101,55 @@ export function LinkRow({
   right?: React.ReactNode;
 }) {
   return (
-    <Link href={href} className="flex items-center gap-3 py-3 transition hover:bg-sand-50">
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-lg py-3 transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+    >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-ink">{title}</p>
-        {sub && <p className="truncate text-xs text-ink-soft">{sub}</p>}
+        <p className="line-clamp-2 text-sm font-semibold text-ink">{title}</p>
+        {sub && <p className="line-clamp-1 text-xs text-ink-soft">{sub}</p>}
       </div>
       {right}
       <svg className="h-4 w-4 shrink-0 text-ink-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" />
       </svg>
     </Link>
+  );
+}
+
+/**
+ * Reference material folded away by default — the screen leads with what needs
+ * doing, and the "how the engine works" panels open on demand. Plain
+ * <details>, so server components can use it and it works without JS.
+ */
+export function CollapsiblePanel({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <details className="group/fold">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-5 transition hover:bg-sand-50/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 [&::-webkit-details-marker]:hidden">
+          <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
+          <svg
+            className="h-4 w-4 shrink-0 text-ink-soft transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-open/fold:rotate-180 motion-reduce:transition-none"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
+        <div className="px-5 pb-5">{children}</div>
+      </details>
+    </Card>
   );
 }
 
