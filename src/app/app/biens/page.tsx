@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { ChipLink } from "@/components/gestion/filters";
-import { getDemo } from "@/lib/demo";
+import { getDatasetId, getDemo } from "@/lib/demo";
 import type { DemoProperty, DemoUnit } from "@/lib/demo/data";
+import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
+import { authedClient, getSession } from "@/lib/supabase/server";
+import { getIdentity } from "@/lib/workspace";
 import { eurosWhole } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -32,27 +35,104 @@ export default async function BiensPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { LEASES, PROPERTIES, UNITS } = await getDemo();
+  const [{ LEASES, PROPERTIES, UNITS }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  const real = datasetId === "real";
 
-  const enriched = PROPERTIES.map((p) => {
-    const units = UNITS.filter((u) => u.propertyId === p.id);
-    const lettable = units.filter((u) => u.kind !== "parking");
-    const occupied = lettable.filter((u) =>
-      LEASES.some((l) => l.unitId === u.id && (l.status === "active" || l.status === "notice")),
-    );
-    const monthlyRent = LEASES.filter(
-      (l) => (l.status === "active" || l.status === "notice") && units.some((u) => u.id === l.unitId),
-    ).reduce((a, l) => a + l.rentCents, 0);
-    return {
-      p,
-      units,
-      lettable,
-      occupied,
-      monthlyRent,
-      vacant: lettable.length - occupied.length,
-      kind: kindOf(p, units),
+  // One display shape for both sources: the demo engines on sample cabinets,
+  // gestion.* under the caller's JWT on real accounts.
+  type CardRow = {
+    p: {
+      id: string; name: string; address: string; energyClass: string | null;
+      isCopropriete: boolean; smokeDetectorsConfirmed: boolean; ownershipNote: string;
     };
-  });
+    lettableCount: number;
+    occupiedCount: number;
+    monthlyRent: number;
+    vacant: number;
+    kind: PropertyKind;
+  };
+
+  let enriched: CardRow[];
+  if (real) {
+    enriched = [];
+    const session = await getSession();
+    const identity = session ? await getIdentity() : null;
+    if (session && identity?.active) {
+      const g = authedClient(session.accessToken).schema("gestion");
+      const [propRes, unitRes] = await Promise.all([
+        g.from("properties")
+          .select("id,name,type,address,energy_class,is_copropriete,smoke_detectors_confirmed")
+          .eq("org_id", identity.active.id)
+          .is("archived_at", null)
+          .order("created_at"),
+        g.from("units").select("id,property_id,kind").eq("org_id", identity.active.id).is("archived_at", null),
+      ]);
+      type DbProp = {
+        id: string; name: string; type: string; address: PropertyAddress | null;
+        energy_class: string | null; is_copropriete: boolean; smoke_detectors_confirmed: boolean;
+      };
+      type DbUnit = { id: string; property_id: string; kind: string };
+      const props = (propRes.data as DbProp[] | null) ?? [];
+      const allUnits = (unitRes.data as DbUnit[] | null) ?? [];
+      enriched = props.map((dp) => {
+        const units = allUnits.filter((u) => u.property_id === dp.id);
+        const dwellings = units.filter((u) => u.kind === "dwelling").length;
+        const commercial = units.filter((u) => u.kind === "commercial" || u.kind === "office").length;
+        const lettableCount = units.filter((u) => u.kind !== "parking" && u.kind !== "cellar").length;
+        const kind: PropertyKind =
+          commercial > 0 && dwellings === 0 && units.length > 0
+            ? "commercial"
+            : dwellings === 1 && units.length === 1
+              ? dp.is_copropriete
+                ? "apartment"
+                : "house"
+              : "building";
+        return {
+          p: {
+            id: dp.id,
+            name: dp.name,
+            address: formatAddress(dp.address),
+            energyClass: dp.energy_class,
+            isCopropriete: dp.is_copropriete,
+            smokeDetectorsConfirmed: dp.smoke_detectors_confirmed,
+            ownershipNote: "",
+          },
+          lettableCount,
+          occupiedCount: 0,
+          monthlyRent: 0,
+          vacant: lettableCount,
+          kind,
+        };
+      });
+    }
+  } else {
+    enriched = PROPERTIES.map((p) => {
+      const units = UNITS.filter((u) => u.propertyId === p.id);
+      const lettable = units.filter((u) => u.kind !== "parking");
+      const occupied = lettable.filter((u) =>
+        LEASES.some((l) => l.unitId === u.id && (l.status === "active" || l.status === "notice")),
+      );
+      const monthlyRent = LEASES.filter(
+        (l) => (l.status === "active" || l.status === "notice") && units.some((u) => u.id === l.unitId),
+      ).reduce((a, l) => a + l.rentCents, 0);
+      return {
+        p: {
+          id: p.id,
+          name: p.name,
+          address: p.address,
+          energyClass: p.energyClass,
+          isCopropriete: p.isCopropriete,
+          smokeDetectorsConfirmed: p.smokeDetectorsConfirmed,
+          ownershipNote: p.ownershipNote,
+        },
+        lettableCount: lettable.length,
+        occupiedCount: occupied.length,
+        monthlyRent,
+        vacant: lettable.length - occupied.length,
+        kind: kindOf(p, units),
+      };
+    });
+  }
 
   const kindFilter = KIND_PARAM[params.type ?? ""];
   const vacantOnly = params.occupation === "vacants";
@@ -129,7 +209,7 @@ export default async function BiensPage({
         />
       ) : (
         <div className="stagger-rise grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {filtered.map(({ p, lettable, occupied, monthlyRent, vacant }) => (
+          {filtered.map(({ p, lettableCount, occupiedCount, monthlyRent, vacant }) => (
             <Link key={p.id} href={`/app/biens/${p.id}`} className="group">
               <Card className="flex h-full flex-col p-5 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-0.5 group-hover:border-brand-100 group-hover:shadow-md">
                 <div className="flex items-start justify-between gap-3">
@@ -139,32 +219,34 @@ export default async function BiensPage({
                     </h2>
                     <p className="truncate text-xs text-ink-soft">{p.address}</p>
                   </div>
-                  <span
-                    className={
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold " +
-                      (p.energyClass.startsWith("A")
-                        ? "bg-emerald-100 text-emerald-800"
-                        : p.energyClass === "B" || p.energyClass === "C"
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-red-100 text-red-700")
-                    }
-                    role="img"
-                    aria-label={fmt(d.biens.energyAria, { cls: p.energyClass })}
-                    title={fmt(d.biens.energyAria, { cls: p.energyClass })}
-                  >
-                    {p.energyClass}
-                  </span>
+                  {p.energyClass && (
+                    <span
+                      className={
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold " +
+                        (p.energyClass.startsWith("A")
+                          ? "bg-emerald-100 text-emerald-800"
+                          : p.energyClass === "B" || p.energyClass === "C"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-red-100 text-red-700")
+                      }
+                      role="img"
+                      aria-label={fmt(d.biens.energyAria, { cls: p.energyClass })}
+                      title={fmt(d.biens.energyAria, { cls: p.energyClass })}
+                    >
+                      {p.energyClass}
+                    </span>
+                  )}
                 </div>
 
                 <div className="mt-4 grid grid-cols-3 gap-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.biens.lots}</p>
-                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">{lettable.length}</p>
+                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">{lettableCount}</p>
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.biens.occupied}</p>
                     <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
-                      {occupied.length}/{lettable.length}
+                      {occupiedCount}/{lettableCount}
                     </p>
                   </div>
                   <div>
@@ -190,7 +272,11 @@ export default async function BiensPage({
                     )}
                   </div>
                 )}
-                <p className="mt-auto pt-3 truncate text-[11px] text-ink-soft">{p.ownershipNote}</p>
+                {p.ownershipNote ? (
+                  <p className="mt-auto pt-3 truncate text-[11px] text-ink-soft">{p.ownershipNote}</p>
+                ) : (
+                  <span className="mt-auto" />
+                )}
               </Card>
             </Link>
           ))}

@@ -2,7 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { getDemo } from "@/lib/demo";
+import { getDatasetId, getDemo } from "@/lib/demo";
+import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
+import { authedClient, getSession } from "@/lib/supabase/server";
+import { getIdentity } from "@/lib/workspace";
+import type { Dict } from "@/lib/i18n/fr";
+import type { Locale } from "@/lib/i18n/config";
 import { METER_UNITS, euros, formatDate, formatNumber, leaseStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -19,6 +24,8 @@ import {
 export default async function BienDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
+  const datasetId = await getDatasetId();
+  if (datasetId === "real") return RealBienDetail({ id, d, locale });
   const { LEASES, METERS, PROPERTIES, TODAY, UNITS, leaseTenantNames } = await getDemo();
   const property = PROPERTIES.find((p) => p.id === id);
   if (!property) notFound();
@@ -216,6 +223,125 @@ export default async function BienDetailPage({ params }: { params: Promise<{ id:
                   }
                 >
                   {p.smokeDetectorsConfirmed ? d.biens.smokeOk : d.biens.smokeKo}
+                </Badge>
+              </li>
+            </ul>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ------------------------- real account: gestion.* -------------------------
+   A freshly created property has no leases, meters or fiscal history yet;
+   the sheet shows exactly what exists and names what is still to fill in. */
+async function RealBienDetail({ id, d, locale }: { id: string; d: Dict; locale: Locale }) {
+  void locale;
+  const session = await getSession();
+  const identity = session ? await getIdentity() : null;
+  if (!session || !identity?.active) notFound();
+
+  const g = authedClient(session!.accessToken).schema("gestion");
+  const [propRes, unitRes] = await Promise.all([
+    g.from("properties")
+      .select("id,name,address,energy_class,is_copropriete,syndic_name,smoke_detectors_confirmed")
+      .eq("org_id", identity!.active!.id)
+      .eq("id", id)
+      .maybeSingle(),
+    g.from("units").select("id,label,kind,floor,area_sqm").eq("property_id", id).is("archived_at", null).order("created_at"),
+  ]);
+  type DbProp = {
+    id: string; name: string; address: PropertyAddress | null; energy_class: string | null;
+    is_copropriete: boolean; syndic_name: string | null; smoke_detectors_confirmed: boolean;
+  };
+  const p = propRes.data as DbProp | null;
+  if (!p) notFound();
+  const units = (unitRes.data as Array<{ id: string; label: string; kind: string }> | null) ?? [];
+
+  return (
+    <div>
+      <div className="mb-2">
+        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline">
+          {d.biens.backToList}
+        </Link>
+      </div>
+      <PageHeader
+        title={p!.name}
+        subtitle={formatAddress(p!.address)}
+        actions={
+          p!.energy_class ? (
+            <Badge className="bg-emerald-100 text-emerald-800">CPE {p!.energy_class}</Badge>
+          ) : (
+            <Badge className="bg-sand-100 text-ink-soft">CPE · {d.biens.cpeMissing}</Badge>
+          )
+        }
+      />
+
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <Panel title={d.biens.unitsTitle}>
+            {units.length === 0 ? (
+              <p className="text-sm text-ink-soft">{d.biens.noUnitsYet}</p>
+            ) : (
+              <ul className="divide-y divide-sand-100">
+                {units.map((u) => (
+                  <li key={u.id} className="flex items-center gap-3 py-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-xs font-bold text-brand-700">
+                      {u.label.slice(0, 3)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-ink">{u.label}</p>
+                      <p className="text-xs text-ink-soft">{d.biens.unitFree}</p>
+                    </div>
+                    {u.kind === "parking" ? (
+                      <Badge className="bg-sand-100 text-ink-soft">{d.biens.unitParking}</Badge>
+                    ) : (
+                      <Badge className="bg-amber-100 text-amber-800">{d.biens.unitVacantBadge}</Badge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+
+          <Panel title={d.biens.metersTitle} className="mt-5">
+            <p className="text-sm text-ink-soft">{d.biens.metersNone}</p>
+          </Panel>
+        </div>
+
+        <div className="flex flex-col gap-5">
+          {p!.is_copropriete && (
+            <Panel title={d.biens.coproTitle}>
+              <ul className="space-y-2 text-sm">
+                <li className="flex justify-between gap-3">
+                  <span className="text-ink-soft">{d.biens.syndic}</span>
+                  <span className="font-semibold text-ink">{p!.syndic_name ?? d.biens.cpeMissing}</span>
+                </li>
+              </ul>
+              <LegalNote>{d.biens.coproLegal}</LegalNote>
+            </Panel>
+          )}
+
+          <Panel title={d.biens.complianceTitle}>
+            <ul className="space-y-2.5 text-sm">
+              <li className="flex items-center justify-between gap-3">
+                <span className="text-ink-soft">{d.biens.cpeRow}</span>
+                {p!.energy_class ? (
+                  <Badge className="bg-emerald-100 text-emerald-800">{p!.energy_class}</Badge>
+                ) : (
+                  <Badge className="bg-amber-100 text-amber-800">{d.biens.cpeMissing}</Badge>
+                )}
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                <span className="text-ink-soft">{d.biens.smokeRow}</span>
+                <Badge
+                  className={
+                    p!.smoke_detectors_confirmed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
+                  }
+                >
+                  {p!.smoke_detectors_confirmed ? d.biens.smokeOk : d.biens.smokeKo}
                 </Badge>
               </li>
             </ul>

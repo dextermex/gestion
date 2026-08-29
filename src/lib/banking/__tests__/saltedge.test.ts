@@ -33,7 +33,7 @@ describe("saltedge client", () => {
       .mockResolvedValueOnce(ok({ data: { id: "cust-1" } }));
     await expect(ensureCustomer("morada-u1")).resolves.toBe("cust-1");
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toBe("https://www.saltedge.com/api/v5/customers");
+    expect(String(url)).toBe("https://www.saltedge.com/api/v6/customers");
     expect(init?.method).toBe("POST");
     const headers = init?.headers as Record<string, string>;
     expect(headers["App-id"]).toBe("app-id");
@@ -72,7 +72,7 @@ describe("saltedge client", () => {
     ).resolves.toBe("https://connect.example/x");
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.data.customer_id).toBe("cust-1");
-    expect(body.data.consent.scopes).toEqual(["account_details", "transactions_details"]);
+    expect(body.data.consent.scopes).toEqual(["accounts", "transactions"]);
     expect(body.data.attempt.return_to).toBe("https://app.morada.lu/app/banque?connexion=retour");
   });
 

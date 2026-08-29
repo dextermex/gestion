@@ -8,8 +8,9 @@ export default async function NouveauBienPage() {
   return (
     <PropertyWizard
       d={d}
-      notice={real ? d.biens.wizRealNotice : d.common.demoCreateNotice}
-      noticeTone={real ? "pending" : "demo"}
+      real={real}
+      notice={d.common.demoCreateNotice}
+      noticeTone="demo"
     />
   );
 }

@@ -41,12 +41,14 @@ export default function PropertyWizard({
   d,
   notice,
   noticeTone = "demo",
+  real = false,
 }: {
   d: Dict;
-  /** End-screen message: the demo notice on sample cabinets, the honest
-   *  "not stored yet" note on real accounts. */
+  /** Demo end-screen message (sample cabinets only). */
   notice: string;
   noticeTone?: "demo" | "pending";
+  /** Real account: submitting WRITES to gestion.* and lands on the list. */
+  real?: boolean;
 }) {
   const router = useRouter();
   const reduced = useReducedMotion();
@@ -54,7 +56,12 @@ export default function PropertyWizard({
   const [submitted, setSubmitted] = useState(false);
   const [name, setName] = useState("");
   const [street, setStreet] = useState("");
+  const [num, setNum] = useState("");
+  const [postal, setPostal] = useState("");
   const [city, setCity] = useState("");
+  const [country, setCountry] = useState("LU");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const step = type === null ? 1 : 2;
@@ -75,6 +82,31 @@ export default function PropertyWizard({
           exit: { opacity: 0, x: -32 * dir },
           transition: { type: "spring" as const, stiffness: 340, damping: 34 },
         };
+
+  const save = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/biens/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, name, street, number: num, postal, city, country }),
+      });
+      if (res.ok) {
+        // The new property on the list IS the confirmation.
+        window.location.assign("/app/biens");
+        return;
+      }
+      if (res.status === 401) {
+        window.location.assign("/connexion?next=/app/biens/nouveau");
+        return;
+      }
+      setSaveError(d.biens.wizSaveFailed);
+    } catch {
+      setSaveError(d.biens.wizSaveFailed);
+    }
+    setSaving(false);
+  };
 
   const types: Array<{ id: PropertyType; title: string; body: string }> = [
     { id: "building", title: d.biens.wizTypeBuilding, body: d.biens.wizTypeBuildingBody },
@@ -115,7 +147,7 @@ export default function PropertyWizard({
         </p>
         <div className="flex-1" />
         {step === 2 && !submitted && (
-          <Button type="submit" form="property-wizard-form" disabled={!canCreate}>
+          <Button type="submit" form="property-wizard-form" disabled={!canCreate} loading={saving}>
             {d.biens.wizCreate}
           </Button>
         )}
@@ -197,7 +229,9 @@ export default function PropertyWizard({
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (canCreate) setSubmitted(true);
+                  if (!canCreate || saving) return;
+                  if (real) void save();
+                  else setSubmitted(true);
                 }}
               >
                 <h2 className="font-display text-lg font-bold text-ink">{d.biens.wizKeyData}</h2>
@@ -215,10 +249,10 @@ export default function PropertyWizard({
                     </Field>
                   </div>
                   <Field label={d.biens.wizNumber}>
-                    <Input maxLength={10} inputMode="numeric" />
+                    <Input maxLength={10} inputMode="numeric" value={num} onChange={(e) => setNum(e.target.value)} />
                   </Field>
                   <Field label={d.biens.wizPostal}>
-                    <Input maxLength={10} inputMode="numeric" placeholder="L-" />
+                    <Input maxLength={10} inputMode="numeric" placeholder="L-" value={postal} onChange={(e) => setPostal(e.target.value)} />
                   </Field>
                   <div className="col-span-2">
                     <Field label={d.biens.wizCity}>
@@ -227,7 +261,7 @@ export default function PropertyWizard({
                   </div>
                   <div className="col-span-3">
                     <Field label={d.biens.wizCountry}>
-                      <Select defaultValue="LU">
+                      <Select value={country} onChange={(e) => setCountry(e.target.value)}>
                         <option value="LU">Luxembourg</option>
                         <option value="FR">France</option>
                         <option value="BE">Belgique</option>
@@ -237,8 +271,13 @@ export default function PropertyWizard({
                   </div>
                 </div>
 
+                {saveError && (
+                  <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                    {saveError}
+                  </p>
+                )}
                 <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={!canCreate}>
+                  <Button type="submit" disabled={!canCreate} loading={saving}>
                     {d.biens.wizCreate}
                   </Button>
                 </div>

@@ -1,5 +1,7 @@
 /**
- * Salt Edge Account Information API, v5 — the thinnest possible client.
+ * Salt Edge Account Information API, v6 — the thinnest possible client.
+ * (v5 answers UnsupportedApiVersion for apps created today; the deployed
+ * probe at /api/banking/health confirmed it.)
  *
  * SERVER ONLY. The App-id and Secret come from the environment
  * (SALTEDGE_APP_ID / SALTEDGE_SECRET, set in the deployment, never in the
@@ -12,7 +14,7 @@
  * tables are approved and applied; nothing is persisted before that.
  */
 
-const BASE = "https://www.saltedge.com/api/v5";
+const BASE = "https://www.saltedge.com/api/v6";
 
 export class SaltEdgeError extends Error {
   constructor(
@@ -98,7 +100,7 @@ export async function saltEdgeProbe(): Promise<
   { ok: true } | { ok: false; code: string; message: string }
 > {
   try {
-    await se<{ data: unknown[] }>("/customers?per_page=1");
+    await se<{ data: unknown[] }>("/customers");
     return { ok: true };
   } catch (e) {
     if (e instanceof SaltEdgeError) return { ok: false, code: e.code, message: e.message };
@@ -168,12 +170,14 @@ export async function createConnectSession(
   returnTo: string,
   locale: "fr" | "en" | "de",
 ): Promise<string> {
-  const session = await se<{ data: { connect_url: string } }>("/connect_sessions/create", {
+  // v6 moved session creation under /connections/connect and renamed the
+  // consent scopes.
+  const session = await se<{ data: { connect_url: string } }>("/connections/connect", {
     method: "POST",
     body: {
       data: {
         customer_id: customerId,
-        consent: { scopes: ["account_details", "transactions_details"] },
+        consent: { scopes: ["accounts", "transactions"] },
         attempt: { return_to: returnTo, locale },
       },
     },
