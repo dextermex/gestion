@@ -227,9 +227,42 @@ button:not(:disabled),
   }
 }
 
+/* Screen entrance: each navigation rises softly into place (template.tsx
+   remounts this wrapper per route). GPU-only; reduced motion keeps a plain
+   short fade so the change of screen still reads. */
+@keyframes morada-page {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-enter {
+  animation: morada-page 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: morada-page-fade 0.15s ease both;
+  }
+}
+@keyframes morada-page-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Tactile press: a subtle squeeze that restores on release. Add to buttons and
    link-buttons for a physical feel without any JS. GPU-only (transform). */
-.tactile {
+/* :where() keeps specificity at zero, so an element pairing .tactile with a
+   Tailwind transition utility (transition-all on cards) keeps that one — the
+   press still animates through the transform it declares. */
+:where(.tactile) {
   transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .tactile:active {

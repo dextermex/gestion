@@ -103,7 +103,7 @@ export function LinkRow({
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-lg py-3 transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+      className="tactile flex items-center gap-3 rounded-lg py-3 transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
     >
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-sm font-semibold text-ink">{title}</p>

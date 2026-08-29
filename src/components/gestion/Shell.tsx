@@ -6,8 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { useDismiss } from "@/lib/useDismiss";
 import { Button, Field, InlineError, Input, Modal, Select, Textarea } from "@/components/pro/ui";
+import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
 import GestionLogo from "./GestionLogo";
+import ScrollHeader from "./ScrollHeader";
 import GettingStarted from "./GettingStarted";
 import type { Dict } from "@/lib/i18n/fr";
 import { MORADA_URL, PRO_URL, WELCOME_URL } from "@/lib/constants";
@@ -37,52 +39,54 @@ export interface ShellData {
    Rental contracts, Documents) + the Luxembourg compliance modules that are
    the product's moat. Labels come from the active dictionary. */
 
-type NavItem = { href: string; label: string; badge?: number };
+type NavItem = { href: string; label: string; icon: IconName; badge?: number };
 type NavGroup = { title: string | null; items: NavItem[] };
 
+// Icon + label, like the Morada Pro shell: eighteen words scan slowly,
+// eighteen shapes scan at a glance.
 function navGroups(d: Dict, badges: { review: number; unread: number }): NavGroup[] {
   return [
-    { title: null, items: [{ href: "/app", label: d.nav.home }] },
+    { title: null, items: [{ href: "/app", label: d.nav.home, icon: "dashboard" }] },
     {
       title: d.nav.groupGestion,
       items: [
-        { href: "/app/workflows", label: d.nav.workflows },
-        { href: "/app/biens", label: d.nav.properties },
-        { href: "/app/baux", label: d.nav.leases },
-        { href: "/app/compteurs", label: d.nav.meters },
-        { href: "/app/charges", label: d.nav.charges },
+        { href: "/app/workflows", label: d.nav.workflows, icon: "pipeline" },
+        { href: "/app/biens", label: d.nav.properties, icon: "properties" },
+        { href: "/app/baux", label: d.nav.leases, icon: "key" },
+        { href: "/app/compteurs", label: d.nav.meters, icon: "gauge" },
+        { href: "/app/charges", label: d.nav.charges, icon: "transactions" },
       ],
     },
     {
       title: d.nav.groupRelations,
       items: [
-        { href: "/app/contacts", label: d.nav.contacts },
-        { href: "/app/messages", label: d.nav.messages, badge: badges.unread || undefined },
+        { href: "/app/contacts", label: d.nav.contacts, icon: "contacts" },
+        { href: "/app/messages", label: d.nav.messages, icon: "messages", badge: badges.unread || undefined },
       ],
     },
     {
       title: d.nav.groupFinances,
       items: [
-        { href: "/app/loyers", label: d.nav.rent },
-        { href: "/app/finance", label: d.nav.finance },
-        { href: "/app/banque", label: d.nav.banking, badge: badges.review || undefined },
+        { href: "/app/loyers", label: d.nav.rent, icon: "euro" },
+        { href: "/app/finance", label: d.nav.finance, icon: "analytics" },
+        { href: "/app/banque", label: d.nav.banking, icon: "bank", badge: badges.review || undefined },
       ],
     },
     {
       title: d.nav.groupContracts,
       items: [
-        { href: "/app/contrats", label: d.nav.contracts },
-        { href: "/app/documents", label: d.nav.documents },
+        { href: "/app/contrats", label: d.nav.contracts, icon: "contract" },
+        { href: "/app/documents", label: d.nav.documents, icon: "documents" },
       ],
     },
     {
       title: d.nav.groupLux,
       items: [
-        { href: "/app/conformite", label: d.nav.compliance },
-        { href: "/app/indexation", label: d.nav.indexation },
-        { href: "/app/garanties", label: d.nav.deposits },
-        { href: "/app/aml", label: d.nav.aml },
-        { href: "/app/fiscalite", label: d.nav.tax },
+        { href: "/app/conformite", label: d.nav.compliance, icon: "shield-check" },
+        { href: "/app/indexation", label: d.nav.indexation, icon: "trending-up" },
+        { href: "/app/garanties", label: d.nav.deposits, icon: "lock" },
+        { href: "/app/aml", label: d.nav.aml, icon: "id" },
+        { href: "/app/fiscalite", label: d.nav.tax, icon: "percent" },
       ],
     },
   ];
@@ -174,13 +178,20 @@ export default function GestionShell({
               href={i.href}
               aria-current={isActivePath(i.href) ? "page" : undefined}
               className={
-                "flex items-center justify-between rounded-xl px-3 py-[5px] text-sm font-medium transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
+                "tactile flex items-center justify-between gap-2 rounded-xl px-3 py-[5px] text-sm font-medium transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
                 (isActivePath(i.href)
                   ? "bg-brand-50 font-semibold text-brand-800"
                   : "text-ink-soft hover:bg-sand-50 hover:text-ink")
               }
             >
-              {i.label}
+              <span className="flex min-w-0 items-center gap-2.5">
+                <Icon
+                  name={i.icon}
+                  size={16}
+                  className={"shrink-0 " + (isActivePath(i.href) ? "text-brand-700" : "text-ink-soft/70")}
+                />
+                <span className="truncate">{i.label}</span>
+              </span>
               {i.badge && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
                   {i.badge}
@@ -226,7 +237,10 @@ export default function GestionShell({
         </MobileDrawer>
 
         <div className="flex min-h-dvh flex-col lg:pl-60">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:gap-3 sm:px-6">
+          <ScrollHeader
+            className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-transparent bg-white/80 px-4 backdrop-blur-xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] sm:gap-3 sm:px-6"
+            elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
+          >
             <button
               className="-ml-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:hidden"
               onClick={() => setMobileOpen(true)}
@@ -297,7 +311,7 @@ export default function GestionShell({
               onPick={(k) => (k === "property" ? router.push("/app/biens/nouveau") : setCreateKind(k))}
             />
             <UserMenu email={shell.userEmail} name={shell.userName} d={d} signedIn={shell.signedIn} />
-          </header>
+          </ScrollHeader>
 
           {/* Sample data announces itself on every screen. Nobody should ever
               have to remember which mode they left the sidebar in. */}

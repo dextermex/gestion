@@ -37,7 +37,17 @@ export type IconName =
   | "marketing"
   | "documents"
   | "ai"
-  | "inbox";
+  | "inbox"
+  | "key"
+  | "gauge"
+  | "euro"
+  | "bank"
+  | "shield-check"
+  | "trending-up"
+  | "lock"
+  | "id"
+  | "percent"
+  | "contract";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   dashboard: (
@@ -225,6 +235,73 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M4 13h4l2 3h4l2-3h4" />
       <path d="M5 5h14l2 8v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5L5 5Z" />
+    </>
+  ),
+  // Management-space glyphs, same grammar as the welcome cards and the
+  // banking empty state so the two surfaces stay one family.
+  key: (
+    <>
+      <circle cx="8" cy="15.5" r="4" />
+      <path d="M10.8 12.7 20 3.5M16.2 7.3l3 3M13.4 10.1l2.2 2.2" />
+    </>
+  ),
+  gauge: (
+    <>
+      <path d="M4 15.5a8 8 0 1 1 16 0" />
+      <path d="m12 15.5 3.5-4.5" />
+      <path d="M12 15.5h.01" />
+    </>
+  ),
+  euro: (
+    <>
+      <path d="M18 6.3A7 7 0 0 0 6.5 12 7 7 0 0 0 18 17.7" />
+      <path d="M4 10.5h9M4 13.5h8" />
+    </>
+  ),
+  bank: (
+    <>
+      <path d="M3 10 12 4l9 6" />
+      <path d="M5 10v8m4.5-8v8m5-8v8M19 10v8M3 20h18" />
+    </>
+  ),
+  "shield-check": (
+    <>
+      <path d="M12 3 4 6v5c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-3Z" />
+      <path d="m8.5 11.5 2.5 2.5 4.5-5" />
+    </>
+  ),
+  "trending-up": (
+    <>
+      <path d="m3 17 6-6 4 4 8-8" />
+      <path d="M15 7h6v6" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  id: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <circle cx="8.5" cy="10.5" r="2" />
+      <path d="M5.5 15.7c.6-1.6 1.7-2.4 3-2.4s2.4.8 3 2.4" />
+      <path d="M14.5 10h4M14.5 13.5h4" />
+    </>
+  ),
+  percent: (
+    <>
+      <path d="m19 5-14 14" />
+      <circle cx="7" cy="7" r="2.5" />
+      <circle cx="17" cy="17" r="2.5" />
+    </>
+  ),
+  contract: (
+    <>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+      <path d="M14 3v5h5" />
+      <path d="M8.5 16c.8-1.1 1.6-1.1 2.3 0 .7 1.1 1.5 1.1 2.3 0" />
     </>
   ),
 };
