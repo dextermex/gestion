@@ -341,7 +341,7 @@ export default async function BailDetailPage({ params }: { params: Promise<{ id:
             title={d.baux.periodsTitle}
             action={
               <Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline">
-                {d.nav.rent}
+                {d.hubs.collections}
               </Link>
             }
           >

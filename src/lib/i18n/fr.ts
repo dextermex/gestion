@@ -34,30 +34,36 @@ export const fr = {
   },
 
   nav: {
-    home: "Accueil",
-    groupGestion: "Gestion",
-    workflows: "Workflows",
+    home: "Aujourd'hui",
     properties: "Biens",
-    leases: "Baux",
-    meters: "Compteurs",
-    charges: "Charges",
-    groupRelations: "Relations",
-    contacts: "Contacts",
-    messages: "Messages",
-    groupFinances: "Finances",
-    rent: "Loyers",
-    finance: "Finance",
-    banking: "Banque",
-    groupContracts: "Contrats & documents",
-    contracts: "Contrats de bail",
+    locations: "Locations",
+    money: "Argent",
     documents: "Documents",
-    groupLux: "Conformité Luxembourg",
+    messages: "Messages",
+    settings: "Réglages",
+    workflows: "Workflows",
     compliance: "Conformité",
-    indexation: "Indexation",
-    deposits: "Garanties",
-    aml: "AML / KYC",
-    tax: "Fiscalité",
     ecosystem: "Écosystème Morada",
+  },
+
+  // Tab labels inside each destination: the sidebar names the room, these
+  // name the walls. One object, one door.
+  hubs: {
+    portfolio: "Biens",
+    meters: "Compteurs",
+    leases: "Baux",
+    deposits: "Garanties",
+    indexation: "Indexation",
+    people: "Personnes",
+    collections: "Encaissements",
+    banking: "Banque",
+    expenses: "Dépenses",
+    statements: "Décomptes",
+    reports: "Rapports",
+    library: "Documents",
+    contracts: "Contrats de bail",
+    general: "Général",
+    aml: "AML / KYC",
   },
 
   shell: {
@@ -370,7 +376,7 @@ export const fr = {
   },
 
   loyers: {
-    title: "Loyers",
+    title: "Encaissements",
     subtitle: "Les loyers du mois : chaque échéance, son statut et son solde, dérivés du registre d'allocations.",
     expected: "Attendu",
     collected: "Encaissé",
@@ -692,7 +698,7 @@ export const fr = {
   },
 
   charges: {
-    title: "Charges",
+    title: "Décomptes",
     subtitle: "Seules les dépenses réellement engagées, justifiées par facture et au bénéfice du locataire sont récupérables. Les blocages légaux ne sont pas contournables.",
     decompteTitle: "Décompte 2025 · {unit} (import syndic)",
     decompteMeta: "Décompte de copropriété approuvé en AG (présomption de justification) · lot {t}/{tt} millièmes · locataire : {tenant}",
@@ -723,7 +729,7 @@ export const fr = {
   },
 
   contacts: {
-    title: "Contacts",
+    title: "Personnes",
     subtitle: "Une personne, plusieurs rôles : la propriétaire du lot 3 peut être locataire du lot 7. Les rôles sont des liens datés sur une fiche unique.",
     facetAll: "Tous",
     facetOwners: "Propriétaires",
@@ -795,7 +801,7 @@ export const fr = {
   },
 
   finance: {
-    title: "Finance",
+    title: "Dépenses",
     subtitle: "Comptes rendus de gérance, honoraires et reversements. Les virements partent en fichiers pain.001 que le gestionnaire dépose dans sa propre banque.",
     statementTitle: "Décompte de gérance · juillet 2026 · Mandat {sci}",
     colEntry: "Écriture",
@@ -864,7 +870,7 @@ export const fr = {
   },
 
   fiscalite: {
-    title: "Fiscalité",
+    title: "Rapports",
     subtitle: "Le pack de fin d'année, par bien et par propriétaire : le jeu de données du modèle 190/210, avec l'amortissement arbitré au niveau du contribuable.",
     lambertTitle: "Amortissement 2026 · {owner} (contribuable)",
     colProperty: "Bien",
@@ -1020,6 +1026,27 @@ export const fr = {
     legal: "Loi du 21.9.2006 rév. 2024 : 50 % dans le mois de la remise des clés, solde dans le mois du décompte ; retenues justifiées par facture ou devis dans le mois, sinon forcloses ; après mise en demeure, pénalité de 10 % du loyer mensuel par mois entamé. Sans EDL d'entrée, aucune retenue pour dégâts n'est possible.",
     heldTitle: "Garanties détenues",
     heldFoot: "Le bailleur doit accepter la forme légale choisie par le locataire : espèces, garantie bancaire, caution tierce, assurance ou garantie étatique. Plafond : 2 mois en habitation (hors charges), 6 mois en commercial.",
+  },
+
+  reglages: {
+    title: "Réglages",
+    subtitle: "Votre espace, ses accès et les registres qui gouvernent les calculs.",
+    workspaceTitle: "Espace de travail",
+    workspaceName: "Nom",
+    workspaceKind: "Type d'espace",
+    kindOwner: "Propriétaire privé",
+    kindCabinet: "Cabinet de gérance",
+    signedInAs: "Connecté en tant que",
+    autorisation: "Autorisation d'établissement",
+    autorisationValue: "n° {num}, valable jusqu'au {date}",
+    piInsurance: "Assurance RC professionnelle",
+    piInsuranceValue: "{provider}, échéance le {date}",
+    vat: "N° TVA",
+    registriesTitle: "Registres et connexions",
+    legalParamsLink: "Paramètres légaux en vigueur",
+    legalParamsBody: "Les valeurs officielles (plafonds, taux, délais) qui alimentent chaque calcul, avec leurs dates d'effet et leur statut de vérification.",
+    bankLink: "Connexion bancaire",
+    bankBody: "Comptes reliés et rapprochement des encaissements, dans l'onglet Banque.",
   },
 
   aml: {

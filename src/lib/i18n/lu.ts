@@ -35,30 +35,34 @@ export const lu: Dict = {
   },
 
   nav: {
-    home: "Iwwerbléck",
-    groupGestion: "Gestioun",
-    workflows: "Workflowen",
+    home: "Haut",
     properties: "Immobilien",
-    leases: "Bailen",
-    meters: "Compteuren",
-    charges: "Chargen",
-    groupRelations: "Relatiounen",
-    contacts: "Kontakter",
-    messages: "Messagen",
-    groupFinances: "Finanzen",
-    rent: "Loyeren",
-    finance: "Finanzen",
-    banking: "Bank",
-    groupContracts: "Kontrakter & Dokumenter",
-    contracts: "Loyerskontrakter",
+    locations: "Locatiounen",
+    money: "Suen",
     documents: "Dokumenter",
-    groupLux: "Lëtzebuerger Konformitéit",
+    messages: "Messagen",
+    settings: "Astellungen",
+    workflows: "Workflowen",
     compliance: "Konformitéit",
-    indexation: "Indexéierung",
-    deposits: "Garantien",
-    aml: "AML / KYC",
-    tax: "Steieren",
     ecosystem: "Morada-Ökosystem",
+  },
+
+  hubs: {
+    portfolio: "Immobilien",
+    meters: "Compteuren",
+    leases: "Bailen",
+    deposits: "Garantien",
+    indexation: "Indexéierung",
+    people: "Persounen",
+    collections: "Loyeren",
+    banking: "Bank",
+    expenses: "Ausgaben",
+    statements: "Décomptes",
+    reports: "Rapporten",
+    library: "Dokumenter",
+    contracts: "Loyerskontrakter",
+    general: "Allgemeng",
+    aml: "AML / KYC",
   },
 
   shell: {
@@ -688,7 +692,7 @@ export const lu: Dict = {
   },
 
   charges: {
-    title: "Chargen",
+    title: "Décomptes",
     subtitle: "Nëmmen tatsächlech entstanen, mat Rechnung beluechten Depensen am Notze vum Locataire si recuperabel. Déi legal Späre sinn net z'iwwersteieren.",
     decompteTitle: "Décompte 2025 · {unit} (Syndic-Import)",
     decompteMeta: "An der AG approuvéierten Copropriétéits-Décompte (Justifikatiounsvermutung) · Lot {t}/{tt} Dausendstel · Locataire: {tenant}",
@@ -719,7 +723,7 @@ export const lu: Dict = {
   },
 
   contacts: {
-    title: "Kontakter",
+    title: "Persounen",
     subtitle: "Eng Persoun, méi Rollen: D'Proprietärin vum Lot 3 kann d'Locatairin vum Lot 7 sinn. Rolle sinn datéiert Verbindungen op enger eenzeger Fiche.",
     facetAll: "All",
     facetOwners: "Proprietären",
@@ -791,7 +795,7 @@ export const lu: Dict = {
   },
 
   finance: {
-    title: "Finanzen",
+    title: "Ausgaben",
     subtitle: "Gérance-Décomptë, Honorairen a Reversementer. D'Virementer gi als pain.001-Fichieren eraus, déi de Gestionnaire bei senger eegener Bank eraluet.",
     statementTitle: "Gérance-Décompte · Juli 2026 · Mandat {sci}",
     colEntry: "Ecriture",
@@ -860,7 +864,7 @@ export const lu: Dict = {
   },
 
   fiscalite: {
-    title: "Steieren",
+    title: "Rapporten",
     subtitle: "De Joresschluss-Pack, pro Bien a pro Proprietär: den Dateset fir de Modell 190/210, mam Amortissement um Niveau vum Steierflichtegen arbitréiert.",
     lambertTitle: "Amortissement 2026 · {owner} (Steierflichteg)",
     colProperty: "Gebai",
@@ -1016,6 +1020,27 @@ export const lu: Dict = {
     legal: "Gesetz vum 21.9.2006, Rev. 2024: 50 % bannent engem Mount no der Schlësseliwwergab, Solde bannent engem Mount nom Décompte; Ofzich bannent engem Mount duerch Rechnung oder Devis ze beleeën, soss verfall; no Mise en demeure eng Strof vun 10 % vum Mountsloyer pro ugefaangene Mount. Ouni Entrée-EDL ass keen Ofzuch fir Schied méiglech.",
     heldTitle: "Hannerluechte Garantien",
     heldFoot: "De Bailleur muss déi gesetzlech Form akzeptéieren, déi de Locataire wielt: Boergeld, Bankgarantie, Cautioun vun engem Drëtten, Assurance oder Staatsgarantie. Plafong: 2 Méint Wunnen (ouni Chargen), 6 Méint Commerce.",
+  },
+
+  reglages: {
+    title: "Astellungen",
+    subtitle: "Ären Espace, seng Zougäng an d'Registere hannert all Berechnung.",
+    workspaceTitle: "Espace de travail",
+    workspaceName: "Numm",
+    workspaceKind: "Zort vum Espace",
+    kindOwner: "Privaten Proprietär",
+    kindCabinet: "Gestiounscabinet",
+    signedInAs: "Ugemellt als",
+    autorisation: "Autorisation d'établissement",
+    autorisationValue: "Nr. {num}, gëlteg bis den {date}",
+    piInsurance: "Berufflech RC-Assurance",
+    piInsuranceValue: "{provider}, leeft of den {date}",
+    vat: "TVA-Nr.",
+    registriesTitle: "Registeren a Verbindungen",
+    legalParamsLink: "Legal Parameteren a Kraaft",
+    legalParamsBody: "Déi offiziell Wäerter (Plafongen, Tauxen, Delaien) hannert all Berechnung, mat hiren Datumer an hirem Verifikatiounsstatus.",
+    bankLink: "Bankverbindung",
+    bankBody: "Verbonne Konten an den Ofgläich vun den Encaissementer, am Tab Bank.",
   },
 
   aml: {

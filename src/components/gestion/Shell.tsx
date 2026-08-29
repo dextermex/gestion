@@ -8,6 +8,7 @@ import { useDismiss } from "@/lib/useDismiss";
 import { Button, Field, InlineError, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
+import { hubTabs } from "./HubTabs";
 import GestionLogo from "./GestionLogo";
 import ScrollHeader from "./ScrollHeader";
 import GettingStarted from "./GettingStarted";
@@ -34,62 +35,57 @@ export interface ShellData {
 }
 
 /* --------------------------------- nav model --------------------------------
-   The immocloud workflow set (Dashboard, Workflows, Objects, Tenancies,
-   Meters, Operating costs, Contacts, Rent, Finance, Banking, Messaging,
-   Rental contracts, Documents) + the Luxembourg compliance modules that are
-   the product's moat. Labels come from the active dictionary. */
+   Six destinations, no group headers: one door per mental object (home,
+   properties, tenancies, money, papers, inbox) — the hub tab rows inside
+   each page name the walls. Réglages sits apart, pinned above the dataset
+   switch. `match` lists the path prefixes that light a destination up, so
+   /app/banque highlights Argent and /app/baux/b-12 highlights Locations. */
 
-type NavItem = { href: string; label: string; icon: IconName; badge?: number };
-type NavGroup = { title: string | null; items: NavItem[] };
+type NavItem = { href: string; label: string; icon: IconName; badge?: number; match?: string[] };
 
-// Icon + label, like the Morada Pro shell: eighteen words scan slowly,
-// eighteen shapes scan at a glance.
-function navGroups(d: Dict, badges: { review: number; unread: number }): NavGroup[] {
+function destinations(d: Dict, badges: { review: number; unread: number }): NavItem[] {
   return [
-    { title: null, items: [{ href: "/app", label: d.nav.home, icon: "dashboard" }] },
+    { href: "/app", label: d.nav.home, icon: "dashboard" },
+    { href: "/app/biens", label: d.nav.properties, icon: "properties", match: ["/app/biens", "/app/compteurs"] },
     {
-      title: d.nav.groupGestion,
-      items: [
-        { href: "/app/workflows", label: d.nav.workflows, icon: "pipeline" },
-        { href: "/app/biens", label: d.nav.properties, icon: "properties" },
-        { href: "/app/baux", label: d.nav.leases, icon: "key" },
-        { href: "/app/compteurs", label: d.nav.meters, icon: "gauge" },
-        { href: "/app/charges", label: d.nav.charges, icon: "transactions" },
-      ],
+      href: "/app/baux",
+      label: d.nav.locations,
+      icon: "key",
+      match: ["/app/baux", "/app/garanties", "/app/indexation", "/app/contacts"],
     },
     {
-      title: d.nav.groupRelations,
-      items: [
-        { href: "/app/contacts", label: d.nav.contacts, icon: "contacts" },
-        { href: "/app/messages", label: d.nav.messages, icon: "messages", badge: badges.unread || undefined },
-      ],
+      href: "/app/loyers",
+      label: d.nav.money,
+      icon: "euro",
+      badge: badges.review || undefined,
+      match: ["/app/loyers", "/app/banque", "/app/finance", "/app/charges", "/app/fiscalite"],
     },
-    {
-      title: d.nav.groupFinances,
-      items: [
-        { href: "/app/loyers", label: d.nav.rent, icon: "euro" },
-        { href: "/app/finance", label: d.nav.finance, icon: "analytics" },
-        { href: "/app/banque", label: d.nav.banking, icon: "bank", badge: badges.review || undefined },
-      ],
-    },
-    {
-      title: d.nav.groupContracts,
-      items: [
-        { href: "/app/contrats", label: d.nav.contracts, icon: "contract" },
-        { href: "/app/documents", label: d.nav.documents, icon: "documents" },
-      ],
-    },
-    {
-      title: d.nav.groupLux,
-      items: [
-        { href: "/app/conformite", label: d.nav.compliance, icon: "shield-check" },
-        { href: "/app/indexation", label: d.nav.indexation, icon: "trending-up" },
-        { href: "/app/garanties", label: d.nav.deposits, icon: "lock" },
-        { href: "/app/aml", label: d.nav.aml, icon: "id" },
-        { href: "/app/fiscalite", label: d.nav.tax, icon: "percent" },
-      ],
-    },
+    { href: "/app/documents", label: d.nav.documents, icon: "documents", match: ["/app/documents", "/app/contrats"] },
+    { href: "/app/messages", label: d.nav.messages, icon: "messages", badge: badges.unread || undefined },
   ];
+}
+
+function settingsItem(d: Dict): NavItem {
+  return { href: "/app/reglages", label: d.nav.settings, icon: "settings", match: ["/app/reglages", "/app/aml"] };
+}
+
+/** Everything ⌘K can route to: the destinations, every hub tab that is not
+ *  a destination's own landing page, and the two screens that now open from
+ *  Aujourd'hui (Workflows, Conformité). Nothing became unreachable. */
+function navigable(d: Dict, nav: NavItem[]): Array<{ href: string; label: string }> {
+  const seen = new Set(nav.map((i) => i.href));
+  const extras: Array<{ href: string; label: string }> = [];
+  for (const { tabs } of Object.values(hubTabs(d))) {
+    for (const t of tabs) {
+      if (!seen.has(t.href)) {
+        seen.add(t.href);
+        extras.push(t);
+      }
+    }
+  }
+  extras.push({ href: "/app/workflows", label: d.nav.workflows });
+  extras.push({ href: "/app/conformite", label: d.nav.compliance });
+  return [...nav.map((i) => ({ href: i.href, label: i.label })), ...extras];
 }
 
 type CreateKind = "property" | "lease" | "contact" | "payment" | "ticket" | "document";
@@ -126,10 +122,9 @@ export default function GestionShell({
   const [createKind, setCreateKind] = useState<CreateKind | null>(null);
   const reduced = useReducedMotion();
 
-  const NAV = useMemo(
-    () => navGroups(d, shell.badges),
-    [d, shell.badges],
-  );
+  const NAV = useMemo(() => destinations(d, shell.badges), [d, shell.badges]);
+  const SETTINGS = useMemo(() => settingsItem(d), [d]);
+  const NAVIGABLE = useMemo(() => navigable(d, [...NAV, SETTINGS]), [d, NAV, SETTINGS]);
   const QUICK_ADD = useMemo(() => quickAdd(d), [d]);
 
   // ⌘K / Ctrl-K
@@ -149,15 +144,39 @@ export default function GestionShell({
     setPaletteOpen(false);
   }, [pathname]);
 
-  const isActivePath = (href: string) =>
-    href === "/app" ? pathname === "/app" : pathname.startsWith(href);
+  // A destination lights up for every path inside its hub: /app/banque is a
+  // wall of Argent, /app/baux/b-12 a room of Locations.
+  const isActive = (i: NavItem) =>
+    i.href === "/app" ? pathname === "/app" : (i.match ?? [i.href]).some((m) => pathname.startsWith(m));
+
+  const navRow = (i: NavItem) => (
+    <Link
+      key={i.href}
+      href={i.href}
+      aria-current={isActive(i) ? "page" : undefined}
+      className={
+        "tactile flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
+        (isActive(i) ? "bg-brand-50 font-semibold text-brand-800" : "text-ink-soft hover:bg-sand-50 hover:text-ink")
+      }
+    >
+      <span className="flex min-w-0 items-center gap-2.5">
+        <Icon name={i.icon} size={18} className={"shrink-0 " + (isActive(i) ? "text-brand-700" : "text-ink-soft")} />
+        <span className="truncate">{i.label}</span>
+      </span>
+      {i.badge && (
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
+          {i.badge}
+        </span>
+      )}
+    </Link>
+  );
 
   const sidebar = (
-    // Two zones: the nav list scrolls when it must, the dataset switch and
-    // ecosystem links stay pinned below it — controls that change what the
-    // whole screen shows must never hide behind a scroll.
+    // Two zones: the six destinations breathe at the top; Réglages, the
+    // dataset switch and ecosystem links stay pinned below — controls that
+    // change what the whole screen shows must never hide behind a scroll.
     <div className="flex h-full flex-col">
-    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pt-2.5" aria-label="Morada Gestion">
+    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pt-2.5" aria-label="Morada Gestion">
       {/* The logo is the way back to the ecosystem gateway, from every space. */}
       <a
         href={WELCOME_URL}
@@ -165,44 +184,10 @@ export default function GestionShell({
       >
         <GestionLogo />
       </a>
-      {NAV.map((g) => (
-        <div key={g.title ?? "top"} className="mb-1">
-          {g.title && (
-            <p className="px-3 pb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-              {g.title}
-            </p>
-          )}
-          {g.items.map((i) => (
-            <Link
-              key={i.href}
-              href={i.href}
-              aria-current={isActivePath(i.href) ? "page" : undefined}
-              className={
-                "tactile flex items-center justify-between gap-2 rounded-xl px-3 py-[5px] text-sm font-medium transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
-                (isActivePath(i.href)
-                  ? "bg-brand-50 font-semibold text-brand-800"
-                  : "text-ink-soft hover:bg-sand-50 hover:text-ink")
-              }
-            >
-              <span className="flex min-w-0 items-center gap-2.5">
-                <Icon
-                  name={i.icon}
-                  size={18}
-                  className={"shrink-0 " + (isActivePath(i.href) ? "text-brand-700" : "text-ink-soft")}
-                />
-                <span className="truncate">{i.label}</span>
-              </span>
-              {i.badge && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
-                  {i.badge}
-                </span>
-              )}
-            </Link>
-          ))}
-        </div>
-      ))}
+      {NAV.map(navRow)}
     </nav>
-    <div className="shrink-0 border-t border-sand-100 px-3 pb-3 pt-2.5">
+    <div className="shrink-0 border-t border-sand-100 px-3 pb-3 pt-2">
+      <div className="pb-2">{navRow(SETTINGS)}</div>
       <DatasetSwitch d={d} datasetId={shell.datasetId} />
       <div className="pt-2.5 text-[11px] text-ink-soft">
         <p className="px-3">{d.nav.ecosystem}</p>
@@ -340,7 +325,7 @@ export default function GestionShell({
           open={paletteOpen}
           onClose={() => setPaletteOpen(false)}
           d={d}
-          nav={NAV}
+          nav={NAVIGABLE}
           quickAdd={QUICK_ADD}
           index={shell.searchIndex}
           onCreate={(k) => {
@@ -698,7 +683,7 @@ function CommandPalette({
   open: boolean;
   onClose: () => void;
   d: Dict;
-  nav: NavGroup[];
+  nav: Array<{ href: string; label: string }>;
   quickAdd: Array<{ kind: CreateKind; label: string }>;
   index: SearchHit[];
   onCreate: (k: CreateKind) => void;
@@ -725,9 +710,7 @@ function CommandPalette({
   const createMatches = needle
     ? quickAdd.filter((i) => `${d.shell.createPrefix} ${i.label}`.toLowerCase().includes(needle) || i.label.toLowerCase().includes(needle))
     : [];
-  const navMatches = nav
-    .flatMap((g) => g.items)
-    .filter((i) => !needle || i.label.toLowerCase().includes(needle));
+  const navMatches = nav.filter((i) => !needle || i.label.toLowerCase().includes(needle));
 
   const items: PaletteItem[] = [
     ...hits.map((hit): PaletteItem => ({ kind: "hit", hit })),

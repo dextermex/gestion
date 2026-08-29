@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { ChipLink } from "@/components/gestion/filters";
@@ -28,7 +29,12 @@ export default async function CompteursPage({
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (METERS.length === 0)
-    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.meters })} body={d.common.emptyBody} />;
+    return (
+      <div>
+        <HubTabs d={d} hub="biens" active="/app/compteurs" />
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.meters })} body={d.common.emptyBody} />
+      </div>
+    );
   const withoutReading = METERS.filter((m) => !m.lastReading);
   const pendingAck = METERS.filter(
     (m) => m.lastReading && (!m.lastReading.tenantAck || !m.lastReading.managerAck),
@@ -64,6 +70,7 @@ export default async function CompteursPage({
 
   return (
     <div>
+      <HubTabs d={d} hub="biens" active="/app/compteurs" />
       <PageHeader
         title={d.compteurs.title}
         subtitle={d.compteurs.subtitle}

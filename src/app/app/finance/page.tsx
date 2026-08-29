@@ -1,4 +1,5 @@
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
+import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import BillUpload from "@/components/gestion/BillUpload";
 import { getDemo } from "@/lib/demo";
@@ -16,7 +17,12 @@ export default async function FinancePage() {
     // A real account with nothing in it: say so rather than reach for a
     // showcase record that no longer exists.
     if (RENT_PERIODS.length === 0)
-      return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.finance })} body={d.common.emptyBody} />;
+      return (
+      <div>
+        <HubTabs d={d} hub="argent" active="/app/finance" />
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.expenses })} body={d.common.emptyBody} />
+      </div>
+    );
 
   // Décompte de gérance — juillet 2026, mandat de la SCI (engine-computed).
   const july = RENT_PERIODS.filter((rp) => rp.period === "2026-07");
@@ -43,6 +49,7 @@ export default async function FinancePage() {
 
   return (
     <div>
+      <HubTabs d={d} hub="argent" active="/app/finance" />
       <PageHeader
         title={d.finance.title}
         subtitle={d.finance.subtitle}

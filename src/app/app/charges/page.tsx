@@ -1,4 +1,5 @@
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
+import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { euros } from "@/lib/types";
@@ -13,7 +14,12 @@ export default async function ChargesPage() {
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (RENT_PERIODS.length === 0)
-    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.charges })} body={d.common.emptyBody} />;
+    return (
+      <div>
+        <HubTabs d={d} hub="argent" active="/app/charges" />
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.statements })} body={d.common.emptyBody} />
+      </div>
+    );
 
   // Blocked categories are stable engine codes — labels come from the dict.
   const blockLabel: Record<string, string> = {
@@ -47,6 +53,7 @@ export default async function ChargesPage() {
 
   return (
     <div>
+      <HubTabs d={d} hub="argent" active="/app/charges" />
       <PageHeader title={d.charges.title} subtitle={d.charges.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">

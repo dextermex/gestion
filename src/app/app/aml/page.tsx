@@ -1,4 +1,5 @@
 import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
+import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { amlTierMeta, initials, riskBandMeta } from "@/lib/types";
@@ -14,7 +15,12 @@ export default async function AmlPage() {
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (CONTACTS.length === 0)
-    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.aml })} body={d.common.emptyBody} />;
+    return (
+      <div>
+        <HubTabs d={d} hub="reglages" active="/app/aml" />
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.aml })} body={d.common.emptyBody} />
+      </div>
+    );
   const sciName = CONTACTS.find((c) => c.id === "c-sci-bealieu")!.name;
   const amlMeta = amlTierMeta(d);
   const riskMeta = riskBandMeta(d);
@@ -57,6 +63,7 @@ export default async function AmlPage() {
 
   return (
     <div>
+      <HubTabs d={d} hub="reglages" active="/app/aml" />
       <PageHeader title={d.aml.title} subtitle={d.aml.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

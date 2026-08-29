@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { ChipLink } from "@/components/gestion/filters";
 import { getDatasetId, getDemo } from "@/lib/demo";
@@ -158,6 +159,7 @@ export default async function BiensPage({
 
   return (
     <div>
+      <HubTabs d={d} hub="biens" active="/app/biens" />
       <PageHeader
         title={d.biens.title}
         subtitle={d.biens.subtitle}

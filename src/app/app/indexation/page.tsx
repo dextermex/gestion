@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, Panel } from "@/components/gestion/bits";
@@ -19,7 +20,12 @@ export default async function IndexationPage() {
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (LEASES.length === 0)
-    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.indexation })} body={d.common.emptyBody} />;
+    return (
+      <div>
+        <HubTabs d={d} hub="locations" active="/app/indexation" />
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.indexation })} body={d.common.emptyBody} />
+      </div>
+    );
 
   const residential = LEASES.filter(
     (l) =>
@@ -51,6 +57,7 @@ export default async function IndexationPage() {
 
   return (
     <div>
+      <HubTabs d={d} hub="locations" active="/app/indexation" />
       <PageHeader title={d.indexation.title} subtitle={d.indexation.subtitle} />
 
       <Panel title={d.indexation.residentialTitle}>

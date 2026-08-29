@@ -1,4 +1,5 @@
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
+import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { euros, eurosWhole } from "@/lib/types";
@@ -17,7 +18,12 @@ export default async function FiscalitePage() {
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (LAMBERT_PORTFOLIO.length === 0)
-    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.tax })} body={d.common.emptyBody} />;
+    return (
+      <div>
+        <HubTabs d={d} hub="argent" active="/app/fiscalite" />
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.reports })} body={d.common.emptyBody} />
+      </div>
+    );
   const lambertName = contactById("c-lambert").name;
   const faberName = contactById("c-faber").name;
 
@@ -74,6 +80,7 @@ export default async function FiscalitePage() {
 
   return (
     <div>
+      <HubTabs d={d} hub="argent" active="/app/fiscalite" />
       <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

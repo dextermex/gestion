@@ -30,30 +30,34 @@ export const de: Dict = {
   },
 
   nav: {
-    home: "Übersicht",
-    groupGestion: "Verwaltung",
-    workflows: "Workflows",
+    home: "Heute",
     properties: "Immobilien",
-    leases: "Mietverhältnisse",
-    meters: "Zähler",
-    charges: "Nebenkosten",
-    groupRelations: "Beziehungen",
-    contacts: "Kontakte",
-    messages: "Nachrichten",
-    groupFinances: "Finanzen",
-    rent: "Mieten",
-    finance: "Finanzen",
-    banking: "Bank",
-    groupContracts: "Verträge & Dokumente",
-    contracts: "Mietverträge",
+    locations: "Vermietungen",
+    money: "Finanzen",
     documents: "Dokumente",
-    groupLux: "Luxemburger Compliance",
+    messages: "Nachrichten",
+    settings: "Einstellungen",
+    workflows: "Workflows",
     compliance: "Compliance",
-    indexation: "Indexierung",
-    deposits: "Kautionen",
-    aml: "AML / KYC",
-    tax: "Steuern",
     ecosystem: "Morada-Ökosystem",
+  },
+
+  hubs: {
+    portfolio: "Immobilien",
+    meters: "Zähler",
+    leases: "Mietverhältnisse",
+    deposits: "Kautionen",
+    indexation: "Indexierung",
+    people: "Personen",
+    collections: "Mieteingänge",
+    banking: "Bank",
+    expenses: "Ausgaben",
+    statements: "Décomptes",
+    reports: "Berichte",
+    library: "Dokumente",
+    contracts: "Mietverträge",
+    general: "Allgemein",
+    aml: "AML / KYC",
   },
 
   shell: {
@@ -361,7 +365,7 @@ export const de: Dict = {
   },
 
   loyers: {
-    title: "Mieten",
+    title: "Mieteingänge",
     subtitle: "Die Mieten des Monats: jede Fälligkeit mit Status und Saldo, abgeleitet aus dem Allokationsregister.",
     expected: "Erwartet",
     collected: "Eingezogen",
@@ -683,7 +687,7 @@ export const de: Dict = {
   },
 
   charges: {
-    title: "Nebenkosten",
+    title: "Décomptes",
     subtitle: "Nur tatsächlich angefallene, durch Rechnung belegte Ausgaben zum Nutzen des Mieters sind umlegbar. Die gesetzlichen Sperren sind nicht übersteuerbar.",
     decompteTitle: "Abrechnung 2025 · {unit} (Verwalter-Import)",
     decompteMeta: "In der Versammlung genehmigte WEG-Abrechnung (Rechtfertigungsvermutung) · Einheit {t}/{tt} Tausendstel · Mieter: {tenant}",
@@ -714,7 +718,7 @@ export const de: Dict = {
   },
 
   contacts: {
-    title: "Kontakte",
+    title: "Personen",
     subtitle: "Eine Person, mehrere Rollen: Die Eigentümerin von Einheit 3 kann Mieterin von Einheit 7 sein. Rollen sind datierte Verknüpfungen auf einer einzigen Karte.",
     facetAll: "Alle",
     facetOwners: "Eigentümer",
@@ -786,7 +790,7 @@ export const de: Dict = {
   },
 
   finance: {
-    title: "Finanzen",
+    title: "Ausgaben",
     subtitle: "Verwaltungsabrechnungen, Honorare und Auszahlungen. Überweisungen gehen als pain.001-Dateien, die der Verwalter bei seiner eigenen Bank einreicht.",
     statementTitle: "Verwaltungsabrechnung · Juli 2026 · Mandat {sci}",
     colEntry: "Buchung",
@@ -855,7 +859,7 @@ export const de: Dict = {
   },
 
   fiscalite: {
-    title: "Steuern",
+    title: "Berichte",
     subtitle: "Das Jahresendpaket, pro Objekt und Eigentümer: der Datensatz für Modell 190/210, mit Abschreibung auf Ebene des Steuerpflichtigen.",
     lambertTitle: "Abschreibung 2026 · {owner} (Steuerpflichtige)",
     colProperty: "Immobilie",
@@ -1011,6 +1015,27 @@ export const de: Dict = {
     legal: "Gesetz vom 21.9.2006, Rev. 2024: 50 % binnen eines Monats nach Schlüsselübergabe, Rest binnen eines Monats nach der Abrechnung; Abzüge binnen eines Monats durch Rechnung oder Kostenvoranschlag zu belegen, sonst verwirkt; nach Mise en demeure eine Strafe von 10 % der Monatsmiete pro angefangenem Monat. Ohne Einzugs-EDL ist kein Schadensabzug möglich.",
     heldTitle: "Hinterlegte Kautionen",
     heldFoot: "Der Vermieter muss die vom Mieter gewählte gesetzliche Form akzeptieren: Bar, Bankgarantie, Drittbürgschaft, Versicherung oder Staatsgarantie. Deckel: 2 Monate Wohnen (ohne Nebenkosten), 6 Monate Gewerbe.",
+  },
+
+  reglages: {
+    title: "Einstellungen",
+    subtitle: "Ihr Arbeitsbereich, seine Zugänge und die Register hinter jeder Berechnung.",
+    workspaceTitle: "Arbeitsbereich",
+    workspaceName: "Name",
+    workspaceKind: "Art des Arbeitsbereichs",
+    kindOwner: "Privater Eigentümer",
+    kindCabinet: "Verwaltungskanzlei",
+    signedInAs: "Angemeldet als",
+    autorisation: "Niederlassungsgenehmigung (autorisation d'établissement)",
+    autorisationValue: "Nr. {num}, gültig bis {date}",
+    piInsurance: "Berufshaftpflichtversicherung",
+    piInsuranceValue: "{provider}, läuft ab am {date}",
+    vat: "USt-Nr.",
+    registriesTitle: "Register und Verbindungen",
+    legalParamsLink: "Geltende gesetzliche Parameter",
+    legalParamsBody: "Die amtlichen Werte (Obergrenzen, Sätze, Fristen) hinter jeder Berechnung, mit Stichtagen und Prüfstatus.",
+    bankLink: "Bankverbindung",
+    bankBody: "Verknüpfte Konten und Zahlungsabgleich, im Tab Bank.",
   },
 
   aml: {

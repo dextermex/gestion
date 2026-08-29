@@ -30,30 +30,34 @@ export const en: Dict = {
   },
 
   nav: {
-    home: "Home",
-    groupGestion: "Management",
-    workflows: "Workflows",
+    home: "Today",
     properties: "Properties",
-    leases: "Tenancies",
-    meters: "Meters",
-    charges: "Operating costs",
-    groupRelations: "Relations",
-    contacts: "Contacts",
-    messages: "Messaging",
-    groupFinances: "Finances",
-    rent: "Rent",
-    finance: "Finance",
-    banking: "Banking",
-    groupContracts: "Contracts & documents",
-    contracts: "Rental contracts",
+    locations: "Tenancies",
+    money: "Money",
     documents: "Documents",
-    groupLux: "Luxembourg compliance",
+    messages: "Messaging",
+    settings: "Settings",
+    workflows: "Workflows",
     compliance: "Compliance",
-    indexation: "Indexation",
-    deposits: "Deposits",
-    aml: "AML / KYC",
-    tax: "Tax",
     ecosystem: "Morada ecosystem",
+  },
+
+  hubs: {
+    portfolio: "Properties",
+    meters: "Meters",
+    leases: "Tenancies",
+    deposits: "Deposits",
+    indexation: "Indexation",
+    people: "People",
+    collections: "Rent",
+    banking: "Banking",
+    expenses: "Expenses",
+    statements: "Décomptes",
+    reports: "Reports",
+    library: "Documents",
+    contracts: "Rental contracts",
+    general: "General",
+    aml: "AML / KYC",
   },
 
   shell: {
@@ -683,7 +687,7 @@ export const en: Dict = {
   },
 
   charges: {
-    title: "Operating costs",
+    title: "Décomptes",
     subtitle: "Only expenses actually incurred, invoice-evidenced and for the tenant's benefit are recoverable. The legal blocks cannot be overridden.",
     decompteTitle: "2025 statement · {unit} (syndic import)",
     decompteMeta: "Co-ownership statement approved at the general meeting (presumption of justification) · lot {t}/{tt} thousandths · tenant: {tenant}",
@@ -714,7 +718,7 @@ export const en: Dict = {
   },
 
   contacts: {
-    title: "Contacts",
+    title: "People",
     subtitle: "One person, several roles: the owner of unit 3 can be the tenant of unit 7. Roles are dated links on a single record.",
     facetAll: "All",
     facetOwners: "Owners",
@@ -786,7 +790,7 @@ export const en: Dict = {
   },
 
   finance: {
-    title: "Finance",
+    title: "Expenses",
     subtitle: "Management statements, fees and payouts. Transfers leave as pain.001 files the manager uploads to their own bank.",
     statementTitle: "Management statement · July 2026 · {sci} mandate",
     colEntry: "Entry",
@@ -855,7 +859,7 @@ export const en: Dict = {
   },
 
   fiscalite: {
-    title: "Tax",
+    title: "Reports",
     subtitle: "The year-end pack, per property and per owner: the model 190/210 dataset, with depreciation arbitrated at taxpayer level.",
     lambertTitle: "2026 depreciation · {owner} (taxpayer)",
     colProperty: "Property",
@@ -1011,6 +1015,27 @@ export const en: Dict = {
     legal: "Law of 21.9.2006 rev. 2024: 50% within a month of key handover, balance within a month of the statement; deductions substantiated by invoice or estimate within a month, otherwise forfeited; after a mise en demeure, a penalty of 10% of the monthly rent per commenced month. Without an entry EDL, no deduction for damage is possible.",
     heldTitle: "Deposits held",
     heldFoot: "The landlord must accept the statutory form chosen by the tenant: cash, bank guarantee, third-party surety, insurance or State guarantee. Cap: 2 months residential (excl. charges), 6 months commercial.",
+  },
+
+  reglages: {
+    title: "Settings",
+    subtitle: "Your workspace, its access and the registries every calculation relies on.",
+    workspaceTitle: "Workspace",
+    workspaceName: "Name",
+    workspaceKind: "Workspace type",
+    kindOwner: "Private landlord",
+    kindCabinet: "Management firm",
+    signedInAs: "Signed in as",
+    autorisation: "Business licence (autorisation d'établissement)",
+    autorisationValue: "no. {num}, valid until {date}",
+    piInsurance: "Professional liability insurance",
+    piInsuranceValue: "{provider}, expires {date}",
+    vat: "VAT no.",
+    registriesTitle: "Registries and connections",
+    legalParamsLink: "Legal parameters in force",
+    legalParamsBody: "The official values (caps, rates, periods) behind every calculation, with their effective dates and verification status.",
+    bankLink: "Bank connection",
+    bankBody: "Linked accounts and payment matching, in the Banking tab.",
   },
 
   aml: {
