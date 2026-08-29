@@ -603,6 +603,7 @@ export const en: Dict = {
     wizCity: "City",
     wizCountry: "Country",
     wizCreate: "Create property",
+    wizRealNotice: "Creating properties on your account activates soon. This entry was not kept.",
   },
 
   workflows: {

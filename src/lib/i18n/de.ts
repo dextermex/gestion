@@ -603,6 +603,7 @@ export const de: Dict = {
     wizCity: "Ort",
     wizCountry: "Land",
     wizCreate: "Objekt anlegen",
+    wizRealNotice: "Das Anlegen von Objekten auf Ihrem Konto wird bald aktiviert. Diese Eingabe wurde nicht gespeichert.",
   },
 
   workflows: {

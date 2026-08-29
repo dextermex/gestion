@@ -229,27 +229,12 @@ button:not(:disabled),
   }
 }
 
-/* Screen entrance: each navigation rises softly into place (template.tsx
-   remounts this wrapper per route). GPU-only; reduced motion keeps a plain
-   short fade so the change of screen still reads. */
-@keyframes morada-page {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.page-enter {
-  animation: morada-page 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@media (prefers-reduced-motion: reduce) {
-  .page-enter {
-    animation: morada-page-fade 0.15s ease both;
-  }
-}
+/* Screen entrance: a soft fade per navigation (template.tsx remounts this
+   wrapper per route). Opacity ONLY, on purpose: a filling transform on this
+   wrapper would make it the containing block for every position:fixed
+   overlay inside the page (the add-property wizard collapsed to a 0-height
+   box and stopped taking clicks) and would unstick sticky rails. An opacity
+   fill has no such side effects and is gentle under reduced motion too. */
 @keyframes morada-page-fade {
   from {
     opacity: 0;
@@ -257,6 +242,9 @@ button:not(:disabled),
   to {
     opacity: 1;
   }
+}
+.page-enter {
+  animation: morada-page-fade 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Tactile press: a subtle squeeze that restores on release. Add to buttons and

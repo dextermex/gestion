@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -36,7 +37,17 @@ const TYPE_ICONS: Record<PropertyType, React.ReactNode> = {
   ),
 };
 
-export default function PropertyWizard({ d }: { d: Dict }) {
+export default function PropertyWizard({
+  d,
+  notice,
+  noticeTone = "demo",
+}: {
+  d: Dict;
+  /** End-screen message: the demo notice on sample cabinets, the honest
+   *  "not stored yet" note on real accounts. */
+  notice: string;
+  noticeTone?: "demo" | "pending";
+}) {
   const router = useRouter();
   const reduced = useReducedMotion();
   const [type, setType] = useState<PropertyType | null>(null);
@@ -71,7 +82,14 @@ export default function PropertyWizard({ d }: { d: Dict }) {
     { id: "house", title: d.biens.wizTypeHouse, body: d.biens.wizTypeHouseBody },
   ];
 
-  return (
+  // The route template animates its wrapper (opacity), which would trap this
+  // fixed overlay in that stacking context, under the shell chrome. After
+  // mount the overlay escapes to <body>; the SSR frame renders inline so
+  // hydration matches, invisible behind the entrance fade.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const overlay = (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
       {/* Top bar */}
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
@@ -107,7 +125,12 @@ export default function PropertyWizard({ d }: { d: Dict }) {
         <AnimatePresence mode="wait" initial={false}>
           {submitted ? (
             <motion.div key="done" {...slide(1)} className="mx-auto max-w-xl text-center">
-              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <span
+                className={
+                  "mx-auto flex h-14 w-14 items-center justify-center rounded-full " +
+                  (noticeTone === "demo" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")
+                }
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="h-7 w-7" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
                 </svg>
@@ -119,8 +142,14 @@ export default function PropertyWizard({ d }: { d: Dict }) {
               >
                 {name || d.biens.wizTypeHouse}
               </h1>
-              <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                {d.common.demoCreateNotice}
+              <p
+                role="status"
+                className={
+                  "mt-3 rounded-xl px-4 py-3 text-sm font-semibold " +
+                  (noticeTone === "demo" ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900")
+                }
+              >
+                {notice}
               </p>
               <Button className="mt-6" onClick={() => router.push("/app/biens")}>
                 {d.biens.wizBack}
@@ -220,6 +249,8 @@ export default function PropertyWizard({ d }: { d: Dict }) {
       </div>
     </div>
   );
+
+  return mounted ? createPortal(overlay, document.body) : overlay;
 }
 
 function BackIcon() {

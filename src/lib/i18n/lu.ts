@@ -608,6 +608,7 @@ export const lu: Dict = {
     wizCity: "Uertschaft",
     wizCountry: "Land",
     wizCreate: "Bien uleeën",
+    wizRealNotice: "D'Uleeë vu Bien op Ärem Kont gëtt geschwënn aktivéiert. Dës Saisie gouf net gespäichert.",
   },
 
   workflows: {

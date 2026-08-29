@@ -612,6 +612,7 @@ export const fr = {
     wizCity: "Localité",
     wizCountry: "Pays",
     wizCreate: "Créer le bien",
+    wizRealNotice: "La création de biens sur votre compte s'active bientôt. Cette saisie n'a pas été conservée.",
   },
 
   workflows: {
