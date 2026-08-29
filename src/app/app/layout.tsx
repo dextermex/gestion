@@ -67,6 +67,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       id: u.id,
       label: `${u.label} \u00b7 ${demo.propertyById(u.propertyId).name}`,
     })),
+    leaseOptions: demo.LEASES.filter((l) => l.status !== "ended").map((l) => ({
+      id: l.id,
+      label: `${demo.leaseUnitLabel(l)} \u00b7 ${demo.leaseTenantNames(l).join(", ")}`,
+    })),
+    contactOptions: demo.CONTACTS.map((c) => ({ id: c.id, label: c.name })),
   };
 
   return (

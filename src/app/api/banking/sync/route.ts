@@ -10,6 +10,7 @@ import {
   saltEdgeConfigured,
 } from "@/lib/banking/saltedge";
 import { mapAccountRow, mapTransactionRow } from "@/lib/banking/mapping";
+import { reconcileUnmatched } from "@/lib/banking/reconcile";
 
 /**
  * Pulls the workspace's Salt Edge connections into gestion.bank_accounts and
@@ -70,7 +71,17 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({ connections: connections.length, accounts: accountCount, transactions: txCount });
+    // The matching engine runs on what just landed: RF first, learned IBAN,
+    // then fuzzy — auto matches become payments + FIFO allocations, the rest
+    // queues for review. Paid-ness stays derived from allocations.
+    const matched = await reconcileUnmatched(g, org.id);
+
+    return NextResponse.json({
+      connections: connections.length,
+      accounts: accountCount,
+      transactions: txCount,
+      matched,
+    });
   } catch (e) {
     console.error("saltedge sync failed:", e instanceof SaltEdgeError ? `${e.code}: ${e.message}` : e);
     return NextResponse.json({ error: "saltedge_error" }, { status: 502 });

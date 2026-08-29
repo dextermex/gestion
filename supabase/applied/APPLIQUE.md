@@ -16,3 +16,14 @@ graphql_public, gestion'` + reload PostgREST. Réversible par
 dans Supabase, Settings puis API, « Exposed schemas ».
 
 Le repli complet reste 0099_rollback.sql (drop du seul schéma gestion).
+
+## 0009 · 2026-08-29 · security_invoker sur la vue de statut
+
+En branchant les écritures réelles, l'audit a montré que
+`gestion.rent_period_status` s'exécutait avec les droits de son
+propriétaire : tout utilisateur authentifié pouvait lire les échéances de
+tous les espaces via l'API. `0009_rent_period_status_security_invoker.sql`
+(migration `gestion_rent_period_status_security_invoker`) force la vue à
+s'exécuter avec les droits de l'appelant (RLS des tables sous-jacentes) et
+retire les droits d'écriture sans objet. Vérifié après application :
+`reloptions = {security_invoker=true}`. Aucun objet de `public` touché.

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import TenantInvite from "@/components/gestion/TenantInvite";
-import { getDemo } from "@/lib/demo";
+import { getDemo, isSampleData } from "@/lib/demo";
 import {
   depositFormLabels,
   depositStatusMeta,
@@ -47,6 +47,7 @@ export default async function BailDetailPage({
   searchParams: Promise<{ onglet?: string }>;
 }) {
   const [{ id }, { onglet }] = await Promise.all([params, searchParams]);
+  const sample = await isSampleData();
   const tab: Tab = (TABS as readonly string[]).includes(onglet ?? "") ? (onglet as Tab) : "loyer";
   const { locale, d } = await getI18n();
   const {
@@ -680,22 +681,27 @@ export default async function BailDetailPage({
             )}
           </Panel>
 
-          <Panel title={d.baux.portalTitle}>
-            <p className="mb-3 text-xs leading-relaxed text-ink-soft">{d.baux.portalBody}</p>
-            <div className="space-y-3">
-              {l.tenantContactIds.map((cid) => {
-                const c = contactById(cid);
-                return (
-                  <TenantInvite
-                    key={cid}
-                    d={d}
-                    tenantName={c.name}
-                    link={`https://app.morada.lu/locataire/onboarding?bail=${l.rfReference}`}
-                  />
-                );
-              })}
-            </div>
-          </Panel>
+          {/* The tenant portal invitation flow is demonstrated on the sample
+              cabinets; the real token-based onboarding is not live yet, so a
+              real account gets no pretend send button. */}
+          {sample && (
+            <Panel title={d.baux.portalTitle}>
+              <p className="mb-3 text-xs leading-relaxed text-ink-soft">{d.baux.portalBody}</p>
+              <div className="space-y-3">
+                {l.tenantContactIds.map((cid) => {
+                  const c = contactById(cid);
+                  return (
+                    <TenantInvite
+                      key={cid}
+                      d={d}
+                      tenantName={c.name}
+                      link={`https://app.morada.lu/locataire/onboarding?bail=${l.rfReference}`}
+                    />
+                  );
+                })}
+              </div>
+            </Panel>
+          )}
         </div>
       )}
     </div>

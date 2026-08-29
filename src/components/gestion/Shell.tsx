@@ -34,6 +34,8 @@ export interface ShellData {
   badges: { review: number; unread: number };
   searchIndex: SearchHit[];
   unitOptions: Array<{ id: string; label: string }>;
+  leaseOptions: Array<{ id: string; label: string }>;
+  contactOptions: Array<{ id: string; label: string }>;
 }
 
 /* --------------------------------- nav model --------------------------------
@@ -130,7 +132,10 @@ export default function GestionShell({
     () => navigable(d, [...NAV, SETTINGS], shell.workspaceKind),
     [d, NAV, SETTINGS, shell.workspaceKind],
   );
-  const QUICK_ADD = useMemo(() => quickAdd(d), [d]);
+  const real = shell.datasetId === "real";
+  // The document vault has no real upload backend yet: on a real account the
+  // quick-add offers only what actually persists.
+  const QUICK_ADD = useMemo(() => quickAdd(d).filter((i) => !real || i.kind !== "document"), [d, real]);
 
   // ⌘K / Ctrl-K
   useEffect(() => {
@@ -345,7 +350,10 @@ export default function GestionShell({
           kind={createKind}
           onClose={() => setCreateKind(null)}
           d={d}
+          real={real}
           unitOptions={shell.unitOptions}
+          leaseOptions={shell.leaseOptions}
+          contactOptions={shell.contactOptions}
         />
 
         {/* A "0% done" checklist on top of a full sample cabinet contradicts
@@ -901,15 +909,94 @@ function CreateDialog({
   kind,
   onClose,
   d,
+  real,
   unitOptions,
+  leaseOptions,
+  contactOptions,
 }: {
   kind: CreateKind | null;
   onClose: () => void;
   d: Dict;
+  real: boolean;
   unitOptions: Array<{ id: string; label: string }>;
+  leaseOptions: Array<{ id: string; label: string }>;
+  contactOptions: Array<{ id: string; label: string }>;
 }) {
+  const router = useRouter();
   const [submitted, setSubmitted] = useState(false);
-  useEffect(() => setSubmitted(false), [kind]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [issues, setIssues] = useState<Array<{ severity: string; message: string }>>([]);
+  const [draftCreated, setDraftCreated] = useState(false);
+  useEffect(() => {
+    setSubmitted(false);
+    setSaving(false);
+    setError(null);
+    setIssues([]);
+    setDraftCreated(false);
+  }, [kind]);
+
+  // On a real account the form persists through the API, under the caller's
+  // own session; the sample cabinets keep their explicitly-fake dialog.
+  const submitReal = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!kind) return;
+    const f = new FormData(e.currentTarget);
+    const v = (name: string) => String(f.get(name) ?? "");
+    const endpoint: Partial<Record<CreateKind, string>> = {
+      contact: "/api/contacts/create",
+      lease: "/api/baux/create",
+      payment: "/api/paiements/create",
+      ticket: "/api/tickets/create",
+    };
+    const payload: Record<string, unknown> =
+      kind === "contact"
+        ? { name: v("name"), email: v("email"), phone: v("phone"), role: v("role") }
+        : kind === "lease"
+          ? {
+              unitId: v("unitId"),
+              tenantContactId: v("tenantContactId"),
+              type: v("type"),
+              startDate: v("startDate"),
+              rent: v("rent"),
+              charges: v("charges"),
+              depositMonths: Number(v("depositMonths") || 2),
+              depositForm: v("depositForm"),
+            }
+          : kind === "payment"
+            ? { leaseId: v("leaseId"), amount: v("amount"), receivedOn: v("receivedOn") }
+            : { unitId: v("unitId"), title: v("title") };
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(endpoint[kind]!, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        issues?: Array<{ severity: string; message: string }>;
+      };
+      if (!res.ok) {
+        setError(d.shell.createFailed);
+        setSaving(false);
+        return;
+      }
+      if (kind === "lease" && data.status === "draft") {
+        setIssues((data.issues ?? []).filter((i) => i.severity === "blocking"));
+        setDraftCreated(true);
+        setSaving(false);
+        router.refresh();
+        return;
+      }
+      onClose();
+      router.refresh();
+    } catch {
+      setError(d.shell.createFailed);
+      setSaving(false);
+    }
+  };
 
   const labels: Record<CreateKind, string> = {
     property: d.shell.quickAddProperty,
@@ -927,7 +1014,155 @@ function CreateDialog({
       title={kind ? d.shell.createDialogTitle.replace("{what}", labels[kind]) : ""}
       closeLabel={d.common.close}
     >
-      {kind && (
+      {kind && real && draftCreated && (
+        <div className="space-y-4">
+          <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+            {d.shell.leaseDraftCreated}
+          </p>
+          <ul className="space-y-2">
+            {issues.map((i) => (
+              <li key={i.message} className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800">
+                {i.message}
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end">
+            <Button type="button" onClick={onClose}>{d.common.close}</Button>
+          </div>
+        </div>
+      )}
+      {kind && real && !draftCreated && (
+        <form className="space-y-4" onSubmit={submitReal}>
+          {kind === "contact" && (
+            <>
+              <Field label={d.shell.fieldName}>
+                <Input name="name" required maxLength={120} />
+              </Field>
+              <Field label={d.shell.fieldRole}>
+                <Select name="role" defaultValue="tenant">
+                  {(["tenant", "owner", "guarantor", "artisan", "supplier", "syndic"] as const).map((r) => (
+                    <option key={r} value={r}>
+                      {d.status.role[r]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={d.shell.fieldEmail}>
+                <Input name="email" type="email" autoComplete="off" />
+              </Field>
+              <Field label={d.shell.fieldPhone}>
+                <Input name="phone" type="tel" autoComplete="off" />
+              </Field>
+            </>
+          )}
+          {kind === "lease" && (
+            <>
+              <Field label={d.shell.fieldUnit}>
+                <Select name="unitId" required defaultValue={unitOptions[0]?.id}>
+                  {unitOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={d.shell.fieldTenant}>
+                <Select name="tenantContactId" required defaultValue={contactOptions[0]?.id}>
+                  {contactOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={d.shell.fieldType}>
+                  <Select name="type" defaultValue="residential">
+                    <option value="residential">{d.status.leaseType.residential}</option>
+                    <option value="commercial">{d.status.leaseType.commercial}</option>
+                  </Select>
+                </Field>
+                <Field label={d.shell.fieldStartDate}>
+                  <Input name="startDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={d.shell.fieldRent}>
+                  <Input name="rent" required inputMode="decimal" placeholder="1 850,00" />
+                </Field>
+                <Field label={d.shell.fieldCharges}>
+                  <Input name="charges" inputMode="decimal" placeholder="220,00" />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={d.shell.fieldDepositMonths}>
+                  <Input name="depositMonths" type="number" min={0} max={12} defaultValue={2} />
+                </Field>
+                <Field label={d.shell.fieldDepositForm}>
+                  <Select name="depositForm" defaultValue="cash">
+                    {(["cash", "bank_guarantee", "third_party_caution", "insurance", "state_guarantee"] as const).map(
+                      (fm) => (
+                        <option key={fm} value={fm}>
+                          {d.status.depositForm[fm]}
+                        </option>
+                      ),
+                    )}
+                  </Select>
+                </Field>
+              </div>
+            </>
+          )}
+          {kind === "payment" && (
+            <>
+              <Field label={d.shell.fieldUnit}>
+                <Select name="leaseId" required defaultValue={leaseOptions[0]?.id}>
+                  {leaseOptions.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={d.shell.fieldAmount}>
+                  <Input name="amount" required inputMode="decimal" placeholder="1 850,00" />
+                </Field>
+                <Field label={d.shell.fieldReceivedOn}>
+                  <Input name="receivedOn" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                </Field>
+              </div>
+            </>
+          )}
+          {kind === "ticket" && (
+            <>
+              <Field label={d.shell.fieldUnit}>
+                <Select name="unitId" required defaultValue={unitOptions[0]?.id}>
+                  {unitOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={d.shell.fieldTitle}>
+                <Input name="title" required maxLength={200} />
+              </Field>
+            </>
+          )}
+          {(kind === "property" || kind === "document") && null}
+
+          <InlineError>{error}</InlineError>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              {d.common.cancel}
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {d.shell.submitCreate}
+            </Button>
+          </div>
+        </form>
+      )}
+      {kind && !real && (
         <form
           className="space-y-4"
           onSubmit={(e) => {
