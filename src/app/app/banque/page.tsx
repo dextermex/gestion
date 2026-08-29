@@ -3,10 +3,14 @@ import { CollapsiblePanel, LegalNote } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import BankWorkspace, { type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
 import SaltEdgeConnect from "@/components/gestion/SaltEdgeConnect";
+import SyncBank from "@/components/gestion/SyncBank";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { bankTxStatusMeta, euros, formatDate, formatPct, matchTierMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { authedClient, getSession } from "@/lib/supabase/server";
+import { getIdentity } from "@/lib/workspace";
+import type { BankTxStatus } from "@/lib/types";
 import { diffDays } from "@/domain/dates";
 import { vopNameCheck } from "@/domain/banking/rf";
 
@@ -39,11 +43,80 @@ export default async function BanquePage({
   const txMeta = bankTxStatusMeta(d);
   const tierMeta = matchTierMeta(d);
 
-  const autoCount = BANK_TXS.filter((t) => t.status === "auto").length;
-  const inCount = BANK_TXS.filter((t) => t.amount > 0).length;
+  // Real accounts read the imported rows from gestion.* under the caller's
+  // own JWT (RLS row by row); sample cabinets keep computing from the
+  // dataset. Signed-out and harness renders skip the network entirely.
+  type DbAccount = {
+    id: string; label: string; iban: string;
+    balance_cents: number | null; consent_expires_at: string | null;
+  };
+  type DbTx = {
+    id: string; booked_on: string; amount_cents: number; counterparty_name: string;
+    remittance_info: string; match_status: string; match_explain: string | null;
+  };
+  let dbAccounts: DbAccount[] = [];
+  let dbTxs: DbTx[] = [];
+  if (real) {
+    const session = await getSession();
+    const identity = session ? await getIdentity() : null;
+    if (session && identity?.active) {
+      const g = authedClient(session.accessToken).schema("gestion");
+      const [accRes, txRes] = await Promise.all([
+        g.from("bank_accounts")
+          .select("id,label,iban,balance_cents,consent_expires_at")
+          .eq("org_id", identity.active.id)
+          .order("created_at"),
+        g.from("bank_transactions")
+          .select("id,booked_on,amount_cents,counterparty_name,remittance_info,match_status,match_explain")
+          .eq("org_id", identity.active.id)
+          .order("booked_on", { ascending: false })
+          .limit(500),
+      ]);
+      dbAccounts = (accRes.data as DbAccount[] | null) ?? [];
+      dbTxs = (txRes.data as DbTx[] | null) ?? [];
+    }
+  }
+
+  // Imported rows carry no match verdict yet: they land in the review queue,
+  // which is the honest place for them until the matching engine runs here.
+  const DB_STATUS: Record<string, BankTxStatus> = {
+    unmatched: "review", auto: "auto", manual: "manual", review: "review", ignored: "ignored",
+  };
+
+  const accounts = real
+    ? dbAccounts.map((a) => ({
+        id: a.id,
+        label: a.label,
+        iban: a.iban,
+        balanceCents: a.balance_cents ?? 0,
+        consentExpiresAt: a.consent_expires_at ? a.consent_expires_at.slice(0, 10) : null,
+      }))
+    : BANK_ACCOUNTS;
+
+  const autoCount = real
+    ? dbTxs.filter((t) => DB_STATUS[t.match_status] === "auto").length
+    : BANK_TXS.filter((t) => t.status === "auto").length;
+  const inCount = real
+    ? dbTxs.filter((t) => t.amount_cents > 0).length
+    : BANK_TXS.filter((t) => t.amount > 0).length;
   const autoRate = inCount === 0 ? null : Math.round((100 * autoCount) / inCount);
 
-  const rows: TxRow[] = BANK_TXS.map((t) => ({
+  const rows: TxRow[] = real ? dbTxs.map((t) => {
+    const status = DB_STATUS[t.match_status] ?? "review";
+    return {
+      id: t.id,
+      status,
+      counterparty: t.counterparty_name || "—",
+      remittance: t.remittance_info || "—",
+      explain: t.match_explain ?? "",
+      amountLabel: euros(t.amount_cents, locale),
+      negative: t.amount_cents < 0,
+      bookedAt: t.booked_on,
+      dateLabel: formatDate(t.booked_on, locale),
+      tier: null,
+      statusMeta: txMeta[status],
+    };
+  }) : BANK_TXS.map((t) => ({
     id: t.id,
     status: t.status,
     counterparty: t.counterpartyName ?? "—",
@@ -57,14 +130,25 @@ export default async function BanquePage({
     statusMeta: txMeta[t.status],
   }));
 
-  const review: ReviewRow[] = BANK_TXS.filter((t) => t.status === "review").map((t) => ({
-    id: t.id,
-    counterparty: t.counterpartyName ?? "—",
-    amountLabel: euros(t.amount, locale),
-    remittance: t.remittanceInfo ?? "—",
-    dateLabel: formatDate(t.bookedAt, locale),
-    explain: t.matchExplain ?? "",
-  }));
+  const review: ReviewRow[] = real
+    ? rows
+        .filter((r) => r.status === "review")
+        .map((r) => ({
+          id: r.id,
+          counterparty: r.counterparty,
+          amountLabel: r.amountLabel,
+          remittance: r.remittance,
+          dateLabel: r.dateLabel,
+          explain: r.explain,
+        }))
+    : BANK_TXS.filter((t) => t.status === "review").map((t) => ({
+        id: t.id,
+        counterparty: t.counterpartyName ?? "—",
+        amountLabel: euros(t.amount, locale),
+        remittance: t.remittanceInfo ?? "—",
+        dateLabel: formatDate(t.bookedAt, locale),
+        explain: t.matchExplain ?? "",
+      }));
 
   const cascade: Array<[string, string]> = [
     [d.banque.cascade0, d.banque.cascade0Body],
@@ -80,21 +164,39 @@ export default async function BanquePage({
         subtitle={d.banque.subtitle}
         actions={
           <>
-            {BANK_ACCOUNTS.length > 0 && (
-              <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
-            )}
+            {accounts.length > 0 &&
+              (real ? (
+                <SyncBank
+                  label={d.banque.retrieve}
+                  labels={{
+                    notConfigured: d.banque.connectNotConfigured,
+                    failed: d.banque.syncFailed,
+                    schemaUnexposed: d.banque.schemaUnexposed,
+                  }}
+                />
+              ) : (
+                <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
+              ))}
             {connectCta}
           </>
         }
       />
 
       {real && params.connexion === "retour" && (
-        <p
-          role="status"
-          className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
-        >
-          {d.banque.connectReturned}
-        </p>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <p role="status" className="text-sm font-semibold text-emerald-800">
+            {d.banque.connectReturned}
+          </p>
+          <SyncBank
+            auto
+            label={d.banque.retrieve}
+            labels={{
+              notConfigured: d.banque.connectNotConfigured,
+              failed: d.banque.syncFailed,
+              schemaUnexposed: d.banque.schemaUnexposed,
+            }}
+          />
+        </div>
       )}
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[290px_minmax(0,1fr)]">
@@ -105,7 +207,7 @@ export default async function BanquePage({
               {d.banque.accountsTitle}
             </p>
 
-            {BANK_ACCOUNTS.length === 0 ? (
+            {accounts.length === 0 ? (
               <div className="py-6 text-center">
                 <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-sand-100 text-ink-soft">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5" aria-hidden>
@@ -121,7 +223,7 @@ export default async function BanquePage({
             ) : (
               <>
                 <ul className="mt-3 space-y-3">
-                  {BANK_ACCOUNTS.map((b) => (
+                  {accounts.map((b) => (
                     <li key={b.id} className="rounded-xl border border-sand-200 p-3">
                       <p className="truncate text-xs font-semibold text-ink" title={b.label}>
                         {b.label}
@@ -176,7 +278,7 @@ export default async function BanquePage({
 
       {/* How the engine decides — reference material, folded by default so the
           screen ends where the work ends. */}
-      {BANK_TXS.length > 0 && (
+      {rows.length > 0 && (
         <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
           <CollapsiblePanel title={d.banque.cascadeTitle}>
             <ol className="space-y-3 text-sm">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/supabase/server";
+import { getIdentity } from "@/lib/workspace";
 import { SaltEdgeError, createConnectSession, ensureCustomer, saltEdgeConfigured } from "@/lib/banking/saltedge";
 
 /**
@@ -22,8 +23,14 @@ export async function POST(req: NextRequest) {
   const cookieLocale = req.cookies.get("morada_locale")?.value;
   const locale = cookieLocale === "en" || cookieLocale === "de" ? cookieLocale : "fr";
 
+  // Bank data belongs to the WORKSPACE, not the person: one Salt Edge
+  // customer per organisation, so every member sees the same connections.
+  const identity = await getIdentity();
+  const org = identity?.active;
+  if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
+
   try {
-    const customerId = await ensureCustomer(`morada-${session.userId}`);
+    const customerId = await ensureCustomer(`morada-ws-${org.id}`);
     const returnTo = new URL("/app/banque?connexion=retour", req.nextUrl.origin).toString();
     const url = await createConnectSession(customerId, returnTo, locale);
     return NextResponse.json({ url });

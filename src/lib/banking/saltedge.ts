@@ -89,6 +89,62 @@ export async function ensureCustomer(identifier: string): Promise<string> {
   throw new SaltEdgeError("CustomerNotFound", `No customer with identifier ${identifier}`);
 }
 
+/* ------------------------- reading back the data ------------------------- */
+
+export interface SeConnection {
+  id: string;
+  provider_name: string;
+  status: string;
+  last_success_at: string | null;
+}
+
+export interface SeAccount {
+  id: string;
+  connection_id: string;
+  name: string;
+  balance: number;
+  currency_code: string;
+  extra?: { iban?: string; bban?: string; client_name?: string; account_name?: string };
+}
+
+export interface SeTransaction {
+  id: string;
+  account_id: string;
+  made_on: string;
+  amount: number;
+  currency_code: string;
+  description: string;
+  extra?: { payer?: string; payee?: string; end_to_end_id?: string; additional?: string };
+}
+
+async function listAll<T>(path: string): Promise<T[]> {
+  const out: T[] = [];
+  let fromId: string | undefined;
+  for (let page = 0; page < 50; page += 1) {
+    const sep = path.includes("?") ? "&" : "?";
+    const q = fromId ? `${sep}from_id=${encodeURIComponent(fromId)}` : "";
+    const res = await se<{ data: T[]; meta?: { next_id?: string | null } }>(`${path}${q}`);
+    out.push(...res.data);
+    if (!res.meta?.next_id) break;
+    fromId = res.meta.next_id;
+  }
+  return out;
+}
+
+export function listConnections(customerId: string): Promise<SeConnection[]> {
+  return listAll<SeConnection>(`/connections?customer_id=${encodeURIComponent(customerId)}`);
+}
+
+export function listAccounts(connectionId: string): Promise<SeAccount[]> {
+  return listAll<SeAccount>(`/accounts?connection_id=${encodeURIComponent(connectionId)}`);
+}
+
+export function listTransactions(connectionId: string, accountId: string): Promise<SeTransaction[]> {
+  return listAll<SeTransaction>(
+    `/transactions?connection_id=${encodeURIComponent(connectionId)}&account_id=${encodeURIComponent(accountId)}`,
+  );
+}
+
 /** Open a consent journey; the returned URL hosts the bank selection. */
 export async function createConnectSession(
   customerId: string,
