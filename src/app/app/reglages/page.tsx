@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/pro/ui";
 import HubTabs from "@/components/gestion/HubTabs";
-import { Panel } from "@/components/gestion/bits";
+import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { getIdentity } from "@/lib/workspace";
 import { formatDate } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { paramsInForce } from "@/domain/legal/params";
 
 /**
  * Réglages: the workspace itself, and the registries every calculation
@@ -16,8 +17,13 @@ import { fmt } from "@/lib/i18n/config";
  */
 export default async function ReglagesPage() {
   const { locale, d } = await getI18n();
-  const { ORG } = await getDemo();
+  const { ORG, TODAY } = await getDemo();
   const identity = await getIdentity();
+
+  // The legal-parameters registry moved here from Conformité: it governs
+  // the calculations of the whole workspace, so it lives with the workspace.
+  const params = paramsInForce(TODAY);
+  const uncertain = params.filter((p) => p.status === "uncertain");
 
   const rows: Array<{ label: string; value: string }> = [
     { label: d.reglages.workspaceName, value: ORG.name },
@@ -52,14 +58,11 @@ export default async function ReglagesPage() {
   }
   if (ORG.vatNumber) rows.push({ label: d.reglages.vat, value: ORG.vatNumber });
 
-  const registries = [
-    { href: "/app/conformite", title: d.reglages.legalParamsLink, body: d.reglages.legalParamsBody },
-    { href: "/app/banque", title: d.reglages.bankLink, body: d.reglages.bankBody },
-  ];
+  const registries = [{ href: "/app/banque", title: d.reglages.bankLink, body: d.reglages.bankBody }];
 
   return (
     <div>
-      <HubTabs d={d} hub="reglages" active="/app/reglages" />
+      <HubTabs d={d} hub="reglages" active="/app/reglages" workspaceKind={ORG.kind} />
       <PageHeader title={d.reglages.title} subtitle={d.reglages.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
@@ -72,6 +75,18 @@ export default async function ReglagesPage() {
               </div>
             ))}
           </dl>
+          {ORG.autorisationNumber !== "" && <LegalNote>{d.conformite.orgLegal}</LegalNote>}
+        </Panel>
+
+        <div className="flex flex-col gap-5">
+        <Panel title={fmt(d.conformite.paramsTitle, { n: params.length })}>
+          <p className="text-sm leading-relaxed text-ink-soft">{d.conformite.paramsBody}</p>
+          <div className="mt-3 rounded-xl bg-sand-50 p-3.5">
+            <p className="text-xs font-semibold text-ink">
+              {fmt(d.conformite.paramsUncertain, { n: uncertain.length })}
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-soft">{d.conformite.paramsFoot}</p>
+          </div>
         </Panel>
 
         <Panel title={d.reglages.registriesTitle}>
@@ -88,6 +103,7 @@ export default async function ReglagesPage() {
             ))}
           </div>
         </Panel>
+        </div>
       </div>
     </div>
   );

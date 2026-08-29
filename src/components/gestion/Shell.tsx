@@ -26,6 +26,8 @@ export interface ShellData {
   sampleCabinet: string | null;
   /** True once a real Morada session is driving the screen. */
   signedIn: boolean;
+  /** "owner" hides the cabinet-only surfaces (AML) everywhere. */
+  workspaceKind: string;
   orgShortName: string;
   userName: string;
   userEmail: string;
@@ -72,10 +74,10 @@ function settingsItem(d: Dict): NavItem {
 /** Everything ⌘K can route to: the destinations, every hub tab that is not
  *  a destination's own landing page, and the two screens that now open from
  *  Aujourd'hui (Workflows, Conformité). Nothing became unreachable. */
-function navigable(d: Dict, nav: NavItem[]): Array<{ href: string; label: string }> {
+function navigable(d: Dict, nav: NavItem[], workspaceKind: string): Array<{ href: string; label: string }> {
   const seen = new Set(nav.map((i) => i.href));
   const extras: Array<{ href: string; label: string }> = [];
-  for (const { tabs } of Object.values(hubTabs(d))) {
+  for (const { tabs } of Object.values(hubTabs(d, workspaceKind))) {
     for (const t of tabs) {
       if (!seen.has(t.href)) {
         seen.add(t.href);
@@ -124,7 +126,10 @@ export default function GestionShell({
 
   const NAV = useMemo(() => destinations(d, shell.badges), [d, shell.badges]);
   const SETTINGS = useMemo(() => settingsItem(d), [d]);
-  const NAVIGABLE = useMemo(() => navigable(d, [...NAV, SETTINGS]), [d, NAV, SETTINGS]);
+  const NAVIGABLE = useMemo(
+    () => navigable(d, [...NAV, SETTINGS], shell.workspaceKind),
+    [d, NAV, SETTINGS, shell.workspaceKind],
+  );
   const QUICK_ADD = useMemo(() => quickAdd(d), [d]);
 
   // ⌘K / Ctrl-K

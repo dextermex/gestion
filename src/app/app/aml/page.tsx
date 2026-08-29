@@ -10,14 +10,14 @@ import { cents } from "@/domain/money";
 
 export default async function AmlPage() {
   const { d } = await getI18n();
-  const { CONTACTS, TODAY } = await getDemo();
+  const { CONTACTS, ORG, TODAY } = await getDemo();
 
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (CONTACTS.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="reglages" active="/app/aml" />
+        <HubTabs d={d} hub="reglages" active="/app/aml" workspaceKind={ORG.kind} />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.aml })} body={d.common.emptyBody} />
       </div>
     );
@@ -63,7 +63,7 @@ export default async function AmlPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="reglages" active="/app/aml" />
+      <HubTabs d={d} hub="reglages" active="/app/aml" workspaceKind={ORG.kind} />
       <PageHeader title={d.aml.title} subtitle={d.aml.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

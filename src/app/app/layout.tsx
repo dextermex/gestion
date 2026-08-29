@@ -52,6 +52,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     datasetId,
     sampleCabinet,
     signedIn: true,
+    // The dataset seam carries the kind for demo and real alike: on "real",
+    // ORG is built from the signed-in workspace.
+    workspaceKind: demo.ORG.kind,
     orgShortName: sampleCabinet ?? identity.active.name,
     userName: identity.displayName,
     userEmail: identity.email,

@@ -16,7 +16,10 @@ export interface HubTab {
   label: string;
 }
 
-export function hubTabs(d: Dict): Record<HubId, { label: string; tabs: HubTab[] }> {
+export function hubTabs(d: Dict, workspaceKind?: string): Record<HubId, { label: string; tabs: HubTab[] }> {
+  // AML/KYC is a cabinet obligation: on an owner-kind workspace the tab
+  // simply does not exist — same product, two densities, zero configuration.
+  const cabinet = workspaceKind !== "owner";
   return {
     biens: {
       label: d.nav.properties,
@@ -55,7 +58,7 @@ export function hubTabs(d: Dict): Record<HubId, { label: string; tabs: HubTab[] 
       label: d.nav.settings,
       tabs: [
         { href: "/app/reglages", label: d.hubs.general },
-        { href: "/app/aml", label: d.hubs.aml },
+        ...(cabinet ? [{ href: "/app/aml", label: d.hubs.aml }] : []),
       ],
     },
   };
@@ -64,8 +67,20 @@ export function hubTabs(d: Dict): Record<HubId, { label: string; tabs: HubTab[] 
 /** The room's tab row: underline tabs in the house style, scrollable on
  *  small screens. `active` is the page's own path — detail pages inside a
  *  hub (a lease, a property) don't render the row at all. */
-export default function HubTabs({ d, hub, active }: { d: Dict; hub: HubId; active: string }) {
-  const { label, tabs } = hubTabs(d)[hub];
+export default function HubTabs({
+  d,
+  hub,
+  active,
+  workspaceKind,
+}: {
+  d: Dict;
+  hub: HubId;
+  active: string;
+  workspaceKind?: string;
+}) {
+  const { label, tabs } = hubTabs(d, workspaceKind)[hub];
+  // A room with a single wall needs no tab row.
+  if (tabs.length < 2) return null;
   return (
     <nav aria-label={label} className="no-scrollbar mb-5 flex gap-0.5 overflow-x-auto border-b border-sand-200">
       {tabs.map((t) => {

@@ -1,5 +1,5 @@
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
-import { CollapsiblePanel, LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
+import { MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { deadlineStatusMeta, formatDate, formatNumber } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
@@ -16,7 +16,7 @@ import {
   vacancyClock,
   type Deadline,
 } from "@/domain/compliance/deadlines";
-import { getParamValue, paramsInForce } from "@/domain/legal/params";
+import { getParamValue } from "@/domain/legal/params";
 
 /** Deadline label from its stable kind — never from the engine's English label. */
 function deadlineLabel(d: Dict, dl: Deadline, today: string, what?: string): string {
@@ -104,15 +104,13 @@ export default async function ConformitePage() {
     clock: vacancyClock(u.label, u.vacantSince!, TODAY),
   }));
 
-  const params = paramsInForce(TODAY);
-  const uncertain = params.filter((p) => p.status === "uncertain");
-
+  // The workspace profile and the parameters registry moved to Réglages:
+  // this screen is the full calendar Aujourd'hui opens, nothing else.
   return (
     <div>
       <PageHeader title={d.conformite.title} subtitle={d.conformite.subtitle} />
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <div className="mx-auto max-w-3xl">
           <Panel title={d.conformite.calendarTitle}>
             <ul className="divide-y divide-sand-100">
               {sorted.map(({ dl, what, status }) => (
@@ -165,45 +163,6 @@ export default async function ConformitePage() {
               </div>
             ))}
           </Panel>
-        </div>
-
-        <div className="flex flex-col gap-5">
-          <Panel title={d.conformite.orgTitle}>
-            <ul className="space-y-2.5 text-sm">
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.conformite.orgAutorisation}</span>
-                <span className="font-semibold tabular-nums text-ink">{ORG.autorisationNumber}</span>
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.conformite.orgExpiry}</span>
-                <span className="font-semibold tabular-nums text-ink">
-                  {formatDate(ORG.autorisationExpiry, locale)}
-                </span>
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.conformite.orgRc}</span>
-                <span className="font-semibold text-ink">{ORG.piInsuranceProvider}</span>
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.conformite.orgRcExpiry}</span>
-                <Badge className="bg-amber-100 text-amber-800">{formatDate(ORG.piInsuranceExpiry, locale)}</Badge>
-              </li>
-            </ul>
-            <LegalNote>{d.conformite.orgLegal}</LegalNote>
-          </Panel>
-
-          {/* Registry internals, folded away: the count reassures, the raw
-              parameter keys and engine notes stay out of the interface. */}
-          <CollapsiblePanel title={fmt(d.conformite.paramsTitle, { n: params.length })}>
-            <p className="text-sm leading-relaxed text-ink-soft">{d.conformite.paramsBody}</p>
-            <div className="mt-3 rounded-xl bg-sand-50 p-3.5">
-              <p className="text-xs font-semibold text-ink">
-                {fmt(d.conformite.paramsUncertain, { n: uncertain.length })}
-              </p>
-              <p className="mt-1 text-[11px] leading-relaxed text-ink-soft">{d.conformite.paramsFoot}</p>
-            </div>
-          </CollapsiblePanel>
-        </div>
       </div>
     </div>
   );
