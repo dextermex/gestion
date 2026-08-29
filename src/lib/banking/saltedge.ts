@@ -89,6 +89,23 @@ export async function ensureCustomer(identifier: string): Promise<string> {
   throw new SaltEdgeError("CustomerNotFound", `No customer with identifier ${identifier}`);
 }
 
+/**
+ * One harmless read against the API with the deployed credentials, for the
+ * health endpoint: reports the provider's error class when the call fails.
+ * No customer data leaves — only ok/code/message.
+ */
+export async function saltEdgeProbe(): Promise<
+  { ok: true } | { ok: false; code: string; message: string }
+> {
+  try {
+    await se<{ data: unknown[] }>("/customers?per_page=1");
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof SaltEdgeError) return { ok: false, code: e.code, message: e.message };
+    return { ok: false, code: "network", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /* ------------------------- reading back the data ------------------------- */
 
 export interface SeConnection {
