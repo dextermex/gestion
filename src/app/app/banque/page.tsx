@@ -2,7 +2,8 @@ import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { CollapsiblePanel, LegalNote } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import BankWorkspace, { type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
-import { getDemo } from "@/lib/demo";
+import SaltEdgeConnect from "@/components/gestion/SaltEdgeConnect";
+import { getDatasetId, getDemo } from "@/lib/demo";
 import { bankTxStatusMeta, euros, formatDate, formatPct, matchTierMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -14,9 +15,27 @@ import { vopNameCheck } from "@/domain/banking/rf";
  * right. A real account with no bank connection gets the honest empty rail,
  * never a sample balance.
  */
-export default async function BanquePage() {
+export default async function BanquePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ connexion?: string }>;
+}) {
+  const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { BANK_ACCOUNTS, BANK_TXS, TODAY } = await getDemo();
+  const [{ BANK_ACCOUNTS, BANK_TXS, TODAY }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+
+  // Real accounts get the real consent journey; sample cabinets keep the
+  // demo action, and nothing sample-side ever calls the provider.
+  const real = datasetId === "real";
+  const connectCta = real ? (
+    <SaltEdgeConnect
+      label={d.banque.connectAccount}
+      notConfigured={d.banque.connectNotConfigured}
+      failed={d.banque.connectFailed}
+    />
+  ) : (
+    <DemoAction label={`+ ${d.banque.connectAccount}`} doneMessage={d.banque.connectDone} />
+  );
   const txMeta = bankTxStatusMeta(d);
   const tierMeta = matchTierMeta(d);
 
@@ -56,7 +75,27 @@ export default async function BanquePage() {
 
   return (
     <div>
-      <PageHeader title={d.banque.title} subtitle={d.banque.subtitle} />
+      <PageHeader
+        title={d.banque.title}
+        subtitle={d.banque.subtitle}
+        actions={
+          <>
+            {BANK_ACCOUNTS.length > 0 && (
+              <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
+            )}
+            {connectCta}
+          </>
+        }
+      />
+
+      {real && params.connexion === "retour" && (
+        <p
+          role="status"
+          className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
+        >
+          {d.banque.connectReturned}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[290px_minmax(0,1fr)]">
         {/* ------------------------------ accounts rail ------------------------------ */}
@@ -77,7 +116,7 @@ export default async function BanquePage() {
                 <p className="mx-auto mt-1.5 max-w-[220px] text-xs leading-relaxed text-ink-soft">
                   {d.banque.connectBody}
                 </p>
-                <DemoAction label={`+ ${d.banque.connectAccount}`} doneMessage={d.banque.connectDone} className="mt-4" />
+                <div className="mt-4 flex justify-center">{connectCta}</div>
               </div>
             ) : (
               <>
@@ -126,14 +165,6 @@ export default async function BanquePage() {
                   </div>
                 )}
 
-                <div className="mt-3 space-y-2 border-t border-sand-100 pt-3">
-                  <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
-                  <DemoAction
-                    label={`+ ${d.banque.connectAccount}`}
-                    doneMessage={d.banque.connectDone}
-                    variant="secondary"
-                  />
-                </div>
               </>
             )}
           </Card>

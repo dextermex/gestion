@@ -104,29 +104,23 @@ export default function BankWorkspace({
 
   return (
     <div className="min-w-0">
-      {/* Status pills, immocloud-style, with live counts */}
-      <div className="no-scrollbar flex gap-2 overflow-x-auto">
+      {/* Status tiles with live counts (the immocloud banking grammar):
+          count above, view below, selection as a border, never a fill. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {views.map((v) => (
           <button
             key={v.id}
             onClick={() => setView(v.id)}
             aria-pressed={view === v.id}
             className={
-              "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition max-sm:min-h-11 " +
+              "tactile rounded-2xl border bg-white p-3.5 text-left shadow-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 " +
               (view === v.id
-                ? "bg-brand-600 text-white"
-                : "border border-sand-200 bg-white text-ink-soft hover:border-brand-200 hover:text-brand-700")
+                ? "border-brand-400 ring-1 ring-brand-200"
+                : "border-sand-200 hover:border-brand-200 hover:shadow-md")
             }
           >
-            {v.label}
-            <span
-              className={
-                "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums " +
-                (view === v.id ? "bg-white/20 text-white" : "bg-sand-100 text-ink-soft")
-              }
-            >
-              {counts[v.id]}
-            </span>
+            <p className="font-display text-xl font-bold tabular-nums text-ink">{counts[v.id]}</p>
+            <p className="mt-0.5 text-xs font-semibold text-ink-soft">{v.label}</p>
           </button>
         ))}
       </div>
