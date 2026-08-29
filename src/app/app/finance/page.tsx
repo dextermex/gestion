@@ -14,9 +14,11 @@ export default async function FinancePage() {
   const { ORG, RENT_PERIODS, TICKETS, UNITS, contactById, leaseById, leaseUnitLabel, propertyById, unitById } =
     await getDemo();
 
-    // A real account with nothing in it: say so rather than reach for a
-    // showcase record that no longer exists.
-    if (RENT_PERIODS.length === 0)
+    // This screen is the managed-SCI worked example: statements, fees and
+    // pain.001 payouts around the sample mandate. Until the real billing
+    // backend exists, an account without that record sees its empty state,
+    // never a borrowed one.
+    if (RENT_PERIODS.length === 0 || !TICKETS.some((t) => t.id === "t-1"))
       return (
       <div>
         <HubTabs d={d} hub="argent" active="/app/finance" />

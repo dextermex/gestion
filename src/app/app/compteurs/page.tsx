@@ -209,14 +209,18 @@ export default async function CompteursPage({
         </Panel>
         <Panel title={d.compteurs.istaTitle}>
           <p className="text-sm leading-relaxed text-ink-soft">{d.compteurs.istaBody}</p>
-          <div className="mt-3 rounded-xl border border-sand-200 bg-sand-50/60 p-3.5 text-xs text-ink-soft">
-            {d.compteurs.istaLast}{" "}
-            <span className="font-semibold text-ink">
-              {fmt(d.compteurs.istaLastDetail, { property: propertyById("p-beaulieu").name })}
-            </span>{" "}
-            ·{" "}
-            {d.compteurs.istaLastMeta}
-          </div>
+          {/* The worked import example names a sample building; it only
+              renders while that record exists (sample cabinets). */}
+          {PROPERTIES.some((p) => p.id === "p-beaulieu") && (
+            <div className="mt-3 rounded-xl border border-sand-200 bg-sand-50/60 p-3.5 text-xs text-ink-soft">
+              {d.compteurs.istaLast}{" "}
+              <span className="font-semibold text-ink">
+                {fmt(d.compteurs.istaLastDetail, { property: propertyById("p-beaulieu").name })}
+              </span>{" "}
+              ·{" "}
+              {d.compteurs.istaLastMeta}
+            </div>
+          )}
         </Panel>
       </div>
     </div>

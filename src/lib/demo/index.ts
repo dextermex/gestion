@@ -13,7 +13,9 @@ import { cookies } from "next/headers";
 import * as frData from "./data";
 import * as luData from "./data-lu";
 import { buildEmptyData, orgFromWorkspace } from "./data-empty";
+import { buildRealData } from "./data-real";
 import { getIdentity } from "@/lib/workspace";
+import { getSession } from "@/lib/supabase/server";
 
 /**
  * Which data a signed-in account is looking at. `real` is its own, and is the
@@ -72,9 +74,20 @@ export const getDemo = cache(async (): Promise<DemoData> => {
 
   const identity = await getIdentity();
   if (identity) {
-    return buildEmptyData(
-      orgFromWorkspace(identity.active ?? { id: "", name: "", kind: "manager" }),
-    );
+    const org = orgFromWorkspace(identity.active ?? { id: "", name: "", kind: "manager" });
+    if (identity.active) {
+      const session = await getSession();
+      if (session) {
+        try {
+          // The account's own rows, read under its own JWT: every page and
+          // engine now computes on real data through the same seam.
+          return await buildRealData(org, session.accessToken);
+        } catch (e) {
+          console.error("real dataset hydration failed, serving empty:", e);
+        }
+      }
+    }
+    return buildEmptyData(org);
   }
   // Signed out, only the tenant portal is reachable, and it has nothing of its
   // own to show: the French sample cabinet stands in.

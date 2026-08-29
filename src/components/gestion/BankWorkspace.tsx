@@ -55,11 +55,14 @@ export default function BankWorkspace({
   rows,
   review,
   todayISO,
+  sample,
 }: {
   d: Dict;
   rows: TxRow[];
   review: ReviewRow[];
   todayISO: string;
+  /** Demo-only affordances (the one-click auto-assign) render on sample data only. */
+  sample?: boolean;
 }) {
   const [view, setView] = useState<View>("all");
   const [q, setQ] = useState("");
@@ -164,9 +167,11 @@ export default function BankWorkspace({
             {d.common.resetFilters}
           </button>
         )}
-        <div className="ml-auto">
-          <DemoAction label={d.banque.autoAssign} doneMessage={d.banque.autoAssignDone} variant="secondary" />
-        </div>
+        {sample && (
+          <div className="ml-auto">
+            <DemoAction label={d.banque.autoAssign} doneMessage={d.banque.autoAssignDone} variant="secondary" />
+          </div>
+        )}
       </div>
 
       {/* The actionable suggestions live at the top of "all" and "review" */}

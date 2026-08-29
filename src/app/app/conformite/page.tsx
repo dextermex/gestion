@@ -71,28 +71,45 @@ export default async function ConformitePage() {
 
   // The calendar is GENERATED from data — every deadline is an engine output.
   const deadlines: Array<{ dl: Deadline; what?: string; done?: string | null }> = [
-    {
-      dl: licenceExpiryDeadline(ORG.name, ORG.piInsuranceExpiry, d.legal.deadlineKind.pi_insurance),
-      what: d.legal.deadlineKind.pi_insurance,
-    },
-    {
-      dl: licenceExpiryDeadline(ORG.name, ORG.autorisationExpiry, d.legal.deadlineKind.autorisation),
-      what: d.legal.deadlineKind.autorisation,
-    },
-    ...PROPERTIES.map((p) => ({ dl: cpeExpiryDeadline(p.name, p.cpeIssuedOn) })),
+    ...(ORG.piInsuranceExpiry
+      ? [
+          {
+            dl: licenceExpiryDeadline(ORG.name, ORG.piInsuranceExpiry, d.legal.deadlineKind.pi_insurance),
+            what: d.legal.deadlineKind.pi_insurance,
+          },
+        ]
+      : []),
+    ...(ORG.autorisationExpiry
+      ? [
+          {
+            dl: licenceExpiryDeadline(ORG.name, ORG.autorisationExpiry, d.legal.deadlineKind.autorisation),
+            what: d.legal.deadlineKind.autorisation,
+          },
+        ]
+      : []),
+    ...PROPERTIES.filter((p) => p.cpeIssuedOn).map((p) => ({ dl: cpeExpiryDeadline(p.name, p.cpeIssuedOn) })),
     ...PROPERTIES.filter((p) => p.syndicMandateStart).map((p) => ({
       dl: syndicMandateDeadline(`${p.name} · ${p.syndicName}`, p.syndicMandateStart!),
     })),
     ...PROPERTIES.filter((p) => p.nextAgDate).map((p) => ({
       dl: agConvocationDeadline(p.name, p.nextAgDate!, false),
     })),
-    {
-      dl: communeArrivalDeadline(
-        `${demo.contactById("c-weber").name} (${demo.unitById("u-b-2a").label})`,
-        "2026-08-18",
-      ),
-    },
-    { dl: defectWindowEnd(demo.propertyById("p-bertrange").name, "2026-12-01") },
+    // Two sample events (a tenant arrival, a defect window) exist only in
+    // the demonstration cabinets; a real account generates these from its
+    // own lease moves.
+    ...(demo.CONTACTS.some((c) => c.id === "c-weber") && demo.UNITS.some((u) => u.id === "u-b-2a")
+      ? [
+          {
+            dl: communeArrivalDeadline(
+              `${demo.contactById("c-weber").name} (${demo.unitById("u-b-2a").label})`,
+              "2026-08-18",
+            ),
+          },
+        ]
+      : []),
+    ...(demo.PROPERTIES.some((p) => p.id === "p-bertrange")
+      ? [{ dl: defectWindowEnd(demo.propertyById("p-bertrange").name, "2026-12-01") }]
+      : []),
   ];
 
   const sorted = deadlines
@@ -112,6 +129,7 @@ export default async function ConformitePage() {
 
       <div className="mx-auto max-w-3xl">
           <Panel title={d.conformite.calendarTitle}>
+            {sorted.length === 0 && <p className="text-sm text-ink-soft">{d.conformite.calendarEmpty}</p>}
             <ul className="divide-y divide-sand-100">
               {sorted.map(({ dl, what, status }) => (
                 <li key={`${dl.kind}-${dl.relatedLabel}-${dl.dueAt}`} className="flex items-start gap-3 py-3">

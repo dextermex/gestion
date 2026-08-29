@@ -3,7 +3,7 @@ import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, Panel } from "@/components/gestion/bits";
-import { getDemo } from "@/lib/demo";
+import { getDemo, isSampleData } from "@/lib/demo";
 import { euros, formatDate, formatNumber } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -15,7 +15,8 @@ import {
 
 export default async function IndexationPage() {
   const { locale, d } = await getI18n();
-  const { LEASES, TODAY, leaseTenantNames, leaseUnitLabel, unitById } = await getDemo();
+  const { LEASES, RENT_PERIODS, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const sample = await isSampleData();
 
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
@@ -44,15 +45,30 @@ export default async function IndexationPage() {
     return { l, capital, proposal };
   });
 
-  const commercial = LEASES.find((l) => l.id === "l-k01")!;
-  const commercialNow = applyCommercialIndexation({
-    currentMonthlyRent: commercial.rentCents,
-    baseIndexValue: commercial.indexationClause!.baseIndexValue,
-    minMonthsBetweenAdjustments: commercial.indexationClause!.minMonthsBetween,
-    lastAdjustmentDate: commercial.lastAdjustmentOn,
-    leaseStartDate: commercial.startDate,
-    proposedDate: TODAY,
-    latestIndex: { month: "2026-07", value: 934.1 },
+  // The commercial computation needs the latest IPC STATEC value. The demo
+  // pins one; no production feed exists yet, so the worked example renders
+  // on sample data only. A real commercial clause shows on its lease sheet.
+  const DEMO_LATEST_IPC = { month: "2026-07", value: 934.1 };
+  const commercial = sample
+    ? LEASES.find((l) => l.type === "commercial" && l.indexationClause)
+    : undefined;
+  const commercialNow = commercial
+    ? applyCommercialIndexation({
+        currentMonthlyRent: commercial.rentCents,
+        baseIndexValue: commercial.indexationClause!.baseIndexValue,
+        minMonthsBetweenAdjustments: commercial.indexationClause!.minMonthsBetween,
+        lastAdjustmentDate: commercial.lastAdjustmentOn,
+        leaseStartDate: commercial.startDate,
+        proposedDate: TODAY,
+        latestIndex: DEMO_LATEST_IPC,
+      })
+    : null;
+
+  // Standing order still on the previous rent: detected, never asserted.
+  const lagLease = LEASES.find((l) => {
+    if (!l.previousRentCents || l.previousRentCents >= l.rentCents) return false;
+    const rp = RENT_PERIODS.find((x) => x.leaseId === l.id && x.period === TODAY.slice(0, 7));
+    return rp ? rp.allocatedCents > 0 && rp.allocatedCents === l.previousRentCents + rp.chargesCents : false;
   });
 
   return (
@@ -116,13 +132,15 @@ export default async function IndexationPage() {
         <LegalNote>{d.indexation.residentialLegal}</LegalNote>
       </Panel>
 
-      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+      {(lagLease || commercialNow) && (
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+        {lagLease && (
         <Panel title={d.indexation.lagTitle}>
           <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
-            <p className="text-sm font-semibold text-sky-800">{fmt(d.indexation.lagCase, { unit: unitById("u-b-3b").label, tenant: leaseTenantNames(LEASES.find((l) => l.id === "l-3b")!)[0] })}</p>
+            <p className="text-sm font-semibold text-sky-800">{fmt(d.indexation.lagCase, { unit: leaseUnitLabel(lagLease), tenant: leaseTenantNames(lagLease)[0] ?? "" })}</p>
             <p className="mt-1 text-xs leading-relaxed text-sky-800">{d.indexation.lagBody}</p>
             <div className="mt-2.5 flex flex-wrap gap-2">
-              <DemoAction label={d.indexation.lagSend} doneMessage={d.indexation.lagSent} />
+              {sample && <DemoAction label={d.indexation.lagSend} doneMessage={d.indexation.lagSent} />}
               <Link
                 href="/app/banque"
                 className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700"
@@ -133,10 +151,14 @@ export default async function IndexationPage() {
           </div>
           <LegalNote>{d.indexation.lagLegal}</LegalNote>
         </Panel>
+        )}
 
+        {commercial && commercialNow && (
         <Panel title={d.indexation.commercialTitle}>
           <div className="rounded-xl border border-sand-200 p-4">
-            <p className="text-sm font-semibold text-ink">{leaseUnitLabel(commercial)} — Boulangerie Bock</p>
+            <p className="text-sm font-semibold text-ink">
+              {leaseUnitLabel(commercial)} · {leaseTenantNames(commercial)[0] ?? ""}
+            </p>
             <ul className="mt-2 space-y-1.5 text-sm">
               <li className="flex justify-between gap-3">
                 <span className="text-ink-soft">{d.indexation.commercialSeries}</span>
@@ -146,7 +168,7 @@ export default async function IndexationPage() {
                 <span className="text-ink-soft">{d.indexation.commercialIndex}</span>
                 <span className="font-semibold tabular-nums text-ink">
                   {formatNumber(commercial.indexationClause!.baseIndexValue, locale)} →{" "}
-                  {formatNumber(934.1, locale)}
+                  {formatNumber(DEMO_LATEST_IPC.value, locale)}
                 </span>
               </li>
               <li className="flex justify-between gap-3">
@@ -172,7 +194,9 @@ export default async function IndexationPage() {
           </div>
           <LegalNote>{d.indexation.commercialLegal}</LegalNote>
         </Panel>
+        )}
       </div>
+      )}
     </div>
   );
 }

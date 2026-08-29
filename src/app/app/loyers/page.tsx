@@ -4,13 +4,12 @@ import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { CountCard } from "@/components/gestion/filters";
-import { getDemo } from "@/lib/demo";
+import { getDemo, isSampleData } from "@/lib/demo";
 import { euros, eurosWhole, formatDate, formatMonth, rentStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
-
-const MONTHS = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+import { addMonths } from "@/domain/dates";
 
 export default async function LoyersPage({
   searchParams,
@@ -20,8 +19,13 @@ export default async function LoyersPage({
   const params = await searchParams;
   const { locale, d } = await getI18n();
   const { LEASES, RENT_PERIODS, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const sample = await isSampleData();
   const rentMeta = rentStatusMeta(d);
-  const month = MONTHS.includes(params.mois ?? "") ? params.mois! : "2026-08";
+  // The live month and its four neighbours, derived from today — the demo
+  // pins its date, a real account simply follows the calendar.
+  const liveMonth = TODAY.slice(0, 7);
+  const MONTHS = [-3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  const month = MONTHS.includes(params.mois ?? "") ? params.mois! : liveMonth;
   const view = params.vue === "impayes" || params.vue === "payes" ? params.vue : undefined;
 
   const monthRows = RENT_PERIODS.filter((rp) => rp.period === month);
@@ -57,7 +61,7 @@ export default async function LoyersPage({
 
   // Arrears ladder — the engine drives every relance, aligned with law.
   const arrearsCases = RENT_PERIODS.filter(
-    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= "2026-08",
+    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth,
   ).map((rp) => {
     const executedByPeriod: Record<string, Partial<Record<Exclude<ArrearsStage, "none">, string>>> = {
       "rp-l-2a-2026-07": { friendly: "2026-07-07", formal: "2026-07-14" },
@@ -234,7 +238,7 @@ export default async function LoyersPage({
                       {n}
                     </p>
                   ))}
-                  {assessment.nextStep?.stage === "mise_en_demeure" && (
+                  {assessment.nextStep?.stage === "mise_en_demeure" && sample && (
                     <div className="mt-2.5">
                       <DemoAction label={d.loyers.arrearsConfirmMed} doneMessage={d.loyers.arrearsConfirmed} />
                     </div>

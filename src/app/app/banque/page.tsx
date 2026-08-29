@@ -275,7 +275,7 @@ export default async function BanquePage({
         </div>
 
         {/* ---------------------------- transactions workspace ---------------------------- */}
-        <BankWorkspace d={d} rows={rows} review={review} todayISO={TODAY} />
+        <BankWorkspace d={d} rows={rows} review={review} todayISO={TODAY} sample={!real} />
       </div>
 
       {/* How the engine decides — reference material, folded by default so the

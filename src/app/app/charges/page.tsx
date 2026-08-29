@@ -11,9 +11,9 @@ export default async function ChargesPage() {
   const { locale, d } = await getI18n();
   const { LEASE_TANTIEMES, RENT_PERIODS, SYNDIC_DECOMPTE_2025, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
 
-  // A real account with nothing in it: say so rather than reach for a
-  // showcase record that no longer exists.
-  if (RENT_PERIODS.length === 0)
+  // The décompte walk-through recharges the sample syndic statement; a
+  // real account without an imported décompte sees its empty state.
+  if (RENT_PERIODS.length === 0 || SYNDIC_DECOMPTE_2025.lines.length === 0)
     return (
       <div>
         <HubTabs d={d} hub="argent" active="/app/charges" />

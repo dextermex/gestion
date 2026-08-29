@@ -12,9 +12,10 @@ export default async function AmlPage() {
   const { d } = await getI18n();
   const { CONTACTS, ORG, TODAY } = await getDemo();
 
-  // A real account with nothing in it: say so rather than reach for a
-  // showcase record that no longer exists.
-  if (CONTACTS.length === 0)
+  // The screen walks the two-speed CDD around the sample SCI; a real
+  // account without that record sees its empty state until the production
+  // AML backend (aml_parties, screenings) is wired.
+  if (!CONTACTS.some((c) => c.id === "c-sci-bealieu"))
     return (
       <div>
         <HubTabs d={d} hub="reglages" active="/app/aml" workspaceKind={ORG.kind} />

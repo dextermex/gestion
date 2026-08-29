@@ -11,11 +11,11 @@ import { computeSettlement } from "@/domain/deposits/settlement";
 
 export default async function GarantiesPage() {
   const { locale, d } = await getI18n();
-  const { DEPOSITS, ENDED_LEASES, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { DEPOSITS, ENDED_LEASES, LEASES, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
 
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
-  if (ENDED_LEASES.length === 0)
+  if (DEPOSITS.length === 0)
     return (
       <div>
         <HubTabs d={d} hub="locations" active="/app/garanties" />
@@ -24,34 +24,48 @@ export default async function GarantiesPage() {
     );
   const formLabels = depositFormLabels(d);
   const statusMeta = depositStatusMeta(d);
-  const showcase = DEPOSITS.find((x) => x.id === "dep-gare")!;
-  const endedLease = ENDED_LEASES[0];
 
-  const settlementInput = {
-    depositAmount: showcase.amountCents,
-    depositForm: showcase.form,
-    monthlyRent: endedLease.rentCents,
-    keyHandoverDate: showcase.keyHandoverOn!,
-    decompteIssuedAt: showcase.decompteIssuedOn ?? null,
-    entryEdlExists: showcase.entryEdlExists,
-    deductions: showcase.deductions.map((x) => ({
-      id: x.id,
-      kind: x.kind,
-      label: x.label,
-      amount: x.amountCents,
-      justificationDocRef: x.justificationDocRef,
-      justifiedAt: x.justifiedAt,
-      edlItemRef: x.edlItemRef,
-    })),
-    miseEnDemeureArDate: showcase.miseEnDemeureArOn ?? null,
-    releasedFirstTranche: showcase.releasedFirstTrancheCents,
-    releasedBalance: showcase.releasedBalanceCents,
-    asOf: TODAY,
+  // Lease facts for a deposit, whether its lease is still live or ended.
+  const leaseFacts = (leaseId: string): { label: string; tenant: string; rentCents: number; live: boolean } => {
+    const live = LEASES.find((l) => l.id === leaseId);
+    if (live) {
+      return { label: leaseUnitLabel(live), tenant: leaseTenantNames(live).join(", "), rentCents: live.rentCents, live: true };
+    }
+    const ended = ENDED_LEASES.find((e) => e.id === leaseId);
+    return { label: ended?.label ?? "", tenant: ended?.tenant ?? "", rentCents: ended?.rentCents ?? 0, live: false };
   };
-  const settlement = computeSettlement(settlementInput);
-  const warnings = settlementNotes(d, locale, settlementInput, settlement);
 
-  const held = DEPOSITS.filter((x) => x.id !== "dep-gare");
+  // The restitution in progress, wherever the data says there is one.
+  const showcase = DEPOSITS.find((x) => x.status !== "held" && x.status !== "released") ?? null;
+  const showcaseFacts = showcase ? leaseFacts(showcase.leaseId) : null;
+
+  const settlementInput = showcase
+    ? {
+        depositAmount: showcase.amountCents,
+        depositForm: showcase.form,
+        monthlyRent: showcaseFacts!.rentCents,
+        keyHandoverDate: showcase.keyHandoverOn ?? TODAY,
+        decompteIssuedAt: showcase.decompteIssuedOn ?? null,
+        entryEdlExists: showcase.entryEdlExists,
+        deductions: showcase.deductions.map((x) => ({
+          id: x.id,
+          kind: x.kind,
+          label: x.label,
+          amount: x.amountCents,
+          justificationDocRef: x.justificationDocRef,
+          justifiedAt: x.justifiedAt,
+          edlItemRef: x.edlItemRef,
+        })),
+        miseEnDemeureArDate: showcase.miseEnDemeureArOn ?? null,
+        releasedFirstTranche: showcase.releasedFirstTrancheCents,
+        releasedBalance: showcase.releasedBalanceCents,
+        asOf: TODAY,
+      }
+    : null;
+  const settlement = settlementInput ? computeSettlement(settlementInput) : null;
+  const warnings = settlementInput && settlement ? settlementNotes(d, locale, settlementInput, settlement) : [];
+
+  const held = DEPOSITS.filter((x) => x.id !== showcase?.id);
 
   const LINE_STATUS: Record<string, { label: string; color: string }> = {
     justified: { label: d.garanties.lineJustified, color: "bg-emerald-100 text-emerald-800" },
@@ -71,13 +85,14 @@ export default async function GarantiesPage() {
       <PageHeader title={d.garanties.title} subtitle={d.garanties.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">
+        {showcase && showcaseFacts && settlement && (
         <div className="lg:col-span-3">
-          <Panel title={fmt(d.garanties.settlementTitle, { label: endedLease.label })}>
+          <Panel title={fmt(d.garanties.settlementTitle, { label: showcaseFacts.label })}>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-orange-100 text-orange-800">{d.status.deposit.release_pending}</Badge>
+              <MetaBadge meta={statusMeta[showcase.status]} />
               <Badge className="bg-sand-100 text-ink-soft">{formLabels[showcase.form]}</Badge>
               <span className="text-xs text-ink-soft">
-                {endedLease.tenant} ·{" "}
+                {showcaseFacts.tenant} ·{" "}
                 {fmt(d.garanties.keysReturned, { date: formatDate(showcase.keyHandoverOn ?? null, locale) })}
               </span>
             </div>
@@ -182,23 +197,28 @@ export default async function GarantiesPage() {
             <LegalNote>{d.garanties.legal}</LegalNote>
           </Panel>
         </div>
+        )}
 
-        <div className="lg:col-span-2">
+        <div className={showcase ? "lg:col-span-2" : "lg:col-span-5"}>
           <Panel title={d.garanties.heldTitle}>
             <ul className="divide-y divide-sand-100">
               {held.map((dep) => {
-                const l = leaseById(dep.leaseId);
+                const facts = leaseFacts(dep.leaseId);
                 return (
                   <li key={dep.id} className="flex items-center gap-3 py-3">
                     <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/app/baux/${l.id}`}
-                        className="block truncate text-sm font-semibold text-ink hover:text-brand-700"
-                      >
-                        {leaseUnitLabel(l)}
-                      </Link>
+                      {facts.live ? (
+                        <Link
+                          href={`/app/baux/${dep.leaseId}`}
+                          className="block truncate text-sm font-semibold text-ink hover:text-brand-700"
+                        >
+                          {facts.label}
+                        </Link>
+                      ) : (
+                        <p className="block truncate text-sm font-semibold text-ink">{facts.label}</p>
+                      )}
                       <p className="truncate text-xs text-ink-soft">
-                        {leaseTenantNames(l).join(", ")} · {formLabels[dep.form]}
+                        {facts.tenant} · {formLabels[dep.form]}
                       </p>
                     </div>
                     <span className="tabular-nums text-sm font-semibold text-ink">
