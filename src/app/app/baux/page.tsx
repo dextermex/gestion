@@ -43,7 +43,7 @@ export default async function BauxPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="locations" active="/app/baux" />
+      <HubTabs d={d} hub="patrimoine" active="/app/baux" />
       <PageHeader title={d.baux.title} subtitle={d.baux.subtitle} />
 
       {/* Status filters as compact pills (the banking-page grammar); the

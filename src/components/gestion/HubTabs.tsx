@@ -2,14 +2,21 @@ import Link from "next/link";
 import type { Dict } from "@/lib/i18n/fr";
 
 /**
- * The hub map — the single description of which pages share a room.
+ * The hub map — the single description of which pages share a section.
  *
- * Six destinations plus Réglages replace the old eighteen-entry sidebar: the
- * sidebar names the room, this row names the walls. URLs never changed, so
- * every old bookmark still lands, it just lands inside a hub.
+ * The sidebar names the main sections and nothing else; this row names the
+ * sub-sections inside each one. URLs never changed, so every old bookmark
+ * still lands, it just lands inside its section.
  */
 
-export type HubId = "biens" | "locations" | "argent" | "documents" | "reglages";
+export type HubId =
+  | "patrimoine"
+  | "relations"
+  | "finances"
+  | "locative"
+  | "documents"
+  | "conformite"
+  | "reglages";
 
 export interface HubTab {
   href: string;
@@ -21,30 +28,35 @@ export function hubTabs(d: Dict, workspaceKind?: string): Record<HubId, { label:
   // simply does not exist — same product, two densities, zero configuration.
   const cabinet = workspaceKind !== "owner";
   return {
-    biens: {
-      label: d.nav.properties,
+    patrimoine: {
+      label: d.nav.patrimoine,
       tabs: [
         { href: "/app/biens", label: d.hubs.portfolio },
-        { href: "/app/compteurs", label: d.hubs.meters },
-      ],
-    },
-    locations: {
-      label: d.nav.locations,
-      tabs: [
         { href: "/app/baux", label: d.hubs.leases },
-        { href: "/app/garanties", label: d.hubs.deposits },
-        { href: "/app/indexation", label: d.hubs.indexation },
-        { href: "/app/contacts", label: d.hubs.people },
+        { href: "/app/compteurs", label: d.hubs.meters },
+        { href: "/app/charges", label: d.hubs.statements },
       ],
     },
-    argent: {
-      label: d.nav.money,
+    relations: {
+      label: d.nav.relations,
+      tabs: [
+        { href: "/app/contacts", label: d.hubs.people },
+        { href: "/app/messages", label: d.hubs.messages },
+      ],
+    },
+    finances: {
+      label: d.nav.finances,
       tabs: [
         { href: "/app/loyers", label: d.hubs.collections },
         { href: "/app/banque", label: d.hubs.banking },
         { href: "/app/finance", label: d.hubs.expenses },
-        { href: "/app/charges", label: d.hubs.statements },
-        { href: "/app/fiscalite", label: d.hubs.reports },
+      ],
+    },
+    locative: {
+      label: d.nav.locative,
+      tabs: [
+        { href: "/app/garanties", label: d.hubs.deposits },
+        { href: "/app/indexation", label: d.hubs.indexation },
       ],
     },
     documents: {
@@ -54,19 +66,24 @@ export function hubTabs(d: Dict, workspaceKind?: string): Record<HubId, { label:
         { href: "/app/contrats", label: d.hubs.contracts },
       ],
     },
+    conformite: {
+      label: d.nav.compliance,
+      tabs: [
+        { href: "/app/conformite", label: d.hubs.calendar },
+        ...(cabinet ? [{ href: "/app/aml", label: d.hubs.aml }] : []),
+        { href: "/app/fiscalite", label: d.hubs.reports },
+      ],
+    },
     reglages: {
       label: d.nav.settings,
-      tabs: [
-        { href: "/app/reglages", label: d.hubs.general },
-        ...(cabinet ? [{ href: "/app/aml", label: d.hubs.aml }] : []),
-      ],
+      tabs: [{ href: "/app/reglages", label: d.hubs.general }],
     },
   };
 }
 
-/** The room's tab row: underline tabs in the house style, scrollable on
+/** The section's tab row: underline tabs in the house style, scrollable on
  *  small screens. `active` is the page's own path — detail pages inside a
- *  hub (a lease, a property) don't render the row at all. */
+ *  section (a lease, a property) don't render the row at all. */
 export default function HubTabs({
   d,
   hub,
@@ -79,7 +96,7 @@ export default function HubTabs({
   workspaceKind?: string;
 }) {
   const { label, tabs } = hubTabs(d, workspaceKind)[hub];
-  // A room with a single wall needs no tab row.
+  // A section with a single page needs no tab row.
   if (tabs.length < 2) return null;
   return (
     <nav aria-label={label} className="no-scrollbar mb-5 flex gap-0.5 overflow-x-auto border-b border-sand-200">

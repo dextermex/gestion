@@ -30,15 +30,15 @@ export const de: Dict = {
   },
 
   nav: {
-    home: "Heute",
-    properties: "Immobilien",
-    locations: "Vermietungen",
-    money: "Finanzen",
+    home: "Übersicht",
+    patrimoine: "Immobilien",
+    relations: "Beziehungen",
+    finances: "Finanzen",
+    locative: "Mietverwaltung",
     documents: "Dokumente",
-    messages: "Nachrichten",
+    compliance: "Compliance",
     settings: "Einstellungen",
     workflows: "Workflows",
-    compliance: "Compliance",
     ecosystem: "Morada-Ökosystem",
   },
 
@@ -48,16 +48,18 @@ export const de: Dict = {
     leases: "Mietverhältnisse",
     deposits: "Kautionen",
     indexation: "Indexierung",
-    people: "Personen",
-    collections: "Mieteingänge",
+    people: "Kontakte",
+    collections: "Mieten & Zahlungen",
     banking: "Bank",
-    expenses: "Ausgaben",
-    statements: "Décomptes",
-    reports: "Berichte",
+    expenses: "Finanzen",
+    statements: "Nebenkosten",
+    reports: "Steuern",
     library: "Dokumente",
     contracts: "Mietverträge",
     general: "Allgemein",
     aml: "AML / KYC",
+    messages: "Nachrichten",
+    calendar: "Kalender",
   },
 
   shell: {
@@ -375,7 +377,7 @@ export const de: Dict = {
   },
 
   loyers: {
-    title: "Mieteingänge",
+    title: "Mieten & Zahlungen",
     subtitle: "Die Mieten des Monats: jede Fälligkeit mit Status und Saldo, abgeleitet aus dem Allokationsregister.",
     expected: "Erwartet",
     collected: "Eingezogen",
@@ -723,7 +725,7 @@ export const de: Dict = {
   },
 
   charges: {
-    title: "Décomptes",
+    title: "Nebenkosten",
     subtitle: "Nur tatsächlich angefallene, durch Rechnung belegte Ausgaben zum Nutzen des Mieters sind umlegbar. Die gesetzlichen Sperren sind nicht übersteuerbar.",
     decompteTitle: "Abrechnung 2025 · {unit} (Verwalter-Import)",
     decompteMeta: "In der Versammlung genehmigte WEG-Abrechnung (Rechtfertigungsvermutung) · Einheit {t}/{tt} Tausendstel · Mieter: {tenant}",
@@ -754,7 +756,7 @@ export const de: Dict = {
   },
 
   contacts: {
-    title: "Personen",
+    title: "Kontakte",
     subtitle: "Eine Person, mehrere Rollen: Die Eigentümerin von Einheit 3 kann Mieterin von Einheit 7 sein. Rollen sind datierte Verknüpfungen auf einer einzigen Karte.",
     facetAll: "Alle",
     facetOwners: "Eigentümer",
@@ -826,7 +828,7 @@ export const de: Dict = {
   },
 
   finance: {
-    title: "Ausgaben",
+    title: "Finanzen",
     subtitle: "Verwaltungsabrechnungen, Honorare und Auszahlungen. Überweisungen gehen als pain.001-Dateien, die der Verwalter bei seiner eigenen Bank einreicht.",
     statementTitle: "Verwaltungsabrechnung · Juli 2026 · Mandat {sci}",
     colEntry: "Buchung",
@@ -895,7 +897,7 @@ export const de: Dict = {
   },
 
   fiscalite: {
-    title: "Berichte",
+    title: "Steuern",
     subtitle: "Das Jahresendpaket, pro Objekt und Eigentümer: der Datensatz für Modell 190/210, mit Abschreibung auf Ebene des Steuerpflichtigen.",
     lambertTitle: "Abschreibung 2026 · {owner} (Steuerpflichtige)",
     colProperty: "Immobilie",

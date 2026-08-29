@@ -35,15 +35,15 @@ export const lu: Dict = {
   },
 
   nav: {
-    home: "Haut",
-    properties: "Immobilien",
-    locations: "Locatiounen",
-    money: "Suen",
+    home: "Iwwerbléck",
+    patrimoine: "Patrimoine",
+    relations: "Relatiounen",
+    finances: "Finanzen",
+    locative: "Gestioun locative",
     documents: "Dokumenter",
-    messages: "Messagen",
+    compliance: "Konformitéit",
     settings: "Astellungen",
     workflows: "Workflowen",
-    compliance: "Konformitéit",
     ecosystem: "Morada-Ökosystem",
   },
 
@@ -53,16 +53,18 @@ export const lu: Dict = {
     leases: "Bailen",
     deposits: "Garantien",
     indexation: "Indexéierung",
-    people: "Persounen",
-    collections: "Loyeren",
+    people: "Kontakter",
+    collections: "Loyeren & Paiementen",
     banking: "Bank",
-    expenses: "Ausgaben",
-    statements: "Décomptes",
-    reports: "Rapporten",
+    expenses: "Finanzen",
+    statements: "Chargen",
+    reports: "Steieren",
     library: "Dokumenter",
     contracts: "Loyerskontrakter",
     general: "Allgemeng",
     aml: "AML / KYC",
+    messages: "Messagen",
+    calendar: "Kalenner",
   },
 
   shell: {
@@ -380,7 +382,7 @@ export const lu: Dict = {
   },
 
   loyers: {
-    title: "Loyeren",
+    title: "Loyeren & Paiementen",
     subtitle: "D'Loyere vum Mount: all Echeance mat Status a Solde, ofgeleet aus dem Allocatiouns-Register.",
     expected: "Erwaart",
     collected: "Agezunn",
@@ -728,7 +730,7 @@ export const lu: Dict = {
   },
 
   charges: {
-    title: "Décomptes",
+    title: "Chargen",
     subtitle: "Nëmmen tatsächlech entstanen, mat Rechnung beluechten Depensen am Notze vum Locataire si recuperabel. Déi legal Späre sinn net z'iwwersteieren.",
     decompteTitle: "Décompte 2025 · {unit} (Syndic-Import)",
     decompteMeta: "An der AG approuvéierten Copropriétéits-Décompte (Justifikatiounsvermutung) · Lot {t}/{tt} Dausendstel · Locataire: {tenant}",
@@ -759,7 +761,7 @@ export const lu: Dict = {
   },
 
   contacts: {
-    title: "Persounen",
+    title: "Kontakter",
     subtitle: "Eng Persoun, méi Rollen: D'Proprietärin vum Lot 3 kann d'Locatairin vum Lot 7 sinn. Rolle sinn datéiert Verbindungen op enger eenzeger Fiche.",
     facetAll: "All",
     facetOwners: "Proprietären",
@@ -831,7 +833,7 @@ export const lu: Dict = {
   },
 
   finance: {
-    title: "Ausgaben",
+    title: "Finanzen",
     subtitle: "Gérance-Décomptë, Honorairen a Reversementer. D'Virementer gi als pain.001-Fichieren eraus, déi de Gestionnaire bei senger eegener Bank eraluet.",
     statementTitle: "Gérance-Décompte · Juli 2026 · Mandat {sci}",
     colEntry: "Ecriture",
@@ -900,7 +902,7 @@ export const lu: Dict = {
   },
 
   fiscalite: {
-    title: "Rapporten",
+    title: "Steieren",
     subtitle: "De Joresschluss-Pack, pro Bien a pro Proprietär: den Dateset fir de Modell 190/210, mam Amortissement um Niveau vum Steierflichtegen arbitréiert.",
     lambertTitle: "Amortissement 2026 · {owner} (Steierflichteg)",
     colProperty: "Gebai",

@@ -34,7 +34,7 @@ export default async function ContactsPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="locations" active="/app/contacts" />
+      <HubTabs d={d} hub="relations" active="/app/contacts" />
       <PageHeader title={d.contacts.title} subtitle={d.contacts.subtitle} />
 
       <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">

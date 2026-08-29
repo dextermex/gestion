@@ -20,7 +20,7 @@ export default async function FiscalitePage() {
   if (LAMBERT_PORTFOLIO.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="argent" active="/app/fiscalite" />
+        <HubTabs d={d} hub="conformite" active="/app/fiscalite" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.reports })} body={d.common.emptyBody} />
       </div>
     );
@@ -80,7 +80,7 @@ export default async function FiscalitePage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="argent" active="/app/fiscalite" />
+      <HubTabs d={d} hub="conformite" active="/app/fiscalite" />
       <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

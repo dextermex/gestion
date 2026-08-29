@@ -1,4 +1,5 @@
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
+import HubTabs from "@/components/gestion/HubTabs";
 import { MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { deadlineStatusMeta, formatDate, formatNumber } from "@/lib/types";
@@ -65,7 +66,12 @@ export default async function ConformitePage() {
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (demo.PROPERTIES.length === 0)
-    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.compliance })} body={d.common.emptyBody} />;
+    return (
+      <div>
+        <HubTabs d={d} hub="conformite" active="/app/conformite" workspaceKind={demo.ORG.kind} />
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.compliance })} body={d.common.emptyBody} />
+      </div>
+    );
   const { ORG, PROPERTIES, TODAY, UNITS } = demo;
   const statusMeta = deadlineStatusMeta(d);
 
@@ -125,6 +131,7 @@ export default async function ConformitePage() {
   // this screen is the full calendar Aujourd'hui opens, nothing else.
   return (
     <div>
+      <HubTabs d={d} hub="conformite" active="/app/conformite" workspaceKind={ORG.kind} />
       <PageHeader title={d.conformite.title} subtitle={d.conformite.subtitle} />
 
       <div className="mx-auto max-w-3xl">

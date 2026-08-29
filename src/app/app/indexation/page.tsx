@@ -23,7 +23,7 @@ export default async function IndexationPage() {
   if (LEASES.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="locations" active="/app/indexation" />
+        <HubTabs d={d} hub="locative" active="/app/indexation" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.indexation })} body={d.common.emptyBody} />
       </div>
     );
@@ -73,7 +73,7 @@ export default async function IndexationPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="locations" active="/app/indexation" />
+      <HubTabs d={d} hub="locative" active="/app/indexation" />
       <PageHeader title={d.indexation.title} subtitle={d.indexation.subtitle} />
 
       <Panel title={d.indexation.residentialTitle}>

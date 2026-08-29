@@ -18,7 +18,7 @@ export default async function AmlPage() {
   if (!CONTACTS.some((c) => c.id === "c-sci-bealieu"))
     return (
       <div>
-        <HubTabs d={d} hub="reglages" active="/app/aml" workspaceKind={ORG.kind} />
+        <HubTabs d={d} hub="conformite" active="/app/aml" workspaceKind={ORG.kind} />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.aml })} body={d.common.emptyBody} />
       </div>
     );
@@ -64,7 +64,7 @@ export default async function AmlPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="reglages" active="/app/aml" workspaceKind={ORG.kind} />
+      <HubTabs d={d} hub="conformite" active="/app/aml" workspaceKind={ORG.kind} />
       <PageHeader title={d.aml.title} subtitle={d.aml.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

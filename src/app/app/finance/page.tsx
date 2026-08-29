@@ -21,7 +21,7 @@ export default async function FinancePage() {
     if (RENT_PERIODS.length === 0 || !TICKETS.some((t) => t.id === "t-1"))
       return (
       <div>
-        <HubTabs d={d} hub="argent" active="/app/finance" />
+        <HubTabs d={d} hub="finances" active="/app/finance" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.expenses })} body={d.common.emptyBody} />
       </div>
     );
@@ -51,7 +51,7 @@ export default async function FinancePage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="argent" active="/app/finance" />
+      <HubTabs d={d} hub="finances" active="/app/finance" />
       <PageHeader
         title={d.finance.title}
         subtitle={d.finance.subtitle}

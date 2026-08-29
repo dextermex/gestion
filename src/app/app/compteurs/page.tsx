@@ -31,7 +31,7 @@ export default async function CompteursPage({
   if (METERS.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="biens" active="/app/compteurs" />
+        <HubTabs d={d} hub="patrimoine" active="/app/compteurs" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.meters })} body={d.common.emptyBody} />
       </div>
     );
@@ -70,7 +70,7 @@ export default async function CompteursPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="biens" active="/app/compteurs" />
+      <HubTabs d={d} hub="patrimoine" active="/app/compteurs" />
       <PageHeader
         title={d.compteurs.title}
         subtitle={d.compteurs.subtitle}

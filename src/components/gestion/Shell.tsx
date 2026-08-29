@@ -39,43 +39,60 @@ export interface ShellData {
 }
 
 /* --------------------------------- nav model --------------------------------
-   Six destinations, no group headers: one door per mental object (home,
-   properties, tenancies, money, papers, inbox) — the hub tab rows inside
-   each page name the walls. Réglages sits apart, pinned above the dataset
-   switch. `match` lists the path prefixes that light a destination up, so
-   /app/banque highlights Argent and /app/baux/b-12 highlights Locations. */
+   The sidebar names the main sections and never a sub-section: those live
+   as tab rows inside their section's pages, so the rail stays identical on
+   every screen. Réglages sits apart, pinned above the dataset switch.
+   `match` lists the path prefixes that light a section up, so /app/banque
+   highlights Finances and /app/baux/b-12 highlights Patrimoine. */
 
 type NavItem = { href: string; label: string; icon: IconName; badge?: number; match?: string[] };
 
 function destinations(d: Dict, badges: { review: number; unread: number }): NavItem[] {
   return [
     { href: "/app", label: d.nav.home, icon: "dashboard" },
-    { href: "/app/biens", label: d.nav.properties, icon: "properties", match: ["/app/biens", "/app/compteurs"] },
     {
-      href: "/app/baux",
-      label: d.nav.locations,
-      icon: "key",
-      match: ["/app/baux", "/app/garanties", "/app/indexation", "/app/contacts"],
+      href: "/app/biens",
+      label: d.nav.patrimoine,
+      icon: "properties",
+      match: ["/app/biens", "/app/baux", "/app/compteurs", "/app/charges"],
+    },
+    {
+      href: "/app/contacts",
+      label: d.nav.relations,
+      icon: "contacts",
+      badge: badges.unread || undefined,
+      match: ["/app/contacts", "/app/messages"],
     },
     {
       href: "/app/loyers",
-      label: d.nav.money,
+      label: d.nav.finances,
       icon: "euro",
       badge: badges.review || undefined,
-      match: ["/app/loyers", "/app/banque", "/app/finance", "/app/charges", "/app/fiscalite"],
+      match: ["/app/loyers", "/app/banque", "/app/finance"],
+    },
+    {
+      href: "/app/garanties",
+      label: d.nav.locative,
+      icon: "key",
+      match: ["/app/garanties", "/app/indexation"],
     },
     { href: "/app/documents", label: d.nav.documents, icon: "documents", match: ["/app/documents", "/app/contrats"] },
-    { href: "/app/messages", label: d.nav.messages, icon: "messages", badge: badges.unread || undefined },
+    {
+      href: "/app/conformite",
+      label: d.nav.compliance,
+      icon: "shield-check",
+      match: ["/app/conformite", "/app/aml", "/app/fiscalite"],
+    },
   ];
 }
 
 function settingsItem(d: Dict): NavItem {
-  return { href: "/app/reglages", label: d.nav.settings, icon: "settings", match: ["/app/reglages", "/app/aml"] };
+  return { href: "/app/reglages", label: d.nav.settings, icon: "settings", match: ["/app/reglages"] };
 }
 
-/** Everything ⌘K can route to: the destinations, every hub tab that is not
- *  a destination's own landing page, and the two screens that now open from
- *  Aujourd'hui (Workflows, Conformité). Nothing became unreachable. */
+/** Everything ⌘K can route to: the sections, every sub-section tab that is
+ *  not a section's own landing page, and Workflows (which opens from the
+ *  home screen). Nothing became unreachable. */
 function navigable(d: Dict, nav: NavItem[], workspaceKind: string): Array<{ href: string; label: string }> {
   const seen = new Set(nav.map((i) => i.href));
   const extras: Array<{ href: string; label: string }> = [];
@@ -88,7 +105,6 @@ function navigable(d: Dict, nav: NavItem[], workspaceKind: string): Array<{ href
     }
   }
   extras.push({ href: "/app/workflows", label: d.nav.workflows });
-  extras.push({ href: "/app/conformite", label: d.nav.compliance });
   return [...nav.map((i) => ({ href: i.href, label: i.label })), ...extras];
 }
 

@@ -30,15 +30,15 @@ export const en: Dict = {
   },
 
   nav: {
-    home: "Today",
-    properties: "Properties",
-    locations: "Tenancies",
-    money: "Money",
+    home: "Home",
+    patrimoine: "Portfolio",
+    relations: "Relations",
+    finances: "Finances",
+    locative: "Rental management",
     documents: "Documents",
-    messages: "Messaging",
+    compliance: "Compliance",
     settings: "Settings",
     workflows: "Workflows",
-    compliance: "Compliance",
     ecosystem: "Morada ecosystem",
   },
 
@@ -48,16 +48,18 @@ export const en: Dict = {
     leases: "Tenancies",
     deposits: "Deposits",
     indexation: "Indexation",
-    people: "People",
-    collections: "Rent",
+    people: "Contacts",
+    collections: "Rent & payments",
     banking: "Banking",
-    expenses: "Expenses",
-    statements: "Décomptes",
-    reports: "Reports",
+    expenses: "Finance",
+    statements: "Operating costs",
+    reports: "Tax",
     library: "Documents",
     contracts: "Rental contracts",
     general: "General",
     aml: "AML / KYC",
+    messages: "Messaging",
+    calendar: "Calendar",
   },
 
   shell: {
@@ -375,7 +377,7 @@ export const en: Dict = {
   },
 
   loyers: {
-    title: "Rent",
+    title: "Rent & payments",
     subtitle: "The month's rents: every period, its status and balance, derived from the allocation ledger.",
     expected: "Expected",
     collected: "Collected",
@@ -723,7 +725,7 @@ export const en: Dict = {
   },
 
   charges: {
-    title: "Décomptes",
+    title: "Operating costs",
     subtitle: "Only expenses actually incurred, invoice-evidenced and for the tenant's benefit are recoverable. The legal blocks cannot be overridden.",
     decompteTitle: "2025 statement · {unit} (syndic import)",
     decompteMeta: "Co-ownership statement approved at the general meeting (presumption of justification) · lot {t}/{tt} thousandths · tenant: {tenant}",
@@ -754,7 +756,7 @@ export const en: Dict = {
   },
 
   contacts: {
-    title: "People",
+    title: "Contacts",
     subtitle: "One person, several roles: the owner of unit 3 can be the tenant of unit 7. Roles are dated links on a single record.",
     facetAll: "All",
     facetOwners: "Owners",
@@ -826,7 +828,7 @@ export const en: Dict = {
   },
 
   finance: {
-    title: "Expenses",
+    title: "Finance",
     subtitle: "Management statements, fees and payouts. Transfers leave as pain.001 files the manager uploads to their own bank.",
     statementTitle: "Management statement · July 2026 · {sci} mandate",
     colEntry: "Entry",
@@ -895,7 +897,7 @@ export const en: Dict = {
   },
 
   fiscalite: {
-    title: "Reports",
+    title: "Tax",
     subtitle: "The year-end pack, per property and per owner: the model 190/210 dataset, with depreciation arbitrated at taxpayer level.",
     lambertTitle: "2026 depreciation · {owner} (taxpayer)",
     colProperty: "Property",

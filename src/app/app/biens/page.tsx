@@ -159,7 +159,7 @@ export default async function BiensPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="biens" active="/app/biens" />
+      <HubTabs d={d} hub="patrimoine" active="/app/biens" />
       <PageHeader
         title={d.biens.title}
         subtitle={d.biens.subtitle}

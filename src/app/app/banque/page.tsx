@@ -160,7 +160,7 @@ export default async function BanquePage({
 
   return (
     <div>
-      <HubTabs d={d} hub="argent" active="/app/banque" />
+      <HubTabs d={d} hub="finances" active="/app/banque" />
       <PageHeader
         title={d.banque.title}
         subtitle={d.banque.subtitle}

@@ -94,7 +94,7 @@ export default async function LoyersPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="argent" active="/app/loyers" />
+      <HubTabs d={d} hub="finances" active="/app/loyers" />
       <PageHeader title={d.loyers.title} subtitle={d.loyers.subtitle} />
 
       <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">
