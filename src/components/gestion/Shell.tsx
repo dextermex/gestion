@@ -8,7 +8,6 @@ import { useDismiss } from "@/lib/useDismiss";
 import { Button, Field, InlineError, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
-import { hubTabs } from "./HubTabs";
 import GestionLogo from "./GestionLogo";
 import ScrollHeader from "./ScrollHeader";
 import GettingStarted from "./GettingStarted";
@@ -39,73 +38,117 @@ export interface ShellData {
 }
 
 /* --------------------------------- nav model --------------------------------
-   The sidebar names the main sections and never a sub-section: those live
-   as tab rows inside their section's pages, so the rail stays identical on
-   every screen. Réglages sits apart, pinned above the dataset switch.
-   `match` lists the path prefixes that light a section up, so /app/banque
+   The sidebar names the main sections; each one folds its sub-sections
+   directly underneath, behind a small arrow. By default only the sections
+   show — expanding is a click, and the rail stays identical on every
+   screen. A section lights up for every path inside it, so /app/banque
    highlights Finances and /app/baux/b-12 highlights Patrimoine. */
 
-type NavItem = { href: string; label: string; icon: IconName; badge?: number; match?: string[] };
+type NavChild = { href: string; label: string; badge?: number };
+type NavItem = { href: string; label: string; icon: IconName; badge?: number; children?: NavChild[] };
 
-function destinations(d: Dict, badges: { review: number; unread: number }): NavItem[] {
+function destinations(d: Dict, badges: { review: number; unread: number }, workspaceKind: string): NavItem[] {
+  // AML/KYC is a cabinet obligation: on an owner-kind workspace the entry
+  // simply does not exist — same product, two densities, zero configuration.
+  const cabinet = workspaceKind !== "owner";
   return [
     { href: "/app", label: d.nav.home, icon: "dashboard" },
     {
       href: "/app/biens",
       label: d.nav.patrimoine,
       icon: "properties",
-      match: ["/app/biens", "/app/baux", "/app/compteurs", "/app/charges"],
+      children: [
+        { href: "/app/biens", label: d.hubs.portfolio },
+        { href: "/app/baux", label: d.hubs.leases },
+        { href: "/app/compteurs", label: d.hubs.meters },
+        { href: "/app/charges", label: d.hubs.statements },
+      ],
     },
     {
       href: "/app/contacts",
       label: d.nav.relations,
       icon: "contacts",
       badge: badges.unread || undefined,
-      match: ["/app/contacts", "/app/messages"],
+      children: [
+        { href: "/app/contacts", label: d.hubs.people },
+        { href: "/app/messages", label: d.hubs.messages, badge: badges.unread || undefined },
+        { href: "/app/interventions", label: d.hubs.interventions },
+      ],
     },
     {
       href: "/app/loyers",
       label: d.nav.finances,
       icon: "euro",
       badge: badges.review || undefined,
-      match: ["/app/loyers", "/app/banque", "/app/finance"],
+      children: [
+        { href: "/app/loyers", label: d.hubs.collections },
+        { href: "/app/finance", label: d.hubs.expenses },
+        { href: "/app/banque", label: d.hubs.banking, badge: badges.review || undefined },
+      ],
     },
     {
-      href: "/app/garanties",
+      href: "/app/documents",
+      label: d.nav.documents,
+      icon: "documents",
+      children: [
+        { href: "/app/documents", label: d.hubs.library },
+        { href: "/app/contrats", label: d.hubs.contracts },
+      ],
+    },
+    {
+      href: "/app/indexation",
       label: d.nav.locative,
       icon: "key",
-      match: ["/app/garanties", "/app/indexation"],
+      children: [
+        { href: "/app/indexation", label: d.hubs.indexation },
+        { href: "/app/garanties", label: d.hubs.deposits },
+        { href: "/app/edl", label: d.hubs.edl },
+        { href: "/app/assurances", label: d.hubs.assurances },
+      ],
     },
-    { href: "/app/documents", label: d.nav.documents, icon: "documents", match: ["/app/documents", "/app/contrats"] },
     {
       href: "/app/conformite",
       label: d.nav.compliance,
       icon: "shield-check",
-      match: ["/app/conformite", "/app/aml", "/app/fiscalite"],
+      children: [
+        { href: "/app/conformite", label: d.hubs.compliance },
+        ...(cabinet ? [{ href: "/app/aml", label: d.hubs.aml }] : []),
+        { href: "/app/fiscalite", label: d.hubs.reports },
+      ],
+    },
+    {
+      href: "/app/reglages",
+      label: d.nav.settings,
+      icon: "settings",
+      children: [
+        { href: "/app/reglages", label: d.hubs.general },
+        { href: "/app/utilisateurs", label: d.hubs.users },
+        { href: "/app/integrations", label: d.hubs.integrations },
+      ],
     },
   ];
 }
 
-function settingsItem(d: Dict): NavItem {
-  return { href: "/app/reglages", label: d.nav.settings, icon: "settings", match: ["/app/reglages"] };
+/** Every path prefix that lights a section up. */
+function matchesOf(i: NavItem): string[] {
+  return i.children?.map((c) => c.href) ?? [i.href];
 }
 
-/** Everything ⌘K can route to: the sections, every sub-section tab that is
- *  not a section's own landing page, and Workflows (which opens from the
- *  home screen). Nothing became unreachable. */
-function navigable(d: Dict, nav: NavItem[], workspaceKind: string): Array<{ href: string; label: string }> {
-  const seen = new Set(nav.map((i) => i.href));
-  const extras: Array<{ href: string; label: string }> = [];
-  for (const { tabs } of Object.values(hubTabs(d, workspaceKind))) {
-    for (const t of tabs) {
-      if (!seen.has(t.href)) {
-        seen.add(t.href);
-        extras.push(t);
+/** Everything ⌘K can route to: home, every sub-section, and Workflows
+ *  (which opens from the home screen). Nothing became unreachable. */
+function navigable(nav: NavItem[], d: Dict): Array<{ href: string; label: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ href: string; label: string }> = [];
+  for (const i of nav) {
+    for (const entry of i.children ?? [{ href: i.href, label: i.label }]) {
+      if (!seen.has(entry.href)) {
+        seen.add(entry.href);
+        out.push({ href: entry.href, label: entry.label });
       }
     }
   }
-  extras.push({ href: "/app/workflows", label: d.nav.workflows });
-  return [...nav.map((i) => ({ href: i.href, label: i.label })), ...extras];
+  out.push({ href: "/app/workflows", label: d.nav.workflows });
+  return out;
 }
 
 type CreateKind = "property" | "lease" | "contact" | "payment" | "ticket" | "document";
@@ -142,12 +185,22 @@ export default function GestionShell({
   const [createKind, setCreateKind] = useState<CreateKind | null>(null);
   const reduced = useReducedMotion();
 
-  const NAV = useMemo(() => destinations(d, shell.badges), [d, shell.badges]);
-  const SETTINGS = useMemo(() => settingsItem(d), [d]);
-  const NAVIGABLE = useMemo(
-    () => navigable(d, [...NAV, SETTINGS], shell.workspaceKind),
-    [d, NAV, SETTINGS, shell.workspaceKind],
+  const NAV = useMemo(
+    () => destinations(d, shell.badges, shell.workspaceKind),
+    [d, shell.badges, shell.workspaceKind],
   );
+  const NAVIGABLE = useMemo(() => navigable(NAV, d), [NAV, d]);
+
+  // Collapsed by default; the section that holds the current page opens on
+  // arrival, and every manual toggle sticks for the rest of the visit.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const active = destinations(d, shell.badges, shell.workspaceKind).find(
+      (i) => i.children && matchesOf(i).some((m) => pathname.startsWith(m)),
+    );
+    if (active) setExpanded((prev) => (prev[active.href] ? prev : { ...prev, [active.href]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
   const real = shell.datasetId === "real";
   // The document vault has no real upload backend yet: on a real account the
   // quick-add offers only what actually persists.
@@ -170,39 +223,102 @@ export default function GestionShell({
     setPaletteOpen(false);
   }, [pathname]);
 
-  // A destination lights up for every path inside its hub: /app/banque is a
-  // wall of Argent, /app/baux/b-12 a room of Locations.
+  // A section lights up for every path inside it: /app/banque belongs to
+  // Finances, /app/baux/b-12 to Patrimoine.
   const isActive = (i: NavItem) =>
-    i.href === "/app" ? pathname === "/app" : (i.match ?? [i.href]).some((m) => pathname.startsWith(m));
+    i.href === "/app" ? pathname === "/app" : matchesOf(i).some((m) => pathname.startsWith(m));
+  const isChildActive = (c: NavChild) => pathname === c.href || pathname.startsWith(`${c.href}/`);
 
-  const navRow = (i: NavItem) => (
-    <Link
-      key={i.href}
-      href={i.href}
-      aria-current={isActive(i) ? "page" : undefined}
-      className={
-        "tactile flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
-        (isActive(i) ? "bg-brand-50 font-semibold text-brand-800" : "text-ink-soft hover:bg-sand-50 hover:text-ink")
-      }
-    >
-      <span className="flex min-w-0 items-center gap-2.5">
-        <Icon name={i.icon} size={18} className={"shrink-0 " + (isActive(i) ? "text-brand-700" : "text-ink-soft")} />
-        <span className="truncate">{i.label}</span>
-      </span>
-      {i.badge && (
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
-          {i.badge}
-        </span>
-      )}
-    </Link>
-  );
+  const navSection = (i: NavItem) => {
+    const open = Boolean(i.children && expanded[i.href]);
+    const parentRow = (
+      <div
+        className={
+          "tactile flex items-center gap-1 rounded-xl transition " +
+          (isActive(i) ? "bg-brand-50" : "hover:bg-sand-50")
+        }
+      >
+        <Link
+          href={i.href}
+          aria-current={isActive(i) ? "page" : undefined}
+          className={
+            "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
+            (isActive(i) ? "font-semibold text-brand-800" : "text-ink-soft hover:text-ink")
+          }
+        >
+          <span className="flex min-w-0 items-center gap-2.5">
+            <Icon name={i.icon} size={18} className={"shrink-0 " + (isActive(i) ? "text-brand-700" : "text-ink-soft")} />
+            <span className="truncate">{i.label}</span>
+          </span>
+          {i.badge && !open && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
+              {i.badge}
+            </span>
+          )}
+        </Link>
+        {i.children && (
+          <button
+            onClick={() => setExpanded((prev) => ({ ...prev, [i.href]: !prev[i.href] }))}
+            aria-expanded={open}
+            aria-label={`${i.label} : ${open ? d.shell.navCollapse : d.shell.navExpand}`}
+            className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:h-10 max-sm:w-10"
+          >
+            <svg
+              className={
+                "h-3.5 w-3.5 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+                (open ? "rotate-90" : "")
+              }
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              aria-hidden
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
+            </svg>
+          </button>
+        )}
+      </div>
+    );
+    return (
+      <div key={i.href}>
+        {parentRow}
+        {open && i.children && (
+          <ul className="mb-1 mt-0.5 space-y-0.5">
+            {i.children.map((c) => (
+              <li key={c.href}>
+                <Link
+                  href={c.href}
+                  aria-current={isChildActive(c) ? "page" : undefined}
+                  className={
+                    "tactile flex items-center justify-between gap-2 rounded-lg py-1.5 pl-[42px] pr-3 text-[13px] transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-10 " +
+                    (isChildActive(c)
+                      ? "bg-brand-50 font-semibold text-brand-800"
+                      : "font-medium text-ink-soft hover:bg-sand-50 hover:text-ink")
+                  }
+                >
+                  <span className="truncate">{c.label}</span>
+                  {c.badge && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
+                      {c.badge}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
 
   const sidebar = (
-    // Two zones: the six destinations breathe at the top; Réglages, the
-    // dataset switch and ecosystem links stay pinned below — controls that
-    // change what the whole screen shows must never hide behind a scroll.
+    // Two zones: the sections at the top, each folding its sub-sections;
+    // the dataset switch and ecosystem links stay pinned below — controls
+    // that change what the whole screen shows must never hide behind a
+    // scroll.
     <div className="flex h-full flex-col">
-    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pt-2.5" aria-label="Morada Gestion">
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pt-2.5" aria-label="Morada Gestion">
       {/* The logo is the way back to the ecosystem gateway, from every space. */}
       <a
         href={WELCOME_URL}
@@ -210,10 +326,9 @@ export default function GestionShell({
       >
         <GestionLogo />
       </a>
-      {NAV.map(navRow)}
+      {NAV.map(navSection)}
     </nav>
     <div className="shrink-0 border-t border-sand-100 px-3 pb-3 pt-2">
-      <div className="pb-2">{navRow(SETTINGS)}</div>
       <DatasetSwitch d={d} datasetId={shell.datasetId} />
       <div className="pt-2.5 text-[11px] text-ink-soft">
         <p className="px-3">{d.nav.ecosystem}</p>
@@ -237,7 +352,7 @@ export default function GestionShell({
       <NavigationProgress />
       <div className="min-h-dvh bg-sand-50">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 border-r border-sand-100 bg-white lg:block">
+        <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-sand-100 bg-white lg:block">
           {sidebar}
         </aside>
 
@@ -247,7 +362,7 @@ export default function GestionShell({
           {sidebar}
         </MobileDrawer>
 
-        <div className="flex min-h-dvh flex-col lg:pl-60">
+        <div className="flex min-h-dvh flex-col lg:pl-64">
           <ScrollHeader
             className="chrome-material sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-transparent bg-white px-4 transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 sm:gap-3 sm:px-6"
             elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"

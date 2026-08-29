@@ -1,5 +1,4 @@
 import Link from "next/link";
-import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { MetaBadge } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
@@ -34,7 +33,6 @@ export default async function ContactsPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="relations" active="/app/contacts" />
       <PageHeader title={d.contacts.title} subtitle={d.contacts.subtitle} />
 
       <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">

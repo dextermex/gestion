@@ -41,7 +41,7 @@ export const lu: Dict = {
     finances: "Finanzen",
     locative: "Gestioun locative",
     documents: "Dokumenter",
-    compliance: "Konformitéit",
+    compliance: "Konformitéit & Steieren",
     settings: "Astellungen",
     workflows: "Workflowen",
     ecosystem: "Morada-Ökosystem",
@@ -60,11 +60,17 @@ export const lu: Dict = {
     statements: "Chargen",
     reports: "Steieren",
     library: "Dokumenter",
-    contracts: "Loyerskontrakter",
-    general: "Allgemeng",
+    contracts: "Modeller & Kontrakter",
+    general: "Astellungen",
     aml: "AML / KYC",
     messages: "Messagen",
     calendar: "Kalenner",
+    interventions: "Interventiounen",
+    edl: "EDL",
+    assurances: "Assurancen",
+    users: "Benotzer & Accès",
+    integrations: "Integratiounen",
+    compliance: "Konformitéit",
   },
 
   shell: {
@@ -117,6 +123,8 @@ export const lu: Dict = {
     fieldRole: "Roll",
     fieldReceivedOn: "Kritt den",
     fieldTitle: "Titel",
+    navExpand: "Opklappen",
+    navCollapse: "Zouklappen",
     datasetTitle: "Demo-Donnéeën",
     datasetReal: "Richteg",
     datasetRealDesc: "Är eege Donnéeën. Eidel, soulaang näischt agedroe ass.",
@@ -129,6 +137,14 @@ export const lu: Dict = {
   },
 
   status: {
+    insuranceKind: {
+      building: "Gebai",
+      pno: "PNO",
+      liability: "RC",
+      rent_guarantee: "Garantie Loyeren",
+      pi: "RC professionnell",
+      other: "Aner",
+    },
     rent: {
       paid: "Bezuelt",
       partial: "Deelweis",
@@ -1075,6 +1091,71 @@ export const lu: Dict = {
     bankBody: "Verbonne Konten an den Ofgläich vun den Encaissementer, am Tab Bank.",
   },
 
+  interventions: {
+    title: "Interventiounen",
+    subtitle: "All Demande an all Chantier, vun der Kreatioun bis zum Ofschloss. Nei Interventioune ginn iwwer de Knäppche Nei ugeluecht.",
+    kpiOpen: "Op",
+    kpiUrgent: "Urgent",
+    kpiPendingTenant: "Waart op Locataire",
+    colTicket: "Interventioun",
+    colUnit: "Logement",
+    colSeverity: "Prioritéit",
+    colStatus: "Status",
+    colSla: "SLA-Echéance",
+  },
+
+  edl: {
+    title: "États des lieux",
+    subtitle: "All État des lieux, vun der Entrée bis zur Sortie, mat Hash verséigelt. All Linn mécht de Bail op.",
+    colUnit: "Bail",
+    colKind: "Typ",
+    colDate: "Datum",
+    colContent: "Inhalt",
+    colStatus: "Status",
+  },
+
+  assurances: {
+    title: "Assurancen",
+    subtitle: "De Registre vun de Policen: Gebaier, PNO, Loyersgarantien, RC. D'Echéance huet déiselwecht Vigilance wéi de Konformitéitskalenner.",
+    add: "Police dobäisetzen",
+    colPolicy: "Police",
+    colScope: "Perimeter",
+    colPremium: "Prime",
+    colExpiry: "Echéance",
+    perYear: "{amount}/Joer",
+    scopeCabinet: "Ganzen Espace",
+    fieldKind: "Typ",
+    fieldProperty: "Verséchert Bien",
+    fieldProvider: "Assureur",
+    fieldNumber: "Policen-Nr.",
+    fieldPremium: "Joresprime (€)",
+    fieldStarts: "Ufank",
+    fieldExpires: "Echéance",
+  },
+
+  utilisateurs: {
+    title: "Benotzer & Accès",
+    subtitle: "Wien dësen Espace opmaache kann. D'Identitéit ass déi vu Morada: ee Kont fir de ganzen Ökosystem.",
+    you: "(Dir)",
+    manageInPro: "Invitatiounen a Rolle ginn a Morada Pro geréiert, mat derselwechter Identitéit.",
+    openPro: "Morada Pro opmaachen",
+  },
+
+  integrations: {
+    title: "Integratiounen",
+    subtitle: "Déi reell Verbindunge vun dësem Espace. Eng Integratioun ouni Backend huet hei keng Kaart.",
+    saltName: "Salt Edge · Bankverbindung",
+    saltBody: "Import vu Konten an Transaktiounen (nëmme liesen), automatesche Rapprochement vun de Loyeren.",
+    connected: "Verbonnen",
+    notConnected: "Net verbonnen",
+    saltAccounts: "{n} verbonne Konten",
+    saltNone: "Nach kee Kont verbonnen.",
+    ecosystemTitle: "Morada-Ökosystem",
+    moradaBody: "Annoncen a Sich: dat ëffentlecht Portal.",
+    proBody: "CRM vum Cabinet: Equipe, Mandater, gedeelt Identitéit.",
+    open: "Opmaachen",
+  },
+
   aml: {
     title: "AML / KYC",
     subtitle: "Onboarding mat zwou Vitessen: liichte Wee fir d'Mass vun de Locatairen, voll CDD automatesch ab de Schwellen. Dat richtegt Risiko läit bei de Proprietären, net de Locatairen.",
@@ -1102,7 +1183,7 @@ export const lu: Dict = {
   },
 
   contrats: {
-    title: "Loyerskontrakter",
+    title: "Modeller & Kontrakter",
     subtitle: "De Generator gëtt kee Bail zum Ënnerschreiwen eraus, soulaang eng Reegel vun der ëffentlecher Uerdnung net erfëllt ass.",
     registryTitle: "Kontraktregëster",
     signedAes: "AES-signéiert, {date}",

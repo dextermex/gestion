@@ -1,5 +1,4 @@
 import Link from "next/link";
-import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
@@ -18,7 +17,6 @@ export default async function GarantiesPage() {
   if (DEPOSITS.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="locative" active="/app/garanties" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.deposits })} body={d.common.emptyBody} />
       </div>
     );
@@ -81,7 +79,6 @@ export default async function GarantiesPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="locative" active="/app/garanties" />
       <PageHeader title={d.garanties.title} subtitle={d.garanties.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">

@@ -1,5 +1,4 @@
 import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
-import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote } from "@/components/gestion/bits";
 import { MessagesPanel } from "@/components/gestion/MessagesPanel";
 import { getDemo } from "@/lib/demo";
@@ -24,7 +23,6 @@ export default async function MessagesPage() {
   if (CONVERSATIONS.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="relations" active="/app/messages" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.messages })} body={d.common.emptyBody} />
       </div>
     );
@@ -43,7 +41,6 @@ export default async function MessagesPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="relations" active="/app/messages" />
       <PageHeader title={d.messages.title} subtitle={d.messages.subtitle} />
 
       <MessagesPanel

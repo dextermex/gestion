@@ -9,7 +9,7 @@
  */
 
 import * as fr from "./data";
-import type { DemoBankTx, DemoContact, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DemoBankTx, DemoContact, DemoInsurance, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
 import type { OpenInvoice } from "@/domain/banking/matching";
 
 /** Merge per-id string overrides into a copy of the FR rows. Throws at module
@@ -252,6 +252,14 @@ export const TICKETS: DemoTicket[] = overlay(fr.TICKETS, {
 export const METERS: DemoMeter[] = overlay(fr.METERS, {
   "m-2": { supplier: "Ville d'Esch-sur-Alzette" },
   "m-6": { supplier: "ista (Verdeelung)" },
+});
+
+// ─── Assurances ─────────────────────────────────────────────────────────────
+
+export const INSURANCES: DemoInsurance[] = overlay(fr.INSURANCES, {
+  "ins-1": { notes: "Police vum Syndic ënnerschriwwen, Quote-part un d'Coproprietären refacturéiert." },
+  "ins-3": { notes: "Proprietär net-Bewunner wärend der Vacance vum Studio." },
+  "ins-4": { notes: "Garantie fir onbezuelte Loyeren um Studio RDC." },
 });
 
 // ─── Workflows ──────────────────────────────────────────────────────────────

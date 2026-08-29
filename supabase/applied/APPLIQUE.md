@@ -27,3 +27,11 @@ tous les espaces via l'API. `0009_rent_period_status_security_invoker.sql`
 s'exécuter avec les droits de l'appelant (RLS des tables sous-jacentes) et
 retire les droits d'écriture sans objet. Vérifié après application :
 `reloptions = {security_invoker=true}`. Aucun objet de `public` touché.
+
+## 0010 · 2026-08-29 · gestion.insurance_policies
+
+La section Gestion locative > Assurances demandée pour la structure de
+référence exige un vrai registre : `0010_insurance_policies.sql`
+(migration `gestion_insurance_policies`) crée la table, ses index et ses
+quatre politiques RLS sur le motif gestion.can existant. Additive, aucune
+table existante touchée ; réversible par un drop de la seule table.

@@ -1,5 +1,4 @@
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
-import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { euros } from "@/lib/types";
@@ -16,7 +15,6 @@ export default async function ChargesPage() {
   if (RENT_PERIODS.length === 0 || SYNDIC_DECOMPTE_2025.lines.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="patrimoine" active="/app/charges" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.statements })} body={d.common.emptyBody} />
       </div>
     );
@@ -53,7 +51,6 @@ export default async function ChargesPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="patrimoine" active="/app/charges" />
       <PageHeader title={d.charges.title} subtitle={d.charges.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">

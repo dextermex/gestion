@@ -1,5 +1,4 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
-import HubTabs from "@/components/gestion/HubTabs";
 import { CollapsiblePanel, LegalNote } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import BankWorkspace, { type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
@@ -160,7 +159,6 @@ export default async function BanquePage({
 
   return (
     <div>
-      <HubTabs d={d} hub="finances" active="/app/banque" />
       <PageHeader
         title={d.banque.title}
         subtitle={d.banque.subtitle}

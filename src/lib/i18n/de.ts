@@ -36,7 +36,7 @@ export const de: Dict = {
     finances: "Finanzen",
     locative: "Mietverwaltung",
     documents: "Dokumente",
-    compliance: "Compliance",
+    compliance: "Compliance & Steuern",
     settings: "Einstellungen",
     workflows: "Workflows",
     ecosystem: "Morada-Ökosystem",
@@ -55,11 +55,17 @@ export const de: Dict = {
     statements: "Nebenkosten",
     reports: "Steuern",
     library: "Dokumente",
-    contracts: "Mietverträge",
-    general: "Allgemein",
+    contracts: "Vorlagen & Verträge",
+    general: "Einstellungen",
     aml: "AML / KYC",
     messages: "Nachrichten",
     calendar: "Kalender",
+    interventions: "Interventionen",
+    edl: "EDL",
+    assurances: "Versicherungen",
+    users: "Benutzer & Zugriff",
+    integrations: "Integrationen",
+    compliance: "Compliance",
   },
 
   shell: {
@@ -112,6 +118,8 @@ export const de: Dict = {
     fieldRole: "Rolle",
     fieldReceivedOn: "Eingegangen am",
     fieldTitle: "Titel",
+    navExpand: "Aufklappen",
+    navCollapse: "Zuklappen",
     datasetTitle: "Demo-Daten",
     datasetReal: "Echt",
     datasetRealDesc: "Ihre eigenen Daten. Leer, solange nichts erfasst ist.",
@@ -124,6 +132,14 @@ export const de: Dict = {
   },
 
   status: {
+    insuranceKind: {
+      building: "Gebäude",
+      pno: "PNO",
+      liability: "Haftpflicht",
+      rent_guarantee: "Mietausfall",
+      pi: "Berufshaftpflicht",
+      other: "Sonstige",
+    },
     rent: {
       paid: "Bezahlt",
       partial: "Teilweise",
@@ -1070,6 +1086,71 @@ export const de: Dict = {
     bankBody: "Verknüpfte Konten und Zahlungsabgleich, im Tab Bank.",
   },
 
+  interventions: {
+    title: "Interventionen",
+    subtitle: "Jede Anfrage und jeder Einsatz, von der Erstellung bis zum Abschluss. Neue Interventionen entstehen über den Button Neu.",
+    kpiOpen: "Offen",
+    kpiUrgent: "Dringend",
+    kpiPendingTenant: "Wartet auf Mieter",
+    colTicket: "Intervention",
+    colUnit: "Einheit",
+    colSeverity: "Priorität",
+    colStatus: "Status",
+    colSla: "SLA-Frist",
+  },
+
+  edl: {
+    title: "États des lieux",
+    subtitle: "Jedes Übergabeprotokoll, vom Einzug bis zum Auszug, per Hash versiegelt. Jede Zeile öffnet ihr Mietverhältnis.",
+    colUnit: "Mietverhältnis",
+    colKind: "Typ",
+    colDate: "Datum",
+    colContent: "Inhalt",
+    colStatus: "Status",
+  },
+
+  assurances: {
+    title: "Versicherungen",
+    subtitle: "Das Policenregister: Gebäude, PNO, Mietgarantien, Haftpflicht. Der Ablauf trägt dieselbe Vigilanz wie der Fristenkalender.",
+    add: "Police hinzufügen",
+    colPolicy: "Police",
+    colScope: "Umfang",
+    colPremium: "Prämie",
+    colExpiry: "Ablauf",
+    perYear: "{amount}/Jahr",
+    scopeCabinet: "Gesamter Arbeitsbereich",
+    fieldKind: "Typ",
+    fieldProperty: "Versichertes Objekt",
+    fieldProvider: "Versicherer",
+    fieldNumber: "Policen-Nr.",
+    fieldPremium: "Jahresprämie (€)",
+    fieldStarts: "Beginn",
+    fieldExpires: "Ablauf",
+  },
+
+  utilisateurs: {
+    title: "Benutzer & Zugriff",
+    subtitle: "Wer diesen Arbeitsbereich öffnen kann. Die Identität ist die von Morada: ein Konto für das ganze Ökosystem.",
+    you: "(Sie)",
+    manageInPro: "Einladungen und Rollen werden in Morada Pro verwaltet, mit derselben Identität.",
+    openPro: "Morada Pro öffnen",
+  },
+
+  integrations: {
+    title: "Integrationen",
+    subtitle: "Die echten Verbindungen dieses Arbeitsbereichs. Eine Integration ohne Backend hat hier keine Karte.",
+    saltName: "Salt Edge · Bankverbindung",
+    saltBody: "Import von Konten und Umsätzen (nur Lesen), automatischer Mietabgleich.",
+    connected: "Verbunden",
+    notConnected: "Nicht verbunden",
+    saltAccounts: "{n} verknüpfte Konten",
+    saltNone: "Noch kein Konto verknüpft.",
+    ecosystemTitle: "Morada-Ökosystem",
+    moradaBody: "Anzeigen und Suche: das öffentliche Portal.",
+    proBody: "CRM der Kanzlei: Team, Mandate, gemeinsame Identität.",
+    open: "Öffnen",
+  },
+
   aml: {
     title: "AML / KYC",
     subtitle: "Onboarding mit zwei Geschwindigkeiten: leichter Weg für die Masse der Mieter, volle Sorgfaltsprüfung automatisch ab den Schwellen. Das echte Risiko liegt bei den Eigentümern, nicht den Mietern.",
@@ -1097,7 +1178,7 @@ export const de: Dict = {
   },
 
   contrats: {
-    title: "Mietverträge",
+    title: "Vorlagen & Verträge",
     subtitle: "Der Generator gibt keinen unterschreibbaren Mietvertrag aus, solange eine zwingende Regel verletzt ist.",
     registryTitle: "Vertragsregister",
     signedAes: "AES-signiert, {date}",

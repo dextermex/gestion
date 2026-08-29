@@ -40,7 +40,7 @@ export const fr = {
     finances: "Finances",
     locative: "Gestion locative",
     documents: "Documents",
-    compliance: "Conformité",
+    compliance: "Conformité & fiscalité",
     settings: "Paramètres",
     workflows: "Workflows",
     ecosystem: "Écosystème Morada",
@@ -61,11 +61,17 @@ export const fr = {
     statements: "Charges",
     reports: "Fiscalité",
     library: "Documents",
-    contracts: "Contrats de bail",
-    general: "Général",
+    contracts: "Modèles & contrats",
+    general: "Paramètres",
     aml: "AML / KYC",
     messages: "Messages",
     calendar: "Calendrier",
+    interventions: "Interventions",
+    edl: "États des lieux",
+    assurances: "Assurances",
+    users: "Utilisateurs & accès",
+    integrations: "Intégrations",
+    compliance: "Conformité",
   },
 
   shell: {
@@ -118,6 +124,8 @@ export const fr = {
     fieldRole: "Rôle",
     fieldReceivedOn: "Reçu le",
     fieldTitle: "Titre",
+    navExpand: "Déplier",
+    navCollapse: "Replier",
     datasetTitle: "Données de démo",
     datasetReal: "Réel",
     datasetRealDesc: "Vos données. Vide tant que rien n'est enregistré.",
@@ -130,6 +138,14 @@ export const fr = {
   },
 
   status: {
+    insuranceKind: {
+      building: "Bâtiment",
+      pno: "PNO",
+      liability: "RC",
+      rent_guarantee: "Garantie loyers impayés",
+      pi: "RC professionnelle",
+      other: "Autre",
+    },
     rent: {
       paid: "Payé",
       partial: "Partiel",
@@ -1063,7 +1079,7 @@ export const fr = {
   },
 
   reglages: {
-    title: "Réglages",
+    title: "Paramètres",
     subtitle: "Votre espace, ses accès et les registres qui gouvernent les calculs.",
     workspaceTitle: "Espace de travail",
     workspaceName: "Nom",
@@ -1079,6 +1095,71 @@ export const fr = {
     registriesTitle: "Registres et connexions",
     bankLink: "Connexion bancaire",
     bankBody: "Comptes reliés et rapprochement des encaissements, dans l'onglet Banque.",
+  },
+
+  interventions: {
+    title: "Interventions",
+    subtitle: "Chaque demande et chaque chantier, de la création à la clôture. Les nouvelles interventions se créent depuis le bouton Nouveau.",
+    kpiOpen: "Ouvertes",
+    kpiUrgent: "Urgentes",
+    kpiPendingTenant: "En attente locataire",
+    colTicket: "Intervention",
+    colUnit: "Logement",
+    colSeverity: "Priorité",
+    colStatus: "Statut",
+    colSla: "Échéance SLA",
+  },
+
+  edl: {
+    title: "États des lieux",
+    subtitle: "Chaque état des lieux, de l'entrée à la sortie, scellé par empreinte. Chaque ligne ouvre la fiche du bail concerné.",
+    colUnit: "Bail",
+    colKind: "Type",
+    colDate: "Date",
+    colContent: "Contenu",
+    colStatus: "Statut",
+  },
+
+  assurances: {
+    title: "Assurances",
+    subtitle: "Le registre des polices : immeubles, PNO, garanties loyers, RC. L'échéance porte la même vigilance que le calendrier de conformité.",
+    add: "Ajouter une police",
+    colPolicy: "Police",
+    colScope: "Périmètre",
+    colPremium: "Prime",
+    colExpiry: "Échéance",
+    perYear: "{amount}/an",
+    scopeCabinet: "Espace entier",
+    fieldKind: "Type",
+    fieldProperty: "Bien couvert",
+    fieldProvider: "Assureur",
+    fieldNumber: "N° de police",
+    fieldPremium: "Prime annuelle (€)",
+    fieldStarts: "Début",
+    fieldExpires: "Échéance",
+  },
+
+  utilisateurs: {
+    title: "Utilisateurs & accès",
+    subtitle: "Qui peut ouvrir cet espace. L'identité est celle de Morada : un seul compte pour tout l'écosystème.",
+    you: "(vous)",
+    manageInPro: "Les invitations et les rôles se gèrent dans Morada Pro, avec la même identité.",
+    openPro: "Ouvrir Morada Pro",
+  },
+
+  integrations: {
+    title: "Intégrations",
+    subtitle: "Les connexions réelles de cet espace. Une intégration sans backend n'a pas de carte ici.",
+    saltName: "Salt Edge · Connexion bancaire",
+    saltBody: "Import des comptes et transactions en lecture seule, rapprochement automatique des loyers.",
+    connected: "Connecté",
+    notConnected: "Non connecté",
+    saltAccounts: "{n} compte(s) relié(s)",
+    saltNone: "Aucun compte relié pour l'instant.",
+    ecosystemTitle: "Écosystème Morada",
+    moradaBody: "Annonces et recherche : le portail public.",
+    proBody: "CRM du cabinet : équipe, mandats, identité partagée.",
+    open: "Ouvrir",
   },
 
   aml: {
@@ -1108,7 +1189,7 @@ export const fr = {
   },
 
   contrats: {
-    title: "Contrats de bail",
+    title: "Modèles & contrats",
     subtitle: "Le générateur n'émet pas de bail signable tant qu'une règle d'ordre public n'est pas satisfaite.",
     registryTitle: "Registre des contrats",
     signedAes: "signé AES, {date}",

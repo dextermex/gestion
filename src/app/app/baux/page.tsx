@@ -1,5 +1,4 @@
 import Link from "next/link";
-import HubTabs from "@/components/gestion/HubTabs";
 import { Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { MetaBadge } from "@/components/gestion/bits";
 import { ChipLink } from "@/components/gestion/filters";
@@ -43,7 +42,6 @@ export default async function BauxPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="patrimoine" active="/app/baux" />
       <PageHeader title={d.baux.title} subtitle={d.baux.subtitle} />
 
       {/* Status filters as compact pills (the banking-page grammar); the

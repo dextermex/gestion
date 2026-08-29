@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Select, Textarea } from "@/components/pro/ui";
 import { METER_UNITS } from "@/lib/types";
@@ -10,7 +11,8 @@ import type { Dict } from "@/lib/i18n/fr";
 /**
  * "Create meter" as a right-hand sheet (the immocloud pattern): general
  * information block, unit auto-derived from the meter type, sub-meter toggle.
- * Demo build — submit shows the standard notice. Enters from the right and
+ * On a real account submit persists through /api/compteurs/create; the
+ * sample cabinets keep the explicitly-fake notice. Enters from the right and
  * leaves the same way; reduced motion crossfades.
  */
 
@@ -19,9 +21,11 @@ const KINDS: MeterKind[] = ["electricity", "gas", "water_cold", "water_hot", "he
 export default function MeterCreate({
   d,
   options,
+  real,
 }: {
   d: Dict;
   options: Array<{ id: string; label: string }>;
+  real?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -32,7 +36,7 @@ export default function MeterCreate({
         </svg>
         {d.compteurs.addMeter}
       </Button>
-      <MeterSheet d={d} options={options} open={open} onClose={() => setOpen(false)} />
+      <MeterSheet d={d} options={options} real={real} open={open} onClose={() => setOpen(false)} />
     </>
   );
 }
@@ -40,19 +44,52 @@ export default function MeterCreate({
 function MeterSheet({
   d,
   options,
+  real,
   open,
   onClose,
 }: {
   d: Dict;
   options: Array<{ id: string; label: string }>;
+  real?: boolean;
   open: boolean;
   onClose: () => void;
 }) {
   const reduced = useReducedMotion();
+  const router = useRouter();
   const [kind, setKind] = useState<MeterKind>("electricity");
   const [secondary, setSecondary] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  const submitReal = async (form: HTMLFormElement) => {
+    const f = new FormData(form);
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/compteurs/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target: String(f.get("target") ?? ""),
+          serial: String(f.get("serial") ?? ""),
+          supplier: String(f.get("supplier") ?? ""),
+          kind,
+        }),
+      });
+      if (!res.ok) {
+        setError(d.shell.createFailed);
+        setSaving(false);
+        return;
+      }
+      onClose();
+      router.refresh();
+    } catch {
+      setError(d.shell.createFailed);
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -108,10 +145,12 @@ function MeterSheet({
             </div>
 
             <form
+              id="meter-sheet-form"
               className="flex-1 space-y-4 overflow-y-auto px-5 py-5"
               onSubmit={(e) => {
                 e.preventDefault();
-                setSubmitted(true);
+                if (real) void submitReal(e.currentTarget);
+                else setSubmitted(true);
               }}
             >
               <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
@@ -120,7 +159,7 @@ function MeterSheet({
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2 sm:col-span-1">
                   <Field label={d.compteurs.sheetProperty}>
-                    <Select defaultValue={options[0]?.id}>
+                    <Select name="target" defaultValue={options[0]?.id}>
                       {options.map((o) => (
                         <option key={o.id} value={o.id}>
                           {o.label}
@@ -131,7 +170,7 @@ function MeterSheet({
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <Field label={d.compteurs.sheetSerial}>
-                    <Input required maxLength={40} placeholder="LU-ENO-…" />
+                    <Input name="serial" required maxLength={40} placeholder="LU-ENO-…" />
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
@@ -189,7 +228,7 @@ function MeterSheet({
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <Field label={d.compteurs.sheetSupplier}>
-                    <Select defaultValue="Enovos">
+                    <Select name="supplier" defaultValue="Enovos">
                       <option>Enovos</option>
                       <option>Sudgaz</option>
                       <option>Ville de Luxembourg</option>
@@ -220,9 +259,14 @@ function MeterSheet({
                 </div>
               </div>
 
-              {submitted && (
+              {submitted && !real && (
                 <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
                   {d.common.demoCreateNotice}
+                </p>
+              )}
+              {error && (
+                <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                  {error}
                 </p>
               )}
             </form>
@@ -231,9 +275,7 @@ function MeterSheet({
               <Button variant="ghost" onClick={onClose}>
                 {d.common.cancel}
               </Button>
-              <Button
-                onClick={() => setSubmitted(true)}
-              >
+              <Button type="submit" form="meter-sheet-form" disabled={saving}>
                 {d.compteurs.sheetCreate}
               </Button>
             </div>

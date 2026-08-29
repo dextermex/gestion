@@ -1,5 +1,4 @@
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
-import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import BillUpload from "@/components/gestion/BillUpload";
 import { getDemo } from "@/lib/demo";
@@ -21,7 +20,6 @@ export default async function FinancePage() {
     if (RENT_PERIODS.length === 0 || !TICKETS.some((t) => t.id === "t-1"))
       return (
       <div>
-        <HubTabs d={d} hub="finances" active="/app/finance" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.expenses })} body={d.common.emptyBody} />
       </div>
     );
@@ -51,7 +49,6 @@ export default async function FinancePage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="finances" active="/app/finance" />
       <PageHeader
         title={d.finance.title}
         subtitle={d.finance.subtitle}

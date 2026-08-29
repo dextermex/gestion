@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/pro/ui";
-import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { getIdentity } from "@/lib/workspace";
@@ -62,7 +61,6 @@ export default async function ReglagesPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="reglages" active="/app/reglages" workspaceKind={ORG.kind} />
       <PageHeader title={d.reglages.title} subtitle={d.reglages.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

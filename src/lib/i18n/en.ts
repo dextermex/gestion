@@ -36,7 +36,7 @@ export const en: Dict = {
     finances: "Finances",
     locative: "Rental management",
     documents: "Documents",
-    compliance: "Compliance",
+    compliance: "Compliance & tax",
     settings: "Settings",
     workflows: "Workflows",
     ecosystem: "Morada ecosystem",
@@ -55,11 +55,17 @@ export const en: Dict = {
     statements: "Operating costs",
     reports: "Tax",
     library: "Documents",
-    contracts: "Rental contracts",
-    general: "General",
+    contracts: "Templates & contracts",
+    general: "Settings",
     aml: "AML / KYC",
     messages: "Messaging",
     calendar: "Calendar",
+    interventions: "Interventions",
+    edl: "EDL",
+    assurances: "Insurance",
+    users: "Users & access",
+    integrations: "Integrations",
+    compliance: "Compliance",
   },
 
   shell: {
@@ -112,6 +118,8 @@ export const en: Dict = {
     fieldRole: "Role",
     fieldReceivedOn: "Received on",
     fieldTitle: "Title",
+    navExpand: "Expand",
+    navCollapse: "Collapse",
     datasetTitle: "Demo data",
     datasetReal: "Real",
     datasetRealDesc: "Your own data. Empty until something is on file.",
@@ -124,6 +132,14 @@ export const en: Dict = {
   },
 
   status: {
+    insuranceKind: {
+      building: "Building",
+      pno: "PNO",
+      liability: "Liability",
+      rent_guarantee: "Rent guarantee",
+      pi: "Professional liability",
+      other: "Other",
+    },
     rent: {
       paid: "Paid",
       partial: "Partial",
@@ -1070,6 +1086,71 @@ export const en: Dict = {
     bankBody: "Linked accounts and payment matching, in the Banking tab.",
   },
 
+  interventions: {
+    title: "Interventions",
+    subtitle: "Every request and every job, from creation to closure. New tickets are created from the New button.",
+    kpiOpen: "Open",
+    kpiUrgent: "Urgent",
+    kpiPendingTenant: "Waiting on tenant",
+    colTicket: "Ticket",
+    colUnit: "Unit",
+    colSeverity: "Priority",
+    colStatus: "Status",
+    colSla: "SLA due",
+  },
+
+  edl: {
+    title: "États des lieux",
+    subtitle: "Every inventory report, entry to exit, hash-sealed. Each row opens its lease sheet.",
+    colUnit: "Lease",
+    colKind: "Type",
+    colDate: "Date",
+    colContent: "Content",
+    colStatus: "Status",
+  },
+
+  assurances: {
+    title: "Insurance",
+    subtitle: "The policy register: buildings, PNO, rent guarantees, liability. Expiry carries the same vigilance as the compliance calendar.",
+    add: "Add a policy",
+    colPolicy: "Policy",
+    colScope: "Scope",
+    colPremium: "Premium",
+    colExpiry: "Expiry",
+    perYear: "{amount}/yr",
+    scopeCabinet: "Whole workspace",
+    fieldKind: "Type",
+    fieldProperty: "Covered property",
+    fieldProvider: "Insurer",
+    fieldNumber: "Policy no.",
+    fieldPremium: "Yearly premium (€)",
+    fieldStarts: "Start",
+    fieldExpires: "Expiry",
+  },
+
+  utilisateurs: {
+    title: "Users & access",
+    subtitle: "Who can open this workspace. Identity is Morada's: one account across the whole ecosystem.",
+    you: "(you)",
+    manageInPro: "Invitations and roles are managed in Morada Pro, with the same identity.",
+    openPro: "Open Morada Pro",
+  },
+
+  integrations: {
+    title: "Integrations",
+    subtitle: "The workspace's real connections. An integration without a backend has no card here.",
+    saltName: "Salt Edge · Bank connection",
+    saltBody: "Read-only import of accounts and transactions, automatic rent matching.",
+    connected: "Connected",
+    notConnected: "Not connected",
+    saltAccounts: "{n} linked account(s)",
+    saltNone: "No linked account yet.",
+    ecosystemTitle: "Morada ecosystem",
+    moradaBody: "Listings and search: the public portal.",
+    proBody: "The firm's CRM: team, mandates, shared identity.",
+    open: "Open",
+  },
+
   aml: {
     title: "AML / KYC",
     subtitle: "Two-speed onboarding: a light journey for the mass of tenants, full CDD auto-triggered on the thresholds. The real risk sits with owners, not tenants.",
@@ -1097,7 +1178,7 @@ export const en: Dict = {
   },
 
   contrats: {
-    title: "Rental contracts",
+    title: "Templates & contracts",
     subtitle: "The generator will not issue a signable lease while any public-order rule is unmet.",
     registryTitle: "Contract registry",
     signedAes: "signed AES, {date}",

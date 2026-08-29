@@ -1,5 +1,4 @@
 import Link from "next/link";
-import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, Panel } from "@/components/gestion/bits";
@@ -23,7 +22,6 @@ export default async function IndexationPage() {
   if (LEASES.length === 0)
     return (
       <div>
-        <HubTabs d={d} hub="locative" active="/app/indexation" />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.indexation })} body={d.common.emptyBody} />
       </div>
     );
@@ -73,7 +71,6 @@ export default async function IndexationPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="locative" active="/app/indexation" />
       <PageHeader title={d.indexation.title} subtitle={d.indexation.subtitle} />
 
       <Panel title={d.indexation.residentialTitle}>

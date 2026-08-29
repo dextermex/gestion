@@ -1,5 +1,4 @@
 import Link from "next/link";
-import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
@@ -63,7 +62,6 @@ export default async function ContratsPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="documents" active="/app/contrats" />
       <PageHeader title={d.contrats.title} subtitle={d.contrats.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

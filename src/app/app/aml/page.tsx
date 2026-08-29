@@ -1,5 +1,4 @@
 import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
-import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { amlTierMeta, initials, riskBandMeta } from "@/lib/types";
@@ -10,7 +9,7 @@ import { cents } from "@/domain/money";
 
 export default async function AmlPage() {
   const { d } = await getI18n();
-  const { CONTACTS, ORG, TODAY } = await getDemo();
+  const { CONTACTS, TODAY } = await getDemo();
 
   // The screen walks the two-speed CDD around the sample SCI; a real
   // account without that record sees its empty state until the production
@@ -18,7 +17,6 @@ export default async function AmlPage() {
   if (!CONTACTS.some((c) => c.id === "c-sci-bealieu"))
     return (
       <div>
-        <HubTabs d={d} hub="conformite" active="/app/aml" workspaceKind={ORG.kind} />
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.aml })} body={d.common.emptyBody} />
       </div>
     );
@@ -64,7 +62,6 @@ export default async function AmlPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="conformite" active="/app/aml" workspaceKind={ORG.kind} />
       <PageHeader title={d.aml.title} subtitle={d.aml.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

@@ -8,6 +8,7 @@ import type {
   DemoDeposit,
   DemoDocument,
   DemoEdl,
+  DemoInsurance,
   DemoLease,
   DemoMeter,
   DemoProperty,
@@ -78,6 +79,7 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
     conversationRows,
     messageRows,
     documentRows,
+    insuranceRows,
   ] = await Promise.all([
     q(
       "properties",
@@ -121,6 +123,7 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
     q("conversations", "id,scope_type,scope_id,subject,last_message_at"),
     q("messages", "conversation_id,sender_kind,sender_contact_id,body,sent_at,read_at", "sent_at"),
     q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,created_at"),
+    q("insurance_policies", "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes", "created_at"),
   ]);
 
   // ── Contacts ──
@@ -471,6 +474,19 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
     createdAt: day(doc.created_at),
   }));
 
+  const INSURANCES: DemoInsurance[] = insuranceRows.map((i) => ({
+    id: s(i.id),
+    propertyId: sOr(i.property_id, null),
+    leaseId: sOr(i.lease_id, null),
+    kind: s(i.kind) as DemoInsurance["kind"],
+    provider: s(i.provider),
+    policyNumber: s(i.policy_number),
+    premiumCents: n(i.premium_cents),
+    startsOn: i.starts_on ? day(i.starts_on) : null,
+    expiresOn: i.expires_on ? day(i.expires_on) : null,
+    notes: s(i.notes),
+  }));
+
   const ENDED_LEASES: DemoData["ENDED_LEASES"] = LEASES.filter((l) => l.status === "ended").map((l) => ({
     id: l.id,
     label: labelOfUnit(l.unitId),
@@ -498,6 +514,7 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
     WORKFLOWS,
     CONVERSATIONS,
     DOCUMENTS,
+    INSURANCES,
     contactById: (id: string) => contactIndex.get(id)!,
     propertyById: (id: string) => propertyIndex.get(id)!,
     unitById: (id: string) => unitIndex.get(id)!,

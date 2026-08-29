@@ -1,5 +1,4 @@
 import Link from "next/link";
-import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
@@ -94,7 +93,6 @@ export default async function LoyersPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="finances" active="/app/loyers" />
       <PageHeader title={d.loyers.title} subtitle={d.loyers.subtitle} />
 
       <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">

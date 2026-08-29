@@ -1,5 +1,4 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
-import HubTabs from "@/components/gestion/HubTabs";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo } from "@/lib/demo";
 import { formatDate } from "@/lib/types";
@@ -66,7 +65,6 @@ export default async function DocumentsPage() {
 
   return (
     <div>
-      <HubTabs d={d} hub="documents" active="/app/documents" />
       <PageHeader title={d.documents.title} subtitle={d.documents.subtitle} />
 
       <Card className="overflow-hidden">

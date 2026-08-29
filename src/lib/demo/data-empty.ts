@@ -68,6 +68,7 @@ export function buildEmptyData(org: Org): DemoData {
     TICKETS: [],
     METERS: [],
     WORKFLOWS: [],
+    INSURANCES: [],
     CONVERSATIONS: [],
     LAMBERT_PORTFOLIO: [],
     SCI_BEAULIEU_PORTFOLIO: [],

@@ -1,10 +1,9 @@
 import Link from "next/link";
-import HubTabs from "@/components/gestion/HubTabs";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { ChipLink } from "@/components/gestion/filters";
 import MeterCreate from "@/components/gestion/MeterSheet";
-import { getDemo } from "@/lib/demo";
+import { getDatasetId, getDemo } from "@/lib/demo";
 import { METER_UNITS, formatDate, formatNumber, type MeterKind } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -24,17 +23,11 @@ export default async function CompteursPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { METERS, PROPERTIES, propertyById, unitById } = await getDemo();
-
-  // A real account with nothing in it: say so rather than reach for a
-  // showcase record that no longer exists.
-  if (METERS.length === 0)
-    return (
-      <div>
-        <HubTabs d={d} hub="patrimoine" active="/app/compteurs" />
-        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.meters })} body={d.common.emptyBody} />
-      </div>
-    );
+  const [{ METERS, PROPERTIES, UNITS, propertyById, unitById }, datasetId] = await Promise.all([
+    getDemo(),
+    getDatasetId(),
+  ]);
+  const real = datasetId === "real";
   const withoutReading = METERS.filter((m) => !m.lastReading);
   const pendingAck = METERS.filter(
     (m) => m.lastReading && (!m.lastReading.tenantAck || !m.lastReading.managerAck),
@@ -43,16 +36,10 @@ export default async function CompteursPage({
   const kindFilter = KIND_SLUGS.find((k) => k.slug === params.type)?.kind;
   const rows = kindFilter ? METERS.filter((m) => m.kind === kindFilter) : METERS;
 
-  // Property/unit options for the create sheet — units first, then the
+  // Property/unit options for the create sheet — every unit first, then the
   // per-property "common areas" rows (dataset-aware labels).
   const sheetOptions = [
-    ...METERS.filter((m) => m.unitId)
-      .map((m) => m.unitId!)
-      .filter((v, i, a) => a.indexOf(v) === i)
-      .map((id) => {
-        const u = unitById(id);
-        return { id, label: `${u.label} — ${propertyById(u.propertyId).name}` };
-      }),
+    ...UNITS.map((u) => ({ id: u.id, label: `${u.label} · ${propertyById(u.propertyId).name}` })),
     ...PROPERTIES.map((p) => ({
       id: `common-${p.id}`,
       label: fmt(d.compteurs.sheetCommonOption, { property: p.name }),
@@ -70,12 +57,16 @@ export default async function CompteursPage({
 
   return (
     <div>
-      <HubTabs d={d} hub="patrimoine" active="/app/compteurs" />
       <PageHeader
         title={d.compteurs.title}
         subtitle={d.compteurs.subtitle}
-        actions={<MeterCreate d={d} options={sheetOptions} />}
+        actions={sheetOptions.length > 0 ? <MeterCreate d={d} options={sheetOptions} real={real} /> : undefined}
       />
+
+      {METERS.length === 0 ? (
+        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.meters })} body={d.common.emptyBody} />
+      ) : (
+      <>
 
       <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">
         <ChipLink href="/app/compteurs" active={!kindFilter}>
@@ -223,6 +214,8 @@ export default async function CompteursPage({
           )}
         </Panel>
       </div>
+      </>
+      )}
     </div>
   );
 }

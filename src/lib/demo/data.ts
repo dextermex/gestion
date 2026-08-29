@@ -684,6 +684,28 @@ export const METERS: DemoMeter[] = [
   { id: "m-6", unitId: null, propertyId: "p-beaulieu", kind: "heat", serial: "ISTA-COL-2210", supplier: "ista (répartition)", lastReading: { date: "2026-07-01", value: 148_220, source: "import", tenantAck: false, managerAck: true } },
 ];
 
+// ─── Assurances ─────────────────────────────────────────────────────────────
+
+export interface DemoInsurance {
+  id: string;
+  propertyId: string | null;
+  leaseId: string | null;
+  kind: "building" | "pno" | "liability" | "rent_guarantee" | "pi" | "other";
+  provider: string;
+  policyNumber: string;
+  premiumCents: number;
+  startsOn: string | null;
+  expiresOn: string | null;
+  notes: string;
+}
+
+export const INSURANCES: DemoInsurance[] = [
+  { id: "ins-1", propertyId: "p-beaulieu", leaseId: null, kind: "building", provider: "Foyer Assurances", policyNumber: "IMM-482210", premiumCents: cents(3840), startsOn: "2026-01-01", expiresOn: "2026-12-31", notes: "Police souscrite par le syndic, quote-part refacturée aux copropriétaires." },
+  { id: "ins-2", propertyId: "p-bertrange", leaseId: null, kind: "building", provider: "Baloise Assurances", policyNumber: "HAB-90114", premiumCents: cents(1260), startsOn: "2025-11-01", expiresOn: "2026-10-31", notes: "" },
+  { id: "ins-3", propertyId: "p-gare", leaseId: null, kind: "pno", provider: "Lalux", policyNumber: "PNO-33871", premiumCents: cents(420), startsOn: "2026-02-01", expiresOn: "2027-01-31", notes: "Propriétaire non occupant pendant la vacance du studio." },
+  { id: "ins-4", propertyId: null, leaseId: "l-rdc", kind: "rent_guarantee", provider: "AXA Luxembourg", policyNumber: "GLI-77120", premiumCents: cents(310), startsOn: "2026-02-01", expiresOn: "2027-01-31", notes: "Garantie loyers impayés sur le Studio RDC." },
+];
+
 // ─── Workflows ──────────────────────────────────────────────────────────────
 
 export interface DemoWorkflow {
