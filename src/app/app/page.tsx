@@ -230,7 +230,13 @@ export default async function DashboardPage() {
           fraction={lettable.length === 0 ? 0 : occupiedCount / lettable.length}
           label={d.dash.ringOccupancy}
           value={`${occupiedCount}/${lettable.length}`}
-          sub={vacantCount > 0 ? fmt(d.dash.ringOccupancySub, { n: vacantCount }) : d.dash.ringOccupancyNone}
+          sub={
+            vacantCount === 0
+              ? d.dash.ringOccupancyNone
+              : vacantCount === 1
+                ? d.dash.ringOccupancySubOne
+                : fmt(d.dash.ringOccupancySubMany, { n: vacantCount })
+          }
           actionHref="/app/biens?occupation=vacants"
           actionLabel={d.dash.ringOccupancyAction}
         />
@@ -290,7 +296,7 @@ export default async function DashboardPage() {
                 <LinkRow
                   href="/app/workflows"
                   title={w.label}
-                  sub={w.blockedReason ?? ""}
+                  sub={(w.blockedReason ?? "").split(". ")[0]}
                   right={<Badge className="bg-amber-100 text-amber-800">{d.status.blocked}</Badge>}
                 />
               </li>

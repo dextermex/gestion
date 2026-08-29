@@ -28,7 +28,7 @@ export default async function TenantLayout({ children }: { children: React.React
   return (
     <div className="min-h-dvh bg-sand-50">
       <ScrollHeader
-        className="sticky top-0 z-30 border-b border-transparent bg-white/80 backdrop-blur-xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        className="chrome-material sticky top-0 z-30 border-b border-transparent bg-white transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150"
         elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
       >
         <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-3 px-4 sm:px-6">

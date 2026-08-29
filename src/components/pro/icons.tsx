@@ -242,14 +242,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
   key: (
     <>
       <circle cx="8" cy="15.5" r="4" />
-      <path d="M10.8 12.7 20 3.5M16.2 7.3l3 3M13.4 10.1l2.2 2.2" />
+      <path d="M10.8 12.7 20 3.5M16 7.5l3 3" />
     </>
   ),
   gauge: (
     <>
       <path d="M4 15.5a8 8 0 1 1 16 0" />
       <path d="m12 15.5 3.5-4.5" />
-      <path d="M12 15.5h.01" />
     </>
   ),
   euro: (
@@ -301,7 +300,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
       <path d="M14 3v5h5" />
-      <path d="M8.5 16c.8-1.1 1.6-1.1 2.3 0 .7 1.1 1.5 1.1 2.3 0" />
+      <path d="m8.5 14.5 2.3 2.3 4.7-5" />
     </>
   ),
 };

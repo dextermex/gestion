@@ -187,8 +187,8 @@ export default function GestionShell({
               <span className="flex min-w-0 items-center gap-2.5">
                 <Icon
                   name={i.icon}
-                  size={16}
-                  className={"shrink-0 " + (isActivePath(i.href) ? "text-brand-700" : "text-ink-soft/70")}
+                  size={18}
+                  className={"shrink-0 " + (isActivePath(i.href) ? "text-brand-700" : "text-ink-soft")}
                 />
                 <span className="truncate">{i.label}</span>
               </span>
@@ -238,7 +238,7 @@ export default function GestionShell({
 
         <div className="flex min-h-dvh flex-col lg:pl-60">
           <ScrollHeader
-            className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-transparent bg-white/80 px-4 backdrop-blur-xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] sm:gap-3 sm:px-6"
+            className="chrome-material sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-transparent bg-white px-4 transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 sm:gap-3 sm:px-6"
             elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
           >
             <button
@@ -251,7 +251,7 @@ export default function GestionShell({
               </svg>
             </button>
 
-            <p className="truncate text-sm font-semibold text-ink">{shell.orgShortName}</p>
+            <p className="hidden truncate text-sm font-semibold text-ink md:block">{shell.orgShortName}</p>
             {/* The badge marks sample data, so it must not sit next to a real
                 workspace name. */}
             {shell.sampleCabinet && (

@@ -4,7 +4,7 @@ import { DemoAction } from "@/components/gestion/DemoAction";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { CountCard } from "@/components/gestion/filters";
 import { getDemo } from "@/lib/demo";
-import { euros, formatDate, formatMonth, rentStatusMeta } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatMonth, rentStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
@@ -113,7 +113,7 @@ export default async function LoyersPage({
       <div className="stagger-rise mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <CountCard
           href={withView(view === "impayes" ? undefined : "impayes")}
-          value={euros(open, locale)}
+          value={eurosWhole(open, locale)}
           label={`${d.loyers.openBalance} · ${d.loyers.viewOpen}`}
           selected={view === "impayes"}
           tone={open > 0 ? "bad" : "good"}
@@ -122,12 +122,12 @@ export default async function LoyersPage({
             active view, not the default state. */}
         <CountCard
           href={withView(undefined)}
-          value={euros(expected, locale)}
+          value={eurosWhole(expected, locale)}
           label={`${d.loyers.expected} · ${d.loyers.viewAll}`}
         />
         <CountCard
           href={withView(view === "payes" ? undefined : "payes")}
-          value={euros(collected, locale)}
+          value={eurosWhole(collected, locale)}
           label={`${d.loyers.collected} · ${d.loyers.viewPaid}`}
           selected={view === "payes"}
           tone={collected >= expected && expected > 0 ? "good" : "default"}

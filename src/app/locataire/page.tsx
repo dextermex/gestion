@@ -73,14 +73,14 @@ export default async function TenantHomePage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Link
             href="/locataire/demandes?nouvelle=technique"
-            className="tactile rounded-xl border border-sand-200 p-4 transition hover:border-brand-200 hover:shadow-sm"
+            className="tactile rounded-xl border border-transparent bg-sand-50 p-4 transition hover:border-brand-200 hover:bg-sand-100"
           >
             <p className="font-display text-sm font-bold text-ink">{d.tenant.quickTech}</p>
             <p className="mt-1 text-xs leading-relaxed text-ink-soft">{d.tenant.quickTechSub}</p>
           </Link>
           <Link
             href="/locataire/demandes?nouvelle=administrative"
-            className="tactile rounded-xl border border-sand-200 p-4 transition hover:border-brand-200 hover:shadow-sm"
+            className="tactile rounded-xl border border-transparent bg-sand-50 p-4 transition hover:border-brand-200 hover:bg-sand-100"
           >
             <p className="font-display text-sm font-bold text-ink">{d.tenant.quickAdmin}</p>
             <p className="mt-1 text-xs leading-relaxed text-ink-soft">{d.tenant.quickAdminSub}</p>
