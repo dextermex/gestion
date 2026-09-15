@@ -114,3 +114,42 @@ over this data — swapping in Supabase changes the data source, not a single co
 5. Banking: CAMT.053 ingestion first (permanent), Enable Banking behind the
    `BankProvider` interface, consent ladder T-14/7/2/0.
 6. Tenant portal + artisan magic-link portal (Phase 2 of the strategy).
+
+## Patrimoine: the object, not the module
+
+An owner thinks about Appartement 3B, not about Baux then Garanties then
+Compteurs. So the left rail names two things under Patrimoine — Biens and
+Interventions — and everything else about a property is read from the
+property.
+
+**The projection.** `src/lib/gestion/portfolio.ts` turns `DemoData` into one
+property-shaped view: lots, the lease in force on each, this month's period
+from the ledger, occupancy, monthly total, the next due date. Both Patrimoine
+screens read it, so a card and a sheet can never disagree, and a sample
+cabinet and a real account compute identically because both arrive as
+`DemoData`. It derives; nothing here is stored.
+
+**Where the old modules live now.** The routes all still exist and still
+answer to their name in ⌘K; they simply left the rail:
+
+| Register | Read from |
+| --- | --- |
+| Baux | property → Location, and `/app/baux/[id]` as the rental dossier |
+| Compteurs | property → Technique |
+| Garanties, Indexation, États des lieux | property → Location, per lease |
+| Assurances | property → Technique (building, PNO), Location (rent guarantee) |
+| Charges | the lease's `charges_cents`, plus Finances for the syndic décompte |
+| Interventions | portfolio-wide under Patrimoine, and per property — same rows |
+
+**One lease path.** `src/lib/gestion/lease.ts` owns tenancy creation. The
+quick-add dialog and the guided flow on a vacant lot both call it, so the
+legal engine, the deposit and the rent ledger behave identically whichever
+door the owner came through. An active lease with a rent and a due day IS the
+monthly obligation: `createLease` opens the rent periods itself, and there is
+no second switch anywhere to "start tracking" a rent.
+
+**Media.** `properties.photo_url` holds a path into the private
+`gestion-media` bucket (migration 0011), never a URL. `src/lib/gestion/media.ts`
+signs those paths in one batched call per render under the caller's own token;
+a property with no photograph draws the placeholder in `PropertyPhoto.tsx`
+rather than a gap.

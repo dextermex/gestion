@@ -45,7 +45,18 @@ export interface ShellData {
    highlights Finances and /app/baux/b-12 highlights Patrimoine. */
 
 type NavChild = { href: string; label: string; badge?: number };
-type NavItem = { href: string; label: string; icon: IconName; badge?: number; children?: NavChild[] };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: IconName;
+  badge?: number;
+  children?: NavChild[];
+  /** Paths that belong to this section without being listed in it. The
+   *  rental dossier, the meter sheet and the deposit ledger now open from
+   *  the property they concern, so they light Patrimoine up without ever
+   *  taking a line in the rail. */
+  also?: string[];
+};
 
 function destinations(d: Dict, badges: { review: number; unread: number }, workspaceKind: string): NavItem[] {
   // AML/KYC is a cabinet obligation: on an owner-kind workspace the entry
@@ -54,14 +65,24 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
   return [
     { href: "/app", label: d.nav.home, icon: "dashboard" },
     {
+      // Patrimoine is deliberately two lines. A bail, a compteur, une
+      // garantie, un EDL, une assurance and l'indexation are not modules an
+      // owner goes looking for: they belong to a property, and they open
+      // from it. The routes stay, the rail stops listing them.
       href: "/app/biens",
       label: d.nav.patrimoine,
       icon: "properties",
       children: [
         { href: "/app/biens", label: d.hubs.portfolio },
-        { href: "/app/baux", label: d.hubs.leases },
-        { href: "/app/compteurs", label: d.hubs.meters },
-        { href: "/app/charges", label: d.hubs.statements },
+        { href: "/app/interventions", label: d.hubs.interventions },
+      ],
+      also: [
+        "/app/baux",
+        "/app/compteurs",
+        "/app/indexation",
+        "/app/garanties",
+        "/app/edl",
+        "/app/assurances",
       ],
     },
     {
@@ -72,7 +93,6 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
       children: [
         { href: "/app/contacts", label: d.hubs.people },
         { href: "/app/messages", label: d.hubs.messages, badge: badges.unread || undefined },
-        { href: "/app/interventions", label: d.hubs.interventions },
       ],
     },
     {
@@ -84,6 +104,7 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
         { href: "/app/loyers", label: d.hubs.collections },
         { href: "/app/finance", label: d.hubs.expenses },
         { href: "/app/banque", label: d.hubs.banking, badge: badges.review || undefined },
+        { href: "/app/charges", label: d.hubs.statements },
       ],
     },
     {
@@ -93,17 +114,6 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
       children: [
         { href: "/app/documents", label: d.hubs.library },
         { href: "/app/contrats", label: d.hubs.contracts },
-      ],
-    },
-    {
-      href: "/app/indexation",
-      label: d.nav.locative,
-      icon: "key",
-      children: [
-        { href: "/app/indexation", label: d.hubs.indexation },
-        { href: "/app/garanties", label: d.hubs.deposits },
-        { href: "/app/edl", label: d.hubs.edl },
-        { href: "/app/assurances", label: d.hubs.assurances },
       ],
     },
     {
@@ -131,23 +141,30 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
 
 /** Every path prefix that lights a section up. */
 function matchesOf(i: NavItem): string[] {
-  return i.children?.map((c) => c.href) ?? [i.href];
+  return [...(i.children?.map((c) => c.href) ?? [i.href]), ...(i.also ?? [])];
 }
 
-/** Everything ⌘K can route to: home, every sub-section, and Workflows
- *  (which opens from the home screen). Nothing became unreachable. */
+/** Everything ⌘K can route to: home, every sub-section, Workflows, and the
+ *  registers that moved into the property context. Simplifying the rail took
+ *  nothing off the map — these still answer to their name in the palette. */
 function navigable(nav: NavItem[], d: Dict): Array<{ href: string; label: string }> {
   const seen = new Set<string>();
   const out: Array<{ href: string; label: string }> = [];
+  const add = (href: string, label: string) => {
+    if (seen.has(href)) return;
+    seen.add(href);
+    out.push({ href, label });
+  };
   for (const i of nav) {
-    for (const entry of i.children ?? [{ href: i.href, label: i.label }]) {
-      if (!seen.has(entry.href)) {
-        seen.add(entry.href);
-        out.push({ href: entry.href, label: entry.label });
-      }
-    }
+    for (const entry of i.children ?? [{ href: i.href, label: i.label }]) add(entry.href, entry.label);
   }
-  out.push({ href: "/app/workflows", label: d.nav.workflows });
+  add("/app/workflows", d.nav.workflows);
+  add("/app/baux", d.hubs.leases);
+  add("/app/compteurs", d.hubs.meters);
+  add("/app/indexation", d.hubs.indexation);
+  add("/app/garanties", d.hubs.deposits);
+  add("/app/edl", d.hubs.edl);
+  add("/app/assurances", d.hubs.assurances);
   return out;
 }
 

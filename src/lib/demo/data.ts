@@ -111,6 +111,9 @@ export interface DemoProperty {
   ownerContactIds: string[];
   ownershipNote: string;
   unitsCount: number;
+  /** Cover photograph, once one has been uploaded. Null renders the drawn
+   *  placeholder: a portfolio without photos still has to look deliberate. */
+  photoUrl: string | null;
 }
 
 export const PROPERTIES: DemoProperty[] = [
@@ -133,6 +136,7 @@ export const PROPERTIES: DemoProperty[] = [
     ownerContactIds: ["c-sci-bealieu"],
     ownershipNote: "SCI Beaulieu (Marie Faber 60 %, Pierre Faber 40 %), transparente",
     unitsCount: 6,
+    photoUrl: null,
   },
   {
     id: "p-bertrange",
@@ -150,6 +154,7 @@ export const PROPERTIES: DemoProperty[] = [
     ownerContactIds: ["c-faber", "c-faber-p"],
     ownershipNote: "Marie et Pierre Faber, 50/50, imposition collective",
     unitsCount: 1,
+    photoUrl: null,
   },
   {
     id: "p-kirchberg",
@@ -169,6 +174,7 @@ export const PROPERTIES: DemoProperty[] = [
     ownerContactIds: ["c-lambert"],
     ownershipNote: "Sophie Lambert (non-résidente BE), 100 %",
     unitsCount: 2,
+    photoUrl: null,
   },
   {
     id: "p-gare",
@@ -188,6 +194,7 @@ export const PROPERTIES: DemoProperty[] = [
     ownerContactIds: ["c-lambert"],
     ownershipNote: "Sophie Lambert, VEFA 2024 (amortissement 6 %, base plafonnée)",
     unitsCount: 1,
+    photoUrl: null,
   },
 ];
 
@@ -198,19 +205,22 @@ export interface DemoUnit {
   kind: "dwelling" | "commercial" | "parking";
   floor: string;
   areaSqm: number;
+  /** Total habitable rooms ("pièces"). */
   rooms: number;
+  /** Bedrooms, when the distinction is meaningful for the unit kind. */
+  bedrooms?: number;
   furnished: boolean;
   vacantSince?: string;
 }
 
 export const UNITS: DemoUnit[] = [
-  { id: "u-b-3b", propertyId: "p-beaulieu", label: "Apt 3B", kind: "dwelling", floor: "3e", areaSqm: 72, rooms: 2, furnished: false },
-  { id: "u-b-3c", propertyId: "p-beaulieu", label: "Apt 3C", kind: "dwelling", floor: "3e", areaSqm: 71, rooms: 2, furnished: false },
-  { id: "u-b-2a", propertyId: "p-beaulieu", label: "Apt 2A", kind: "dwelling", floor: "2e", areaSqm: 85, rooms: 3, furnished: false },
-  { id: "u-b-1a", propertyId: "p-beaulieu", label: "Apt 1A", kind: "dwelling", floor: "1er", areaSqm: 96, rooms: 3, furnished: false },
-  { id: "u-b-rdc", propertyId: "p-beaulieu", label: "Studio RDC", kind: "dwelling", floor: "RDC", areaSqm: 38, rooms: 1, furnished: true },
+  { id: "u-b-3b", propertyId: "p-beaulieu", label: "Apt 3B", kind: "dwelling", floor: "3e", areaSqm: 72, bedrooms: 2, rooms: 3, furnished: false },
+  { id: "u-b-3c", propertyId: "p-beaulieu", label: "Apt 3C", kind: "dwelling", floor: "3e", areaSqm: 71, bedrooms: 2, rooms: 3, furnished: false },
+  { id: "u-b-2a", propertyId: "p-beaulieu", label: "Apt 2A", kind: "dwelling", floor: "2e", areaSqm: 85, bedrooms: 3, rooms: 4, furnished: false },
+  { id: "u-b-1a", propertyId: "p-beaulieu", label: "Apt 1A", kind: "dwelling", floor: "1er", areaSqm: 96, bedrooms: 3, rooms: 4, furnished: false },
+  { id: "u-b-rdc", propertyId: "p-beaulieu", label: "Studio RDC", kind: "dwelling", floor: "RDC", areaSqm: 38, bedrooms: 1, rooms: 2, furnished: true },
   { id: "u-b-p1", propertyId: "p-beaulieu", label: "Parking P1", kind: "parking", floor: "-1", areaSqm: 12, rooms: 0, furnished: false },
-  { id: "u-bert", propertyId: "p-bertrange", label: "Maison", kind: "dwelling", floor: "—", areaSqm: 168, rooms: 4, furnished: false },
+  { id: "u-bert", propertyId: "p-bertrange", label: "Maison", kind: "dwelling", floor: "—", areaSqm: 168, bedrooms: 4, rooms: 5, furnished: false },
   { id: "u-k-01", propertyId: "p-kirchberg", label: "Plateau 1er", kind: "commercial", floor: "1er", areaSqm: 240, rooms: 0, furnished: false },
   { id: "u-k-rdc", propertyId: "p-kirchberg", label: "Local RDC", kind: "commercial", floor: "RDC", areaSqm: 95, rooms: 0, furnished: false },
   { id: "u-gare", propertyId: "p-gare", label: "Studio 4A", kind: "dwelling", floor: "4e", areaSqm: 34, rooms: 1, furnished: true, vacantSince: "2026-01-10" },
@@ -614,6 +624,8 @@ export const EDLS: DemoEdl[] = [
 export interface DemoTicket {
   id: string;
   ref: string;
+  /** The lot the intervention concerns: the link a property page follows. */
+  unitId: string;
   unitLabel: string;
   leaseId: string | null;
   source: "tenant" | "manager" | "edl_defect" | "owner";
@@ -630,32 +642,32 @@ export interface DemoTicket {
 
 export const TICKETS: DemoTicket[] = [
   {
-    id: "t-1", ref: "INT-2026-0141", unitLabel: "Apt 3B · Résidence Beaulieu", leaseId: "l-3b",
+    id: "t-1", unitId: "u-b-3b", ref: "INT-2026-0141", unitLabel: "Apt 3B · Résidence Beaulieu", leaseId: "l-3b",
     source: "tenant", category: "heating", severity: "urgent", status: "scheduled",
     title: "Chaudière en défaut, pression à 0,4 bar", createdAt: "2026-08-19", slaDueAt: "2026-08-25",
     artisanContactId: "c-krier", amountCents: cents(1240),
     rechargeDecision: { decision: "owner", note: "Grosse réparation, non refacturable au locataire (blocage légal)." },
   },
   {
-    id: "t-2", ref: "INT-2026-0142", unitLabel: "Apt 2A · Résidence Beaulieu", leaseId: "l-2a",
+    id: "t-2", unitId: "u-b-2a", ref: "INT-2026-0142", unitLabel: "Apt 2A · Résidence Beaulieu", leaseId: "l-2a",
     source: "tenant", category: "damp_mould", severity: "priority", status: "in_progress",
     title: "Trace d'humidité mur chambre 2", createdAt: "2026-08-12", slaDueAt: "2026-08-27",
     artisanContactId: "c-da-silva",
   },
   {
-    id: "t-3", ref: "INT-2026-0139", unitLabel: "Plateau 1er · Bureaux Kirchberg", leaseId: "l-k01",
+    id: "t-3", unitId: "u-k-01", ref: "INT-2026-0139", unitLabel: "Plateau 1er · Bureaux Kirchberg", leaseId: "l-k01",
     source: "tenant", category: "electrics", severity: "routine", status: "done",
     title: "Prise réseau défectueuse open space", createdAt: "2026-08-02", slaDueAt: "2026-08-16",
     artisanContactId: "c-elektro", amountCents: cents(380),
     rechargeDecision: { decision: "tenant", note: "Bail commercial : refacturation selon la clause charges (équipement du preneur)." },
   },
   {
-    id: "t-4", ref: "INT-2026-0143", unitLabel: "Studio RDC · Résidence Beaulieu", leaseId: "l-rdc",
+    id: "t-4", unitId: "u-b-rdc", ref: "INT-2026-0143", unitLabel: "Studio RDC · Résidence Beaulieu", leaseId: "l-rdc",
     source: "edl_defect", category: "plumbing", severity: "routine", status: "pending_tenant",
     title: "Joint silicone douche à refaire (défaut EDL n° 17)", createdAt: "2026-08-05", slaDueAt: null,
   },
   {
-    id: "t-5", ref: "INT-2026-0144", unitLabel: "Studio 4A · Studio Quartier Gare", leaseId: null,
+    id: "t-5", unitId: "u-gare", ref: "INT-2026-0144", unitLabel: "Studio 4A · Studio Quartier Gare", leaseId: null,
     source: "manager", category: "common_areas", severity: "routine", status: "offered",
     title: "Remise en peinture avant relocation", createdAt: "2026-08-18", slaDueAt: null,
     artisanContactId: "c-da-silva", amountCents: cents(2150),

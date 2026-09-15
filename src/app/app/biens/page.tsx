@@ -1,25 +1,30 @@
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
 import { ChipLink } from "@/components/gestion/filters";
-import { getDatasetId, getDemo } from "@/lib/demo";
-import type { DemoProperty, DemoUnit } from "@/lib/demo/data";
-import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
-import { authedClient, getSession } from "@/lib/supabase/server";
-import { getIdentity } from "@/lib/workspace";
-import { eurosWhole } from "@/lib/types";
+import PropertyPhoto from "@/components/gestion/PropertyPhoto";
+import { getDemo } from "@/lib/demo";
+import {
+  buildPortfolio,
+  occupancyOf,
+  type PropertyCard,
+  type PropertyKind,
+  type UnitLine,
+} from "@/lib/gestion/portfolio";
+import { eurosWhole, formatDate, formatMonth, rentStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
-import { fmt } from "@/lib/i18n/config";
+import { fmt, plural, type Locale } from "@/lib/i18n/config";
+import type { Dict } from "@/lib/i18n";
 
-/** Structural classification — derived from the units, never from the free-
- *  text `type` label, so it holds on every dataset. */
-type PropertyKind = "building" | "house" | "apartment" | "commercial";
-function kindOf(p: DemoProperty, units: DemoUnit[]): PropertyKind {
-  const dwellings = units.filter((u) => u.kind === "dwelling");
-  const commercial = units.filter((u) => u.kind === "commercial");
-  if (commercial.length > 0 && dwellings.length === 0) return "commercial";
-  if (dwellings.length === 1 && units.length === 1) return p.isCopropriete ? "apartment" : "house";
-  return "building";
-}
+/**
+ * Biens — the portfolio, read in a few seconds.
+ *
+ * One card per property, photograph first, and underneath only what tells an
+ * owner whether that property is fine this month: who lives there, what it
+ * brings in, whether the rent arrived. Everything technical waits on the
+ * property page. The figures come from the portfolio projection, so a sample
+ * cabinet and a real account compute the same way.
+ */
 
 const KIND_PARAM: Record<string, PropertyKind> = {
   immeubles: "building",
@@ -28,6 +33,144 @@ const KIND_PARAM: Record<string, PropertyKind> = {
   commerciaux: "commercial",
 };
 
+function kindLabel(d: Dict, kind: PropertyKind): string {
+  return {
+    building: d.biens.kindBuilding,
+    house: d.biens.kindHouse,
+    apartment: d.biens.kindApartment,
+    commercial: d.biens.kindCommercial,
+  }[kind];
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-lg bg-sand-100 px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{children}</span>
+  );
+}
+
+function OccupancyBadge({ card, d }: { card: PropertyCard; d: Dict }) {
+  const state = occupancyOf(card);
+  if (state === "occupied") return <Badge className="bg-emerald-100 text-emerald-800">{d.biens.occupiedOne}</Badge>;
+  if (state === "vacant") return <Badge className="bg-sand-100 text-ink-soft">{d.biens.vacantLabel}</Badge>;
+  return <Badge className="bg-amber-100 text-amber-800">{d.biens.partiallyOccupied}</Badge>;
+}
+
+/** The single tenancy: tenant, rent, and whether this month arrived. */
+function SingleTenancy({ line, d, locale }: { line: UnitLine; d: Dict; locale: Locale }) {
+  const meta = rentStatusMeta(d);
+  if (line.vacant) {
+    return (
+      <div className="mt-3 border-t border-sand-100 pt-3">
+        <p className="text-sm text-ink-soft">{d.common.none}</p>
+        <p className="mt-0.5 text-sm text-ink-soft">{d.biens.noTenant}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 space-y-1.5 border-t border-sand-100 pt-3">
+      <p className="flex items-center gap-1.5 truncate text-sm text-ink">
+        <Icon name="user" size={14} className="shrink-0 text-ink-soft" />
+        {line.tenantNames.join(", ") || d.common.none}
+      </p>
+      <p className="flex items-center gap-1.5 text-sm tabular-nums text-ink">
+        <Icon name="calendar" size={14} className="shrink-0 text-ink-soft" />
+        {fmt(d.biens.perMonth, { amount: eurosWhole(line.monthlyCents, locale) })}
+      </p>
+      {line.status && (
+        <p className="flex items-center gap-1.5 pt-0.5 text-sm">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-semibold ${
+              meta[line.status].color
+            }`}
+          >
+            {line.status === "paid" && <Icon name="check" size={13} />}
+            {line.status === "paid" && line.period
+              ? fmt(d.biens.paidOn, { date: formatDate(line.period.dueDate, locale) })
+              : meta[line.status].label}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A building: how the month is going across its lots, in one bar. */
+function BuildingTenancy({ card, d, locale }: { card: PropertyCard; d: Dict; locale: Locale }) {
+  const segments: Array<{ key: string; n: number; label: string; bar: string; dot: string }> = [
+    {
+      key: "paid",
+      n: card.mix.paid ?? 0,
+      label: plural(locale, card.mix.paid ?? 0, d.biens.mixPaidOne, d.biens.mixPaidMany),
+      bar: "bg-emerald-500",
+      dot: "bg-emerald-500",
+    },
+    {
+      key: "partial",
+      n: (card.mix.partial ?? 0) + (card.mix.pending ?? 0) + (card.mix.upcoming ?? 0),
+      label: plural(
+        locale,
+        (card.mix.partial ?? 0) + (card.mix.pending ?? 0) + (card.mix.upcoming ?? 0),
+        d.biens.mixPartialOne,
+        d.biens.mixPartialMany,
+      ),
+      bar: "bg-amber-400",
+      dot: "bg-amber-400",
+    },
+    {
+      key: "late",
+      n: card.mix.late ?? 0,
+      label: plural(locale, card.mix.late ?? 0, d.biens.mixLateOne, d.biens.mixLateMany),
+      bar: "bg-red-500",
+      dot: "bg-red-500",
+    },
+  ];
+  const total = segments.reduce((a, s) => a + s.n, 0);
+
+  return (
+    <div className="mt-3 border-t border-sand-100 pt-3">
+      <p className="text-sm tabular-nums text-ink-soft">
+        {plural(locale, card.occupied, d.biens.occupiedOneN, d.biens.occupiedManyN)}
+        {" \u00b7 "}
+        {plural(locale, card.vacant, d.biens.vacantOneN, d.biens.vacantManyN)}
+      </p>
+      {total > 0 ? (
+        <>
+          <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+            {fmt(d.biens.rentsOf, { month: formatMonth(monthOf(card), locale) })}
+          </p>
+          <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-sand-200" aria-hidden>
+            {segments
+              .filter((s) => s.n > 0)
+              .map((s) => (
+                <span key={s.key} className={s.bar} style={{ width: `${(s.n / total) * 100}%` }} />
+              ))}
+          </div>
+          <ul className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1">
+            {segments
+              .filter((s) => s.n > 0)
+              .map((s) => (
+                <li key={s.key} className="flex items-center gap-1.5 text-[12px] tabular-nums text-ink-soft">
+                  <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />
+                  {s.label}
+                </li>
+              ))}
+          </ul>
+        </>
+      ) : (
+        <p className="mt-2 text-sm tabular-nums text-ink">
+          {fmt(d.biens.perMonth, { amount: eurosWhole(card.monthlyCents, locale) })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The month the card is reporting on, taken from the periods it found. */
+function monthOf(card: PropertyCard): string {
+  const p = card.lots.find((l) => l.period)?.period;
+  return p ? p.period : "";
+}
+
 export default async function BiensPage({
   searchParams,
 }: {
@@ -35,112 +178,23 @@ export default async function BiensPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const [{ LEASES, PROPERTIES, UNITS }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
-  const real = datasetId === "real";
-
-  // One display shape for both sources: the demo engines on sample cabinets,
-  // gestion.* under the caller's JWT on real accounts.
-  type CardRow = {
-    p: {
-      id: string; name: string; address: string; energyClass: string | null;
-      isCopropriete: boolean; smokeDetectorsConfirmed: boolean; ownershipNote: string;
-    };
-    lettableCount: number;
-    occupiedCount: number;
-    monthlyRent: number;
-    vacant: number;
-    kind: PropertyKind;
-  };
-
-  let enriched: CardRow[];
-  if (real) {
-    enriched = [];
-    const session = await getSession();
-    const identity = session ? await getIdentity() : null;
-    if (session && identity?.active) {
-      const g = authedClient(session.accessToken).schema("gestion");
-      const [propRes, unitRes] = await Promise.all([
-        g.from("properties")
-          .select("id,name,type,address,energy_class,is_copropriete,smoke_detectors_confirmed")
-          .eq("org_id", identity.active.id)
-          .is("archived_at", null)
-          .order("created_at"),
-        g.from("units").select("id,property_id,kind").eq("org_id", identity.active.id).is("archived_at", null),
-      ]);
-      type DbProp = {
-        id: string; name: string; type: string; address: PropertyAddress | null;
-        energy_class: string | null; is_copropriete: boolean; smoke_detectors_confirmed: boolean;
-      };
-      type DbUnit = { id: string; property_id: string; kind: string };
-      const props = (propRes.data as DbProp[] | null) ?? [];
-      const allUnits = (unitRes.data as DbUnit[] | null) ?? [];
-      enriched = props.map((dp) => {
-        const units = allUnits.filter((u) => u.property_id === dp.id);
-        const dwellings = units.filter((u) => u.kind === "dwelling").length;
-        const commercial = units.filter((u) => u.kind === "commercial" || u.kind === "office").length;
-        const lettableCount = units.filter((u) => u.kind !== "parking" && u.kind !== "cellar").length;
-        const kind: PropertyKind =
-          commercial > 0 && dwellings === 0 && units.length > 0
-            ? "commercial"
-            : dwellings === 1 && units.length === 1
-              ? dp.is_copropriete
-                ? "apartment"
-                : "house"
-              : "building";
-        return {
-          p: {
-            id: dp.id,
-            name: dp.name,
-            address: formatAddress(dp.address),
-            energyClass: dp.energy_class,
-            isCopropriete: dp.is_copropriete,
-            smokeDetectorsConfirmed: dp.smoke_detectors_confirmed,
-            ownershipNote: "",
-          },
-          lettableCount,
-          occupiedCount: 0,
-          monthlyRent: 0,
-          vacant: lettableCount,
-          kind,
-        };
-      });
-    }
-  } else {
-    enriched = PROPERTIES.map((p) => {
-      const units = UNITS.filter((u) => u.propertyId === p.id);
-      const lettable = units.filter((u) => u.kind !== "parking");
-      const occupied = lettable.filter((u) =>
-        LEASES.some((l) => l.unitId === u.id && (l.status === "active" || l.status === "notice")),
-      );
-      const monthlyRent = LEASES.filter(
-        (l) => (l.status === "active" || l.status === "notice") && units.some((u) => u.id === l.unitId),
-      ).reduce((a, l) => a + l.rentCents, 0);
-      return {
-        p: {
-          id: p.id,
-          name: p.name,
-          address: p.address,
-          energyClass: p.energyClass,
-          isCopropriete: p.isCopropriete,
-          smokeDetectorsConfirmed: p.smokeDetectorsConfirmed,
-          ownershipNote: p.ownershipNote,
-        },
-        lettableCount: lettable.length,
-        occupiedCount: occupied.length,
-        monthlyRent,
-        vacant: lettable.length - occupied.length,
-        kind: kindOf(p, units),
-      };
-    });
-  }
+  const demo = await getDemo();
+  const all = buildPortfolio(demo);
 
   const kindFilter = KIND_PARAM[params.type ?? ""];
   const vacantOnly = params.occupation === "vacants";
-  const filtered = enriched
-    .filter((e) => (kindFilter ? e.kind === kindFilter : true))
-    .filter((e) => (vacantOnly ? e.vacant > 0 : true));
+  const filtered = all
+    .filter((c) => (kindFilter ? c.kind === kindFilter : true))
+    .filter((c) => (vacantOnly ? c.vacant > 0 : true));
 
-  const countOf = (k: PropertyKind) => enriched.filter((e) => e.kind === k).length;
+  const totals = {
+    properties: all.length,
+    occupied: all.reduce((a, c) => a + c.occupied, 0),
+    vacant: all.reduce((a, c) => a + c.vacant, 0),
+    rent: all.reduce((a, c) => a + c.monthlyCents, 0),
+  };
+
+  const countOf = (k: PropertyKind) => all.filter((c) => c.kind === k).length;
   const href = (type: string | undefined, vacant: boolean) => {
     const q = new URLSearchParams();
     if (type) q.set("type", type);
@@ -148,36 +202,60 @@ export default async function BiensPage({
     const s = q.toString();
     return `/app/biens${s ? `?${s}` : ""}`;
   };
-  const cards: Array<{ slug?: string; label: string; value: number }> = [
-    { label: d.biens.filterAll, value: enriched.length },
+  const chips: Array<{ slug?: string; label: string; value: number }> = [
+    { label: d.biens.filterAll, value: all.length },
     { slug: "immeubles", label: d.biens.filterBuilding, value: countOf("building") },
     { slug: "maisons", label: d.biens.filterHouse, value: countOf("house") },
     { slug: "appartements", label: d.biens.filterApartment, value: countOf("apartment") },
     { slug: "commerciaux", label: d.biens.filterCommercial, value: countOf("commercial") },
   ];
 
+  const addButton = (
+    <Link
+      href="/app/biens/nouveau"
+      className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 max-sm:min-h-11"
+    >
+      <Icon name="plus" size={16} />
+      {d.biens.addProperty}
+    </Link>
+  );
+
+  if (all.length === 0) {
+    return (
+      <div>
+        <PageHeader title={d.biens.title} subtitle={d.biens.subtitle} actions={addButton} />
+        <EmptyState icon="properties" title={d.biens.emptyFirstTitle} body={d.biens.emptyFirstBody} action={addButton} />
+      </div>
+    );
+  }
+
+  const kpis: Array<{ label: string; value: string; icon: "properties" | "user" | "key" | "euro" }> = [
+    { label: d.biens.kpiTotal, value: String(totals.properties), icon: "properties" },
+    { label: d.biens.kpiOccupied, value: String(totals.occupied), icon: "user" },
+    { label: d.biens.kpiVacant, value: String(totals.vacant), icon: "key" },
+    { label: d.biens.kpiRent, value: eurosWhole(totals.rent, locale), icon: "euro" },
+  ];
+
   return (
     <div>
-      <PageHeader
-        title={d.biens.title}
-        subtitle={d.biens.subtitle}
-        actions={
-          <Link
-            href="/app/biens/nouveau"
-            className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 max-sm:min-h-11"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
-              <path strokeLinecap="round" d="M12 5v14M5 12h14" />
-            </svg>
-            {d.biens.addProperty}
-          </Link>
-        }
-      />
+      <PageHeader title={d.biens.title} subtitle={d.biens.subtitle} actions={addButton} />
 
-      {/* One compact filter row (the banking-page grammar): counts stay
-          visible, the page leads with the portfolio itself. */}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <Card key={k.label} className="flex items-center gap-3 p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sand-100 text-ink-soft">
+              <Icon name={k.icon} size={17} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-xl font-bold tabular-nums leading-tight text-ink">{k.value}</p>
+              <p className="truncate text-xs text-ink-soft">{k.label}</p>
+            </div>
+          </Card>
+        ))}
+      </div>
+
       <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto">
-        {cards.map((c) => (
+        {chips.map((c) => (
           <ChipLink
             key={c.label}
             href={href(c.slug, vacantOnly)}
@@ -191,9 +269,7 @@ export default async function BiensPage({
         <ChipLink href={href(params.type, !vacantOnly)} active={vacantOnly}>
           {d.biens.filterVacant}
         </ChipLink>
-        {(params.type || vacantOnly) && (
-          <ChipLink href="/app/biens">{d.common.resetFilters}</ChipLink>
-        )}
+        {(params.type || vacantOnly) && <ChipLink href="/app/biens">{d.common.resetFilters}</ChipLink>}
       </div>
 
       {filtered.length === 0 ? (
@@ -208,78 +284,58 @@ export default async function BiensPage({
           }
         />
       ) : (
-        <div className="stagger-rise grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {filtered.map(({ p, lettableCount, occupiedCount, monthlyRent, vacant }) => (
-            <Link key={p.id} href={`/app/biens/${p.id}`} className="group">
-              <Card className="flex h-full flex-col p-5 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-0.5 group-hover:border-brand-100 group-hover:shadow-md">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="truncate font-display text-lg font-bold text-ink group-hover:text-brand-700">
-                      {p.name}
-                    </h2>
-                    <p className="truncate text-xs text-ink-soft">{p.address}</p>
+        <div className="stagger-rise grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((card) => {
+            const p = card.property;
+            const single = card.single;
+            return (
+              <Link key={p.id} href={`/app/biens/${p.id}`} className="group">
+                <Card className="flex h-full flex-col overflow-hidden p-0 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-0.5 group-hover:border-brand-100 group-hover:shadow-md">
+                  <div className="aspect-[16/10] w-full overflow-hidden">
+                    <PropertyPhoto
+                      url={p.photoUrl}
+                      kind={card.kind}
+                      alt={fmt(d.biens.photoAlt, { property: p.name })}
+                      rounded=""
+                    />
                   </div>
-                  {p.energyClass && (
-                    <span
-                      className={
-                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold " +
-                        (p.energyClass.startsWith("A")
-                          ? "bg-emerald-100 text-emerald-800"
-                          : p.energyClass === "B" || p.energyClass === "C"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-red-100 text-red-700")
-                      }
-                      role="img"
-                      aria-label={fmt(d.biens.energyAria, { cls: p.energyClass })}
-                      title={fmt(d.biens.energyAria, { cls: p.energyClass })}
-                    >
-                      {p.energyClass}
-                    </span>
-                  )}
-                </div>
+                  <div className="flex flex-1 flex-col p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <h2 className="min-w-0 truncate font-display text-base font-bold text-ink group-hover:text-brand-700">
+                        {p.name}
+                      </h2>
+                      <OccupancyBadge card={card} d={d} />
+                    </div>
+                    <p className="mt-1 flex items-center gap-1 truncate text-xs text-ink-soft">
+                      <Icon name="pin" size={13} className="shrink-0" />
+                      <span className="truncate">{p.address}</span>
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      <Chip>{kindLabel(d, card.kind)}</Chip>
+                      {single ? (
+                        <>
+                          {single.unit.areaSqm > 0 && <Chip>{fmt(d.biens.sqm, { n: single.unit.areaSqm })}</Chip>}
+                          {single.unit.bedrooms ? (
+                            <Chip>{plural(locale, single.unit.bedrooms, d.biens.bedroomOne, d.biens.bedroomMany)}</Chip>
+                          ) : null}
+                        </>
+                      ) : (
+                        <Chip>{plural(locale, card.lots.length, d.biens.lotOne, d.biens.lotMany)}</Chip>
+                      )}
+                    </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.biens.lots}</p>
-                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">{lettableCount}</p>
+                    <div className="mt-auto">
+                      {single ? (
+                        <SingleTenancy line={single} d={d} locale={locale} />
+                      ) : (
+                        <BuildingTenancy card={card} d={d} locale={locale} />
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.biens.occupied}</p>
-                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
-                      {occupiedCount}/{lettableCount}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                      {d.biens.rentPerMonth}
-                    </p>
-                    <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
-                      {eurosWhole(monthlyRent, locale)}
-                    </p>
-                  </div>
-                </div>
-
-                {(p.isCopropriete || vacant > 0 || !p.smokeDetectorsConfirmed) && (
-                  <div className="mt-4 flex flex-wrap items-center gap-1.5">
-                    {p.isCopropriete && <Badge className="bg-sand-100 text-ink-soft">{d.biens.copro}</Badge>}
-                    {vacant > 0 && (
-                      <Badge className="bg-amber-100 text-amber-800">
-                        {vacant === 1 ? d.biens.vacantOne : fmt(d.biens.vacantMany, { n: vacant })}
-                      </Badge>
-                    )}
-                    {!p.smokeDetectorsConfirmed && (
-                      <Badge className="bg-red-100 text-red-700">{d.biens.smokeMissing}</Badge>
-                    )}
-                  </div>
-                )}
-                {p.ownershipNote ? (
-                  <p className="mt-auto pt-3 truncate text-[11px] text-ink-soft">{p.ownershipNote}</p>
-                ) : (
-                  <span className="mt-auto" />
-                )}
-              </Card>
-            </Link>
-          ))}
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,353 +1,1064 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge, PageHeader } from "@/components/pro/ui";
+import { Badge, Card, EmptyState } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { getDatasetId, getDemo } from "@/lib/demo";
-import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
-import { authedClient, getSession } from "@/lib/supabase/server";
-import { getIdentity } from "@/lib/workspace";
-import type { Dict } from "@/lib/i18n/fr";
+import PropertyPhoto from "@/components/gestion/PropertyPhoto";
+import { getDemo } from "@/lib/demo";
+import type { DemoData } from "@/lib/demo";
+import { buildPortfolio, findCard, occupancyOf, type PropertyCard, type UnitLine } from "@/lib/gestion/portfolio";
+import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
-import { METER_UNITS, euros, formatDate, formatNumber, leaseStatusMeta } from "@/lib/types";
+import {
+  METER_UNITS,
+  depositStatusMeta,
+  edlStatusMeta,
+  euros,
+  eurosWhole,
+  formatDate,
+  formatMonth,
+  formatNumber,
+  rentStatusMeta,
+  ticketSeverityMeta,
+  ticketStatusMeta,
+} from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
-import { fmt } from "@/lib/i18n/config";
+import { fmt, ordinalDay, plural } from "@/lib/i18n/config";
 import {
   cpeExpiryDeadline,
   deadlineStatus,
   syndicMandateDeadline,
   vacancyClock,
 } from "@/domain/compliance/deadlines";
+import { computeCapitalInvesti, proposeResidentialAdjustment } from "@/domain/indexation/engine";
+
+/**
+ * The property sheet: everything about one building or one home, in the
+ * place an owner already has in mind.
+ *
+ * The lease, the deposit, the meters, the inventory, the insurance and the
+ * indexation proposal are not modules to go and find — they are facts about
+ * this property, so they are read here, from the same canonical rows the
+ * dedicated registers read. Nothing is copied; a tab is a lens.
+ */
+
+const TABS = ["apercu", "lots", "location", "technique", "interventions", "documents", "historique"] as const;
+type Tab = (typeof TABS)[number];
 
 // No generateStaticParams: the page reads the locale cookie, so it must be
 // request-rendered — a build-time prerender would bake one language in.
 
-export default async function BienDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const { locale, d } = await getI18n();
-  const datasetId = await getDatasetId();
-  if (datasetId === "real") return RealBienDetail({ id, d, locale });
-  const { LEASES, METERS, PROPERTIES, TODAY, UNITS, leaseTenantNames } = await getDemo();
-  const property = PROPERTIES.find((p) => p.id === id);
-  if (!property) notFound();
-  const p = property!;
-  const units = UNITS.filter((u) => u.propertyId === p.id);
-  const meters = METERS.filter((m) => m.propertyId === p.id);
-  const statusMeta = leaseStatusMeta(d);
+function tabLabel(d: Dict, t: Tab): string {
+  return {
+    apercu: d.bien.tabOverview,
+    lots: d.bien.tabLots,
+    location: d.bien.tabRental,
+    technique: d.bien.tabTechnical,
+    interventions: d.bien.tabInterventions,
+    documents: d.bien.tabDocuments,
+    historique: d.bien.tabHistory,
+  }[t];
+}
 
-  const cpe = cpeExpiryDeadline(p.name, p.cpeIssuedOn);
-  const cpeStatus = deadlineStatus(cpe, TODAY);
-  const syndic = p.syndicMandateStart
-    ? syndicMandateDeadline(p.syndicName ?? "Syndic", p.syndicMandateStart)
-    : null;
+/* ------------------------------ small pieces ------------------------------ */
 
+function Rows({ items }: { items: Array<{ k: string; v: React.ReactNode }> }) {
   return (
-    <div>
-      <div className="mb-2">
-        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline">
-          {d.biens.backToList}
-        </Link>
-      </div>
-      <PageHeader
-        title={p.name}
-        subtitle={`${p.address} · ${p.cadastralRef}`}
-        actions={
-          <Badge
-            className={
-              cpeStatus === "overdue"
-                ? "bg-red-100 text-red-700"
-                : cpeStatus === "due_soon"
-                  ? "bg-amber-100 text-amber-800"
-                  : "bg-emerald-100 text-emerald-800"
-            }
-          >
-            {fmt(d.biens.cpeBadge, { cls: p.energyClass, date: formatDate(cpe.dueAt, locale) })}
-          </Badge>
-        }
-      />
+    <dl className="divide-y divide-sand-100">
+      {items.map((r) => (
+        <div key={r.k} className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+          <dt className="text-sm text-ink-soft">{r.k}</dt>
+          <dd className="text-right text-sm font-semibold text-ink">{r.v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Panel title={d.biens.unitsTitle}>
-            <ul className="divide-y divide-sand-100">
-              {units.map((u) => {
-                const lease = LEASES.find(
-                  (l) => l.unitId === u.id && (l.status === "active" || l.status === "notice"),
-                );
-                const vacancy = u.vacantSince ? vacancyClock(u.label, u.vacantSince, TODAY) : null;
-                return (
-                  <li key={u.id} className="flex items-center gap-3 py-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-xs font-bold text-brand-700">
-                      {u.label.slice(0, 3)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-ink">
-                        {u.label}
-                        <span className="ml-2 text-xs font-normal text-ink-soft">
-                          {fmt(d.biens.unitMeta, { floor: u.floor, area: u.areaSqm })}
-                          {u.rooms > 0 ? fmt(d.biens.unitRooms, { n: u.rooms }) : ""}
-                          {u.furnished ? d.biens.unitFurnished : ""}
-                        </span>
-                      </p>
-                      {lease ? (
-                        <Link href={`/app/baux/${lease.id}`} className="text-xs text-ink-soft hover:text-brand-700">
-                          {leaseTenantNames(lease).join(", ")} · {euros(lease.rentCents, locale)}
-                          {d.common.perMonth}
-                        </Link>
-                      ) : vacancy ? (
-                        <p className="text-xs text-red-700">
-                          {fmt(d.biens.unitVacantSince, {
-                            date: formatDate(u.vacantSince ?? null, locale),
-                            months: vacancy.monthsVacant,
-                          })}
-                          {vacancy.triggered ? d.biens.unitVacantInol : ""}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-ink-soft">{d.biens.unitFree}</p>
-                      )}
-                    </div>
-                    {lease ? (
-                      <MetaBadge meta={statusMeta[lease.status]} />
-                    ) : u.kind === "parking" ? (
-                      <Badge className="bg-sand-100 text-ink-soft">{d.biens.unitParking}</Badge>
-                    ) : (
-                      <Badge className="bg-amber-100 text-amber-800">{d.biens.unitVacantBadge}</Badge>
-                    )}
-                  </li>
-                );
+function AddTenantLink({ unitId, d, className = "" }: { unitId: string; d: Dict; className?: string }) {
+  return (
+    <Link
+      href={`/app/biens/locataire?lot=${encodeURIComponent(unitId)}`}
+      className={`tactile inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 ${className}`}
+    >
+      <Icon name="plus" size={15} />
+      {d.bien.addTenant}
+    </Link>
+  );
+}
+
+/** The month's rent on one tenancy, phrased the way an owner reads it. */
+function RentStatusLine({ line, d, locale }: { line: UnitLine; d: Dict; locale: Locale }) {
+  const meta = rentStatusMeta(d);
+  if (!line.period || !line.status) return <p className="text-sm text-ink-soft">{d.bien.noLedgerYet}</p>;
+  const paid = line.status === "paid";
+  return (
+    <div
+      className={`flex items-start gap-2.5 rounded-xl p-3.5 ${paid ? "bg-emerald-50" : "bg-sand-50"}`}
+    >
+      <span className={`mt-0.5 shrink-0 ${paid ? "text-emerald-600" : "text-ink-soft"}`}>
+        <Icon name={paid ? "check" : "clock"} size={18} />
+      </span>
+      <div className="min-w-0">
+        <p className="font-display text-sm font-bold text-ink">
+          {fmt(d.bien.rentOfMonth, { month: formatMonth(line.period.period, locale), status: meta[line.status].label })}
+        </p>
+        <p className="mt-0.5 text-xs text-ink-soft">
+          {paid
+            ? fmt(d.biens.paidOn, { date: formatDate(line.period.dueDate, locale) })
+            : fmt(d.bien.openAmount, {
+                amount: euros(line.period.totalCents - line.period.allocatedCents, locale),
               })}
-            </ul>
-          </Panel>
-
-          <Panel title={d.biens.metersTitle} className="mt-5">
-            {meters.length === 0 ? (
-              <p className="text-sm text-ink-soft">{d.biens.metersNone}</p>
-            ) : (
-              <ul className="divide-y divide-sand-100">
-                {meters.map((m) => {
-                  const unit = m.unitId ? units.find((u) => u.id === m.unitId) : null;
-                  return (
-                    <li key={m.id} className="flex items-center gap-3 py-2.5 text-sm">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-ink">
-                          {d.status.meter[m.kind]}{" "}
-                          <span className="text-xs font-normal text-ink-soft">
-                            · {m.serial}
-                            {unit ? ` · ${unit.label}` : ` · ${d.biens.metersCommon}`}
-                          </span>
-                        </p>
-                        <p className="text-xs text-ink-soft">{m.supplier}</p>
-                      </div>
-                      {m.lastReading ? (
-                        <div className="text-right">
-                          <p className="tabular-nums text-ink">
-                            {formatNumber(m.lastReading.value, locale)} {METER_UNITS[m.kind]}
-                          </p>
-                          <p className="text-[11px] text-ink-soft">{formatDate(m.lastReading.date, locale)}</p>
-                        </div>
-                      ) : (
-                        <Badge className="bg-amber-100 text-amber-800">{d.compteurs.kpiNoReading}</Badge>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Panel>
-        </div>
-
-        <div className="flex flex-col gap-5">
-          <Panel title={d.biens.ownershipTitle}>
-            <p className="text-sm leading-relaxed text-ink">{p.ownershipNote}</p>
-            <ul className="mt-3 space-y-2 text-sm">
-              <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">{d.biens.construction}</span>
-                <span className="font-semibold tabular-nums text-ink">{p.constructionYear}</span>
-              </li>
-              <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">{d.biens.completion}</span>
-                <span className="font-semibold tabular-nums text-ink">{formatDate(p.completionDate, locale)}</span>
-              </li>
-              <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">{d.biens.type}</span>
-                <span className="font-semibold text-ink">{p.type}</span>
-              </li>
-            </ul>
-            <LegalNote>{d.biens.ownershipLegal}</LegalNote>
-          </Panel>
-
-          {p.isCopropriete && (
-            <Panel title={d.biens.coproTitle}>
-              <ul className="space-y-2 text-sm">
-                <li className="flex justify-between gap-3">
-                  <span className="text-ink-soft">{d.biens.syndic}</span>
-                  <span className="font-semibold text-ink">{p.syndicName}</span>
-                </li>
-                {syndic && (
-                  <li className="flex justify-between gap-3">
-                    <span className="text-ink-soft">{d.biens.mandateEnd}</span>
-                    <span className="font-semibold tabular-nums text-ink">{formatDate(syndic.dueAt, locale)}</span>
-                  </li>
-                )}
-                {p.nextAgDate && (
-                  <li className="flex justify-between gap-3">
-                    <span className="text-ink-soft">{d.biens.nextAg}</span>
-                    <span className="font-semibold tabular-nums text-ink">{formatDate(p.nextAgDate, locale)}</span>
-                  </li>
-                )}
-              </ul>
-              <LegalNote>{d.biens.coproLegal}</LegalNote>
-            </Panel>
-          )}
-
-          <Panel title={d.biens.complianceTitle}>
-            <ul className="space-y-2.5 text-sm">
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.biens.cpeRow}</span>
-                <Badge
-                  className={
-                    cpeStatus === "due_soon"
-                      ? "bg-amber-100 text-amber-800"
-                      : cpeStatus === "overdue"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-emerald-100 text-emerald-800"
-                  }
-                >
-                  {formatDate(cpe.dueAt, locale)}
-                </Badge>
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.biens.smokeRow}</span>
-                <Badge
-                  className={
-                    p.smokeDetectorsConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
-                  }
-                >
-                  {p.smokeDetectorsConfirmed ? d.biens.smokeOk : d.biens.smokeKo}
-                </Badge>
-              </li>
-            </ul>
-          </Panel>
-        </div>
+        </p>
       </div>
     </div>
   );
 }
 
+/* --------------------------------- tabs ---------------------------------- */
 
-/* ------------------------- real account: gestion.* -------------------------
-   A freshly created property has no leases, meters or fiscal history yet;
-   the sheet shows exactly what exists and names what is still to fill in. */
-async function RealBienDetail({ id, d, locale }: { id: string; d: Dict; locale: Locale }) {
-  void locale;
-  const session = await getSession();
-  const identity = session ? await getIdentity() : null;
-  if (!session || !identity?.active) notFound();
+function Overview({
+  card,
+  demo,
+  d,
+  locale,
+}: {
+  card: PropertyCard;
+  demo: DemoData;
+  d: Dict;
+  locale: Locale;
+}) {
+  const p = card.property;
+  const single = card.single;
+  const unit = single?.unit;
+  const tenant = single?.lease ? demo.contactById(single.lease.tenantContactIds[0]) : null;
+  const docs = documentsFor(demo, card).slice(0, 3);
+  const tickets = ticketsFor(demo, card).slice(0, 3);
+  const tMeta = ticketStatusMeta(d);
 
-  const g = authedClient(session!.accessToken).schema("gestion");
-  const [propRes, unitRes] = await Promise.all([
-    g.from("properties")
-      .select("id,name,address,energy_class,is_copropriete,syndic_name,smoke_detectors_confirmed")
-      .eq("org_id", identity!.active!.id)
-      .eq("id", id)
-      .maybeSingle(),
-    g.from("units").select("id,label,kind,floor,area_sqm").eq("property_id", id).is("archived_at", null).order("created_at"),
-  ]);
-  type DbProp = {
-    id: string; name: string; address: PropertyAddress | null; energy_class: string | null;
-    is_copropriete: boolean; syndic_name: string | null; smoke_detectors_confirmed: boolean;
-  };
-  const p = propRes.data as DbProp | null;
-  if (!p) notFound();
-  const units = (unitRes.data as Array<{ id: string; label: string; kind: string }> | null) ?? [];
+  const info: Array<{ k: string; v: React.ReactNode }> = [
+    { k: d.biens.type, v: p.type || d.common.none },
+    ...(unit && unit.areaSqm > 0 ? [{ k: d.bien.surface, v: fmt(d.biens.sqm, { n: unit.areaSqm }) }] : []),
+    ...(unit && unit.rooms > 0 ? [{ k: d.bien.rooms, v: formatNumber(unit.rooms, locale) }] : []),
+    ...(unit?.bedrooms ? [{ k: d.bien.bedrooms, v: formatNumber(unit.bedrooms, locale) }] : []),
+    ...(unit?.floor && unit.floor !== "—" ? [{ k: d.bien.floor, v: unit.floor }] : []),
+    ...(p.constructionYear ? [{ k: d.biens.construction, v: String(p.constructionYear) }] : []),
+    ...(p.cadastralRef ? [{ k: d.bien.cadastral, v: p.cadastralRef }] : []),
+    { k: d.bien.address, v: p.address },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Panel title={d.bien.mainInfo}>
+        <Rows items={info} />
+      </Panel>
+
+      {single && !single.vacant ? (
+        <Panel
+          title={d.bien.rentStatus}
+          action={
+            <Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline">
+              {d.bien.seePayments}
+            </Link>
+          }
+        >
+          <RentStatusLine line={single} d={d} locale={locale} />
+          <div className="mt-3">
+            <Rows
+              items={[
+                { k: d.bien.rentExclCharges, v: euros(single.lease!.rentCents, locale) },
+                { k: d.bien.charges, v: euros(single.lease!.chargesCents, locale) },
+                {
+                  k: d.bien.monthlyTotal,
+                  v: <span className="font-display text-base font-bold">{euros(single.monthlyCents, locale)}</span>,
+                },
+                { k: d.bien.dueDay, v: fmt(d.bien.dueDayValue, { n: ordinalDay(locale, single.lease!.paymentDay) }) },
+              ]}
+            />
+          </div>
+        </Panel>
+      ) : single ? (
+        <Panel title={d.bien.rentStatus}>
+          <div className="py-2 text-center">
+            <p className="font-display text-base font-bold text-ink">{d.bien.vacantTitle}</p>
+            <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">{d.bien.vacantBody}</p>
+            <AddTenantLink unitId={single.unit.id} d={d} className="mt-3.5" />
+          </div>
+        </Panel>
+      ) : (
+        // A building has no single tenancy to report: what its owner wants to
+        // know is how the month is going across its lots.
+        <Panel
+          title={d.bien.rentStatus}
+          action={
+            <Link href={`/app/biens/${p.id}?onglet=lots`} className="text-sm font-semibold text-brand-700 hover:underline">
+              {d.bien.tabLots}
+            </Link>
+          }
+        >
+          <Rows
+            items={[
+              {
+                k: d.bien.occupancy,
+                v: `${plural(locale, card.occupied, d.biens.occupiedOneN, d.biens.occupiedManyN)} \u00b7 ${plural(
+                  locale,
+                  card.vacant,
+                  d.biens.vacantOneN,
+                  d.biens.vacantManyN,
+                )}`,
+              },
+              {
+                k: d.bien.monthlyTotal,
+                v: (
+                  <span className="font-display text-base font-bold">{euros(card.monthlyCents, locale)}</span>
+                ),
+              },
+              ...(card.mix.paid
+                ? [{ k: d.status.rent.paid, v: plural(locale, card.mix.paid, d.biens.mixPaidOne, d.biens.mixPaidMany) }]
+                : []),
+              ...(card.mix.late
+                ? [{ k: d.status.rent.late, v: plural(locale, card.mix.late, d.biens.mixLateOne, d.biens.mixLateMany) }]
+                : []),
+              ...(card.nextDue ? [{ k: d.bien.nextDue, v: formatDate(card.nextDue, locale) }] : []),
+            ]}
+          />
+        </Panel>
+      )}
+
+      {tenant && (
+        <Panel
+          title={d.bien.currentTenant}
+          action={
+            <Link
+              href={`/app/contacts/${tenant.id}`}
+              className="text-sm font-semibold text-brand-700 hover:underline"
+            >
+              {d.bien.seeProfile}
+            </Link>
+          }
+        >
+          <p className="font-display text-base font-bold text-ink">{tenant.name}</p>
+          <ul className="mt-2.5 space-y-1.5 text-sm text-ink-soft">
+            {tenant.email && (
+              <li className="flex items-center gap-2">
+                <Icon name="mail" size={14} /> {tenant.email}
+              </li>
+            )}
+            {tenant.phone && (
+              <li className="flex items-center gap-2">
+                <Icon name="phone" size={14} /> {tenant.phone}
+              </li>
+            )}
+            <li className="flex items-center gap-2">
+              <Icon name="calendar" size={14} />
+              {fmt(d.bien.tenantSince, { date: formatDate(single!.lease!.startDate, locale) })}
+            </li>
+            {single!.lease!.endDate && (
+              <li className="flex items-center gap-2">
+                <Icon name="contract" size={14} />
+                {fmt(d.bien.leaseEnds, { date: formatDate(single!.lease!.endDate, locale) })}
+              </li>
+            )}
+          </ul>
+        </Panel>
+      )}
+
+      <Panel
+        title={d.bien.recentDocuments}
+        action={
+          <Link href="/app/documents" className="text-sm font-semibold text-brand-700 hover:underline">
+            {d.bien.seeAll}
+          </Link>
+        }
+      >
+        {docs.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.bien.noDocuments}</p>
+        ) : (
+          <ul className="divide-y divide-sand-100">
+            {docs.map((doc) => (
+              <li key={doc.id} className="flex items-center gap-2.5 py-2.5 first:pt-0 last:pb-0">
+                <Icon name="documents" size={16} className="shrink-0 text-ink-soft" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">{doc.name}</span>
+                  <span className="block text-xs text-ink-soft">{formatDate(doc.createdAt, locale)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel title={d.bien.recentInterventions}>
+        {tickets.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.bien.noInterventions}</p>
+        ) : (
+          <ul className="divide-y divide-sand-100">
+            {tickets.map((t) => (
+              <li key={t.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">{t.title}</span>
+                  <span className="block text-xs text-ink-soft">{formatDate(t.createdAt, locale)}</span>
+                </span>
+                <MetaBadge meta={tMeta[t.status]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function Lots({ card, d, locale }: { card: PropertyCard; d: Dict; locale: Locale }) {
+  const meta = rentStatusMeta(d);
+  return (
+    <div className="space-y-5">
+      <Panel title={d.bien.tabLots}>
+        <ul className="divide-y divide-sand-100">
+          {card.lots.map((line) => (
+            <li key={line.unit.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-display text-sm font-bold text-ink">{line.unit.label}</p>
+                <p className="truncate text-xs text-ink-soft">
+                  {[
+                    line.unit.floor && line.unit.floor !== "—" ? line.unit.floor : "",
+                    line.unit.areaSqm > 0 ? fmt(d.biens.sqm, { n: line.unit.areaSqm }) : "",
+                    line.unit.bedrooms ? plural(locale, line.unit.bedrooms, d.biens.bedroomOne, d.biens.bedroomMany) : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+              {line.vacant ? (
+                <>
+                  <Badge className="bg-sand-100 text-ink-soft">{d.biens.vacantLabel}</Badge>
+                  <AddTenantLink unitId={line.unit.id} d={d} />
+                </>
+              ) : (
+                <>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-ink">{line.tenantNames.join(", ")}</p>
+                    <p className="text-xs tabular-nums text-ink-soft">
+                      {fmt(d.biens.perMonth, { amount: eurosWhole(line.monthlyCents, locale) })}
+                    </p>
+                  </div>
+                  {line.status && <MetaBadge meta={meta[line.status]} />}
+                  <Link
+                    href={`/app/baux/${line.lease!.id}`}
+                    className="text-sm font-semibold text-brand-700 hover:underline"
+                  >
+                    {d.bien.openRental}
+                  </Link>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Panel>
+
+      {card.annexes.length > 0 && (
+        <Panel title={d.bien.annexes}>
+          <ul className="flex flex-wrap gap-2">
+            {card.annexes.map((u) => (
+              <li key={u.id} className="rounded-lg bg-sand-100 px-2.5 py-1 text-sm text-ink-soft">
+                {u.label}
+                {u.areaSqm > 0 ? ` · ${fmt(d.biens.sqm, { n: u.areaSqm })}` : ""}
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+function Rental({
+  card,
+  demo,
+  d,
+  locale,
+}: {
+  card: PropertyCard;
+  demo: DemoData;
+  d: Dict;
+  locale: Locale;
+}) {
+  const live = card.lots.filter((l) => !l.vacant);
+  if (live.length === 0) {
+    const first = card.lots[0];
+    return (
+      <EmptyState
+        icon="key"
+        title={d.bien.vacantTitle}
+        body={d.bien.vacantBody}
+        action={first ? <AddTenantLink unitId={first.unit.id} d={d} /> : undefined}
+      />
+    );
+  }
+  const depMeta = depositStatusMeta(d);
+  const edlMeta = edlStatusMeta(d);
+
+  return (
+    <div className="space-y-5">
+      {live.map((line) => {
+        const lease = line.lease!;
+        const deposit = demo.DEPOSITS.find((x) => x.leaseId === lease.id) ?? null;
+        const edls = demo.EDLS.filter((e) => e.leaseId === lease.id);
+        const policies = demo.INSURANCES.filter((i) => i.leaseId === lease.id);
+        const payers = demo.IBAN_BINDINGS.filter((b) => b.leaseId === lease.id);
+        const periods = demo.RENT_PERIODS.filter((rp) => rp.leaseId === lease.id)
+          .slice()
+          .sort((a, b) => (a.period < b.period ? 1 : -1))
+          .slice(0, 6);
+        const meta = rentStatusMeta(d);
+
+        // The indexation engine already knows everything it needs; the owner
+        // should not have to go and ask a separate screen.
+        const capital = computeCapitalInvesti(lease.capitalComponents, demo.TODAY);
+        const proposal =
+          lease.type === "residential" && lease.capitalComponents.length > 0
+            ? proposeResidentialAdjustment({
+                currentMonthlyRent: lease.rentCents,
+                lastAdjustmentDate: lease.lastAdjustmentOn,
+                leaseStartDate: lease.startDate,
+                proposedDate: demo.TODAY,
+                capital,
+              })
+            : null;
+
+        return (
+          <section key={lease.id} className="space-y-5">
+            <Panel
+              title={fmt(d.bien.rentalOf, { unit: line.unit.label })}
+              action={
+                <Link href={`/app/baux/${lease.id}`} className="text-sm font-semibold text-brand-700 hover:underline">
+                  {d.bien.openRental}
+                </Link>
+              }
+            >
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div>
+                  <RentStatusLine line={line} d={d} locale={locale} />
+                  <div className="mt-3">
+                    <Rows
+                      items={[
+                        { k: d.bien.tenant, v: line.tenantNames.join(", ") },
+                        { k: d.bien.rentExclCharges, v: euros(lease.rentCents, locale) },
+                        { k: d.bien.charges, v: euros(lease.chargesCents, locale) },
+                        {
+                          k: d.bien.monthlyTotal,
+                          v: (
+                            <span className="font-display text-base font-bold">
+                              {euros(line.monthlyCents, locale)}
+                            </span>
+                          ),
+                        },
+                        { k: d.bien.dueDay, v: fmt(d.bien.dueDayValue, { n: ordinalDay(locale, lease.paymentDay) }) },
+                        { k: d.bien.reference, v: lease.rfReference || d.common.none },
+                      ]}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+                    {d.bien.paymentHistory}
+                  </p>
+                  {periods.length === 0 && <p className="mt-2 text-sm text-ink-soft">{d.bien.noLedgerYet}</p>}
+                  <ul className="mt-2 divide-y divide-sand-100">
+                    {periods.map((rp) => (
+                      <li key={rp.id} className="flex items-center justify-between gap-3 py-2 first:pt-0">
+                        <span className="text-sm text-ink">{formatMonth(rp.period, locale)}</span>
+                        <span className="flex items-center gap-2.5">
+                          <span className="text-sm tabular-nums text-ink-soft">{euros(rp.totalCents, locale)}</span>
+                          <MetaBadge meta={meta[rp.status]} />
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </Panel>
+
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <Panel title={d.bien.payerAccounts}>
+                {payers.length === 0 ? (
+                  <p className="text-sm text-ink-soft">{d.bien.noPayer}</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {payers.map((b) => (
+                      <li key={b.payerIban} className="font-mono text-sm tabular-nums text-ink">
+                        {b.payerIban}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-2.5 text-xs leading-relaxed text-ink-soft">{d.bien.payerHint}</p>
+              </Panel>
+
+              <Panel title={d.hubs.deposits}>
+                {deposit ? (
+                  <Rows
+                    items={[
+                      { k: d.bien.depositAmount, v: euros(deposit.amountCents, locale) },
+                      { k: d.bien.depositForm, v: d.status.depositForm[deposit.form] },
+                      { k: d.bien.depositState, v: <MetaBadge meta={depMeta[deposit.status]} /> },
+                    ]}
+                  />
+                ) : (
+                  <p className="text-sm text-ink-soft">{d.bien.noDeposit}</p>
+                )}
+              </Panel>
+
+              <Panel title={d.hubs.indexation}>
+                {proposal ? (
+                  proposal.allowed ? (
+                    <div className="rounded-xl bg-amber-50 p-3.5">
+                      <p className="font-display text-sm font-bold text-ink">
+                        {fmt(d.bien.indexationPossible, { tenant: line.tenantNames.join(", ") })}
+                      </p>
+                      <p className="mt-1 text-sm tabular-nums text-ink-soft">
+                        {fmt(d.bien.indexationFromTo, {
+                          from: euros(proposal.currentMonthlyRent, locale),
+                          to: euros(proposal.proposedMonthlyRent, locale),
+                        })}
+                      </p>
+                      <Link
+                        href="/app/indexation"
+                        className="mt-2 inline-block text-sm font-semibold text-brand-700 hover:underline"
+                      >
+                        {d.bien.indexationReview}
+                      </Link>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-ink-soft">
+                      {proposal.nextAllowedDate
+                        ? fmt(d.indexation.decisionLocked, {
+                            date: formatDate(proposal.nextAllowedDate, locale),
+                          })
+                        : d.bien.indexationNone}
+                    </p>
+                  )
+                ) : (
+                  <p className="text-sm text-ink-soft">{d.bien.indexationNone}</p>
+                )}
+              </Panel>
+
+              <Panel title={d.hubs.edl}>
+                {edls.length === 0 ? (
+                  <p className="text-sm text-ink-soft">{d.bien.noEdl}</p>
+                ) : (
+                  <ul className="divide-y divide-sand-100">
+                    {edls.map((e) => (
+                      <li key={e.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                        <span className="text-sm text-ink">
+                          {e.kind === "entry"
+                            ? d.baux.edlKindEntry
+                            : e.kind === "exit"
+                              ? d.baux.edlKindExit
+                              : d.baux.edlKindIntermediate}
+                        </span>
+                        <MetaBadge meta={edlMeta[e.status]} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Panel>
+
+              {policies.length > 0 && (
+                <Panel title={d.hubs.assurances}>
+                  <ul className="divide-y divide-sand-100">
+                    {policies.map((i) => (
+                      <li key={i.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-ink">{i.provider}</span>
+                          <span className="block text-xs text-ink-soft">{d.status.insuranceKind[i.kind]}</span>
+                        </span>
+                        <span className="text-sm tabular-nums text-ink-soft">
+                          {i.expiresOn ? formatDate(i.expiresOn, locale) : d.common.none}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Panel>
+              )}
+            </div>
+          </section>
+        );
+      })}
+      <LegalNote>{d.bien.rentalLegal}</LegalNote>
+    </div>
+  );
+}
+
+function Technical({
+  card,
+  demo,
+  d,
+  locale,
+}: {
+  card: PropertyCard;
+  demo: DemoData;
+  d: Dict;
+  locale: Locale;
+}) {
+  const p = card.property;
+  const meters = demo.METERS.filter((m) => m.propertyId === p.id);
+  const policies = demo.INSURANCES.filter((i) => i.propertyId === p.id);
+  const cpe = cpeExpiryDeadline(p.name, p.cpeIssuedOn);
+  const cpeState = deadlineStatus(cpe, demo.TODAY);
+  const syndic = p.syndicMandateStart ? syndicMandateDeadline(p.syndicName ?? "", p.syndicMandateStart) : null;
+  const unitLabel = (id: string | null) =>
+    id ? demo.UNITS.find((u) => u.id === id)?.label ?? d.biens.metersCommon : d.biens.metersCommon;
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Panel title={d.bien.energyTitle}>
+        <Rows
+          items={[
+            {
+              k: d.biens.cpeRow,
+              v: p.energyClass ? (
+                <Badge
+                  className={
+                    cpeState === "overdue"
+                      ? "bg-red-100 text-red-700"
+                      : cpeState === "due_soon"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-emerald-100 text-emerald-800"
+                  }
+                >
+                  {fmt(d.biens.cpeBadge, { cls: p.energyClass, date: formatDate(cpe.dueAt, locale) })}
+                </Badge>
+              ) : (
+                d.biens.cpeMissing
+              ),
+            },
+            {
+              k: d.biens.smokeRow,
+              v: p.smokeDetectorsConfirmed ? d.biens.smokeOk : d.biens.smokeKo,
+            },
+            ...(p.constructionYear ? [{ k: d.biens.construction, v: String(p.constructionYear) }] : []),
+            ...(p.completionDate
+              ? [{ k: d.biens.completion, v: formatDate(p.completionDate, locale) }]
+              : []),
+          ]}
+        />
+      </Panel>
+
+      <Panel title={d.biens.metersTitle}>
+        {meters.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.biens.metersNone}</p>
+        ) : (
+          <ul className="divide-y divide-sand-100">
+            {meters.map((m) => (
+              <li key={m.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-ink">
+                    {d.status.meter[m.kind]} · {unitLabel(m.unitId)}
+                  </span>
+                  <span className="block truncate text-xs text-ink-soft">{m.serial}</span>
+                </span>
+                {m.lastReading ? (
+                  <span className="shrink-0 text-right text-sm tabular-nums text-ink-soft">
+                    {formatNumber(m.lastReading.value, locale)} {METER_UNITS[m.kind]}
+                    <span className="block text-xs">{formatDate(m.lastReading.date, locale)}</span>
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-sm text-ink-soft">{d.compteurs.toRead}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel title={d.hubs.assurances}>
+        {policies.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.bien.noInsurance}</p>
+        ) : (
+          <ul className="divide-y divide-sand-100">
+            {policies.map((i) => (
+              <li key={i.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-ink">{i.provider}</span>
+                  <span className="block truncate text-xs text-ink-soft">
+                    {d.status.insuranceKind[i.kind]}
+                    {i.policyNumber ? ` · ${i.policyNumber}` : ""}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right text-sm tabular-nums text-ink-soft">
+                  {i.premiumCents > 0 ? euros(i.premiumCents, locale) : ""}
+                  {i.expiresOn && <span className="block text-xs">{formatDate(i.expiresOn, locale)}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel title={d.bien.cadastreTitle}>
+        <Rows
+          items={[
+            { k: d.bien.cadastral, v: p.cadastralRef || d.common.none },
+            { k: d.bien.commune, v: p.commune || d.common.none },
+            { k: d.biens.copro, v: p.isCopropriete ? d.common.yes : d.common.none },
+            ...(p.syndicName ? [{ k: d.biens.syndic, v: p.syndicName }] : []),
+            ...(syndic
+              ? [{ k: d.biens.mandateEnd, v: formatDate(syndic.dueAt, locale) }]
+              : []),
+          ]}
+        />
+        {p.isCopropriete && <LegalNote>{d.biens.coproLegal}</LegalNote>}
+      </Panel>
+    </div>
+  );
+}
+
+function Interventions({
+  card,
+  demo,
+  d,
+  locale,
+}: {
+  card: PropertyCard;
+  demo: DemoData;
+  d: Dict;
+  locale: Locale;
+}) {
+  const tickets = ticketsFor(demo, card);
+  const sMeta = ticketStatusMeta(d);
+  const vMeta = ticketSeverityMeta(d);
+  if (tickets.length === 0) {
+    return <EmptyState icon="tasks" title={d.bien.noInterventionsTitle} body={d.bien.noInterventionsBody} />;
+  }
+  return (
+    <Panel
+      title={d.hubs.interventions}
+      action={
+        <Link href="/app/interventions" className="text-sm font-semibold text-brand-700 hover:underline">
+          {d.bien.seeAll}
+        </Link>
+      }
+    >
+      <ul className="divide-y divide-sand-100">
+        {tickets.map((t) => (
+          <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-ink">{t.title}</span>
+              <span className="block text-xs text-ink-soft">
+                {t.ref} · {formatDate(t.createdAt, locale)}
+              </span>
+            </span>
+            <MetaBadge meta={vMeta[t.severity]} />
+            <MetaBadge meta={sMeta[t.status]} />
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
+function Documents({
+  card,
+  demo,
+  d,
+  locale,
+}: {
+  card: PropertyCard;
+  demo: DemoData;
+  d: Dict;
+  locale: Locale;
+}) {
+  const docs = documentsFor(demo, card);
+  if (docs.length === 0) {
+    return <EmptyState icon="documents" title={d.bien.noDocumentsTitle} body={d.bien.noDocumentsBody} />;
+  }
+  return (
+    <Panel title={d.hubs.library}>
+      <ul className="divide-y divide-sand-100">
+        {docs.map((doc) => (
+          <li key={doc.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3 first:pt-0 last:pb-0">
+            <Icon name="documents" size={16} className="shrink-0 text-ink-soft" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-ink">{doc.name}</span>
+              <span className="block truncate text-xs text-ink-soft">
+                {doc.relatedLabel} · {formatDate(doc.createdAt, locale)}
+              </span>
+            </span>
+            {doc.sealed && <Badge className="bg-sand-100 text-ink-soft">{d.documents.sealedAria}</Badge>}
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
+function History({
+  card,
+  demo,
+  d,
+  locale,
+}: {
+  card: PropertyCard;
+  demo: DemoData;
+  d: Dict;
+  locale: Locale;
+}) {
+  const unitIds = new Set(demo.UNITS.filter((u) => u.propertyId === card.property.id).map((u) => u.id));
+  const past = demo.LEASES.filter((l) => unitIds.has(l.unitId) && l.status === "ended");
+  const vacancies = card.lots
+    .filter((l) => l.vacant && l.unit.vacantSince)
+    .map((l) => ({ unit: l.unit, clock: vacancyClock(l.unit.label, l.unit.vacantSince!, demo.TODAY) }));
+
+  if (past.length === 0 && vacancies.length === 0) {
+    return <EmptyState icon="clock" title={d.bien.noHistoryTitle} body={d.bien.noHistoryBody} />;
+  }
+  return (
+    <div className="space-y-5">
+      {vacancies.length > 0 && (
+        <Panel title={d.bien.vacancyTitle}>
+          <ul className="divide-y divide-sand-100">
+            {vacancies.map((v) => (
+              <li key={v.unit.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                <span className="text-sm font-semibold text-ink">{v.unit.label}</span>
+                <span className="text-sm text-ink-soft">
+                  {fmt(d.biens.unitVacantSince, {
+                    date: formatDate(v.unit.vacantSince!, locale),
+                    months: v.clock.monthsVacant,
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+      {past.length > 0 && (
+        <Panel title={d.bien.pastLeases}>
+          <ul className="divide-y divide-sand-100">
+            {past.map((l) => (
+              <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">
+                    {demo.leaseTenantNames(l).join(", ")}
+                  </span>
+                  <span className="block text-xs text-ink-soft">
+                    {formatDate(l.startDate, locale)}
+                    {l.endDate ? ` · ${formatDate(l.endDate, locale)}` : ""}
+                  </span>
+                </span>
+                <span className="text-sm tabular-nums text-ink-soft">{euros(l.rentCents, locale)}</span>
+                <Link href={`/app/baux/${l.id}`} className="text-sm font-semibold text-brand-700 hover:underline">
+                  {d.bien.openRental}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------ shared lookups ---------------------------- */
+
+function ticketsFor(demo: DemoData, card: PropertyCard) {
+  const unitIds = new Set(demo.UNITS.filter((u) => u.propertyId === card.property.id).map((u) => u.id));
+  return demo.TICKETS.filter((t) => unitIds.has(t.unitId))
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+function documentsFor(demo: DemoData, card: PropertyCard) {
+  const unitIds = new Set(demo.UNITS.filter((u) => u.propertyId === card.property.id).map((u) => u.id));
+  const leaseIds = new Set(demo.LEASES.filter((l) => unitIds.has(l.unitId)).map((l) => l.id));
+  const labels = new Set<string>([card.property.name]);
+  for (const line of card.lots) labels.add(line.unit.label);
+  return demo.DOCUMENTS.filter(
+    (doc) =>
+      leaseIds.has(doc.id) ||
+      [...labels].some((l) => l && doc.relatedLabel.includes(l)),
+  )
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+/* ---------------------------------- page ---------------------------------- */
+
+export default async function BienDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ onglet?: string }>;
+}) {
+  const [{ id }, { onglet }] = await Promise.all([params, searchParams]);
+  const { locale, d } = await getI18n();
+  const demo = await getDemo();
+  const card = findCard(buildPortfolio(demo), id);
+  if (!card) notFound();
+
+  const p = card.property;
+  const single = card.single;
+  const multi = card.lots.length > 1;
+  const visible = TABS.filter((t) => (t === "lots" ? multi : true));
+  const tab: Tab = (visible as readonly string[]).includes(onglet ?? "") ? (onglet as Tab) : "apercu";
+  const tabHref = (t: Tab) => (t === "apercu" ? `/app/biens/${p.id}` : `/app/biens/${p.id}?onglet=${t}`);
+
+  const headline = [
+    card.kind === "building" ? plural(locale, card.lots.length, d.biens.lotOne, d.biens.lotMany) : "",
+    single && single.unit.areaSqm > 0 ? fmt(d.biens.sqm, { n: single.unit.areaSqm }) : "",
+    single && single.unit.rooms > 0 ? plural(locale, single.unit.rooms, d.biens.roomOne, d.biens.roomMany) : "",
+    single?.unit.bedrooms ? plural(locale, single.unit.bedrooms, d.biens.bedroomOne, d.biens.bedroomMany) : "",
+    single?.unit.floor && single.unit.floor !== "—" ? single.unit.floor : "",
+  ].filter(Boolean);
 
   return (
     <div>
-      <div className="mb-2">
+      <div className="mb-3">
         <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline">
           {d.biens.backToList}
         </Link>
       </div>
-      <PageHeader
-        title={p!.name}
-        subtitle={formatAddress(p!.address)}
-        actions={
-          p!.energy_class ? (
-            <Badge className="bg-emerald-100 text-emerald-800">CPE {p!.energy_class}</Badge>
-          ) : (
-            <Badge className="bg-sand-100 text-ink-soft">CPE · {d.biens.cpeMissing}</Badge>
-          )
-        }
-      />
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Panel title={d.biens.unitsTitle}>
-            {units.length === 0 ? (
-              <p className="text-sm text-ink-soft">{d.biens.noUnitsYet}</p>
-            ) : (
-              <ul className="divide-y divide-sand-100">
-                {units.map((u) => (
-                  <li key={u.id} className="flex items-center gap-3 py-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-xs font-bold text-brand-700">
-                      {u.label.slice(0, 3)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-ink">{u.label}</p>
-                      <p className="text-xs text-ink-soft">{d.biens.unitFree}</p>
-                    </div>
-                    {u.kind === "parking" ? (
-                      <Badge className="bg-sand-100 text-ink-soft">{d.biens.unitParking}</Badge>
-                    ) : (
-                      <Badge className="bg-amber-100 text-amber-800">{d.biens.unitVacantBadge}</Badge>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-
-          <Panel title={d.biens.metersTitle} className="mt-5">
-            <p className="text-sm text-ink-soft">{d.biens.metersNone}</p>
-          </Panel>
+      {/* The hero: the photograph, the name, and the four facts that decide
+          whether this property needs attention today. */}
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
+        <div className="aspect-[4/3] w-full overflow-hidden rounded-2xl">
+          <PropertyPhoto
+            url={p.photoUrl}
+            kind={card.kind}
+            alt={fmt(d.biens.photoAlt, { property: p.name })}
+            rounded="rounded-2xl"
+          />
         </div>
-
-        <div className="flex flex-col gap-5">
-          {p!.is_copropriete && (
-            <Panel title={d.biens.coproTitle}>
-              <ul className="space-y-2 text-sm">
-                <li className="flex justify-between gap-3">
-                  <span className="text-ink-soft">{d.biens.syndic}</span>
-                  <span className="font-semibold text-ink">{p!.syndic_name ?? d.biens.cpeMissing}</span>
-                </li>
-              </ul>
-              <LegalNote>{d.biens.coproLegal}</LegalNote>
-            </Panel>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">{p.name}</h1>
+            <OccupancyPill card={card} d={d} />
+          </div>
+          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-ink-soft">
+            <Icon name="pin" size={15} className="shrink-0" />
+            {p.address}
+          </p>
+          {headline.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {headline.map((h) => (
+                <span key={h} className="rounded-lg bg-sand-100 px-2.5 py-1 text-xs font-semibold text-ink-soft">
+                  {h}
+                </span>
+              ))}
+            </div>
           )}
 
-          <Panel title={d.biens.complianceTitle}>
-            <ul className="space-y-2.5 text-sm">
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.biens.cpeRow}</span>
-                {p!.energy_class ? (
-                  <Badge className="bg-emerald-100 text-emerald-800">{p!.energy_class}</Badge>
-                ) : (
-                  <Badge className="bg-amber-100 text-amber-800">{d.biens.cpeMissing}</Badge>
-                )}
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{d.biens.smokeRow}</span>
-                <Badge
-                  className={
-                    p!.smoke_detectors_confirmed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
-                  }
-                >
-                  {p!.smoke_detectors_confirmed ? d.biens.smokeOk : d.biens.smokeKo}
-                </Badge>
-              </li>
-            </ul>
-          </Panel>
+          <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {single ? (
+              <HeroStat
+                icon="user"
+                label={d.bien.tenant}
+                value={single.vacant ? d.biens.noTenant : single.tenantNames.join(", ")}
+                sub={
+                  single.vacant
+                    ? undefined
+                    : fmt(d.bien.tenantSince, { date: formatDate(single.lease!.startDate, locale) })
+                }
+              />
+            ) : (
+              <HeroStat
+                icon="user"
+                label={d.bien.occupancy}
+                value={`${card.occupied}/${card.lots.length}`}
+                sub={plural(locale, card.vacant, d.biens.vacantOneN, d.biens.vacantManyN)}
+              />
+            )}
+            <HeroStat
+              icon="euro"
+              label={d.bien.monthlyTotal}
+              value={fmt(d.biens.perMonth, { amount: eurosWhole(card.monthlyCents, locale) })}
+              sub={
+                single && !single.vacant
+                  ? `${euros(single.lease!.rentCents, locale)} + ${euros(single.lease!.chargesCents, locale)}`
+                  : undefined
+              }
+            />
+            <HeroStat
+              icon="calendar"
+              label={d.bien.thisMonth}
+              value={
+                single?.status
+                  ? rentStatusMeta(d)[single.status].label
+                  : `${plural(locale, card.occupied, d.biens.occupiedOneN, d.biens.occupiedManyN)} \u00b7 ${plural(
+                      locale,
+                      card.vacant,
+                      d.biens.vacantOneN,
+                      d.biens.vacantManyN,
+                    )}`
+              }
+            />
+            <HeroStat
+              icon="clock"
+              label={d.bien.nextDue}
+              value={card.nextDue ? formatDate(card.nextDue, locale) : d.common.none}
+            />
+          </div>
         </div>
       </div>
+
+      {/* Tabs: lenses on one property, never separate records. */}
+      <div className="no-scrollbar mb-5 flex gap-1 overflow-x-auto border-b border-sand-200">
+        {visible.map((t) => (
+          <Link
+            key={t}
+            href={tabHref(t)}
+            aria-current={t === tab ? "page" : undefined}
+            className={
+              "shrink-0 border-b-2 px-3 py-2.5 text-sm font-semibold transition " +
+              (t === tab
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-ink-soft hover:text-ink")
+            }
+          >
+            {tabLabel(d, t)}
+          </Link>
+        ))}
+      </div>
+
+      {tab === "apercu" && <Overview card={card} demo={demo} d={d} locale={locale} />}
+      {tab === "lots" && <Lots card={card} d={d} locale={locale} />}
+      {tab === "location" && <Rental card={card} demo={demo} d={d} locale={locale} />}
+      {tab === "technique" && <Technical card={card} demo={demo} d={d} locale={locale} />}
+      {tab === "interventions" && <Interventions card={card} demo={demo} d={d} locale={locale} />}
+      {tab === "documents" && <Documents card={card} demo={demo} d={d} locale={locale} />}
+      {tab === "historique" && <History card={card} demo={demo} d={d} locale={locale} />}
     </div>
+  );
+}
+
+function OccupancyPill({ card, d }: { card: PropertyCard; d: Dict }) {
+  const state = occupancyOf(card);
+  if (state === "occupied") return <Badge className="bg-emerald-100 text-emerald-800">{d.biens.occupiedOne}</Badge>;
+  if (state === "vacant") return <Badge className="bg-sand-100 text-ink-soft">{d.biens.vacantLabel}</Badge>;
+  return <Badge className="bg-amber-100 text-amber-800">{d.biens.partiallyOccupied}</Badge>;
+}
+
+function HeroStat({
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: "user" | "euro" | "calendar" | "clock";
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <Card className="p-3.5">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+        <Icon name={icon} size={13} />
+        {label}
+      </p>
+      <p className="mt-1 truncate font-display text-sm font-bold text-ink">{value}</p>
+      {sub && <p className="mt-0.5 truncate text-xs tabular-nums text-ink-soft">{sub}</p>}
+    </Card>
   );
 }

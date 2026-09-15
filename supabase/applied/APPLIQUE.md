@@ -35,3 +35,26 @@ référence exige un vrai registre : `0010_insurance_policies.sql`
 (migration `gestion_insurance_policies`) crée la table, ses index et ses
 quatre politiques RLS sur le motif gestion.can existant. Additive, aucune
 table existante touchée ; réversible par un drop de la seule table.
+
+## 0011 · 2026-09-15 · chambres des lots et bucket média
+
+La refonte de Patrimoine a besoin de deux choses que la base n'avait pas.
+`gestion.units.bedrooms` (int, nullable) porte le nombre de chambres, que
+`rooms` ne distinguait pas des pièces. Et le bucket privé `gestion-media`
+stocke enfin les photos de biens : `gestion.properties.photo_url` existait
+depuis 0003 sans aucun stockage derrière.
+
+Le bucket est le septième du projet ; les six de Morada
+(discovery-videos, discovery-thumbnails, documents, customer-documents,
+listing-images, discovery-audio) ne sont pas touchés. Les quatre policies
+ajoutées sur `storage.objects` sont PERMISSIVE et filtrées sur
+`bucket_id = 'gestion-media'` : elles n'élargissent ni ne restreignent
+l'accès aux autres buckets. Les quatorze policies existantes sont
+inchangées (empreinte `bea6afc57e674006c12d00b38dc3f0cd`), et
+`public.g_can` reste sur `60d98f80cccaa74f02b4afb1ebd6b859`.
+
+Le chemin d'un objet est `<org_id>/<property_id>/<uuid>.<ext>` : la RLS lit
+l'espace sur le premier segment via `gestion.media_org(text)`, qui renvoie
+NULL si ce segment n'est pas un uuid. Bricoler une URL ne donne donc jamais
+accès au bucket d'un autre cabinet. Vérifié après application : 7 buckets,
+18 policies sur storage.objects, colonne `bedrooms` présente.

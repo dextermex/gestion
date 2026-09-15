@@ -1,5 +1,6 @@
 import "server-only";
 import { authedClient } from "@/lib/supabase/server";
+import { signMedia } from "@/lib/gestion/media";
 import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
 import type { OpenInvoice } from "@/domain/banking/matching";
 import type { DemoData } from "./index";
@@ -39,13 +40,18 @@ const b = (v: unknown): boolean => v === true;
 const day = (v: unknown): string => s(v).slice(0, 10);
 
 export async function buildRealData(org: Org, accessToken: string): Promise<DemoData> {
-  const g = authedClient(accessToken).schema("gestion");
+  const client = authedClient(accessToken);
+  const g = client.schema("gestion");
   const oid = org.id;
 
   // One org-scoped read per table, in parallel. A failed read degrades to an
   // empty collection (logged), never to sample data.
+  // Tables carrying `archived_at`: an archived row is gone from every screen,
+  // not only from the one that happens to filter it.
+  const ARCHIVABLE = new Set(["properties", "units", "contacts"]);
   const q = async (table: string, select: string, order?: string): Promise<Row[]> => {
     let query = g.from(table).select(select).eq("org_id", oid);
+    if (ARCHIVABLE.has(table)) query = query.is("archived_at", null);
     if (order) query = query.order(order);
     const { data, error } = await query.limit(2000);
     if (error) {
@@ -83,10 +89,10 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
   ] = await Promise.all([
     q(
       "properties",
-      "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed",
+      "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url",
       "created_at",
     ),
-    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,furnished", "created_at"),
+    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished", "created_at"),
     q(
       "contacts",
       "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes",
@@ -151,6 +157,12 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
   }));
 
   // ── Properties & units ──
+  // photo_url holds a bucket path, not a link: one batched signing call,
+  // skipped entirely when no property has a photograph yet.
+  const signed = await signMedia(
+    client,
+    propertyRows.map((p) => s(p.photo_url)).filter(Boolean),
+  );
   const unitsByProperty = new Map<string, number>();
   for (const u of unitRows) {
     unitsByProperty.set(s(u.property_id), (unitsByProperty.get(s(u.property_id)) ?? 0) + 1);
@@ -175,6 +187,7 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
     ownerContactIds: [],
     ownershipNote: "",
     unitsCount: unitsByProperty.get(s(p.id)) ?? 0,
+    photoUrl: signed.get(s(p.photo_url)) ?? null,
   }));
   const UNITS: DemoUnit[] = unitRows.map((u) => ({
     id: s(u.id),
@@ -184,6 +197,7 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
     floor: s(u.floor),
     areaSqm: n(u.area_sqm),
     rooms: n(u.rooms),
+    bedrooms: typeof u.bedrooms === "number" ? u.bedrooms : undefined,
     furnished: b(u.furnished),
   }));
 
@@ -373,6 +387,7 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
   const TICKETS: DemoTicket[] = ticketRows.map((t) => ({
     id: s(t.id),
     ref: `INT-${s(t.id).slice(0, 8).toUpperCase()}`,
+    unitId: s(t.unit_id),
     unitLabel: labelOfUnit(s(t.unit_id)),
     leaseId: sOr(t.lease_id, null),
     source: (["tenant", "manager", "edl_defect", "owner"].includes(s(t.source))

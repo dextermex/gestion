@@ -7,7 +7,8 @@ BASE="http://127.0.0.1:4321"
 ROUTES="/app /app/biens /app/baux /app/loyers /app/charges /app/compteurs
 /app/conformite /app/contacts /app/contrats /app/documents /app/finance
 /app/fiscalite /app/garanties /app/indexation /app/messages /app/workflows
-/app/banque /app/aml /app/biens/nouveau /locataire /locataire/bail
+/app/banque /app/aml /app/biens/nouveau /app/interventions /app/edl
+/app/assurances /app/utilisateurs /app/integrations /locataire /locataire/bail
 /locataire/paiements /locataire/demandes /connexion"
 
 fail=0
