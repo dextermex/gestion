@@ -31,7 +31,10 @@ type Props = {
   notice: string;
 };
 
-const STEPS = [1, 2, 3, 4, 5, 6] as const;
+/** Five steps create the rental; the last three enrich it once it exists,
+ *  because an inspection and a policy both need a lease to belong to. */
+const LAST_INPUT = 5;
+const LAST_STEP = 8;
 
 export default function TenantWizard({
   d,
@@ -67,6 +70,12 @@ export default function TenantWizard({
 
   const [payerName, setPayerName] = useState("");
   const [payerIban, setPayerIban] = useState("");
+
+  const [edlDone, setEdlDone] = useState(false);
+  const [insurer, setInsurer] = useState("");
+  const [insurancePolicy, setInsurancePolicy] = useState("");
+  const [insuranceExpires, setInsuranceExpires] = useState("");
+  const [insuranceDone, setInsuranceDone] = useState(false);
 
   const [hasDeposit, setHasDeposit] = useState(true);
   const [depositMonths, setDepositMonths] = useState("2");
@@ -142,6 +151,7 @@ export default function TenantWizard({
           : [],
       );
       setStep(6);
+      return;
     } catch {
       setSaveError(d.location.saveFailed);
     }
@@ -154,7 +164,7 @@ export default function TenantWizard({
     else setStep(6);
   };
 
-  const go = (delta: 1 | -1) => setStep((s) => Math.min(6, Math.max(1, s + delta)));
+  const go = (delta: 1 | -1) => setStep((s) => Math.min(LAST_STEP, Math.max(1, s + delta)));
 
   const slide = (dir: 1 | -1) =>
     reduced
@@ -172,8 +182,25 @@ export default function TenantWizard({
     3: d.location.titleRent,
     4: d.location.titlePayer,
     5: d.location.titleGuarantee,
-    6: "",
+    6: d.location.titleInspection,
+    7: d.location.titleInsurance,
+    8: d.location.titleReview,
   };
+
+  // What an owner has actually told Morada about this tenancy. The percentage
+  // is a count of real facts, not a progress bar for its own sake: each one
+  // is something the product will otherwise have to ask for later.
+  const checklist = [
+    { label: d.location.checkTenant, done: nameOk },
+    { label: d.location.checkLease, done: startDate !== "" },
+    { label: d.location.checkRent, done: rentOk },
+    { label: d.location.checkPayer, done: payerIban.trim() !== "" },
+    { label: d.location.checkGuarantee, done: !hasDeposit || depositMonths !== "" },
+    { label: d.location.checkInspection, done: edlDone },
+    { label: d.location.checkInsurance, done: insuranceDone },
+    { label: d.location.checkDocuments, done: false },
+  ];
+  const completion = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -204,7 +231,7 @@ export default function TenantWizard({
   const overlay = (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
-        {step === 1 || step === 6 ? (
+        {step === 1 || step > LAST_INPUT ? (
           <Link
             href={`/app/biens/${propertyId}`}
             className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
@@ -218,9 +245,9 @@ export default function TenantWizard({
             {d.common.back}
           </button>
         )}
-        {step !== 6 && (
+        {step <= LAST_STEP && (
           <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
-            {d.biens.wizStepOf.replace("{n}", String(step)).replace("{total}", String(STEPS.length - 1))}
+            {d.biens.wizStepOf.replace("{n}", String(step)).replace("{total}", String(LAST_STEP))}
           </p>
         )}
       </div>
@@ -438,54 +465,135 @@ export default function TenantWizard({
           )}
 
           {step === 6 && (
-            <motion.div key="t6" {...slide(1)} className="mx-auto max-w-xl text-center">
-              <span
-                className={
-                  "mx-auto flex h-14 w-14 items-center justify-center rounded-full " +
-                  (draftIssues.length > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")
-                }
-              >
-                <Icon name="check" size={28} />
-              </span>
-              <h1
-                ref={headingRef}
-                tabIndex={-1}
-                className="mt-5 font-display text-2xl font-bold tracking-tight text-ink outline-none"
-              >
-                {d.location.doneTitle.replace("{tenant}", `${firstName} ${lastName}`.trim())}
-              </h1>
-
-              {real ? (
-                <>
-                  {draftIssues.length > 0 ? (
-                    <div role="status" className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-left">
-                      <p className="text-sm font-semibold text-amber-900">{d.location.draftTitle}</p>
-                      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-amber-900">
-                        {draftIssues.map((m) => (
-                          <li key={m}>{m}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-ink-soft">{d.location.doneBody}</p>
-                  )}
-                  <div className="mt-6 flex flex-col gap-2.5">
-                    <Button onClick={() => router.push(`/app/baux/${leaseId}`)}>{d.location.openRental}</Button>
-                    <Button variant="secondary" onClick={() => router.push(`/app/biens/${propertyId}?onglet=location`)}>
-                      {d.location.backToProperty}
-                    </Button>
+            <motion.div key="t6" {...slide(1)}>
+              {Heading}
+              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+                {draftIssues.length > 0 && (
+                  <div role="status" className="mb-4 rounded-xl bg-amber-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-amber-900">{d.location.draftTitle}</p>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-amber-900">
+                      {draftIssues.map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
                   </div>
-                </>
-              ) : (
-                <>
-                  <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                    {notice}
+                )}
+                <p className="text-sm leading-relaxed text-ink-soft">{d.location.inspectionHint}</p>
+                {real && leaseId ? (
+                  <Link
+                    href={`/app/biens/etat-des-lieux?bail=${leaseId}&type=entry`}
+                    onClick={() => setEdlDone(true)}
+                    className="tactile mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+                  >
+                    <Icon name="plus" size={15} />
+                    {d.location.inspectionStart}
+                  </Link>
+                ) : (
+                  <p className="mt-4 text-sm text-ink-soft">{notice}</p>
+                )}
+                <div className="mt-6 flex items-center justify-between">
+                  <button onClick={() => setStep(7)} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                    {d.biens.wizLater}
+                  </button>
+                  <Button onClick={() => setStep(7)}>{d.common.next}</Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 7 && (
+            <motion.div key="t7" {...slide(1)}>
+              {Heading}
+              <form
+                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!real || !leaseId || insurer.trim() === "") {
+                    setStep(8);
+                    return;
+                  }
+                  setSaving(true);
+                  const res = await fetch("/api/assurances/create", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      leaseId,
+                      kind: "rent_guarantee",
+                      provider: insurer,
+                      policyNumber: insurancePolicy,
+                      expiresOn: insuranceExpires,
+                    }),
+                  });
+                  setSaving(false);
+                  if (res.ok) setInsuranceDone(true);
+                  setStep(8);
+                }}
+              >
+                <p className="text-sm leading-relaxed text-ink-soft">{d.location.insuranceHint}</p>
+                <div className="mt-4 space-y-3">
+                  <Field label={d.assurances.fieldProvider}>
+                    <Input maxLength={120} value={insurer} onChange={(e) => setInsurer(e.target.value)} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={d.assurances.fieldNumber}>
+                      <Input maxLength={80} value={insurancePolicy} onChange={(e) => setInsurancePolicy(e.target.value)} />
+                    </Field>
+                    <Field label={d.assurances.fieldExpires}>
+                      <Input type="date" value={insuranceExpires} onChange={(e) => setInsuranceExpires(e.target.value)} />
+                    </Field>
+                  </div>
+                </div>
+                <div className="mt-6 flex items-center justify-between">
+                  <button type="button" onClick={() => setStep(8)} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                    {d.biens.wizLater}
+                  </button>
+                  <Button type="submit" loading={saving}>
+                    {d.common.next}
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+
+          {step === 8 && (
+            <motion.div key="t8" {...slide(1)}>
+              {Heading}
+              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="font-display text-lg font-bold text-ink">
+                    {d.location.dossierComplete.replace("{pct}", String(completion))}
                   </p>
-                  <Button className="mt-6" onClick={() => router.push(`/app/biens/${propertyId}`)}>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sand-200" aria-hidden>
+                  <span className="block h-full rounded-full bg-brand-600" style={{ width: `${completion}%` }} />
+                </div>
+
+                <ul className="mt-4 space-y-1.5">
+                  {checklist.map((c) => (
+                    <li key={c.label} className="flex items-center gap-2.5 text-sm">
+                      <span className={c.done ? "text-emerald-600" : "text-sand-400"}>
+                        <Icon name={c.done ? "check" : "clock"} size={15} />
+                      </span>
+                      <span className={c.done ? "text-ink" : "text-ink-soft"}>{c.label}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="mt-4 text-xs leading-relaxed text-ink-soft">{d.location.reviewNote}</p>
+
+                <div className="mt-6 flex flex-col gap-2.5">
+                  {real && leaseId ? (
+                    <Button onClick={() => router.push(`/app/baux/${leaseId}`)}>{d.location.openRental}</Button>
+                  ) : (
+                    <p role="status" className="rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800">
+                      {notice}
+                    </p>
+                  )}
+                  <Button variant="secondary" onClick={() => router.push(`/app/biens/${propertyId}?onglet=location`)}>
                     {d.location.backToProperty}
                   </Button>
-                </>
-              )}
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

@@ -201,3 +201,60 @@ export async function createLease(
     })),
   };
 }
+
+/**
+ * Re-prices the rent periods a change is allowed to touch.
+ *
+ * A rent that goes up, or an indexation that is applied, changes what is owed
+ * from a date forward. It must never rewrite a month that already carries
+ * money: the ledger is the record of what actually happened, and an allocated
+ * period is history. So only periods from `fromMonth` onward that have nothing
+ * allocated against them are re-priced; everything else is left exactly as the
+ * bank and the tenant left it.
+ *
+ * Returns how many periods were re-priced, so a caller can tell the owner.
+ */
+export async function repriceOpenPeriods(
+  ctx: OrgContext,
+  leaseId: string,
+  rentCents: number,
+  chargesCents: number,
+  fromMonth: string,
+): Promise<number> {
+  const { g, org } = ctx;
+  const [{ data: periods, error: pErr }, { data: statuses, error: sErr }] = await Promise.all([
+    g.from("rent_periods").select("id,period").eq("org_id", org.id).eq("lease_id", leaseId).gte("period", fromMonth),
+    g.from("rent_period_status").select("id,allocated_cents").eq("lease_id", leaseId),
+  ]);
+  if (pErr || sErr) {
+    console.error("reprice lookup failed:", pErr?.message ?? sErr?.message);
+    return 0;
+  }
+  const allocated = new Map<string, number>();
+  for (const row of (statuses as Array<{ id: string; allocated_cents: number }> | null) ?? []) {
+    allocated.set(row.id, row.allocated_cents ?? 0);
+  }
+  const open = ((periods as Array<{ id: string; period: string }> | null) ?? []).filter(
+    (p) => (allocated.get(p.id) ?? 0) === 0,
+  );
+  if (open.length === 0) return 0;
+
+  // total_cents is generated: the database re-sums from the parts.
+  const { error } = await g
+    .from("rent_periods")
+    .update({ rent_cents: rentCents, charges_cents: chargesCents })
+    .eq("org_id", org.id)
+    .in("id", open.map((p) => p.id));
+  if (error) {
+    console.error("reprice failed:", error.code, error.message);
+    return 0;
+  }
+  return open.length;
+}
+
+/** The month a change takes effect from: today's month, or later. */
+export function effectiveMonth(from: string | null): string {
+  const today = new Date().toISOString().slice(0, 10).slice(0, 7);
+  const asked = (from ?? "").slice(0, 7);
+  return asked && asked > today ? `${asked}-01` : `${today}-01`;
+}

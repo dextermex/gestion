@@ -153,3 +153,39 @@ no second switch anywhere to "start tracking" a rent.
 signs those paths in one batched call per render under the caller's own token;
 a property with no photograph draws the placeholder in `PropertyPhoto.tsx`
 rather than a gap.
+
+## The write layer: edit, end, archive
+
+The audit that opened this work found a product that could only ever
+accumulate: ten routes, all inserts, no way to correct anything. That is now
+closed.
+
+**One button.** Every change to a property goes through `Modifier` on its
+sheet, grouped the way an owner thinks (`src/lib/gestion/property-menu.ts`
+builds it). Nine of the entries are flat forms described as data
+(`src/lib/gestion/editors.ts`) and rendered by one client component, so there
+is a single save path and every editor behaves identically. Photos, payer
+accounts, indexation and archiving own their own small interfaces because
+they are not forms.
+
+**Money is never rewritten backwards.** `repriceOpenPeriods` is the rule:
+a rent change or an applied indexation re-prices periods from a chosen month
+forward, and only those with nothing allocated against them. A month the
+tenant paid, or part-paid, is the record of what happened. The endpoints
+return how many periods moved so the owner is told rather than trusting it.
+
+**Indexation is decided by the engine, not the request.** `/api/baux/[id]/
+indexation` re-runs `proposeResidentialAdjustment` server-side and applies its
+answer; the amount in the body is ignored entirely, and a proposal the engine
+refuses comes back with the engine's reason.
+
+**A departure closes, it never deletes.** `/api/baux/[id]/cloture` sets the
+lease to `ended`, stamps `lease_parties.moved_out_on`, releases the lot, and
+removes only the future periods nobody paid. Everything else stays: the
+tenancy keeps its payments, its inventory and its documents and becomes the
+property's history. `Historique` lists tenancies numbered in the order they
+began — Location 1, Location 2 — each whole and read-only, with an explicit
+`Corriger` rather than an edit in passing. Two tenancies are never merged.
+
+**Nothing is deleted anywhere.** A property leaves the portfolio through
+`archived_at`, and only once no lease is running on it.

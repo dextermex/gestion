@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as fr from "@/lib/demo/data";
 import type { DemoData } from "@/lib/demo";
-import { buildPortfolio, findCard, occupancyOf } from "@/lib/gestion/portfolio";
+import { buildPortfolio, findCard, nextDueOn, occupancyOf } from "@/lib/gestion/portfolio";
 
 /**
  * The portfolio projection is what both Patrimoine screens read, so a
@@ -115,5 +115,57 @@ describe("buildPortfolio on an empty account", () => {
     expect(card.single).toBeNull();
     expect(card.monthlyCents).toBe(0);
     expect(occupancyOf(card)).toBe("vacant");
+  });
+});
+
+describe("nextDueOn", () => {
+  it("keeps this month's due day when it has not passed", () => {
+    expect(nextDueOn("2026-09-03", 5)).toBe("2026-09-05");
+    expect(nextDueOn("2026-09-05", 5)).toBe("2026-09-05");
+  });
+
+  it("rolls to next month once the day is behind us", () => {
+    expect(nextDueOn("2026-09-20", 1)).toBe("2026-10-01");
+  });
+
+  it("rolls across a year boundary", () => {
+    expect(nextDueOn("2026-12-20", 1)).toBe("2027-01-01");
+  });
+
+  it("clamps a payment day to what the schema accepts", () => {
+    expect(nextDueOn("2026-09-01", 31)).toBe("2026-09-28");
+    expect(nextDueOn("2026-09-01", 0)).toBe("2026-09-01");
+  });
+});
+
+describe("a tenancy that ended", () => {
+  // Closing a lease must free its lot without touching anything else: the
+  // property goes back to vacant, and the old rent stops being counted.
+  const ended = {
+    ...demo,
+    LEASES: demo.LEASES.map((l) => (l.unitId === "u-bert" ? { ...l, status: "ended" as const } : l)),
+  } as unknown as DemoData;
+
+  it("frees the lot and stops counting its rent", () => {
+    const before = findCard(buildPortfolio(demo), "p-bertrange")!;
+    const after = findCard(buildPortfolio(ended), "p-bertrange")!;
+    expect(before.occupied).toBe(1);
+    expect(after.occupied).toBe(0);
+    expect(after.vacant).toBe(1);
+    expect(after.monthlyCents).toBe(0);
+    expect(occupancyOf(after)).toBe("vacant");
+    expect(after.single?.lease).toBeNull();
+  });
+
+  it("leaves the ended lease and its ledger in the dataset", () => {
+    expect(ended.LEASES.some((l) => l.unitId === "u-bert" && l.status === "ended")).toBe(true);
+    expect(ended.RENT_PERIODS.length).toBe(demo.RENT_PERIODS.length);
+  });
+
+  it("does not disturb any other property", () => {
+    const a = findCard(buildPortfolio(demo), "p-beaulieu")!;
+    const b = findCard(buildPortfolio(ended), "p-beaulieu")!;
+    expect(b.occupied).toBe(a.occupied);
+    expect(b.monthlyCents).toBe(a.monthlyCents);
   });
 });

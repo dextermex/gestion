@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, EmptyState } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
-import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
+import { CollapsiblePanel, LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import PropertyPhoto from "@/components/gestion/PropertyPhoto";
+import ModifyMenu from "@/components/gestion/ModifyMenu";
+import { propertyMenu } from "@/lib/gestion/property-menu";
 import { getDemo } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
 import { buildPortfolio, findCard, occupancyOf, type PropertyCard, type UnitLine } from "@/lib/gestion/portfolio";
@@ -480,7 +482,7 @@ function Rental({
             </Panel>
 
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              <Panel title={d.bien.payerAccounts}>
+              <CollapsiblePanel title={d.bien.payerAccounts}>
                 {payers.length === 0 ? (
                   <p className="text-sm text-ink-soft">{d.bien.noPayer}</p>
                 ) : (
@@ -493,9 +495,9 @@ function Rental({
                   </ul>
                 )}
                 <p className="mt-2.5 text-xs leading-relaxed text-ink-soft">{d.bien.payerHint}</p>
-              </Panel>
+              </CollapsiblePanel>
 
-              <Panel title={d.hubs.deposits}>
+              <CollapsiblePanel title={d.hubs.deposits}>
                 {deposit ? (
                   <Rows
                     items={[
@@ -507,9 +509,9 @@ function Rental({
                 ) : (
                   <p className="text-sm text-ink-soft">{d.bien.noDeposit}</p>
                 )}
-              </Panel>
+              </CollapsiblePanel>
 
-              <Panel title={d.hubs.indexation}>
+              <CollapsiblePanel title={d.hubs.indexation}>
                 {proposal ? (
                   proposal.allowed ? (
                     <div className="rounded-xl bg-amber-50 p-3.5">
@@ -541,9 +543,9 @@ function Rental({
                 ) : (
                   <p className="text-sm text-ink-soft">{d.bien.indexationNone}</p>
                 )}
-              </Panel>
+              </CollapsiblePanel>
 
-              <Panel title={d.hubs.edl}>
+              <CollapsiblePanel title={d.hubs.edl}>
                 {edls.length === 0 ? (
                   <p className="text-sm text-ink-soft">{d.bien.noEdl}</p>
                 ) : (
@@ -562,10 +564,10 @@ function Rental({
                     ))}
                   </ul>
                 )}
-              </Panel>
+              </CollapsiblePanel>
 
               {policies.length > 0 && (
-                <Panel title={d.hubs.assurances}>
+                <CollapsiblePanel title={d.hubs.assurances}>
                   <ul className="divide-y divide-sand-100">
                     {policies.map((i) => (
                       <li key={i.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
@@ -579,7 +581,7 @@ function Rental({
                       </li>
                     ))}
                   </ul>
-                </Panel>
+                </CollapsiblePanel>
               )}
             </div>
           </section>
@@ -804,15 +806,41 @@ function History({
   d: Dict;
   locale: Locale;
 }) {
+  // The property's memory. Every tenancy it has ever had, numbered in the
+  // order they began and shown newest first, each one whole: its own tenant,
+  // its own rent, its own payments, its own inventory. Two tenancies are
+  // never merged into one story, which is the point of numbering them.
   const unitIds = new Set(demo.UNITS.filter((u) => u.propertyId === card.property.id).map((u) => u.id));
-  const past = demo.LEASES.filter((l) => unitIds.has(l.unitId) && l.status === "ended");
+  const rentals = demo.LEASES.filter((l) => unitIds.has(l.unitId) && l.status !== "draft")
+    .slice()
+    .sort((a, b) => (a.startDate < b.startDate ? -1 : 1))
+    .map((lease, i) => {
+      const periods = demo.RENT_PERIODS.filter((rp) => rp.leaseId === lease.id);
+      const received = periods.reduce((a, rp) => a + rp.allocatedCents, 0);
+      const open = periods.reduce((a, rp) => a + Math.max(0, rp.totalCents - rp.allocatedCents), 0);
+      return {
+        lease,
+        number: i + 1,
+        unitLabel: demo.UNITS.find((u) => u.id === lease.unitId)?.label ?? "",
+        tenants: demo.leaseTenantNames(lease).join(", "),
+        periods: periods.length,
+        received,
+        open,
+        deposit: demo.DEPOSITS.find((x) => x.leaseId === lease.id) ?? null,
+        edls: demo.EDLS.filter((e) => e.leaseId === lease.id).length,
+        live: lease.status === "active" || lease.status === "notice",
+      };
+    })
+    .reverse();
+
   const vacancies = card.lots
     .filter((l) => l.vacant && l.unit.vacantSince)
     .map((l) => ({ unit: l.unit, clock: vacancyClock(l.unit.label, l.unit.vacantSince!, demo.TODAY) }));
 
-  if (past.length === 0 && vacancies.length === 0) {
+  if (rentals.length === 0 && vacancies.length === 0) {
     return <EmptyState icon="clock" title={d.bien.noHistoryTitle} body={d.bien.noHistoryBody} />;
   }
+
   return (
     <div className="space-y-5">
       {vacancies.length > 0 && (
@@ -832,27 +860,65 @@ function History({
           </ul>
         </Panel>
       )}
-      {past.length > 0 && (
-        <Panel title={d.bien.pastLeases}>
-          <ul className="divide-y divide-sand-100">
-            {past.map((l) => (
-              <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink">
-                    {demo.leaseTenantNames(l).join(", ")}
-                  </span>
-                  <span className="block text-xs text-ink-soft">
-                    {formatDate(l.startDate, locale)}
-                    {l.endDate ? ` · ${formatDate(l.endDate, locale)}` : ""}
-                  </span>
-                </span>
-                <span className="text-sm tabular-nums text-ink-soft">{euros(l.rentCents, locale)}</span>
-                <Link href={`/app/baux/${l.id}`} className="text-sm font-semibold text-brand-700 hover:underline">
-                  {d.bien.openRental}
-                </Link>
+
+      {rentals.length > 0 && (
+        <Panel title={d.bien.rentalsTitle}>
+          <ul className="space-y-3">
+            {rentals.map((r) => (
+              <li
+                key={r.lease.id}
+                className={
+                  "rounded-xl border p-4 " +
+                  (r.live ? "border-brand-100 bg-brand-50/40" : "border-sand-200 bg-white")
+                }
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-display text-sm font-bold text-ink">
+                      {fmt(d.bien.rentalNumber, { n: r.number })} \u00b7 {r.tenants || d.common.none}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-soft">
+                      {r.unitLabel} \u00b7 {formatDate(r.lease.startDate, locale)}
+                      {r.lease.endDate ? ` \u00b7 ${formatDate(r.lease.endDate, locale)}` : ""}
+                    </p>
+                  </div>
+                  <Badge className={r.live ? "bg-emerald-100 text-emerald-800" : "bg-sand-100 text-ink-soft"}>
+                    {r.live ? d.bien.rentalLive : d.bien.rentalClosed}
+                  </Badge>
+                </div>
+
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
+                  {[
+                    { k: d.bien.monthlyTotal, v: euros(r.lease.rentCents + r.lease.chargesCents, locale) },
+                    { k: d.bien.periodsCount, v: String(r.periods) },
+                    { k: d.bien.received, v: euros(r.received, locale) },
+                    ...(r.open > 0 ? [{ k: d.bien.stillOpen, v: euros(r.open, locale) }] : []),
+                    ...(r.edls > 0 ? [{ k: d.hubs.edl, v: String(r.edls) }] : []),
+                  ].map((x) => (
+                    <div key={x.k}>
+                      <dt className="text-[11px] uppercase tracking-wide text-ink-soft">{x.k}</dt>
+                      <dd className="text-sm font-semibold tabular-nums text-ink">{x.v}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  <Link href={`/app/baux/${r.lease.id}`} className="text-sm font-semibold text-brand-700 hover:underline">
+                    {r.live ? d.bien.openRental : d.bien.consult}
+                  </Link>
+                  {!r.live && (
+                    <Link
+                      href={`/app/baux/${r.lease.id}?onglet=contrat`}
+                      className="text-sm font-semibold text-ink-soft hover:text-ink hover:underline"
+                    >
+                      {d.bien.correct}
+                    </Link>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
+          <LegalNote>{d.bien.historyLegal}</LegalNote>
         </Panel>
       )}
     </div>
@@ -896,6 +962,7 @@ export default async function BienDetailPage({
   const demo = await getDemo();
   const card = findCard(buildPortfolio(demo), id);
   if (!card) notFound();
+  const menu = propertyMenu(card, demo, d, locale);
 
   const p = card.property;
   const single = card.single;
@@ -933,8 +1000,12 @@ export default async function BienDetailPage({
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">{p.name}</h1>
-            <OccupancyPill card={card} d={d} />
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">{p.name}</h1>
+              <OccupancyPill card={card} d={d} />
+            </div>
+            {/* One button for every change this property can take. */}
+            <ModifyMenu groups={menu.groups} labels={modifyLabels(d)} />
           </div>
           <p className="mt-1.5 flex items-center gap-1.5 text-sm text-ink-soft">
             <Icon name="pin" size={15} className="shrink-0" />
@@ -1061,4 +1132,32 @@ function HeroStat({
       {sub && <p className="mt-0.5 truncate text-xs tabular-nums text-ink-soft">{sub}</p>}
     </Card>
   );
+}
+
+/** The handful of strings the editors own, rather than the page. */
+function modifyLabels(d: Dict) {
+  return {
+    trigger: d.modify.trigger,
+    cancel: d.common.cancel,
+    save: d.common.save,
+    saved: d.modify.saved,
+    failed: d.modify.failed,
+    photoCurrent: d.modify.photoCurrent,
+    photoChoose: d.modify.photoChoose,
+    photoRemove: d.modify.photoRemove,
+    photoNone: d.modify.photoNone,
+    payerAdd: d.modify.payerAdd,
+    payerIban: d.location.payerIban,
+    payerNone: d.modify.payerNone,
+    payerHint: d.location.payerHint,
+    remove: d.modify.remove,
+    indexApply: d.modify.indexApply,
+    indexBlocked: d.modify.indexBlocked,
+    indexFrom: d.modify.indexTo,
+    indexTo: d.modify.indexTo,
+    archiveConfirm: d.modify.archive,
+    archiveBody: d.modify.archiveBody,
+    archiveBlocked: d.modify.archiveBlocked,
+    archiveDo: d.modify.archiveDo,
+  };
 }

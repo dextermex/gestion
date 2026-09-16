@@ -125,7 +125,7 @@ export default function PropertyWizard({
   const isDwelling = type !== null && DWELLING.includes(type);
   // Step 4 only exists for a container; the numbering follows.
   const flow = useMemo(
-    () => (needsUnits ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 5, 6]),
+    () => (needsUnits ? [1, 2, 3, 4, 5, 6, 7, 8, 9] : [1, 2, 3, 4, 5, 7, 8, 9]),
     [needsUnits],
   );
   const position = flow.indexOf(step) + 1;
@@ -226,7 +226,7 @@ export default function PropertyWizard({
           break;
         }
       }
-      setStep(6);
+      setStep(9);
     } catch {
       setSaveError(d.biens.wizSaveFailed);
     }
@@ -236,7 +236,7 @@ export default function PropertyWizard({
   const submit = () => {
     if (!canSubmit || saving) return;
     if (real) void save();
-    else setStep(6);
+    else setStep(9);
   };
 
   const slide = (dir: 1 | -1) =>
@@ -258,17 +258,16 @@ export default function PropertyWizard({
   ];
 
   const stepTitle =
-    step === 1
-      ? d.biens.wizTitle1
-      : step === 2
-        ? d.biens.wizTitle2
-        : step === 3
-          ? d.biens.wizTitlePhotos
-          : step === 4
-            ? d.biens.wizTitleUnits
-            : step === 5
-              ? d.biens.wizTitleTech
-              : "";
+    ({
+      1: d.biens.wizTitle1,
+      2: d.biens.wizTitle2,
+      3: d.biens.wizTitleAddress,
+      4: d.biens.wizTitleRooms,
+      5: d.biens.wizTitlePhotos,
+      6: d.biens.wizTitleUnits,
+      7: d.biens.wizTitleTech,
+      8: d.biens.wizTitleReview,
+    } as Record<number, string>)[step] ?? "";
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -286,7 +285,7 @@ export default function PropertyWizard({
   const overlay = (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
-        {step === 1 || step === 6 ? (
+        {step === 1 || step === 9 ? (
           <Link href="/app/biens" className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
             <BackIcon />
             {d.biens.wizBack}
@@ -297,13 +296,13 @@ export default function PropertyWizard({
             {d.common.back}
           </button>
         )}
-        {step !== 6 && (
+        {step !== 9 && (
           <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
             {d.biens.wizStepOf.replace("{n}", String(position)).replace("{total}", String(flow.length - 1))}
           </p>
         )}
         <div className="flex-1" />
-        {step === 5 && (
+        {step === 8 && (
           <Button onClick={submit} disabled={!canSubmit} loading={saving}>
             {d.biens.wizCreate}
           </Button>
@@ -343,18 +342,32 @@ export default function PropertyWizard({
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  if (name.trim() !== "") go(1);
+                }}
+              >
+                <Field label={d.biens.wizNameLabel} hint={d.biens.wizNameHint}>
+                  <Input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+                </Field>
+                <div className="mt-6 flex justify-end">
+                  <Button type="submit" disabled={name.trim() === ""}>
+                    {d.common.next}
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div key="s3" {...slide(1)}>
+              {Heading}
+              <form
+                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                onSubmit={(e) => {
+                  e.preventDefault();
                   if (canSubmit) go(1);
                 }}
               >
-                <h2 className="font-display text-lg font-bold text-ink">{d.biens.wizKeyData}</h2>
-                <div className="mt-3">
-                  <Field label={d.biens.wizNameLabel} hint={d.biens.wizNameHint}>
-                    <Input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
-                  </Field>
-                </div>
-
-                <h2 className="mt-6 font-display text-lg font-bold text-ink">{d.biens.wizAddress}</h2>
-                <div className="mt-3 grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2">
                     <Field label={d.biens.wizStreet}>
                       <Input required maxLength={160} value={street} onChange={(e) => setStreet(e.target.value)} />
@@ -382,9 +395,26 @@ export default function PropertyWizard({
                     </Field>
                   </div>
                 </div>
+                <div className="mt-6 flex justify-end">
+                  <Button type="submit" disabled={!canSubmit}>
+                    {d.common.next}
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          )}
 
-                <h2 className="mt-6 font-display text-lg font-bold text-ink">{d.biens.wizCharacteristics}</h2>
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {step === 4 && (
+            <motion.div key="s4" {...slide(1)}>
+              {Heading}
+              <form
+                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  go(1);
+                }}
+              >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {!needsUnits && (
                     <Field label={d.biens.wizSurface}>
                       <Input inputMode="decimal" value={areaSqm} onChange={(e) => setAreaSqm(e.target.value)} />
@@ -409,18 +439,18 @@ export default function PropertyWizard({
                     <Input inputMode="numeric" maxLength={4} value={year} onChange={(e) => setYear(e.target.value)} />
                   </Field>
                 </div>
-
-                <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={!canSubmit}>
-                    {d.common.next}
-                  </Button>
+                <div className="mt-6 flex items-center justify-between">
+                  <button type="button" onClick={() => go(1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                    {d.biens.wizLater}
+                  </button>
+                  <Button type="submit">{d.common.next}</Button>
                 </div>
               </form>
             </motion.div>
           )}
 
-          {step === 3 && (
-            <motion.div key="s3" {...slide(1)}>
+          {step === 5 && (
+            <motion.div key="s5" {...slide(1)}>
               {Heading}
               <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
                 <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizPhotosHint}</p>
@@ -476,8 +506,8 @@ export default function PropertyWizard({
             </motion.div>
           )}
 
-          {step === 4 && (
-            <motion.div key="s4" {...slide(1)}>
+          {step === 6 && (
+            <motion.div key="s6" {...slide(1)}>
               {Heading}
               <div className="mx-auto mt-10 max-w-2xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
                 <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizUnitsHint}</p>
@@ -570,14 +600,14 @@ export default function PropertyWizard({
             </motion.div>
           )}
 
-          {step === 5 && (
-            <motion.div key="s5" {...slide(1)}>
+          {step === 7 && (
+            <motion.div key="s7" {...slide(1)}>
               {Heading}
               <form
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  submit();
+                  go(1);
                 }}
               >
                 <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizTechHint}</p>
@@ -615,19 +645,56 @@ export default function PropertyWizard({
                   </p>
                 )}
                 <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={submit} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                  <button type="button" onClick={() => go(1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
                     {d.biens.wizLater}
                   </button>
-                  <Button type="submit" disabled={!canSubmit} loading={saving}>
-                    {d.biens.wizCreate}
-                  </Button>
+                  <Button type="submit">{d.common.next}</Button>
                 </div>
               </form>
             </motion.div>
           )}
 
-          {step === 6 && (
-            <motion.div key="s6" {...slide(1)} className="mx-auto max-w-xl text-center">
+          {step === 8 && (
+            <motion.div key="s8" {...slide(1)}>
+              {Heading}
+              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+                <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizReviewHint}</p>
+                <dl className="mt-4 divide-y divide-sand-100">
+                  {[
+                    { k: d.biens.type, v: type ? types.find((t) => t.id === type)?.title ?? "" : "" },
+                    { k: d.biens.wizNameLabel, v: name },
+                    { k: d.bien.address, v: [num, street, postal, city].filter(Boolean).join(" ") },
+                    ...(areaSqm ? [{ k: d.biens.wizSurface, v: areaSqm }] : []),
+                    ...(isDwelling && rooms ? [{ k: d.biens.wizRooms, v: rooms }] : []),
+                    ...(isDwelling && bedrooms ? [{ k: d.biens.wizBedrooms, v: bedrooms }] : []),
+                    ...(photos.length > 0 ? [{ k: d.modify.photos, v: String(photos.length) }] : []),
+                    ...(needsUnits
+                      ? [{ k: d.bien.tabLots, v: String(units.filter((u) => u.label.trim() !== "").length) }]
+                      : []),
+                    ...(energyClass ? [{ k: d.biens.wizEnergyClass, v: energyClass }] : []),
+                  ].map((r) => (
+                    <div key={r.k} className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
+                      <dt className="text-sm text-ink-soft">{r.k}</dt>
+                      <dd className="text-right text-sm font-semibold text-ink">{r.v || d.common.none}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {saveError && (
+                  <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                    {saveError}
+                  </p>
+                )}
+                <div className="mt-6 flex justify-end">
+                  <Button onClick={submit} disabled={!canSubmit} loading={saving}>
+                    {d.biens.wizCreate}
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 9 && (
+            <motion.div key="s9" {...slide(1)} className="mx-auto max-w-xl text-center">
               <span
                 className={
                   "mx-auto flex h-14 w-14 items-center justify-center rounded-full " +
