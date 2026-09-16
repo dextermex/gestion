@@ -52,6 +52,27 @@ paid/partial/late/upcoming from non-reversed allocations + due date. Partial pay
 allocate FIFO and leave residuals open; overpayments become tenant credit; every
 auto-post is reversible (`reversed_at`) and audited.
 
+### A tenancy's lifecycle is not its document's compliance
+
+`g_leases.status` says whether the tenancy is **in force**: `active` (someone has the
+keys, rent falls due each month), `notice`, `ended`. Whether the written lease is
+**complete** under the 2006/2024 law (the eight mentions, the deposit ceiling, the pacte
+de colocation) is a different fact: `validateLeaseDraft` derives it from the recorded
+data, the dossier and the lease sheet show it, and nothing stores it. Recording a rental
+the owner has agreed (`createLease`, both doorways) makes it `active` and opens its
+ledger on the spot; the document generator still refuses to print a non-compliant lease.
+Deriving the first from the second is exactly the bug that once left a let property
+reading as vacant: a residential lease recorded through the guided flow can never carry
+the capital investi declaration. `draft` remains for a lease that has genuinely not
+started (and for rows written before this rule): it never occupies a lot, is shown on the
+property as a dossier in preparation, and leaves through `activateLease` or
+`discardDraft`. A lease has as many `g_lease_parties` as people who sign it; `colocation`
+is the owner's explicit answer, never a head count.
+
+The ledger keeps growing on its own: `gestion.roll_rent_periods()` (pg_cron, nightly)
+applies the same month rule as `openLedger` to every live lease, inserting only what is
+missing and never rewriting a period.
+
 ### Registered letters gate legal effect
 
 `g_registered_letters.legal_effect_on` is a **generated column from `ar_received_on`**.

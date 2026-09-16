@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
   const lease = await createLease(ctx, d, {
     unitId,
     tenantContactIds: [tenantContactId],
+    colocation: false,
     type,
     startDate,
     endDate: null,

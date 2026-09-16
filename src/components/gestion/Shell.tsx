@@ -1074,14 +1074,10 @@ function CreateDialog({
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [issues, setIssues] = useState<Array<{ severity: string; message: string }>>([]);
-  const [draftCreated, setDraftCreated] = useState(false);
   useEffect(() => {
     setSubmitted(false);
     setSaving(false);
     setError(null);
-    setIssues([]);
-    setDraftCreated(false);
   }, [kind]);
 
   // On a real account the form persists through the API, under the caller's
@@ -1122,20 +1118,9 @@ function CreateDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json().catch(() => ({}))) as {
-        status?: string;
-        issues?: Array<{ severity: string; message: string }>;
-      };
       if (!res.ok) {
         setError(d.shell.createFailed);
         setSaving(false);
-        return;
-      }
-      if (kind === "lease" && data.status === "draft") {
-        setIssues((data.issues ?? []).filter((i) => i.severity === "blocking"));
-        setDraftCreated(true);
-        setSaving(false);
-        router.refresh();
         return;
       }
       onClose();
@@ -1162,24 +1147,7 @@ function CreateDialog({
       title={kind ? d.shell.createDialogTitle.replace("{what}", labels[kind]) : ""}
       closeLabel={d.common.close}
     >
-      {kind && real && draftCreated && (
-        <div className="space-y-4">
-          <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
-            {d.shell.leaseDraftCreated}
-          </p>
-          <ul className="space-y-2">
-            {issues.map((i) => (
-              <li key={i.message} className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800">
-                {i.message}
-              </li>
-            ))}
-          </ul>
-          <div className="flex justify-end">
-            <Button type="button" onClick={onClose}>{d.common.close}</Button>
-          </div>
-        </div>
-      )}
-      {kind && real && !draftCreated && (
+      {kind && real && (
         <form className="space-y-4" onSubmit={submitReal}>
           {kind === "contact" && (
             <>

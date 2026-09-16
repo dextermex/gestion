@@ -47,6 +47,17 @@ describe("buildPortfolio", () => {
     }
   });
 
+  it("lists a draft dossier on its lot without letting it occupy the lot", () => {
+    const draft = demo.LEASES.find((l) => l.status === "draft")!;
+    const card = cards.find((c) => c.lots.some((l) => l.unit.id === draft.unitId))!;
+    const line = card.lots.find((l) => l.unit.id === draft.unitId)!;
+    expect(line.drafts.map((l) => l.id)).toEqual([draft.id]);
+    expect(line.lease).toBeNull();
+    expect(line.vacant).toBe(true);
+    expect(line.monthlyCents).toBe(0);
+    expect(cards.flatMap((c) => c.lots).filter((l) => l.lease?.status === "draft")).toEqual([]);
+  });
+
   it("sums the monthly rent from rent plus charges of live leases", () => {
     const beaulieu = findCard(cards, "p-beaulieu")!;
     const expected = beaulieu.lots

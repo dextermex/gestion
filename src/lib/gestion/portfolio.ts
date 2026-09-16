@@ -29,6 +29,10 @@ export type UnitLine = {
   /** The lease in force, if any. A draft never occupies a lot. */
   lease: DemoLease | null;
   tenantNames: string[];
+  /** Dossiers recorded on this lot that have not started: they are shown as
+   *  such, so an owner can resume, activate or discard them, and they never
+   *  make the lot read as occupied. Oldest first. */
+  drafts: DemoLease[];
   /** Rent plus charges: what the tenant owes each month. */
   monthlyCents: number;
   /** This month's period, once the ledger has opened it. */
@@ -88,6 +92,9 @@ export function buildPortfolio(demo: DemoData): PropertyCard[] {
 
     const lots: UnitLine[] = lettable.map((unit) => {
       const lease = demo.LEASES.find((l) => l.unitId === unit.id && LIVE.has(l.status)) ?? null;
+      const drafts = demo.LEASES.filter((l) => l.unitId === unit.id && l.status === "draft")
+        .slice()
+        .sort((a, b) => a.seq - b.seq);
       const period = lease
         ? (periodsByLease.get(lease.id) ?? []).find((rp) => rp.period === month) ?? null
         : null;
@@ -95,6 +102,7 @@ export function buildPortfolio(demo: DemoData): PropertyCard[] {
         unit,
         lease,
         tenantNames: lease ? demo.leaseTenantNames(lease) : [],
+        drafts,
         monthlyCents: lease ? lease.rentCents + lease.chargesCents : 0,
         period,
         status: period?.status ?? null,

@@ -32,7 +32,11 @@ export function propertyMenu(
   const single = card.single;
   const live = card.lots.find((l) => l.lease) ?? null;
   const lease = live?.lease ?? null;
-  const tenant = lease ? demo.CONTACTS.find((c) => c.id === lease.tenantContactIds[0]) ?? null : null;
+  // Everyone on the lease is a tenant in their own right, so each one gets
+  // an editor of their own rather than the first name standing for all.
+  const tenants = lease
+    ? lease.tenantContactIds.map((id) => demo.CONTACTS.find((c) => c.id === id)).filter((c) => c !== undefined)
+    : [];
 
   /* ------------------------------- the property ------------------------------ */
 
@@ -148,26 +152,25 @@ export function propertyMenu(
         : null;
 
     const entries: MenuEntry[] = [
-      ...(tenant
-        ? [
-            {
-              id: "tenant",
-              label: d.modify.tenant,
-              topic: {
-                id: "tenant",
-                title: d.modify.tenant,
-                endpoint: `/api/contacts/${tenant.id}`,
-                method: "PATCH" as const,
-                fields: [
-                  { kind: "text" as const, name: "firstName", label: d.location.firstName, value: firstOf(tenant.name), maxLength: 80 },
-                  { kind: "text" as const, name: "lastName", label: d.location.lastName, value: lastOf(tenant.name), maxLength: 80 },
-                  { kind: "text" as const, name: "email", label: d.location.email, value: tenant.email ?? "", maxLength: 160, span: 2 as const },
-                  { kind: "text" as const, name: "phone", label: d.location.phone, value: tenant.phone ?? "", maxLength: 40, span: 2 as const },
-                ],
-              },
-            },
-          ]
-        : []),
+      ...tenants.map((tenant, i) => {
+        const label = tenants.length > 1 ? `${d.modify.tenant} \u00b7 ${tenant.name}` : d.modify.tenant;
+        return {
+          id: `tenant-${i}`,
+          label,
+          topic: {
+            id: `tenant-${i}`,
+            title: label,
+            endpoint: `/api/contacts/${tenant.id}`,
+            method: "PATCH" as const,
+            fields: [
+              { kind: "text" as const, name: "firstName", label: d.location.firstName, value: firstOf(tenant.name), maxLength: 80 },
+              { kind: "text" as const, name: "lastName", label: d.location.lastName, value: lastOf(tenant.name), maxLength: 80 },
+              { kind: "text" as const, name: "email", label: d.location.email, value: tenant.email ?? "", maxLength: 160, span: 2 as const },
+              { kind: "text" as const, name: "phone", label: d.location.phone, value: tenant.phone ?? "", maxLength: 40, span: 2 as const },
+            ],
+          },
+        };
+      }),
       {
         id: "lease",
         label: d.modify.lease,

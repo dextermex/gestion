@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
-import { effectiveMonth, normalizePaymentDay, repriceOpenPeriods } from "@/lib/gestion/lease";
+import {
+  activateLease,
+  discardDraft,
+  effectiveMonth,
+  normalizePaymentDay,
+  repriceOpenPeriods,
+} from "@/lib/gestion/lease";
 
 /**
  * Editing a running tenancy: its terms, and what it costs.
@@ -12,6 +18,11 @@ import { effectiveMonth, normalizePaymentDay, repriceOpenPeriods } from "@/lib/g
  * or part-paid, is a record of what happened and is never rewritten. The
  * response says how many periods moved, so the owner is told rather than
  * having to trust it.
+ *
+ * Two lifecycle actions ride on the same route. `activate` turns a draft
+ * into the tenancy in force (the lot is occupied, the ledger opens);
+ * `discard` removes a draft that never started and carries nothing. Both
+ * exist for rows written before lifecycle and compliance were told apart.
  */
 
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -24,6 +35,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { g, org } = ctx;
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (body.action === "activate") {
+    const result = await activateLease(ctx, id);
+    if ("error" in result) return lifecycleError(result.error);
+    return NextResponse.json({ ok: true, periodsOpened: result.periodsOpened });
+  }
+  if (body.action === "discard") {
+    const result = await discardDraft(ctx, id);
+    if ("error" in result) return lifecycleError(result.error);
+    return NextResponse.json({ ok: true });
+  }
 
   const { data: lease, error: findErr } = await g
     .from("leases")
@@ -82,4 +104,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     repriced = await repriceOpenPeriods(ctx, id, rentCents, chargesCents, effectiveMonth(str(body.effectiveFrom, 10)));
   }
   return NextResponse.json({ ok: true, repriced });
+}
+
+function lifecycleError(code: "not_found" | "not_draft" | "already_let" | "not_empty" | "storage_failed") {
+  if (code === "not_found") return NextResponse.json({ error: code }, { status: 404 });
+  if (code === "storage_failed") return NextResponse.json({ error: code }, { status: 502 });
+  return NextResponse.json({ error: code }, { status: 409 });
 }

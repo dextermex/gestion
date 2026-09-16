@@ -23,13 +23,25 @@ import {
 /**
  * Putting a tenant into a lot, as a conversation.
  *
- * The owner started from the lot, so the lot is never asked for again. Five
- * short steps collect the tenant, the lease, the rent, the account the rent
- * will arrive from and the guarantee — and that is the whole configuration.
- * There is no "start tracking this rent" switch afterwards: an active lease
- * with a rent and a due day IS the monthly obligation, and the ledger opens
- * itself the moment the lease is written.
+ * The owner started from the lot, so the lot is never asked for again. Eight
+ * short steps collect the people, the lease, the rent, the account the rent
+ * will arrive from, the guarantee, the inventory, the insurance and the
+ * documents, and that is the whole configuration. There is no "start
+ * tracking this rent" switch afterwards: an active lease with a rent and a
+ * due day IS the monthly obligation, and the ledger opens itself the moment
+ * the lease is written.
+ *
+ * A lease is signed by everyone who moves in. A couple, a family or three
+ * roommates are each a tenant in their own right on the same lease, which is
+ * why the first step is a list of people rather than a person.
  */
+
+export type Person = { firstName: string; lastName: string; email: string; phone: string };
+
+type LeaseStatus = "draft" | "active" | "notice" | "ended";
+
+const blankPerson = (): Person => ({ firstName: "", lastName: "", email: "", phone: "" });
+const hasName = (p: Person): boolean => p.firstName.trim() !== "" || p.lastName.trim() !== "";
 
 type Props = {
   d: Dict;
@@ -37,18 +49,20 @@ type Props = {
   propertyName: string;
   propertyId: string;
   unitId: string;
-  /** Real account: the flow writes tenant, lease, ledger, deposit and payer. */
+  /** Real account: the flow writes tenants, lease, ledger, deposit and payer. */
   real: boolean;
   notice: string;
+  /** What the law allows for the guarantee, by lease type, resolved by the
+   *  parameter registry on the server so the step can say it. */
+  depositMax: { residential: number; commercial: number };
   /** Resuming a rental that already exists: its id, and what is already
    *  known about it, so the earlier steps open filled in rather than blank. */
   existing?: {
     leaseId: string;
+    status: LeaseStatus;
     startStep: RentalStep;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
+    tenants: Person[];
+    colocation: boolean;
     type: "residential" | "commercial";
     startDate: string;
     endDate: string;
@@ -63,8 +77,6 @@ type Props = {
   };
 };
 
-
-
 export default function TenantWizard({
   d,
   unitLabel,
@@ -73,6 +85,7 @@ export default function TenantWizard({
   unitId,
   real,
   notice,
+  depositMax,
   existing,
 }: Props) {
   const router = useRouter();
@@ -83,12 +96,17 @@ export default function TenantWizard({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [leaseId, setLeaseId] = useState<string | null>(existing?.leaseId ?? null);
-  const [draftIssues, setDraftIssues] = useState<string[]>([]);
+  const [leaseStatus, setLeaseStatus] = useState<LeaseStatus | null>(existing?.status ?? null);
+  // What the written lease still lacks, as the legal engine said it when
+  // the rental was recorded. Informative: the rental runs regardless.
+  const [compliance, setCompliance] = useState<string[]>([]);
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
 
-  const [firstName, setFirstName] = useState(existing?.firstName ?? "");
-  const [lastName, setLastName] = useState(existing?.lastName ?? "");
-  const [email, setEmail] = useState(existing?.email ?? "");
-  const [phone, setPhone] = useState(existing?.phone ?? "");
+  const [people, setPeople] = useState<Person[]>(
+    existing && existing.tenants.length > 0 ? existing.tenants : [blankPerson()],
+  );
+  const [colocation, setColocation] = useState(existing?.colocation ?? false);
 
   const [type, setType] = useState<"residential" | "commercial">(existing?.type ?? "residential");
   const [startDate, setStartDate] = useState(existing?.startDate ?? (() => new Date().toISOString().slice(0, 10))());
@@ -115,9 +133,17 @@ export default function TenantWizard({
     headingRef.current?.focus();
   }, [step]);
 
-  const nameOk = firstName.trim() !== "" || lastName.trim() !== "";
+  const nameOk = people.some(hasName);
   const rentOk = rent.trim() !== "";
   const canSubmit = nameOk && rentOk;
+  const named = people.filter(hasName);
+
+  const setPerson = (i: number, patch: Partial<Person>) =>
+    setPeople((list) => list.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const removePerson = (i: number) => {
+    setPeople((list) => (list.length > 1 ? list.filter((_, j) => j !== i) : list));
+    if (people.length <= 2) setColocation(false);
+  };
 
   // The live total is the whole point of this step: what the tenant will
   // actually transfer each month.
@@ -139,10 +165,8 @@ export default function TenantWizard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           unitId,
-          firstName,
-          lastName,
-          email,
-          phone,
+          tenants: named,
+          colocation: named.length > 1 && colocation,
           type,
           startDate,
           endDate: endDate || undefined,
@@ -171,15 +195,12 @@ export default function TenantWizard({
       }
       const created = (await res.json()) as {
         leaseId: string;
-        status: string;
+        status: "active";
         issues?: Array<{ severity: string; message: string }>;
       };
       setLeaseId(created.leaseId);
-      setDraftIssues(
-        created.status === "draft"
-          ? (created.issues ?? []).filter((i) => i.severity === "blocking").map((i) => i.message)
-          : [],
-      );
+      setLeaseStatus(created.status);
+      setCompliance((created.issues ?? []).map((i) => i.message));
       setStep(nextStep(CREATION_STEP));
       return;
     } catch {
@@ -188,13 +209,37 @@ export default function TenantWizard({
     setSaving(false);
   };
 
+  // A dossier written before lifecycle and compliance were told apart is
+  // still a draft: this is its way into force, from the same review step.
+  const activate = async () => {
+    if (!leaseId) return;
+    setActivating(true);
+    setActivateError(null);
+    try {
+      const res = await fetch(`/api/baux/${leaseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate" }),
+      });
+      if (res.ok) {
+        setLeaseStatus("active");
+        router.refresh();
+      } else {
+        setActivateError(d.bien.draftActivateFailed);
+      }
+    } catch {
+      setActivateError(d.bien.draftActivateFailed);
+    }
+    setActivating(false);
+  };
+
   const filled = { tenant: nameOk, rent: rentOk };
 
   /**
    * Moving on. Leaving the creation step writes the rental the first time and
    * only the first time; every other step, and every later visit to this one,
    * simply advances. Nothing here inspects whether a section was filled in to
-   * decide which step comes next — that is what used to lose steps.
+   * decide which step comes next: that is what used to lose steps.
    */
   const advance = () => {
     if (saving) return;
@@ -312,24 +357,80 @@ export default function TenantWizard({
                   if (nameOk) advance();
                 }}
               >
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label={d.location.firstName}>
-                    <Input required maxLength={80} value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-                  </Field>
-                  <Field label={d.location.lastName}>
-                    <Input maxLength={80} value={lastName} onChange={(e) => setLastName(e.target.value)} />
-                  </Field>
-                  <div className="col-span-2">
-                    <Field label={d.location.email}>
-                      <Input type="email" maxLength={160} value={email} onChange={(e) => setEmail(e.target.value)} />
-                    </Field>
-                  </div>
-                  <div className="col-span-2">
-                    <Field label={d.location.phone}>
-                      <Input type="tel" maxLength={40} value={phone} onChange={(e) => setPhone(e.target.value)} />
-                    </Field>
-                  </div>
+                <div className="space-y-5">
+                  {people.map((person, i) => (
+                    <fieldset key={i} className={i > 0 ? "border-t border-sand-100 pt-5" : ""}>
+                      {people.length > 1 && (
+                        <div className="mb-3 flex items-center justify-between">
+                          <legend className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+                            {d.location.personN.replace("{n}", String(i + 1))}
+                          </legend>
+                          <button
+                            type="button"
+                            onClick={() => removePerson(i)}
+                            className="text-xs font-semibold text-ink-soft hover:text-red-700"
+                          >
+                            {d.location.removePerson}
+                          </button>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label={d.location.firstName}>
+                          <Input
+                            required={i === 0}
+                            maxLength={80}
+                            value={person.firstName}
+                            onChange={(e) => setPerson(i, { firstName: e.target.value })}
+                          />
+                        </Field>
+                        <Field label={d.location.lastName}>
+                          <Input maxLength={80} value={person.lastName} onChange={(e) => setPerson(i, { lastName: e.target.value })} />
+                        </Field>
+                        <div className="col-span-2">
+                          <Field label={d.location.email}>
+                            <Input
+                              type="email"
+                              maxLength={160}
+                              value={person.email}
+                              onChange={(e) => setPerson(i, { email: e.target.value })}
+                            />
+                          </Field>
+                        </div>
+                        <div className="col-span-2">
+                          <Field label={d.location.phone}>
+                            <Input type="tel" maxLength={40} value={person.phone} onChange={(e) => setPerson(i, { phone: e.target.value })} />
+                          </Field>
+                        </div>
+                      </div>
+                    </fieldset>
+                  ))}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPeople((list) => [...list, blankPerson()])}
+                  className="tactile mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-dashed border-sand-300 px-3.5 py-1.5 text-sm font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
+                >
+                  <Icon name="plus" size={15} />
+                  {d.location.addPerson}
+                </button>
+
+                {people.length > 1 && (
+                  <div className="mt-4 rounded-xl bg-sand-50 p-3.5">
+                    <p className="text-xs leading-relaxed text-ink-soft">{d.location.severalHint}</p>
+                    <label className="mt-3 flex items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={colocation}
+                        onChange={(e) => setColocation(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-sand-300 text-brand-600 focus:ring-brand-400"
+                      />
+                      <span className="text-sm text-ink">{d.location.colocationToggle}</span>
+                    </label>
+                    <p className="mt-2 text-xs leading-relaxed text-ink-soft">{d.location.colocationHint}</p>
+                  </div>
+                )}
+
                 <Footer onNext={() => nameOk && advance()} />
               </form>
             </motion.div>
@@ -479,7 +580,10 @@ export default function TenantWizard({
 
                 {hasDeposit && (
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    <Field label={d.location.depositMonths}>
+                    <Field
+                      label={d.location.depositMonths}
+                      hint={d.location.depositMax.replace("{n}", String(depositMax[type]))}
+                    >
                       <Select value={depositMonths} onChange={(e) => setDepositMonths(e.target.value)}>
                         {["1", "2", "3"].map((n) => (
                           <option key={n} value={n}>
@@ -521,16 +625,6 @@ export default function TenantWizard({
             <motion.div key="t6" {...slide(1)}>
               {Heading}
               <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-                {draftIssues.length > 0 && (
-                  <div role="status" className="mb-4 rounded-xl bg-amber-50 px-4 py-3">
-                    <p className="text-sm font-semibold text-amber-900">{d.location.draftTitle}</p>
-                    <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-amber-900">
-                      {draftIssues.map((m) => (
-                        <li key={m}>{m}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.inspectionHint}</p>
                 {real && leaseId ? (
                   <Link
@@ -614,6 +708,25 @@ export default function TenantWizard({
             <motion.div key="t8" {...slide(1)}>
               {Heading}
               <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+                {real && leaseId && leaseStatus === "draft" && (
+                  <div role="status" className="mb-5 rounded-xl bg-amber-50 px-4 py-3.5">
+                    <p className="text-sm font-semibold text-amber-900">{d.location.draftResume}</p>
+                    {activateError && (
+                      <p role="alert" className="mt-2 text-sm font-semibold text-red-700">
+                        {activateError}
+                      </p>
+                    )}
+                    <Button className="mt-3" size="sm" loading={activating} onClick={() => void activate()}>
+                      {d.location.activate}
+                    </Button>
+                  </div>
+                )}
+                {real && leaseId && leaseStatus === "active" && existing?.status === "draft" && (
+                  <p role="status" className="mb-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+                    {d.location.activated}
+                  </p>
+                )}
+
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-display text-lg font-bold text-ink">
                     {d.location.dossierComplete.replace("{pct}", String(completion))}
@@ -633,6 +746,18 @@ export default function TenantWizard({
                     </li>
                   ))}
                 </ul>
+
+                {compliance.length > 0 && (
+                  <div className="mt-5 rounded-xl border border-sand-200 bg-sand-50 p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.complianceTitle}</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-ink">
+                      {compliance.map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
+                    <p className="mt-2.5 text-xs leading-relaxed text-ink-soft">{d.location.complianceNote}</p>
+                  </div>
+                )}
 
                 <p className="mt-4 text-xs leading-relaxed text-ink-soft">{d.location.reviewNote}</p>
 

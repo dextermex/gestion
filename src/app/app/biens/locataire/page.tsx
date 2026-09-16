@@ -1,8 +1,9 @@
 import { notFound, redirect } from "next/navigation";
-import TenantWizard from "@/components/gestion/TenantWizard";
+import TenantWizard, { type Person } from "@/components/gestion/TenantWizard";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { stepAt, type RentalStep } from "@/lib/gestion/rental-flow";
+import { getParamValue } from "@/domain/legal/params";
 
 /**
  * The guided rental, entered two ways.
@@ -15,7 +16,8 @@ import { stepAt, type RentalStep } from "@/lib/gestion/rental-flow";
  * état des lieux, which is a journey of its own; coming back has to land on
  * the next step of this one rather than bouncing off a "already let" guard.
  * That guard was why steps 7 and 8 were unreachable for anyone who actually
- * did the inspection.
+ * did the inspection. A dossier that is still a draft resumes the same way,
+ * and its review step is where it becomes the tenancy in force.
  */
 export default async function AjouterLocatairePage({
   searchParams,
@@ -31,6 +33,13 @@ export default async function AjouterLocatairePage({
   const cents = (n: number): string => (n / 100).toFixed(2).replace(".", ",");
   const startStep: RentalStep = stepAt(Number(etape) || 1);
 
+  // What the law allows for the guarantee, resolved as of today by the
+  // registry: the step says it, the dossier flags what exceeds it.
+  const depositMax = {
+    residential: getParamValue("residential.deposit_max_months", demo.TODAY),
+    commercial: getParamValue("commercial.deposit_max_months", demo.TODAY),
+  };
+
   // ── Resuming an existing rental ──
   if (bail) {
     const lease = demo.LEASES.find((l) => l.id === bail);
@@ -39,9 +48,20 @@ export default async function AjouterLocatairePage({
     const property = unit ? demo.PROPERTIES.find((p) => p.id === unit.propertyId) : undefined;
     if (!unit || !property) notFound();
 
-    const tenant = demo.CONTACTS.find((c) => c.id === lease.tenantContactIds[0]);
+    // Everyone on the lease comes back, in the order they were recorded.
+    const tenants: Person[] = lease.tenantContactIds
+      .map((id) => demo.CONTACTS.find((c) => c.id === id))
+      .filter((c) => c !== undefined)
+      .map((c) => {
+        const parts = c.name.trim().split(/\s+/);
+        return {
+          firstName: parts.length > 1 ? parts.slice(0, -1).join(" ") : c.name,
+          lastName: parts.length > 1 ? parts[parts.length - 1] : "",
+          email: c.email ?? "",
+          phone: c.phone ?? "",
+        };
+      });
     const deposit = demo.DEPOSITS.find((x) => x.leaseId === lease.id);
-    const parts = (tenant?.name ?? "").trim().split(/\s+/);
 
     return (
       <TenantWizard
@@ -52,13 +72,13 @@ export default async function AjouterLocatairePage({
         propertyName={property.name}
         real={real}
         notice={d.common.demoCreateNotice}
+        depositMax={depositMax}
         existing={{
           leaseId: lease.id,
+          status: lease.status,
           startStep,
-          firstName: parts.length > 1 ? parts.slice(0, -1).join(" ") : (tenant?.name ?? ""),
-          lastName: parts.length > 1 ? parts[parts.length - 1] : "",
-          email: tenant?.email ?? "",
-          phone: tenant?.phone ?? "",
+          tenants,
+          colocation: lease.colocation,
           type: lease.type,
           startDate: lease.startDate,
           endDate: lease.endDate ?? "",
@@ -95,6 +115,7 @@ export default async function AjouterLocatairePage({
       propertyName={property.name}
       real={real}
       notice={d.common.demoCreateNotice}
+      depositMax={depositMax}
     />
   );
 }

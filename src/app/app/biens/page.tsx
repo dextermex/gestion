@@ -4,6 +4,7 @@ import { Icon } from "@/components/pro/icons";
 import { ChipLink } from "@/components/gestion/filters";
 import PropertyPhoto from "@/components/gestion/PropertyPhoto";
 import { getDemo } from "@/lib/demo";
+import type { DemoData } from "@/lib/demo";
 import {
   buildPortfolio,
   occupancyOf,
@@ -56,13 +57,20 @@ function OccupancyBadge({ card, d }: { card: PropertyCard; d: Dict }) {
 }
 
 /** The single tenancy: tenant, rent, and whether this month arrived. */
-function SingleTenancy({ line, d, locale }: { line: UnitLine; d: Dict; locale: Locale }) {
+function SingleTenancy({ line, demo, d, locale }: { line: UnitLine; demo: DemoData; d: Dict; locale: Locale }) {
   const meta = rentStatusMeta(d);
   if (line.vacant) {
+    // A dossier recorded but never started is said as such: the lot is free,
+    // and the owner can see there is something to finish on the sheet.
+    const draft = line.drafts[line.drafts.length - 1];
     return (
       <div className="mt-3 border-t border-sand-100 pt-3">
         <p className="text-sm text-ink-soft">{d.common.none}</p>
-        <p className="mt-0.5 text-sm text-ink-soft">{d.biens.noTenant}</p>
+        <p className="mt-0.5 text-sm text-ink-soft">
+          {draft
+            ? fmt(d.biens.draftInProgress, { tenant: demo.leaseTenantNames(draft).join(", ") || d.common.none })
+            : d.biens.noTenant}
+        </p>
       </div>
     );
   }
@@ -326,7 +334,7 @@ export default async function BiensPage({
 
                     <div className="mt-auto">
                       {single ? (
-                        <SingleTenancy line={single} d={d} locale={locale} />
+                        <SingleTenancy line={single} demo={demo} d={d} locale={locale} />
                       ) : (
                         <BuildingTenancy card={card} d={d} locale={locale} />
                       )}

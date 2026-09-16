@@ -39,9 +39,25 @@ const n = (v: unknown): number => (typeof v === "number" ? v : 0);
 const b = (v: unknown): boolean => v === true;
 const day = (v: unknown): string => s(v).slice(0, 10);
 
+/** The gestion schema as PostgREST exposes it, bound to one caller. */
+export type GestionReader = ReturnType<ReturnType<typeof authedClient>["schema"]>;
+
 export async function buildRealData(org: Org, accessToken: string): Promise<DemoData> {
   const client = authedClient(accessToken);
-  const g = client.schema("gestion");
+  return buildRealDataFrom(client.schema("gestion"), org, (paths) => signMedia(client, paths));
+}
+
+/**
+ * The hydration itself, over any reader of the gestion schema. Production
+ * hands it the caller's PostgREST client; the lifecycle tests hand it an
+ * in-memory database, so what the pages compute from real rows is exactly
+ * what the tests assert against.
+ */
+export async function buildRealDataFrom(
+  g: GestionReader,
+  org: Org,
+  sign: (paths: string[]) => Promise<Map<string, string>>,
+): Promise<DemoData> {
   const oid = org.id;
 
   // One org-scoped read per table, in parallel. A failed read degrades to an
@@ -159,10 +175,7 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
   // ── Properties & units ──
   // photo_url holds a bucket path, not a link: one batched signing call,
   // skipped entirely when no property has a photograph yet.
-  const signed = await signMedia(
-    client,
-    propertyRows.map((p) => s(p.photo_url)).filter(Boolean),
-  );
+  const signed = await sign(propertyRows.map((p) => s(p.photo_url)).filter(Boolean));
   const unitsByProperty = new Map<string, number>();
   for (const u of unitRows) {
     unitsByProperty.set(s(u.property_id), (unitsByProperty.get(s(u.property_id)) ?? 0) + 1);
@@ -202,15 +215,21 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
   }));
 
   // ── Leases ──
-  const tenantsByLease = new Map<string, string[]>();
-  const guarantorsByLease = new Map<string, string[]>();
+  // A party who moved out has left a tenancy that goes on without them (a
+  // co-tenant leaving a couple's lease). On a tenancy that has ended, the
+  // move-out date is the closure itself, and the people stay: history keeps
+  // its names.
+  const partiesByLease = new Map<string, Row[]>();
   for (const p of partyRows) {
-    if (p.moved_out_on) continue;
-    const map = s(p.role) === "guarantor" ? guarantorsByLease : tenantsByLease;
-    const list = map.get(s(p.lease_id)) ?? [];
-    list.push(s(p.contact_id));
-    map.set(s(p.lease_id), list);
+    const list = partiesByLease.get(s(p.lease_id)) ?? [];
+    list.push(p);
+    partiesByLease.set(s(p.lease_id), list);
   }
+  const partyIds = (leaseId: string, ended: boolean, role: "tenant" | "guarantor"): string[] =>
+    (partiesByLease.get(leaseId) ?? [])
+      .filter((p) => (role === "guarantor") === (s(p.role) === "guarantor"))
+      .filter((p) => ended || !p.moved_out_on)
+      .map((p) => s(p.contact_id));
   const depositByLease = new Map<string, Row>();
   for (const d of depositRows) depositByLease.set(s(d.lease_id), d);
 
@@ -218,6 +237,10 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
     const details = (l.details ?? {}) as Row;
     const dep = depositByLease.get(s(l.id));
     const rent = n(l.rent_cents);
+    const status = (["draft", "active", "notice", "ended"].includes(s(l.status))
+      ? s(l.status)
+      : "active") as DemoLease["status"];
+    const ended = status === "ended";
     const depMonths =
       typeof details.depositMonths === "number"
         ? details.depositMonths
@@ -229,11 +252,9 @@ export async function buildRealData(org: Org, accessToken: string): Promise<Demo
       seq: n(l.seq),
       unitId: s(l.unit_id),
       type: l.lease_type === "commercial" ? "commercial" : "residential",
-      status: (["draft", "active", "notice", "ended"].includes(s(l.status))
-        ? s(l.status)
-        : "active") as DemoLease["status"],
-      tenantContactIds: tenantsByLease.get(s(l.id)) ?? [],
-      guarantorContactIds: guarantorsByLease.get(s(l.id)),
+      status,
+      tenantContactIds: partyIds(s(l.id), ended, "tenant"),
+      guarantorContactIds: partyIds(s(l.id), ended, "guarantor"),
       colocation: b(l.colocation),
       startDate: day(l.start_date),
       endDate: l.end_date ? day(l.end_date) : null,

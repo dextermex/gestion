@@ -8,9 +8,8 @@ import { getDatasetId, getDemo } from "@/lib/demo";
 import { bankTxStatusMeta, euros, formatDate, formatPct, matchTierMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { authedClient, getSession } from "@/lib/supabase/server";
-import { getIdentity } from "@/lib/workspace";
 import type { BankTxStatus } from "@/lib/types";
+import type { DemoBankTx } from "@/lib/demo/data";
 import { diffDays } from "@/domain/dates";
 import { vopNameCheck } from "@/domain/banking/rf";
 
@@ -43,112 +42,46 @@ export default async function BanquePage({
   const txMeta = bankTxStatusMeta(d);
   const tierMeta = matchTierMeta(d);
 
-  // Real accounts read the imported rows from gestion.* under the caller's
-  // own JWT (RLS row by row); sample cabinets keep computing from the
-  // dataset. Signed-out and harness renders skip the network entirely.
-  type DbAccount = {
-    id: string; label: string; iban: string;
-    balance_cents: number | null; consent_expires_at: string | null;
-  };
-  type DbTx = {
-    id: string; booked_on: string; amount_cents: number; counterparty_name: string;
-    remittance_info: string; match_status: string; match_explain: string | null;
-  };
-  let dbAccounts: DbAccount[] = [];
-  let dbTxs: DbTx[] = [];
-  if (real) {
-    const session = await getSession();
-    const identity = session ? await getIdentity() : null;
-    if (session && identity?.active) {
-      const g = authedClient(session.accessToken).schema("gestion");
-      const [accRes, txRes] = await Promise.all([
-        g.from("bank_accounts")
-          .select("id,label,iban,balance_cents,consent_expires_at")
-          .eq("org_id", identity.active.id)
-          .order("created_at"),
-        g.from("bank_transactions")
-          .select("id,booked_on,amount_cents,counterparty_name,remittance_info,match_status,match_explain")
-          .eq("org_id", identity.active.id)
-          .order("booked_on", { ascending: false })
-          .limit(500),
-      ]);
-      dbAccounts = (accRes.data as DbAccount[] | null) ?? [];
-      dbTxs = (txRes.data as DbTx[] | null) ?? [];
-    }
-  }
+  // A real account and a sample cabinet read the same seam: the rows
+  // gestion.* holds under the caller's own JWT, or the dataset. The bank
+  // screen computes from BANK_ACCOUNTS and BANK_TXS exactly as the property
+  // sheet computes from LEASES, so no screen carries a reading of its own.
+  // An imported transaction the matcher could not place carries no verdict
+  // yet; the review queue is the honest place for it.
+  const statusOf = (t: DemoBankTx): BankTxStatus => (t.status === "unmatched" ? "review" : t.status);
+  const accounts = BANK_ACCOUNTS;
 
-  // Imported rows carry no match verdict yet: they land in the review queue,
-  // which is the honest place for them until the matching engine runs here.
-  const DB_STATUS: Record<string, BankTxStatus> = {
-    unmatched: "review", auto: "auto", manual: "manual", review: "review", ignored: "ignored",
-  };
-
-  const accounts = real
-    ? dbAccounts.map((a) => ({
-        id: a.id,
-        label: a.label,
-        iban: a.iban,
-        balanceCents: a.balance_cents ?? 0,
-        consentExpiresAt: a.consent_expires_at ? a.consent_expires_at.slice(0, 10) : null,
-      }))
-    : BANK_ACCOUNTS;
-
-  const autoCount = real
-    ? dbTxs.filter((t) => DB_STATUS[t.match_status] === "auto").length
-    : BANK_TXS.filter((t) => t.status === "auto").length;
-  const inCount = real
-    ? dbTxs.filter((t) => t.amount_cents > 0).length
-    : BANK_TXS.filter((t) => t.amount > 0).length;
+  const autoCount = BANK_TXS.filter((t) => statusOf(t) === "auto").length;
+  const inCount = BANK_TXS.filter((t) => t.amount > 0).length;
   const autoRate = inCount === 0 ? null : Math.round((100 * autoCount) / inCount);
 
-  const rows: TxRow[] = real ? dbTxs.map((t) => {
-    const status = DB_STATUS[t.match_status] ?? "review";
+  const rows: TxRow[] = BANK_TXS.map((t) => {
+    const status = statusOf(t);
     return {
       id: t.id,
       status,
-      counterparty: t.counterparty_name || "—",
-      remittance: t.remittance_info || "—",
-      explain: t.match_explain ?? "",
-      amountLabel: euros(t.amount_cents, locale),
-      negative: t.amount_cents < 0,
-      bookedAt: t.booked_on,
-      dateLabel: formatDate(t.booked_on, locale),
-      tier: null,
+      counterparty: t.counterpartyName ?? "—",
+      remittance: t.remittanceInfo ?? "—",
+      explain: t.matchExplain ?? "",
+      amountLabel: euros(t.amount, locale),
+      negative: t.amount < 0,
+      bookedAt: t.bookedAt,
+      dateLabel: formatDate(t.bookedAt, locale),
+      tier: t.matchTier ? tierMeta[t.matchTier] : null,
       statusMeta: txMeta[status],
     };
-  }) : BANK_TXS.map((t) => ({
-    id: t.id,
-    status: t.status,
-    counterparty: t.counterpartyName ?? "—",
-    remittance: t.remittanceInfo ?? "—",
-    explain: t.matchExplain ?? "",
-    amountLabel: euros(t.amount, locale),
-    negative: t.amount < 0,
-    bookedAt: t.bookedAt,
-    dateLabel: formatDate(t.bookedAt, locale),
-    tier: t.matchTier ? tierMeta[t.matchTier] : null,
-    statusMeta: txMeta[t.status],
-  }));
+  });
 
-  const review: ReviewRow[] = real
-    ? rows
-        .filter((r) => r.status === "review")
-        .map((r) => ({
-          id: r.id,
-          counterparty: r.counterparty,
-          amountLabel: r.amountLabel,
-          remittance: r.remittance,
-          dateLabel: r.dateLabel,
-          explain: r.explain,
-        }))
-    : BANK_TXS.filter((t) => t.status === "review").map((t) => ({
-        id: t.id,
-        counterparty: t.counterpartyName ?? "—",
-        amountLabel: euros(t.amount, locale),
-        remittance: t.remittanceInfo ?? "—",
-        dateLabel: formatDate(t.bookedAt, locale),
-        explain: t.matchExplain ?? "",
-      }));
+  const review: ReviewRow[] = rows
+    .filter((r) => r.status === "review")
+    .map((r) => ({
+      id: r.id,
+      counterparty: r.counterparty,
+      amountLabel: r.amountLabel,
+      remittance: r.remittance,
+      dateLabel: r.dateLabel,
+      explain: r.explain,
+    }));
 
   const cascade: Array<[string, string]> = [
     [d.banque.cascade0, d.banque.cascade0Body],

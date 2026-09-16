@@ -5,8 +5,9 @@ import { Icon } from "@/components/pro/icons";
 import { CollapsiblePanel, LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import PropertyPhoto from "@/components/gestion/PropertyPhoto";
 import ModifyMenu from "@/components/gestion/ModifyMenu";
+import DraftDossierActions from "@/components/gestion/DraftDossier";
 import { propertyMenu } from "@/lib/gestion/property-menu";
-import { getDemo } from "@/lib/demo";
+import { getDatasetId, getDemo } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
 import { buildPortfolio, findCard, occupancyOf, type PropertyCard, type UnitLine } from "@/lib/gestion/portfolio";
 import type { Dict } from "@/lib/i18n";
@@ -89,6 +90,71 @@ function AddTenantLink({ unitId, d, className = "" }: { unitId: string; d: Dict;
   );
 }
 
+/**
+ * Dossiers recorded on this property that never started. They are said as
+ * such rather than hidden: the lot is free, nothing is owed, and the owner
+ * can resume, activate or discard each one from here. Nothing is shown
+ * when there is none.
+ */
+function DraftDossiers({
+  card,
+  demo,
+  d,
+  locale,
+  real,
+}: {
+  card: PropertyCard;
+  demo: DemoData;
+  d: Dict;
+  locale: Locale;
+  real: boolean;
+}) {
+  const drafts = card.lots.flatMap((line) => line.drafts.map((lease) => ({ lease, unit: line.unit })));
+  if (drafts.length === 0) return null;
+  return (
+    <Panel title={d.bien.draftDossierTitle}>
+      <p className="text-sm leading-relaxed text-ink-soft">{d.bien.draftDossierBody}</p>
+      <ul className="mt-3 divide-y divide-sand-100">
+        {drafts.map(({ lease, unit }) => (
+          <li key={lease.id} className="py-3.5 first:pt-0 last:pb-0">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-display text-sm font-bold text-ink">
+                  {demo.leaseTenantNames(lease).join(", ") || d.common.none}
+                </p>
+                <p className="mt-0.5 text-xs tabular-nums text-ink-soft">
+                  {unit.label}
+                  {" \u00b7 "}
+                  {fmt(d.biens.perMonth, { amount: eurosWhole(lease.rentCents + lease.chargesCents, locale) })}
+                  {" \u00b7 "}
+                  {d.location.startDate} {formatDate(lease.startDate, locale)}
+                </p>
+              </div>
+              <Badge className="bg-amber-100 text-amber-800">{d.status.lease.draft}</Badge>
+            </div>
+            <DraftDossierActions
+              leaseId={lease.id}
+              propertyId={card.property.id}
+              real={real}
+              labels={{
+                resume: d.bien.draftResume,
+                activate: d.bien.draftActivate,
+                discard: d.bien.draftDiscard,
+                discardConfirm: d.bien.draftDiscardConfirm,
+                confirm: d.bien.draftConfirm,
+                cancel: d.common.cancel,
+                activateFailed: d.bien.draftActivateFailed,
+                discardBlocked: d.bien.draftDiscardBlocked,
+                failed: d.modify.failed,
+              }}
+            />
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
 /** The month's rent on one tenancy, phrased the way an owner reads it. */
 function RentStatusLine({ line, d, locale }: { line: UnitLine; d: Dict; locale: Locale }) {
   const meta = rentStatusMeta(d);
@@ -124,16 +190,21 @@ function Overview({
   demo,
   d,
   locale,
+  real,
 }: {
   card: PropertyCard;
   demo: DemoData;
   d: Dict;
   locale: Locale;
+  real: boolean;
 }) {
   const p = card.property;
   const single = card.single;
   const unit = single?.unit;
-  const tenant = single?.lease ? demo.contactById(single.lease.tenantContactIds[0]) : null;
+  // Everyone on the lease, not the first name standing for all.
+  const tenants = single?.lease
+    ? single.lease.tenantContactIds.map((id) => demo.contactById(id)).filter((c) => c !== undefined)
+    : [];
   const docs = documentsFor(demo, card).slice(0, 3);
   const tickets = ticketsFor(demo, card).slice(0, 3);
   const tMeta = ticketStatusMeta(d);
@@ -227,30 +298,44 @@ function Overview({
         </Panel>
       )}
 
-      {tenant && (
+      <DraftDossiers card={card} demo={demo} d={d} locale={locale} real={real} />
+
+      {tenants.length > 0 && (
         <Panel
-          title={d.bien.currentTenant}
+          title={tenants.length > 1 ? d.bien.currentTenants : d.bien.currentTenant}
           action={
-            <Link
-              href={`/app/contacts/${tenant.id}`}
-              className="text-sm font-semibold text-brand-700 hover:underline"
-            >
-              {d.bien.seeProfile}
-            </Link>
+            tenants.length === 1 ? (
+              <Link
+                href={`/app/contacts/${tenants[0].id}`}
+                className="text-sm font-semibold text-brand-700 hover:underline"
+              >
+                {d.bien.seeProfile}
+              </Link>
+            ) : undefined
           }
         >
-          <p className="font-display text-base font-bold text-ink">{tenant.name}</p>
-          <ul className="mt-2.5 space-y-1.5 text-sm text-ink-soft">
-            {tenant.email && (
-              <li className="flex items-center gap-2">
-                <Icon name="mail" size={14} /> {tenant.email}
+          <ul className="space-y-3">
+            {tenants.map((tenant) => (
+              <li key={tenant.id}>
+                <Link href={`/app/contacts/${tenant.id}`} className="font-display text-base font-bold text-ink hover:underline">
+                  {tenant.name}
+                </Link>
+                <ul className="mt-1.5 space-y-1 text-sm text-ink-soft">
+                  {tenant.email && (
+                    <li className="flex items-center gap-2">
+                      <Icon name="mail" size={14} /> {tenant.email}
+                    </li>
+                  )}
+                  {tenant.phone && (
+                    <li className="flex items-center gap-2">
+                      <Icon name="phone" size={14} /> {tenant.phone}
+                    </li>
+                  )}
+                </ul>
               </li>
-            )}
-            {tenant.phone && (
-              <li className="flex items-center gap-2">
-                <Icon name="phone" size={14} /> {tenant.phone}
-              </li>
-            )}
+            ))}
+          </ul>
+          <ul className="mt-3 space-y-1.5 border-t border-sand-100 pt-3 text-sm text-ink-soft">
             <li className="flex items-center gap-2">
               <Icon name="calendar" size={14} />
               {fmt(d.bien.tenantSince, { date: formatDate(single!.lease!.startDate, locale) })}
@@ -379,22 +464,27 @@ function Rental({
   demo,
   d,
   locale,
+  real,
 }: {
   card: PropertyCard;
   demo: DemoData;
   d: Dict;
   locale: Locale;
+  real: boolean;
 }) {
   const live = card.lots.filter((l) => !l.vacant);
   if (live.length === 0) {
     const first = card.lots[0];
     return (
-      <EmptyState
-        icon="key"
-        title={d.bien.vacantTitle}
-        body={d.bien.vacantBody}
-        action={first ? <AddTenantLink unitId={first.unit.id} d={d} /> : undefined}
-      />
+      <div className="space-y-5">
+        <EmptyState
+          icon="key"
+          title={d.bien.vacantTitle}
+          body={d.bien.vacantBody}
+          action={first ? <AddTenantLink unitId={first.unit.id} d={d} /> : undefined}
+        />
+        <DraftDossiers card={card} demo={demo} d={d} locale={locale} real={real} />
+      </div>
     );
   }
   const depMeta = depositStatusMeta(d);
@@ -587,6 +677,7 @@ function Rental({
           </section>
         );
       })}
+      <DraftDossiers card={card} demo={demo} d={d} locale={locale} real={real} />
       <LegalNote>{d.bien.rentalLegal}</LegalNote>
     </div>
   );
@@ -875,10 +966,10 @@ function History({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-display text-sm font-bold text-ink">
-                      {fmt(d.bien.rentalNumber, { n: r.number })} \u00b7 {r.tenants || d.common.none}
+                      {fmt(d.bien.rentalNumber, { n: r.number })}{" \u00b7 "}{r.tenants || d.common.none}
                     </p>
                     <p className="mt-0.5 text-xs text-ink-soft">
-                      {r.unitLabel} \u00b7 {formatDate(r.lease.startDate, locale)}
+                      {r.unitLabel}{" \u00b7 "}{formatDate(r.lease.startDate, locale)}
                       {r.lease.endDate ? ` \u00b7 ${formatDate(r.lease.endDate, locale)}` : ""}
                     </p>
                   </div>
@@ -959,7 +1050,8 @@ export default async function BienDetailPage({
 }) {
   const [{ id }, { onglet }] = await Promise.all([params, searchParams]);
   const { locale, d } = await getI18n();
-  const demo = await getDemo();
+  const [demo, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  const real = datasetId === "real";
   const card = findCard(buildPortfolio(demo), id);
   if (!card) notFound();
   const menu = propertyMenu(card, demo, d, locale);
@@ -1029,7 +1121,11 @@ export default async function BienDetailPage({
                 value={single.vacant ? d.biens.noTenant : single.tenantNames.join(", ")}
                 sub={
                   single.vacant
-                    ? undefined
+                    ? single.drafts.length > 0
+                      ? fmt(d.biens.draftInProgress, {
+                          tenant: demo.leaseTenantNames(single.drafts[single.drafts.length - 1]).join(", ") || d.common.none,
+                        })
+                      : undefined
                     : fmt(d.bien.tenantSince, { date: formatDate(single.lease!.startDate, locale) })
                 }
               />
@@ -1093,9 +1189,9 @@ export default async function BienDetailPage({
         ))}
       </div>
 
-      {tab === "apercu" && <Overview card={card} demo={demo} d={d} locale={locale} />}
+      {tab === "apercu" && <Overview card={card} demo={demo} d={d} locale={locale} real={real} />}
       {tab === "lots" && <Lots card={card} d={d} locale={locale} />}
-      {tab === "location" && <Rental card={card} demo={demo} d={d} locale={locale} />}
+      {tab === "location" && <Rental card={card} demo={demo} d={d} locale={locale} real={real} />}
       {tab === "technique" && <Technical card={card} demo={demo} d={d} locale={locale} />}
       {tab === "interventions" && <Interventions card={card} demo={demo} d={d} locale={locale} />}
       {tab === "documents" && <Documents card={card} demo={demo} d={d} locale={locale} />}
