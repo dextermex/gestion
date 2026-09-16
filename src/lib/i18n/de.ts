@@ -772,6 +772,7 @@ export const de: Dict = {
     archiveDo: "Archivieren",
   },
   edlWizard: {
+    continueDossier: "Mietakte fortsetzen",
     roomsTitle: "Welche Räume gehen Sie ab?",
     roomsHint: "Morada schlägt die Räume anhand der Wohnung vor. Ergänzen, umbenennen oder entfernen Sie, was nicht passt.",
     addRoom: "Hinzufügen",

@@ -783,6 +783,7 @@ export const fr = {
     archiveDo: "Archiver",
   },
   edlWizard: {
+    continueDossier: "Continuer le dossier de location",
     roomsTitle: "Quelles pièces allez-vous parcourir ?",
     roomsHint: "Morada propose les pièces d'après le logement. Ajoutez, renommez ou retirez ce qui ne correspond pas.",
     addRoom: "Ajouter",

@@ -8,6 +8,17 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
+import {
+  CREATION_STEP,
+  RENTAL_TOTAL,
+  canLeave,
+  isFirstStep,
+  nextStep,
+  prevStep,
+  shouldCreateOnLeaving,
+  stepNumber,
+  type RentalStep,
+} from "@/lib/gestion/rental-flow";
 
 /**
  * Putting a tenant into a lot, as a conversation.
@@ -29,12 +40,30 @@ type Props = {
   /** Real account: the flow writes tenant, lease, ledger, deposit and payer. */
   real: boolean;
   notice: string;
+  /** Resuming a rental that already exists: its id, and what is already
+   *  known about it, so the earlier steps open filled in rather than blank. */
+  existing?: {
+    leaseId: string;
+    startStep: RentalStep;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    type: "residential" | "commercial";
+    startDate: string;
+    endDate: string;
+    rent: string;
+    charges: string;
+    paymentDay: string;
+    payerIban: string;
+    depositMonths: string;
+    depositForm: string;
+    hasInspection: boolean;
+    hasInsurance: boolean;
+  };
 };
 
-/** Five steps create the rental; the last three enrich it once it exists,
- *  because an inspection and a policy both need a lease to belong to. */
-const LAST_INPUT = 5;
-const LAST_STEP = 8;
+
 
 export default function TenantWizard({
   d,
@@ -44,42 +73,43 @@ export default function TenantWizard({
   unitId,
   real,
   notice,
+  existing,
 }: Props) {
   const router = useRouter();
   const reduced = useReducedMotion();
   const headingRef = useRef<HTMLHeadingElement>(null);
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<RentalStep>(existing?.startStep ?? "tenant");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [leaseId, setLeaseId] = useState<string | null>(null);
+  const [leaseId, setLeaseId] = useState<string | null>(existing?.leaseId ?? null);
   const [draftIssues, setDraftIssues] = useState<string[]>([]);
 
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [firstName, setFirstName] = useState(existing?.firstName ?? "");
+  const [lastName, setLastName] = useState(existing?.lastName ?? "");
+  const [email, setEmail] = useState(existing?.email ?? "");
+  const [phone, setPhone] = useState(existing?.phone ?? "");
 
-  const [type, setType] = useState<"residential" | "commercial">("residential");
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState("");
+  const [type, setType] = useState<"residential" | "commercial">(existing?.type ?? "residential");
+  const [startDate, setStartDate] = useState(existing?.startDate ?? (() => new Date().toISOString().slice(0, 10))());
+  const [endDate, setEndDate] = useState(existing?.endDate ?? "");
 
-  const [rent, setRent] = useState("");
-  const [charges, setCharges] = useState("");
-  const [paymentDay, setPaymentDay] = useState("1");
+  const [rent, setRent] = useState(existing?.rent ?? "");
+  const [charges, setCharges] = useState(existing?.charges ?? "");
+  const [paymentDay, setPaymentDay] = useState(existing?.paymentDay ?? "1");
 
   const [payerName, setPayerName] = useState("");
-  const [payerIban, setPayerIban] = useState("");
+  const [payerIban, setPayerIban] = useState(existing?.payerIban ?? "");
 
-  const [edlDone, setEdlDone] = useState(false);
+  const [edlDone, setEdlDone] = useState(existing?.hasInspection ?? false);
   const [insurer, setInsurer] = useState("");
   const [insurancePolicy, setInsurancePolicy] = useState("");
   const [insuranceExpires, setInsuranceExpires] = useState("");
-  const [insuranceDone, setInsuranceDone] = useState(false);
+  const [insuranceDone, setInsuranceDone] = useState(existing?.hasInsurance ?? false);
 
-  const [hasDeposit, setHasDeposit] = useState(true);
-  const [depositMonths, setDepositMonths] = useState("2");
-  const [depositForm, setDepositForm] = useState("cash");
+  const [hasDeposit, setHasDeposit] = useState(existing ? existing.depositMonths !== "0" : true);
+  const [depositMonths, setDepositMonths] = useState(existing?.depositMonths ?? "2");
+  const [depositForm, setDepositForm] = useState(existing?.depositForm ?? "cash");
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -150,7 +180,7 @@ export default function TenantWizard({
           ? (created.issues ?? []).filter((i) => i.severity === "blocking").map((i) => i.message)
           : [],
       );
-      setStep(6);
+      setStep(nextStep(CREATION_STEP));
       return;
     } catch {
       setSaveError(d.location.saveFailed);
@@ -158,13 +188,31 @@ export default function TenantWizard({
     setSaving(false);
   };
 
-  const submit = () => {
-    if (!canSubmit || saving) return;
-    if (real) void save();
-    else setStep(6);
+  const filled = { tenant: nameOk, rent: rentOk };
+
+  /**
+   * Moving on. Leaving the creation step writes the rental the first time and
+   * only the first time; every other step, and every later visit to this one,
+   * simply advances. Nothing here inspects whether a section was filled in to
+   * decide which step comes next — that is what used to lose steps.
+   */
+  const advance = () => {
+    if (saving) return;
+    if (!canLeave(step, filled)) return;
+    if (shouldCreateOnLeaving(step, leaseId)) {
+      if (!canSubmit) return;
+      if (real) {
+        void save();
+        return;
+      }
+    }
+    setStep(nextStep(step));
   };
 
-  const go = (delta: 1 | -1) => setStep((s) => Math.min(LAST_STEP, Math.max(1, s + delta)));
+  const back = () => {
+    if (saving) return;
+    setStep(prevStep(step));
+  };
 
   const slide = (dir: 1 | -1) =>
     reduced
@@ -176,15 +224,15 @@ export default function TenantWizard({
           transition: { type: "spring" as const, stiffness: 340, damping: 34 },
         };
 
-  const titles: Record<number, string> = {
-    1: d.location.titleTenant,
-    2: d.location.titleLease,
-    3: d.location.titleRent,
-    4: d.location.titlePayer,
-    5: d.location.titleGuarantee,
-    6: d.location.titleInspection,
-    7: d.location.titleInsurance,
-    8: d.location.titleReview,
+  const titles: Record<RentalStep, string> = {
+    tenant: d.location.titleTenant,
+    lease: d.location.titleLease,
+    rent: d.location.titleRent,
+    payment: d.location.titlePayer,
+    guarantee: d.location.titleGuarantee,
+    inspection: d.location.titleInspection,
+    insurance: d.location.titleInsurance,
+    review: d.location.titleReview,
   };
 
   // What an owner has actually told Morada about this tenancy. The percentage
@@ -231,7 +279,7 @@ export default function TenantWizard({
   const overlay = (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
-        {step === 1 || step > LAST_INPUT ? (
+        {isFirstStep(step) ? (
           <Link
             href={`/app/biens/${propertyId}`}
             className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
@@ -240,28 +288,28 @@ export default function TenantWizard({
             {d.location.backToProperty}
           </Link>
         ) : (
-          <button onClick={() => go(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
+          <button onClick={() => back()} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
             <BackIcon />
             {d.common.back}
           </button>
         )}
-        {step <= LAST_STEP && (
-          <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
-            {d.biens.wizStepOf.replace("{n}", String(step)).replace("{total}", String(LAST_STEP))}
-          </p>
-        )}
+        {/* The indicator reads its position from the same list the body
+            renders from, so it cannot drift from what is on screen. */}
+        <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
+          {d.biens.wizStepOf.replace("{n}", String(stepNumber(step))).replace("{total}", String(RENTAL_TOTAL))}
+        </p>
       </div>
 
       <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
         <AnimatePresence mode="wait" initial={false}>
-          {step === 1 && (
+          {step === "tenant" && (
             <motion.div key="t1" {...slide(-1)}>
               {Heading}
               <form
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (nameOk) go(1);
+                  if (nameOk) advance();
                 }}
               >
                 <div className="grid grid-cols-2 gap-3">
@@ -282,19 +330,19 @@ export default function TenantWizard({
                     </Field>
                   </div>
                 </div>
-                <Footer onNext={() => nameOk && go(1)} />
+                <Footer onNext={() => nameOk && advance()} />
               </form>
             </motion.div>
           )}
 
-          {step === 2 && (
+          {step === "lease" && (
             <motion.div key="t2" {...slide(1)}>
               {Heading}
               <form
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  go(1);
+                  advance();
                 }}
               >
                 <Field label={d.location.leaseType}>
@@ -311,19 +359,24 @@ export default function TenantWizard({
                     <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                   </Field>
                 </div>
-                <Footer onNext={() => go(1)} />
+                <div className="mt-6 flex items-center justify-between">
+                  <button type="button" onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                    {d.biens.wizLater}
+                  </button>
+                  <Button type="submit">{d.common.next}</Button>
+                </div>
               </form>
             </motion.div>
           )}
 
-          {step === 3 && (
+          {step === "rent" && (
             <motion.div key="t3" {...slide(1)}>
               {Heading}
               <form
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (rentOk) go(1);
+                  if (rentOk) advance();
                 }}
               >
                 <div className="grid grid-cols-2 gap-3">
@@ -352,19 +405,19 @@ export default function TenantWizard({
                   </Field>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.location.rentHint}</p>
-                <Footer onNext={() => rentOk && go(1)} />
+                <Footer onNext={() => rentOk && advance()} />
               </form>
             </motion.div>
           )}
 
-          {step === 4 && (
+          {step === "payment" && (
             <motion.div key="t4" {...slide(1)}>
               {Heading}
               <form
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  go(1);
+                  advance();
                 }}
               >
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.payerHint}</p>
@@ -383,7 +436,7 @@ export default function TenantWizard({
                   </Field>
                 </div>
                 <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={() => go(1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                  <button type="button" onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
                     {d.biens.wizLater}
                   </button>
                   <Button type="submit">{d.common.next}</Button>
@@ -392,14 +445,14 @@ export default function TenantWizard({
             </motion.div>
           )}
 
-          {step === 5 && (
+          {step === "guarantee" && (
             <motion.div key="t5" {...slide(1)}>
               {Heading}
               <form
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  submit();
+                  advance();
                 }}
               >
                 <fieldset>
@@ -457,14 +510,14 @@ export default function TenantWizard({
                 )}
                 <div className="mt-6 flex justify-end">
                   <Button type="submit" disabled={!canSubmit} loading={saving}>
-                    {d.location.createRental}
+                    {shouldCreateOnLeaving(step, leaseId) ? d.location.createRental : d.common.next}
                   </Button>
                 </div>
               </form>
             </motion.div>
           )}
 
-          {step === 6 && (
+          {step === "inspection" && (
             <motion.div key="t6" {...slide(1)}>
               {Heading}
               <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
@@ -481,7 +534,9 @@ export default function TenantWizard({
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.inspectionHint}</p>
                 {real && leaseId ? (
                   <Link
-                    href={`/app/biens/etat-des-lieux?bail=${leaseId}&type=entry`}
+                    href={`/app/biens/etat-des-lieux?bail=${leaseId}&type=entry&retour=${encodeURIComponent(
+                      `/app/biens/locataire?bail=${leaseId}&etape=${stepNumber(nextStep(step))}`,
+                    )}`}
                     onClick={() => setEdlDone(true)}
                     className="tactile mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
                   >
@@ -492,16 +547,16 @@ export default function TenantWizard({
                   <p className="mt-4 text-sm text-ink-soft">{notice}</p>
                 )}
                 <div className="mt-6 flex items-center justify-between">
-                  <button onClick={() => setStep(7)} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                  <button onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
                     {d.biens.wizLater}
                   </button>
-                  <Button onClick={() => setStep(7)}>{d.common.next}</Button>
+                  <Button onClick={() => advance()}>{d.common.next}</Button>
                 </div>
               </div>
             </motion.div>
           )}
 
-          {step === 7 && (
+          {step === "insurance" && (
             <motion.div key="t7" {...slide(1)}>
               {Heading}
               <form
@@ -509,7 +564,7 @@ export default function TenantWizard({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (!real || !leaseId || insurer.trim() === "") {
-                    setStep(8);
+                    advance();
                     return;
                   }
                   setSaving(true);
@@ -526,7 +581,7 @@ export default function TenantWizard({
                   });
                   setSaving(false);
                   if (res.ok) setInsuranceDone(true);
-                  setStep(8);
+                  advance();
                 }}
               >
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.insuranceHint}</p>
@@ -544,7 +599,7 @@ export default function TenantWizard({
                   </div>
                 </div>
                 <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={() => setStep(8)} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                  <button type="button" onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
                     {d.biens.wizLater}
                   </button>
                   <Button type="submit" loading={saving}>
@@ -555,7 +610,7 @@ export default function TenantWizard({
             </motion.div>
           )}
 
-          {step === 8 && (
+          {step === "review" && (
             <motion.div key="t8" {...slide(1)}>
               {Heading}
               <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">

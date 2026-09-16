@@ -47,6 +47,7 @@ export default function EdlWizard({
   suggestedRooms,
   real,
   notice,
+  returnTo,
 }: {
   d: Dict;
   leaseId: string;
@@ -58,6 +59,10 @@ export default function EdlWizard({
   suggestedRooms: string[];
   real: boolean;
   notice: string;
+  /** Where the owner came from, when the inspection is one step of a larger
+   *  journey. Without it the walk-through would be a dead end and the rest of
+   *  that journey would never be shown again. */
+  returnTo?: string;
 }) {
   const router = useRouter();
   const reduced = useReducedMotion();
@@ -199,11 +204,11 @@ export default function EdlWizard({
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 0 || step === doneStep ? (
           <Link
-            href={`/app/biens/${propertyId}?onglet=location`}
+            href={returnTo ?? `/app/biens/${propertyId}?onglet=location`}
             className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
           >
             <BackIcon />
-            {d.location.backToProperty}
+            {returnTo ? d.edlWizard.continueDossier : d.location.backToProperty}
           </Link>
         ) : (
           <button
@@ -442,9 +447,17 @@ export default function EdlWizard({
                   {notice}
                 </p>
               )}
-              <Button className="mt-6" onClick={() => router.push(`/app/biens/${propertyId}?onglet=location`)}>
-                {d.location.backToProperty}
-              </Button>
+              <div className="mt-6 flex flex-col gap-2.5">
+                {returnTo && (
+                  <Button onClick={() => router.push(returnTo)}>{d.edlWizard.continueDossier}</Button>
+                )}
+                <Button
+                  variant={returnTo ? "secondary" : "primary"}
+                  onClick={() => router.push(`/app/biens/${propertyId}?onglet=location`)}
+                >
+                  {d.location.backToProperty}
+                </Button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

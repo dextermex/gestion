@@ -772,6 +772,7 @@ export const en: Dict = {
     archiveDo: "Archive",
   },
   edlWizard: {
+    continueDossier: "Continue the rental dossier",
     roomsTitle: "Which rooms will you walk through?",
     roomsHint: "Morada suggests rooms from the home itself. Add, rename or remove whatever does not match.",
     addRoom: "Add",

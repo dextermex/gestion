@@ -777,6 +777,7 @@ export const lu: Dict = {
     archiveDo: "Archivéieren",
   },
   edlWizard: {
+    continueDossier: "D'Dossier vun der Locatioun weiderféieren",
     roomsTitle: "Wéi eng Pièceë gitt Dir duerch?",
     roomsHint: "Morada proposéiert d'Pièceën no der Wunneng. Sett derbäi, benennt ëm oder huelt ewech wat net passt.",
     addRoom: "Derbäisetzen",

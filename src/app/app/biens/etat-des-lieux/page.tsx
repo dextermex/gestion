@@ -13,9 +13,9 @@ import { METER_UNITS } from "@/lib/types";
 export default async function EtatDesLieuxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ bail?: string; type?: string }>;
+  searchParams: Promise<{ bail?: string; type?: string; retour?: string }>;
 }) {
-  const { bail, type } = await searchParams;
+  const { bail, type, retour } = await searchParams;
   const { d } = await getI18n();
   const demo = await getDemo();
   const datasetId = await getDatasetId();
@@ -54,6 +54,9 @@ export default async function EtatDesLieuxPage({
       suggestedRooms={rooms}
       real={datasetId === "real"}
       notice={d.common.demoCreateNotice}
+      // Only an internal path is honoured: a return address is a redirect,
+      // and a redirect that trusts a query string is an open one.
+      returnTo={retour && retour.startsWith("/app/") ? retour : undefined}
     />
   );
 }
