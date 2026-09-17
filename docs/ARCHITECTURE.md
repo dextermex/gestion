@@ -73,6 +73,22 @@ The ledger keeps growing on its own: `gestion.roll_rent_periods()` (pg_cron, nig
 applies the same month rule as `openLedger` to every live lease, inserting only what is
 missing and never rewriting a period.
 
+### The ledger's calendar is one rule, and the checklist reads the rows
+
+`src/lib/gestion/ledger.ts` decides which months a live lease's ledger holds and when
+each one is owed (the payment day, never before the tenancy starts, never after its end);
+`openLedger` writes it, `gestion.roll_rent_periods()` mirrors it nightly, and the portfolio
+projection reads its "next due" from it, so a card, a sheet and the database agree on a
+date. The getting-started card ticks what the account's rows attest (a property, a contact,
+a running lease, a bank account, a received rent); a browser only remembers whether it is
+collapsed or dismissed. A page restored from the browser's back-forward cache is refreshed
+from the server on `pageshow`.
+
+`scripts/e2e-real.mjs` runs the rental lifecycle on the real path, with a real Supabase
+session, the app's own API routes and its server-rendered pages (PostgREST under RLS,
+`getDemo()` → `buildRealData()`), then reloads in a browser. It needs a disposable Supabase
+project and network access to it; the unit suite stays offline.
+
 ### Registered letters gate legal effect
 
 `g_registered_letters.legal_effect_on` is a **generated column from `ar_received_on`**.

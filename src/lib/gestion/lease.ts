@@ -2,8 +2,10 @@ import "server-only";
 import type { OrgContext } from "@/lib/gestion/api";
 import { validateLeaseDraft, type ValidationIssue } from "@/domain/lease/rules";
 import { leaseRF } from "@/domain/banking/rf";
-import { addMonths } from "@/domain/dates";
 import { getParamValue } from "@/domain/legal/params";
+import { dueDateFor, ledgerMonths } from "@/lib/gestion/ledger";
+
+export { dueDateFor, ledgerMonths };
 import { leaseIssueText } from "@/lib/i18n/engine";
 import type { Dict } from "@/lib/i18n";
 
@@ -128,30 +130,6 @@ export function leaseCompliance(input: LeaseInput, today: string): ValidationIss
   );
 }
 
-/**
- * The months a live lease's ledger must hold, as YYYY-MM-01: from the start
- * month (capped a year back) through next month, never past the lease's end.
- * `gestion.roll_rent_periods()` applies the same rule inside the database
- * every night, so a ledger that was opened here keeps growing on its own.
- */
-export function ledgerMonths(startDate: string, endDate: string | null, today: string): string[] {
-  const liveMonth = `${today.slice(0, 7)}-01`;
-  const floor = addMonths(liveMonth, -11);
-  const startMonth = `${startDate.slice(0, 7)}-01`;
-  let m = startMonth < floor ? floor : startMonth;
-  let end = addMonths(liveMonth, 1);
-  if (endDate) {
-    const endMonth = `${endDate.slice(0, 7)}-01`;
-    if (endMonth < end) end = endMonth;
-  }
-  const out: string[] = [];
-  while (m <= end) {
-    out.push(m);
-    m = addMonths(m, 1);
-  }
-  return out;
-}
-
 interface LedgerLease {
   id: string;
   startDate: string;
@@ -166,17 +144,17 @@ interface LedgerLease {
  * that already exists is left exactly as it is, because creation and
  * activation may both pass here and neither may rewrite a period. Paid-ness
  * is derived from allocations by the rent_period_status view, never stored.
- * Returns how many periods were opened.
+ * The calendar (which months, due when) is `ledger.ts`, mirrored nightly by
+ * `gestion.roll_rent_periods()`. Returns how many periods were opened.
  */
 export async function openLedger(ctx: OrgContext, lease: LedgerLease, today: string): Promise<number> {
   const { g, org } = ctx;
-  const day = String(lease.paymentDay).padStart(2, "0");
   // total_cents is a generated column: the database sums the parts.
   const rows = ledgerMonths(lease.startDate, lease.endDate, today).map((m) => ({
     org_id: org.id,
     lease_id: lease.id,
     period: m,
-    due_date: `${m.slice(0, 7)}-${day}`,
+    due_date: dueDateFor(m, lease.paymentDay, lease.startDate),
     rent_cents: lease.rentCents,
     charges_cents: lease.chargesCents,
     other_cents: 0,

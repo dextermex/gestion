@@ -72,6 +72,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       label: `${demo.leaseUnitLabel(l)} \u00b7 ${demo.leaseTenantNames(l).join(", ")}`,
     })),
     contactOptions: demo.CONTACTS.map((c) => ({ id: c.id, label: c.name })),
+    // The getting-started card ticks what the rows attest, never what a
+    // browser remembers: the same records Biens, Contacts and Loyers read.
+    progress: {
+      property: demo.PROPERTIES.length > 0,
+      contact: demo.CONTACTS.length > 0,
+      lease: demo.LEASES.some((l) => l.status === "active" || l.status === "notice"),
+      bank: demo.BANK_ACCOUNTS.length > 0,
+      rent: demo.RENT_PERIODS.some((rp) => rp.allocatedCents > 0),
+    },
   };
 
   return (

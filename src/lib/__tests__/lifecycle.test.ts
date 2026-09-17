@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fr } from "@/lib/i18n/fr";
 import type { OrgContext } from "@/lib/gestion/api";
 import { createRental, parseRentalInput, payerTenantIndex } from "@/lib/gestion/rental";
-import { activateLease, closeLease, discardDraft, ledgerMonths, openLedger } from "@/lib/gestion/lease";
+import { activateLease, closeLease, discardDraft, openLedger } from "@/lib/gestion/lease";
+import { dueDateFor, ledgerMonths, nextDueOn as nextDueByRule } from "@/lib/gestion/ledger";
 import { buildRealDataFrom } from "@/lib/demo/data-real";
 import { orgFromWorkspace } from "@/lib/demo/data-empty";
 import { buildPortfolio, findCard, nextDueOn, occupancyOf } from "@/lib/gestion/portfolio";
@@ -344,6 +345,38 @@ describe("a draft written before lifecycle and compliance were told apart", () =
 });
 
 describe("the ledger", () => {
+  it("never makes the first month due before the tenancy starts", () => {
+    // Signed on the 17th, rent due on the 5th: September is owed on the 17th,
+    // October on the 5th. Before this rule a brand-new tenancy read as late.
+    expect(dueDateFor("2026-09-01", 5, "2026-09-17")).toBe("2026-09-17");
+    expect(dueDateFor("2026-10-01", 5, "2026-09-17")).toBe("2026-10-05");
+    expect(dueDateFor("2026-09-01", 20, "2026-09-17")).toBe("2026-09-20");
+    expect(nextDueByRule("2026-09-17", 5, "2026-09-17", null)).toBe("2026-09-17");
+    expect(nextDueByRule("2026-09-18", 5, "2026-09-17", null)).toBe("2026-10-05");
+    // A tenancy that ends before its next payment day owes nothing more.
+    expect(nextDueByRule("2026-09-18", 5, "2026-09-17", "2026-09-23")).toBeNull();
+    expect(nextDueByRule("2026-09-01", 5, "2026-09-17", null)).toBe("2026-09-17");
+  });
+
+  it("writes the first period due on the start date when the payment day has passed", async () => {
+    const db = new FakeDb("2026-09-17");
+    const ctx = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    const created = await createRental(
+      ctx,
+      fr,
+      parseRentalInput({ unitId, firstName: "Paul", lastName: "Wurrh", rent: "20", charges: "5", paymentDay: "5", startDate: "2026-09-17" }, "2026-09-17", "fr")!,
+    );
+    if ("error" in created) throw new Error(created.error);
+    const periods = db.table("rent_periods").map((rp) => ({ period: rp.period, due: rp.due_date })).sort((a, b) => String(a.period).localeCompare(String(b.period)));
+    expect(periods).toEqual([
+      { period: "2026-09-01", due: "2026-09-17" },
+      { period: "2026-10-01", due: "2026-10-05" },
+    ]);
+    // On the day it is created, the tenancy is pending, not late.
+    expect(db.periodStatus().map((r) => r.status)).toEqual(["pending", "upcoming"]);
+  });
+
   it("opens this month and next for a lease starting now", () => {
     expect(ledgerMonths(thisMonth, null, today)).toEqual([thisMonth, nextMonth]);
   });

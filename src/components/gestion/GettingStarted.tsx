@@ -9,11 +9,23 @@ import { MORADA_URL } from "@/lib/constants";
 /**
  * The new-account journey (the immocloud "getting started" card): a floating
  * checklist with progress, one row per setup step, each linking into the
- * matching module. State is a per-browser convenience (localStorage): checked
- * steps, collapsed, or dismissed for good.
+ * matching module.
+ *
+ * What is done is read from the account's own rows: a property exists, a
+ * contact exists, a lease is running, a bank account is connected, a rent
+ * has been received. The browser remembers only what is a browser matter:
+ * whether the card is collapsed or dismissed, and the one step (the cabinet
+ * profile) that nothing in the database can attest. A checklist that said
+ * "add your first property" over an account that had two, because its ticks
+ * lived in localStorage, contradicted the very screen it floated over.
+ *
+ * On a phone the open card would cover most of the screen, so it starts as
+ * the pill there unless the owner has already chosen otherwise.
  */
 
 const STORE = "morada_getting_started";
+
+export type Progress = Record<"property" | "contact" | "lease" | "bank" | "rent", boolean>;
 
 interface Stored {
   done: string[];
@@ -22,13 +34,14 @@ interface Stored {
 }
 
 function load(): Stored {
+  const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
   try {
     const raw = localStorage.getItem(STORE);
-    if (raw) return { done: [], collapsed: false, hidden: false, ...JSON.parse(raw) };
+    if (raw) return { done: [], collapsed: phone, hidden: false, ...JSON.parse(raw) };
   } catch {
     // Private mode or blocked storage: start fresh each visit.
   }
-  return { done: [], collapsed: false, hidden: false };
+  return { done: [], collapsed: phone, hidden: false };
 }
 
 function save(s: Stored) {
@@ -39,7 +52,7 @@ function save(s: Stored) {
   }
 }
 
-export default function GettingStarted({ d }: { d: Dict }) {
+export default function GettingStarted({ d, progress }: { d: Dict; progress: Progress }) {
   const [state, setState] = useState<Stored | null>(null);
   const reduced = useReducedMotion();
 
@@ -49,15 +62,17 @@ export default function GettingStarted({ d }: { d: Dict }) {
 
   if (!state || state.hidden) return null;
 
-  const steps = [
-    { id: "profile", href: "/app/conformite", title: d.onboarding.stepProfile, sub: d.onboarding.stepProfileSub },
-    { id: "property", href: "/app/biens/nouveau", title: d.onboarding.stepProperty, sub: d.onboarding.stepPropertySub },
-    { id: "contact", href: "/app/contacts", title: d.onboarding.stepContact, sub: d.onboarding.stepContactSub },
-    { id: "lease", href: "/app/baux", title: d.onboarding.stepLease, sub: d.onboarding.stepLeaseSub },
-    { id: "bank", href: "/app/banque", title: d.onboarding.stepBank, sub: d.onboarding.stepBankSub },
-    { id: "rent", href: "/app/loyers", title: d.onboarding.stepRent, sub: d.onboarding.stepRentSub },
+  // Every step but the profile is a fact the database attests.
+  const steps: Array<{ id: string; href: string; title: string; sub: string; attested: boolean | null }> = [
+    { id: "profile", href: "/app/conformite", title: d.onboarding.stepProfile, sub: d.onboarding.stepProfileSub, attested: null },
+    { id: "property", href: "/app/biens/nouveau", title: d.onboarding.stepProperty, sub: d.onboarding.stepPropertySub, attested: progress.property },
+    { id: "contact", href: "/app/contacts", title: d.onboarding.stepContact, sub: d.onboarding.stepContactSub, attested: progress.contact },
+    { id: "lease", href: "/app/baux", title: d.onboarding.stepLease, sub: d.onboarding.stepLeaseSub, attested: progress.lease },
+    { id: "bank", href: "/app/banque", title: d.onboarding.stepBank, sub: d.onboarding.stepBankSub, attested: progress.bank },
+    { id: "rent", href: "/app/loyers", title: d.onboarding.stepRent, sub: d.onboarding.stepRentSub, attested: progress.rent },
   ];
-  const pct = Math.round((100 * state.done.length) / steps.length);
+  const isDone = (s: (typeof steps)[number]) => (s.attested === null ? state.done.includes(s.id) : s.attested);
+  const pct = Math.round((100 * steps.filter(isDone).length) / steps.length);
 
   const update = (next: Stored) => {
     setState(next);
@@ -124,17 +139,19 @@ export default function GettingStarted({ d }: { d: Dict }) {
 
             <ul className="max-h-[50dvh] divide-y divide-sand-100 overflow-y-auto">
               {steps.map((s) => {
-                const done = state.done.includes(s.id);
+                const done = isDone(s);
                 return (
                   <li key={s.id} className="flex items-center gap-3 px-4 py-2.5">
                     <button
-                      onClick={() => toggle(s.id)}
+                      onClick={() => (s.attested === null ? toggle(s.id) : undefined)}
                       role="checkbox"
                       aria-checked={done}
+                      aria-disabled={s.attested !== null}
                       aria-label={done ? d.onboarding.stepDone : d.onboarding.stepTodo}
                       className={
                         "tactile flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors " +
-                        (done ? "border-brand-600 bg-brand-600 text-white" : "border-sand-300 bg-white text-transparent hover:border-brand-400")
+                        (done ? "border-brand-600 bg-brand-600 text-white" : "border-sand-300 bg-white text-transparent") +
+                        (s.attested === null ? " hover:border-brand-400" : " cursor-default")
                       }
                     >
                       <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3" aria-hidden>

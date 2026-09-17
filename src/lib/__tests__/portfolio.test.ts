@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as fr from "@/lib/demo/data";
 import type { DemoData } from "@/lib/demo";
 import { buildPortfolio, findCard, nextDueOn, occupancyOf } from "@/lib/gestion/portfolio";
+import type { DemoLease } from "@/lib/demo/data";
 
 /**
  * The portfolio projection is what both Patrimoine screens read, so a
@@ -178,5 +179,21 @@ describe("a tenancy that ended", () => {
     const b = findCard(buildPortfolio(ended), "p-beaulieu")!;
     expect(b.occupied).toBe(a.occupied);
     expect(b.monthlyCents).toBe(a.monthlyCents);
+  });
+});
+
+describe("the next due date on a card", () => {
+  it("is bounded by the end of the tenancy", () => {
+    // A lease that ends on the 23rd with rent due on the 5th has no next
+    // payment after today: the card says so rather than naming a date the
+    // tenant will never owe.
+    const lease = demo.LEASES.find((l) => l.status === "active")!;
+    const short: DemoLease = { ...lease, paymentDay: 5, startDate: "2026-09-17", endDate: "2026-09-23" };
+    const dataset = { ...demo, TODAY: "2026-09-18", LEASES: demo.LEASES.map((l) => (l.id === lease.id ? short : l)) } as DemoData;
+    const card = cards.find((c) => c.lots.some((l) => l.lease?.id === lease.id))!;
+    const after = buildPortfolio(dataset).find((c) => c.property.id === card.property.id)!;
+    expect(after.lots.find((l) => l.lease?.id === lease.id)!.lease!.endDate).toBe("2026-09-23");
+    expect(after.nextDue === null || after.nextDue <= "2026-09-23" || after.lots.length > 1).toBe(true);
+    if (after.lots.length === 1) expect(after.nextDue).toBeNull();
   });
 });

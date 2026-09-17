@@ -1,7 +1,7 @@
 import type { DemoData } from "@/lib/demo";
 import type { DemoLease, DemoProperty, DemoRentPeriod, DemoUnit } from "@/lib/demo/data";
 import type { RentStatus } from "@/lib/types";
-import { addMonths } from "@/domain/dates";
+import { nextDueOn } from "@/lib/gestion/ledger";
 
 /**
  * The portfolio projection: one property-shaped view of the whole dataset.
@@ -117,10 +117,12 @@ export function buildPortfolio(demo: DemoData): PropertyCard[] {
 
     // The next rent to fall due, read from the lease's payment day rather
     // than from the open period: mid-month every period is already past, and
-    // an owner still wants to know when the next one lands.
+    // an owner still wants to know when the next one lands. A tenancy that
+    // ends before then owes nothing more, so it contributes no date.
     const due = lots
       .filter((l) => l.lease)
-      .map((l) => nextDueOn(demo.TODAY, l.lease!.paymentDay))
+      .map((l) => nextDueOn(demo.TODAY, l.lease!.paymentDay, l.lease!.startDate, l.lease!.endDate))
+      .filter((d): d is string => d !== null)
       .sort();
 
     return {
@@ -139,13 +141,7 @@ export function buildPortfolio(demo: DemoData): PropertyCard[] {
   });
 }
 
-/** The next occurrence of a monthly due day, on or after `today`. */
-export function nextDueOn(today: string, paymentDay: number): string {
-  const day = String(Math.min(Math.max(Math.round(paymentDay) || 1, 1), 28)).padStart(2, "0");
-  const thisMonth = `${today.slice(0, 7)}-${day}`;
-  if (thisMonth >= today) return thisMonth;
-  return `${addMonths(`${today.slice(0, 7)}-01`, 1).slice(0, 7)}-${day}`;
-}
+export { nextDueOn };
 
 export function findCard(cards: PropertyCard[], propertyId: string): PropertyCard | null {
   return cards.find((c) => c.property.id === propertyId) ?? null;

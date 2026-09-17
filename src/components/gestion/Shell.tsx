@@ -10,7 +10,7 @@ import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
 import GestionLogo from "./GestionLogo";
 import ScrollHeader from "./ScrollHeader";
-import GettingStarted from "./GettingStarted";
+import GettingStarted, { type Progress } from "./GettingStarted";
 import type { Dict } from "@/lib/i18n/fr";
 import { MORADA_URL, PRO_URL, WELCOME_URL } from "@/lib/constants";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
@@ -35,6 +35,8 @@ export interface ShellData {
   unitOptions: Array<{ id: string; label: string }>;
   leaseOptions: Array<{ id: string; label: string }>;
   contactOptions: Array<{ id: string; label: string }>;
+  /** What the account's own rows attest for the getting-started card. */
+  progress: Progress;
 }
 
 /* --------------------------------- nav model --------------------------------
@@ -199,6 +201,18 @@ export default function GestionShell({
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // A page restored from the browser's back-forward cache is a snapshot of
+  // the screen as it was, not of the account as it is: Safari restores it
+  // even with no-store. Re-render from the server so a property created
+  // since, or a tenant added since, is on the screen the owner comes back to.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) router.refresh();
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, [router]);
   const [createKind, setCreateKind] = useState<CreateKind | null>(null);
   const reduced = useReducedMotion();
 
@@ -506,7 +520,7 @@ export default function GestionShell({
 
         {/* A "0% done" checklist on top of a full sample cabinet contradicts
             itself. It belongs to the real account only. */}
-        {!shell.sampleCabinet && <GettingStarted d={d} />}
+        {!shell.sampleCabinet && <GettingStarted d={d} progress={shell.progress} />}
       </div>
     </MotionConfig>
   );
