@@ -382,6 +382,101 @@ describe("the lifecycle of a rental", () => {
   });
 });
 
+describe("each property sees only the dossiers on its own lots", () => {
+  let db: FakeDb;
+  let ctx: OrgContext;
+
+  /** A property with the given lots, as the property wizard writes it. */
+  const seed = (name: string, labels: string[]) => {
+    const property = db.insertRow("properties", { org_id: ORG, name, type: labels.length > 1 ? "building" : "house", address: {}, commune: "Luxembourg" });
+    const units = labels.map((label) => String(db.insertRow("units", { org_id: ORG, property_id: property.id, label, kind: "dwelling", area_sqm: 50, rooms: 2 }).id));
+    return { id: String(property.id), units };
+  };
+  /** A dossier saved from the first step on a lot, as the wizard sends it. */
+  const start = async (unitId: string, firstName: string) => {
+    const r = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "tenant", tenants: [{ firstName, lastName: "Test" }] }));
+    if ("error" in r) throw new Error(r.error);
+    return r;
+  };
+  const draftsOf = (cards: ReturnType<typeof buildPortfolio>, propertyId: string) =>
+    findCard(cards, propertyId)!.lots.map((line) => ({ unit: line.unit.id, drafts: line.drafts.map((l) => l.id) }));
+
+  beforeEach(() => {
+    db = new FakeDb(today);
+    ctx = ctxFor(db);
+  });
+
+  it("writes every dossier on the lot it was started from, and each property reads only its own, before and after a refresh", async () => {
+    const a = seed("Maison A", ["Maison"]);
+    const b = seed("Maison B", ["Maison"]);
+    const c = seed("Résidence C", ["Apt 1", "Apt 2"]);
+
+    const dA = await start(a.units[0], "Anna");
+    const dB = await start(b.units[0], "Bruno");
+    const dC = await start(c.units[1], "Chloé");
+
+    // ── Written: lease → unit → property is the canonical chain, and it is what was asked for ──
+    const unitOf = (leaseId: string) => String(db.table("leases").find((l) => l.id === leaseId)!.unit_id);
+    const propertyOf = (unitId: string) => String(db.table("units").find((u) => u.id === unitId)!.property_id);
+    expect(unitOf(dA.leaseId)).toBe(a.units[0]);
+    expect(unitOf(dB.leaseId)).toBe(b.units[0]);
+    expect(unitOf(dC.leaseId)).toBe(c.units[1]);
+    expect([dA.propertyId, dB.propertyId, dC.propertyId]).toEqual([a.id, b.id, c.id]);
+    expect([propertyOf(unitOf(dA.leaseId)), propertyOf(unitOf(dB.leaseId)), propertyOf(unitOf(dC.leaseId))]).toEqual([a.id, b.id, c.id]);
+
+    // ── Read, exactly as the property sheet and the Biens card read it ──
+    const expectScoped = (demo: Awaited<ReturnType<typeof hydrate>>) => {
+      const cards = buildPortfolio(demo);
+      expect(draftsOf(cards, a.id)).toEqual([{ unit: a.units[0], drafts: [dA.leaseId] }]);
+      expect(draftsOf(cards, b.id)).toEqual([{ unit: b.units[0], drafts: [dB.leaseId] }]);
+      // A building shows a dossier under the lot it is on, and nowhere else.
+      expect(draftsOf(cards, c.id)).toEqual([
+        { unit: c.units[0], drafts: [] },
+        { unit: c.units[1], drafts: [dC.leaseId] },
+      ]);
+      // What each sheet names: its own tenant, never another property's.
+      const names = (propertyId: string) => findCard(cards, propertyId)!.lots.flatMap((line) => line.drafts.flatMap((l) => demo.leaseTenantNames(l)));
+      expect(names(a.id)).toEqual(["Anna Test"]);
+      expect(names(b.id)).toEqual(["Bruno Test"]);
+      expect(names(c.id)).toEqual(["Chloé Test"]);
+      // Every property remains vacant: a dossier occupies nothing.
+      for (const id of [a.id, b.id, c.id]) expect(occupancyOf(findCard(cards, id)!)).toBe("vacant");
+    };
+    expectScoped(await hydrate(db));
+    // A refresh is a new request: the dataset is rebuilt from the rows, and says the same.
+    expectScoped(await hydrate(db));
+
+    // ── Resuming from a lot picks that lot's dossier, never a neighbour's ──
+    const againA = await start(a.units[0], "Anna");
+    expect(againA.leaseId).toBe(dA.leaseId);
+    const firstC1 = await start(c.units[0], "Dan");
+    expect(firstC1.leaseId).not.toBe(dC.leaseId);
+    const demo = await hydrate(db);
+    expect(draftsOf(buildPortfolio(demo), c.id)).toEqual([
+      { unit: c.units[0], drafts: [firstC1.leaseId] },
+      { unit: c.units[1], drafts: [dC.leaseId] },
+    ]);
+    expect(draftsOf(buildPortfolio(demo), a.id)).toEqual([{ unit: a.units[0], drafts: [dA.leaseId] }]);
+    expect(demo.LEASES).toHaveLength(4);
+  });
+
+  it("refuses to save a dossier onto a lot it does not belong to, and moves nothing", async () => {
+    const a = seed("Maison A", ["Maison"]);
+    const b = seed("Maison B", ["Maison"]);
+    const dA = await start(a.units[0], "Anna");
+    const dB = await start(b.units[0], "Bruno");
+
+    // A stale tab, or a request naming another lot: refused, not rewritten.
+    const crossed = await saveRentalDraft(ctx, fr, dossier({ leaseId: dA.leaseId, unitId: b.units[0], step: "rent", tenants: [{ firstName: "Anna", lastName: "Test", contactId: dA.contactIds[0] }], rent: "900" }));
+    expect(crossed).toEqual({ error: "wrong_lot" });
+
+    const cards = buildPortfolio(await hydrate(db));
+    expect(draftsOf(cards, a.id)).toEqual([{ unit: a.units[0], drafts: [dA.leaseId] }]);
+    expect(draftsOf(cards, b.id)).toEqual([{ unit: b.units[0], drafts: [dB.leaseId] }]);
+    expect(db.table("leases").find((l) => l.id === dA.leaseId)!.rent_cents).toBe(0);
+  });
+});
+
 describe("a draft written before the flow kept its own memory", () => {
   let db: FakeDb;
   let ctx: OrgContext;

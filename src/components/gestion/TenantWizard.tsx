@@ -209,12 +209,9 @@ export default function TenantWizard({
         window.location.assign(`/connexion?next=${encodeURIComponent(here)}`);
         return null;
       }
-      if (res.status === 409) {
-        setSaveError(d.location.alreadyLet);
-        return null;
-      }
       if (!res.ok) {
-        setSaveError(d.location.saveFailed);
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setSaveError(data.error === "already_let" ? d.location.alreadyLet : d.location.saveFailed);
         return null;
       }
       const saved = (await res.json()) as {

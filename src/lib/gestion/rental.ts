@@ -77,7 +77,7 @@ export interface DossierResult {
 }
 
 export type DossierFailure =
-  | { error: "not_found" | "already_let" | "not_draft" }
+  | { error: "not_found" | "already_let" | "not_draft" | "wrong_lot" }
   | { error: "storage_failed"; context: string; detail: { code?: string; message?: string } | null };
 
 const LANGUAGES = ["fr", "en", "de", "lu"];
@@ -199,6 +199,10 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
   if (!unit) return { error: "not_found" };
 
   // ── The draft row: the one being resumed, the one already on this lot, or a new one ──
+  // A dossier belongs to one lot for life: it is written with that lot's
+  // `unit_id`, the lot names the property, and a resume that names another
+  // lot (a stale tab, a forged request) is refused rather than moved or
+  // written across.
   let lease: Row | null = null;
   if (input.leaseId) {
     const { data, error } = await g
@@ -210,6 +214,7 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
     if (error) return fail("dossier lease lookup", error);
     if (!data) return { error: "not_found" };
     if (data.status !== "draft") return { error: "not_draft" };
+    if (String(data.unit_id) !== input.unitId) return { error: "wrong_lot" };
     lease = data as Row;
   } else {
     // A lot under a live lease cannot take a second tenancy.

@@ -209,6 +209,24 @@ await withBrowser("dossier survives a reload", async (page) => {
   check("browser: save and continue later returns to the property as a dossier", /Dossier en préparation · 5\/9 étapes/.test(back) && /Libre/.test(back));
 });
 
+// ── 5b. A second property with its own dossier: each sheet shows only its own ──
+const other = await post("/api/biens/create", { type: "house", name: `Maison E2E ${stamp}`, street: "rue Neuve", number: "3", postal: "1234", city: "Luxembourg", country: "LU", areaSqm: "120", rooms: "5", bedrooms: "3" });
+const otherUnitId = other.json.units?.[0]?.id;
+check("second property created with its lot", other.status === 200 && Boolean(otherUnitId));
+const otherDossier = await post("/api/locations/save", { unitId: otherUnitId, step: "tenant", tenants: [{ firstName: "Bruno", lastName: `Kremer ${stamp}` }], type: "residential", startDate: today });
+check("second dossier saved on the second property's lot", otherDossier.status === 200 && otherDossier.json.propertyId === other.json.id);
+const sheetA = await get(`/app/biens/${propertyId}`);
+const sheetB = await get(`/app/biens/${other.json.id}`);
+check("property A shows only its own dossier", sheetA.text.includes(`Anna Weber ${stamp}`) && !sheetA.text.includes(`Bruno Kremer ${stamp}`));
+check("property B shows only its own dossier", sheetB.text.includes(`Bruno Kremer ${stamp}`) && !sheetB.text.includes(`Anna Weber ${stamp}`) && /Dossier en préparation · 1\/9 étapes/.test(sheetB.text));
+check("a dossier cannot be saved onto another property's lot", (await post("/api/locations/save", { leaseId, unitId: otherUnitId, step: "rent", tenants: people, rent: "1" })).status === 409);
+await withBrowser("scoping survives a reload", async (page) => {
+  await page.goto(`${BASE}/app/biens/${other.json.id}?onglet=location`, { waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "networkidle" });
+  const text = await mainText(page);
+  check("browser: property B after a reload still shows only its own dossier", text.includes(`Bruno Kremer ${stamp}`) && !text.includes(`Anna Weber ${stamp}`));
+});
+
 // ── 6. Activation is the one move that occupies the lot ──
 const activated = await patch(`/api/baux/${leaseId}`, { action: "activate" });
 check("PATCH /api/baux/[id] activate", activated.status === 200 && activated.json.ok === true, `(status ${activated.status} ${JSON.stringify(activated.json).slice(0, 120)})`);
