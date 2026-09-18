@@ -42,6 +42,17 @@ const day = (v: unknown): string => s(v).slice(0, 10);
 /** The gestion schema as PostgREST exposes it, bound to one caller. */
 export type GestionReader = ReturnType<ReturnType<typeof authedClient>["schema"]>;
 
+/** The guided rental's memory on a draft lease, if the row carries one. */
+function dossierOf(details: Row): DemoLease["dossier"] | undefined {
+  const raw = details.dossier as Row | undefined;
+  if (!raw || typeof raw !== "object") return undefined;
+  return {
+    completed: Array.isArray(raw.completed) ? raw.completed.map(String) : [],
+    step: s(raw.step),
+    payerName: sOr(raw.payerName, null),
+  };
+}
+
 export async function buildRealData(org: Org, accessToken: string): Promise<DemoData> {
   const client = authedClient(accessToken);
   return buildRealDataFrom(client.schema("gestion"), org, (paths) => signMedia(client, paths));
@@ -276,6 +287,7 @@ export async function buildRealDataFrom(
       vatRegime: l.vat_regime === "opted" ? "opted" : "exempt",
       vatOption: (l.vat_option as DemoLease["vatOption"]) ?? undefined,
       indexationClause: (l.indexation_clause as DemoLease["indexationClause"]) ?? undefined,
+      dossier: dossierOf(details),
     };
   });
   const leaseIndex = new Map(LEASES.map((l) => [l.id, l]));

@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
-  CREATION_STEP,
+  DATA_STEPS,
   RENTAL_STEPS,
   RENTAL_TOTAL,
   canLeave,
-  isAfterCreation,
+  completedOnSave,
+  completionFrom,
+  dossierProgress,
+  firstIncomplete,
   isFirstStep,
   isLastStep,
+  isReadyToActivate,
   nextStep,
   prevStep,
-  shouldCreateOnLeaving,
   stepAt,
+  stepNamed,
   stepNumber,
+  type DossierFacts,
   type RentalStep,
 } from "@/lib/gestion/rental-flow";
 
@@ -19,191 +24,169 @@ import {
  * The guided rental used to lose steps: the inspection step navigated away to
  * the état des lieux and never came back, Retour left the wizard instead of
  * going back one, and returning to the creation step wrote a second lease.
- * The flow is now a list, and these are the rules that list has to keep.
+ * The flow is now a list with a memory, and these are the rules that list
+ * has to keep: nine steps, one at a time, saved as the owner goes, resumed
+ * at the first one not completed, and only the last one activates anything.
  */
 
 const ALL = RENTAL_STEPS as readonly RentalStep[];
 const FILLED = { tenant: true, rent: true };
 const EMPTY = { tenant: false, rent: false };
+const NOTHING: DossierFacts = { tenants: 0, rentCents: 0, hasPayer: false, hasDeposit: false, hasInspection: false, hasInsurance: false };
 
-describe("the eight steps", () => {
+describe("the nine steps", () => {
   it("is exactly the flow the product promises, in order", () => {
-    expect(ALL).toEqual([
-      "tenant",
-      "lease",
-      "rent",
-      "payment",
-      "guarantee",
-      "inspection",
-      "insurance",
-      "review",
-    ]);
-    expect(RENTAL_TOTAL).toBe(8);
+    expect(ALL).toEqual(["tenant", "lease", "rent", "payment", "guarantee", "inspection", "insurance", "documents", "activation"]);
+    expect(RENTAL_TOTAL).toBe(9);
+    // The first eight collect the dossier; the ninth only activates it.
+    expect(DATA_STEPS).toEqual(ALL.slice(0, 8));
   });
 
   it("numbers every step by its position, with no gaps", () => {
-    expect(ALL.map(stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(ALL.map(stepNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
   it("shows a number that always matches the step on screen", () => {
     // The indicator and the body read the same list, so walking the flow must
-    // produce 1/8 through 8/8 with nothing repeated or missed.
+    // produce 1/9 through 9/9 with nothing repeated or missed.
     const seen: number[] = [];
     let step: RentalStep = ALL[0];
     for (let i = 0; i < RENTAL_TOTAL; i++) {
       seen.push(stepNumber(step));
       step = nextStep(step);
     }
-    expect(seen).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(seen).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
-  it("maps a position back to its step and rejects nothing in range", () => {
-    for (let n = 1; n <= RENTAL_TOTAL; n++) expect(stepNumber(stepAt(n))).toBe(n);
-  });
-});
-
-describe("Suivant", () => {
-  it("always moves to the very next step, never further", () => {
-    for (let i = 0; i < ALL.length - 1; i++) {
-      expect(nextStep(ALL[i])).toBe(ALL[i + 1]);
-    }
-  });
-
-  it("visits all eight steps when walked from the start", () => {
-    const visited = new Set<RentalStep>();
-    let step: RentalStep = ALL[0];
-    visited.add(step);
-    while (!isLastStep(step)) {
-      step = nextStep(step);
-      visited.add(step);
-    }
-    expect(visited.size).toBe(RENTAL_TOTAL);
-    for (const s of ALL) expect(visited.has(s)).toBe(true);
+  it("moves one step at a time and never computes an optional step away", () => {
+    // The inventory, the insurance and the documents are optional to fill,
+    // never optional to show: the successor is the successor.
+    expect(nextStep("guarantee")).toBe("inspection");
+    expect(nextStep("inspection")).toBe("insurance");
+    expect(nextStep("insurance")).toBe("documents");
+    expect(nextStep("documents")).toBe("activation");
+    for (const step of ALL.slice(0, -1)) expect(stepNumber(nextStep(step))).toBe(stepNumber(step) + 1);
+    for (const step of ALL.slice(1)) expect(stepNumber(prevStep(step))).toBe(stepNumber(step) - 1);
   });
 
-  it("stops at the last step rather than running off the end", () => {
-    expect(nextStep("review")).toBe("review");
-    expect(isLastStep("review")).toBe(true);
-  });
-});
-
-describe("Retour", () => {
-  it("always moves to the previous step", () => {
-    for (let i = 1; i < ALL.length; i++) {
-      expect(prevStep(ALL[i])).toBe(ALL[i - 1]);
-    }
-  });
-
-  it("goes back from the three steps that used to have no way back", () => {
-    // These followed the creation of the rental, and the header sent them to
-    // the property instead of to the previous step.
-    expect(prevStep("inspection")).toBe("guarantee");
-    expect(prevStep("insurance")).toBe("inspection");
-    expect(prevStep("review")).toBe("insurance");
-  });
-
-  it("stops at the first step rather than running off the start", () => {
+  it("stops at both ends instead of falling off the list", () => {
     expect(prevStep("tenant")).toBe("tenant");
+    expect(nextStep("activation")).toBe("activation");
     expect(isFirstStep("tenant")).toBe(true);
+    expect(isFirstStep("lease")).toBe(false);
+    expect(isLastStep("activation")).toBe(true);
+    expect(isLastStep("documents")).toBe(false);
   });
 
-  it("round-trips: forward then back lands where it started", () => {
-    for (const s of ALL) {
-      if (!isLastStep(s)) expect(prevStep(nextStep(s))).toBe(s);
-      if (!isFirstStep(s)) expect(nextStep(prevStep(s))).toBe(s);
-    }
-  });
-});
-
-describe("optional steps are shown, never computed away", () => {
-  it("lets the owner leave every step but the two that make a tenancy", () => {
-    // Nothing filled in at all: only the tenant and the rent hold the flow,
-    // because without them there is no lease to write. Payment, guarantee,
-    // inspection, insurance and documents all let the owner straight through.
-    const blocked = ALL.filter((s) => !canLeave(s, EMPTY));
-    expect(blocked).toEqual(["tenant", "rent"]);
-  });
-
-  it("lets the owner through every step once those two are filled", () => {
-    for (const s of ALL) expect(canLeave(s, FILLED)).toBe(true);
-  });
-
-  it("never decides the next step from what is filled in", () => {
-    // Same successor whatever the form holds: emptiness can block a step, it
-    // can never reroute the flow around one.
-    for (const s of ALL) expect(nextStep(s)).toBe(nextStep(s));
-    const emptyWalk: RentalStep[] = [];
-    const fullWalk: RentalStep[] = [];
-    let a: RentalStep = ALL[0];
-    let b: RentalStep = ALL[0];
-    for (let i = 0; i < RENTAL_TOTAL; i++) {
-      emptyWalk.push(a);
-      fullWalk.push(b);
-      a = nextStep(a);
-      b = nextStep(b);
-    }
-    expect(emptyWalk).toEqual(fullWalk);
-    expect(emptyWalk).toEqual([...ALL]);
-  });
-});
-
-describe("creating the rental exactly once", () => {
-  it("writes it when leaving the guarantee step with no lease yet", () => {
-    expect(CREATION_STEP).toBe("guarantee");
-    expect(shouldCreateOnLeaving("guarantee", null)).toBe(true);
-  });
-
-  it("never writes a second lease when the owner comes back to that step", () => {
-    // This is what dead-ended the flow on a 409: Retour to the guarantee step
-    // and pressing on again posted another lease onto a lot already let.
-    expect(shouldCreateOnLeaving("guarantee", "lease-1")).toBe(false);
-  });
-
-  it("never writes from any other step", () => {
-    for (const s of ALL) {
-      if (s === CREATION_STEP) continue;
-      expect(shouldCreateOnLeaving(s, null)).toBe(false);
-      expect(shouldCreateOnLeaving(s, "lease-1")).toBe(false);
-    }
-  });
-
-  it("knows which steps enrich a rental that already exists", () => {
-    expect(ALL.filter(isAfterCreation)).toEqual(["inspection", "insurance", "review"]);
-  });
-});
-
-describe("resuming a rental that already exists", () => {
-  it("can open at any of the eight steps", () => {
-    for (let n = 1; n <= RENTAL_TOTAL; n++) {
-      expect(ALL).toContain(stepAt(n));
-      expect(stepNumber(stepAt(n))).toBe(n);
-    }
-  });
-
-  it("clamps a position outside the flow onto a real step", () => {
-    // The resume position arrives in a URL, so it is whatever someone typed.
+  it("reads a position or a name from anywhere and lands on a real step", () => {
+    // A URL can say anything; the flow must still open on a step.
+    expect(stepAt(1)).toBe("tenant");
+    expect(stepAt(7)).toBe("insurance");
+    expect(stepAt(9)).toBe("activation");
     expect(stepAt(0)).toBe("tenant");
-    expect(stepAt(-5)).toBe("tenant");
-    expect(stepAt(99)).toBe("review");
+    expect(stepAt(99)).toBe("activation");
+    expect(stepAt(3.6)).toBe("payment");
     expect(stepAt(Number.NaN)).toBe("tenant");
+    expect(stepNamed("rent")).toBe("rent");
+    expect(stepNamed("nope")).toBe("tenant");
+    expect(stepNamed(undefined)).toBe("tenant");
+  });
+});
+
+describe("leaving a step", () => {
+  it("requires only what a tenancy cannot exist without", () => {
+    expect(canLeave("tenant", EMPTY)).toBe(false);
+    expect(canLeave("tenant", { tenant: true, rent: false })).toBe(true);
+    expect(canLeave("rent", { tenant: true, rent: false })).toBe(false);
+    expect(canLeave("rent", FILLED)).toBe(true);
+    for (const step of ALL.filter((s) => s !== "tenant" && s !== "rent")) expect(canLeave(step, EMPTY)).toBe(true);
+  });
+});
+
+describe("the dossier's memory, recomputed at every save", () => {
+  it("counts the step being left and everything before it", () => {
+    expect(completedOnSave([], "tenant", { tenant: true, rent: false })).toEqual(["tenant"]);
+    expect(completedOnSave(["tenant"], "lease", { tenant: true, rent: false })).toEqual(["tenant", "lease"]);
+    // Saving from the guarantee step: the owner went through the four before.
+    expect(completedOnSave([], "guarantee", FILLED)).toEqual(["tenant", "lease", "rent", "payment", "guarantee"]);
   });
 
-  it("lands on the insurance step when the inspection hands back", () => {
-    // The inspection sends the owner to the état des lieux with a return
-    // address built from `nextStep`; coming back must be step 7 of 8.
-    const back = nextStep("inspection");
-    expect(back).toBe("insurance");
-    expect(stepNumber(back)).toBe(7);
-    expect(stepAt(stepNumber(back))).toBe("insurance");
+  it("does not count a required step whose fact is missing", () => {
+    // Saved from the rent step with no rent: the rent step stays open.
+    expect(completedOnSave(["tenant", "lease"], "rent", { tenant: true, rent: false })).toEqual(["tenant", "lease"]);
+    // A rent cleared later reopens the rent step, whatever was remembered.
+    expect(completedOnSave(["tenant", "lease", "rent", "payment"], "payment", { tenant: true, rent: false })).toEqual([
+      "tenant",
+      "lease",
+      "payment",
+    ]);
+    // Everyone removed: the first step reopens, the rest stands.
+    expect(completedOnSave(["tenant", "lease", "rent"], "lease", { tenant: false, rent: true })).toEqual(["lease", "rent"]);
   });
 
-  it("still walks to the end from a resumed step", () => {
-    let step: RentalStep = stepAt(7);
-    const rest: RentalStep[] = [step];
-    while (!isLastStep(step)) {
-      step = nextStep(step);
-      rest.push(step);
-    }
-    expect(rest).toEqual(["insurance", "review"]);
+  it("keeps what an earlier visit completed when the owner goes back", () => {
+    const before = ["tenant", "lease", "rent", "payment", "guarantee"];
+    expect(completedOnSave(before, "lease", FILLED)).toEqual(before);
+    expect(completedOnSave(before, "tenant", FILLED)).toEqual(before);
+  });
+
+  it("never records the activation as a step completed", () => {
+    // Activation is the lease's status, not a box the dossier ticks.
+    expect(completedOnSave([], "activation", FILLED)).toEqual([...DATA_STEPS]);
+    expect(completedOnSave(["activation"], "documents", FILLED)).toEqual([...DATA_STEPS]);
+  });
+
+  it("resumes at the first step not completed, and at the activation once all are", () => {
+    expect(firstIncomplete([])).toBe("tenant");
+    expect(firstIncomplete(["tenant"])).toBe("lease");
+    expect(firstIncomplete(["tenant", "lease", "rent"])).toBe("payment");
+    expect(firstIncomplete([...DATA_STEPS])).toBe("activation");
+    // A gap in the middle is where the owner is taken back to.
+    expect(firstIncomplete(["tenant", "lease", "payment", "guarantee"])).toBe("rent");
+  });
+});
+
+describe("what a saved dossier has completed, read from its rows", () => {
+  it("believes the memory, and lets the rows add what happened elsewhere", () => {
+    // Saved from the first step: one step done, the lease step not yet seen.
+    expect(completionFrom({ ...NOTHING, tenants: 1 }, ["tenant"])).toEqual(["tenant"]);
+    // An inventory done from the property, an insurance recorded there: they count.
+    expect(
+      completionFrom({ ...NOTHING, tenants: 1, rentCents: 1, hasInspection: true, hasInsurance: true }, ["tenant", "lease", "rent"]),
+    ).toEqual(["tenant", "lease", "rent", "inspection", "insurance"]);
+  });
+
+  it("reads a dossier written before the flow kept a memory from its rows alone", () => {
+    expect(completionFrom({ ...NOTHING, tenants: 1, rentCents: 90000, hasDeposit: true })).toEqual(["tenant", "lease", "rent", "guarantee"]);
+    expect(completionFrom({ ...NOTHING, tenants: 2, rentCents: 90000, hasPayer: true })).toEqual(["tenant", "lease", "rent", "payment"]);
+    expect(completionFrom(NOTHING)).toEqual([]);
+  });
+
+  it("reopens a required step whose fact is gone, whatever the memory says", () => {
+    expect(completionFrom(NOTHING, ["tenant", "lease", "rent"])).toEqual(["lease"]);
+    expect(completionFrom({ ...NOTHING, tenants: 1 }, ["tenant", "lease", "rent"])).toEqual(["tenant", "lease"]);
+  });
+
+  it("is ready to activate only with someone on it and a rent", () => {
+    expect(isReadyToActivate({ tenants: 0, rentCents: 100 })).toBe(false);
+    expect(isReadyToActivate({ tenants: 1, rentCents: 0 })).toBe(false);
+    expect(isReadyToActivate({ tenants: 1, rentCents: 100 })).toBe(true);
+  });
+
+  it("says X/9 and where to resume, for the property and the flow alike", () => {
+    expect(dossierProgress({ ...NOTHING, tenants: 2, rentCents: 125000 }, ["tenant", "lease", "rent"])).toEqual({
+      completed: ["tenant", "lease", "rent"],
+      done: 3,
+      total: 9,
+      resumeStep: "payment",
+      ready: true,
+    });
+    const first = dossierProgress({ ...NOTHING, tenants: 1 }, ["tenant"]);
+    expect([first.done, first.total, first.resumeStep, first.ready]).toEqual([1, 9, "lease", false]);
+    // Every data step done: the dossier waits on the activation, and says so.
+    const all = dossierProgress({ ...NOTHING, tenants: 1, rentCents: 1, hasPayer: true, hasDeposit: true, hasInspection: true, hasInsurance: true }, [
+      ...DATA_STEPS,
+    ]);
+    expect([all.done, all.resumeStep, all.ready]).toEqual([8, "activation", true]);
   });
 });

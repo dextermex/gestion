@@ -9,38 +9,41 @@ import { Button, Field, Input, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 import {
-  CREATION_STEP,
   RENTAL_TOTAL,
   canLeave,
   isFirstStep,
   nextStep,
   prevStep,
-  shouldCreateOnLeaving,
   stepNumber,
   type RentalStep,
 } from "@/lib/gestion/rental-flow";
 
 /**
- * Putting a tenant into a lot, as a conversation.
+ * Putting a tenant into a lot, as a conversation the owner can pause.
  *
- * The owner started from the lot, so the lot is never asked for again. Eight
- * short steps collect the people, the lease, the rent, the account the rent
- * will arrive from, the guarantee, the inventory, the insurance and the
- * documents, and that is the whole configuration. There is no "start
- * tracking this rent" switch afterwards: an active lease with a rent and a
- * due day IS the monthly obligation, and the ledger opens itself the moment
- * the lease is written.
+ * The owner started from the lot, so the lot is never asked for again. Nine
+ * steps: the people, the lease, the rent, the account the rent will arrive
+ * from, the guarantee, the inventory, the insurance, the documents, and the
+ * activation. Every step offers the same three moves: back, save and
+ * continue later, next. Moving on saves; saving writes the dossier to the
+ * lease row as a draft, which is why closing the tab, refreshing or signing
+ * out loses nothing, and why the property can say "Dossier en préparation ·
+ * 3/9 étapes" and reopen the dossier at its first incomplete step.
+ *
+ * Nothing before the last step makes the rental active. The ninth step,
+ * Activation, is the only doorway: until then the lot is free and no rent
+ * falls due.
  *
  * A lease is signed by everyone who moves in. A couple, a family or three
  * roommates are each a tenant in their own right on the same lease, which is
  * why the first step is a list of people rather than a person.
  */
 
-export type Person = { firstName: string; lastName: string; email: string; phone: string };
+export type Person = { contactId: string | null; firstName: string; lastName: string; email: string; phone: string };
 
 type LeaseStatus = "draft" | "active" | "notice" | "ended";
 
-const blankPerson = (): Person => ({ firstName: "", lastName: "", email: "", phone: "" });
+const blankPerson = (): Person => ({ contactId: null, firstName: "", lastName: "", email: "", phone: "" });
 const hasName = (p: Person): boolean => p.firstName.trim() !== "" || p.lastName.trim() !== "";
 
 type Props = {
@@ -49,18 +52,19 @@ type Props = {
   propertyName: string;
   propertyId: string;
   unitId: string;
-  /** Real account: the flow writes tenants, lease, ledger, deposit and payer. */
+  /** Real account: the flow writes the dossier to the database as it goes. */
   real: boolean;
   notice: string;
   /** What the law allows for the guarantee, by lease type, resolved by the
    *  parameter registry on the server so the step can say it. */
   depositMax: { residential: number; commercial: number };
-  /** Resuming a rental that already exists: its id, and what is already
-   *  known about it, so the earlier steps open filled in rather than blank. */
+  /** Resuming a dossier that already exists: its id, what it already holds,
+   *  and which steps it has completed, so the flow reopens filled in. */
   existing?: {
     leaseId: string;
     status: LeaseStatus;
     startStep: RentalStep;
+    completed: RentalStep[];
     tenants: Person[];
     colocation: boolean;
     type: "residential" | "commercial";
@@ -69,6 +73,7 @@ type Props = {
     rent: string;
     charges: string;
     paymentDay: string;
+    payerName: string;
     payerIban: string;
     depositMonths: string;
     depositForm: string;
@@ -94,11 +99,13 @@ export default function TenantWizard({
 
   const [step, setStep] = useState<RentalStep>(existing?.startStep ?? "tenant");
   const [saving, setSaving] = useState(false);
+  // Which move the save belongs to, so only that button shows it.
+  const [leaving, setLeaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [leaseId, setLeaseId] = useState<string | null>(existing?.leaseId ?? null);
-  const [leaseStatus, setLeaseStatus] = useState<LeaseStatus | null>(existing?.status ?? null);
-  // What the written lease still lacks, as the legal engine said it when
-  // the rental was recorded. Informative: the rental runs regardless.
+  const [completed, setCompleted] = useState<RentalStep[]>(existing?.completed ?? []);
+  // What the written lease still lacks, as the legal engine said it at the
+  // last save. Informative: the rental runs regardless once activated.
   const [compliance, setCompliance] = useState<string[]>([]);
   const [activating, setActivating] = useState(false);
   const [activateError, setActivateError] = useState<string | null>(null);
@@ -116,7 +123,7 @@ export default function TenantWizard({
   const [charges, setCharges] = useState(existing?.charges ?? "");
   const [paymentDay, setPaymentDay] = useState(existing?.paymentDay ?? "1");
 
-  const [payerName, setPayerName] = useState("");
+  const [payerName, setPayerName] = useState(existing?.payerName ?? "");
   const [payerIban, setPayerIban] = useState(existing?.payerIban ?? "");
 
   const [edlDone, setEdlDone] = useState(existing?.hasInspection ?? false);
@@ -125,8 +132,11 @@ export default function TenantWizard({
   const [insuranceExpires, setInsuranceExpires] = useState("");
   const [insuranceDone, setInsuranceDone] = useState(existing?.hasInsurance ?? false);
 
-  const [hasDeposit, setHasDeposit] = useState(existing ? existing.depositMonths !== "0" : true);
-  const [depositMonths, setDepositMonths] = useState(existing?.depositMonths ?? "2");
+  // The guarantee is pre-filled ("yes, two months") until the owner has been
+  // through its step; only then is a dossier without a deposit read as "no".
+  const guaranteeAnswered = existing?.completed.includes("guarantee") ?? false;
+  const [hasDeposit, setHasDeposit] = useState(existing && guaranteeAnswered ? existing.depositMonths !== "0" : true);
+  const [depositMonths, setDepositMonths] = useState(existing && existing.depositMonths !== "0" ? existing.depositMonths : "2");
   const [depositForm, setDepositForm] = useState(existing?.depositForm ?? "cash");
 
   useEffect(() => {
@@ -134,9 +144,9 @@ export default function TenantWizard({
   }, [step]);
 
   const nameOk = people.some(hasName);
-  const rentOk = rent.trim() !== "";
-  const canSubmit = nameOk && rentOk;
+  const rentOk = rent.trim() !== "" && rent.trim() !== "0";
   const named = people.filter(hasName);
+  const filled = { tenant: nameOk, rent: rentOk };
 
   const setPerson = (i: number, patch: Partial<Person>) =>
     setPeople((list) => list.map((p, j) => (j === i ? { ...p, ...patch } : p)));
@@ -147,24 +157,39 @@ export default function TenantWizard({
 
   // The live total is the whole point of this step: what the tenant will
   // actually transfer each month.
-  const totalPreview = (() => {
-    const toNumber = (v: string) => {
-      const n = Number(v.replace(/[\s €]/g, "").replace(",", "."));
-      return Number.isFinite(n) ? n : 0;
-    };
-    const t = toNumber(rent) + toNumber(charges);
-    return t > 0 ? t.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
-  })();
+  const toNumber = (v: string) => {
+    const n = Number(v.replace(/[\s €]/g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const total = toNumber(rent) + toNumber(charges);
+  const totalPreview = total > 0 ? total.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
 
-  const save = async () => {
+  /** The URL always names the dossier and the step, so a refresh lands here. */
+  const syncUrl = (id: string | null, at: RentalStep) => {
+    if (typeof window === "undefined" || !id) return;
+    window.history.replaceState(window.history.state, "", `/app/biens/locataire?bail=${id}&etape=${stepNumber(at)}`);
+  };
+
+  /**
+   * Writes the dossier as it stands, from the step the owner is on, and
+   * answers with its id (null when nothing was written). The server decides
+   * what counts as completed; the wizard only reports. On the first save the
+   * dossier comes into existence and the URL learns its id.
+   */
+  const save = async (from: RentalStep): Promise<string | null> => {
     setSaving(true);
     setSaveError(null);
+    // The guarantee is the owner's answer, not the form's pre-filled one: it
+    // is written only once the guarantee step has been reached.
+    const guaranteeReached = completed.includes("guarantee") || stepNumber(from) >= stepNumber("guarantee");
     try {
-      const res = await fetch("/api/locations/create", {
+      const res = await fetch("/api/locations/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          leaseId,
           unitId,
+          step: from,
           tenants: named,
           colocation: named.length > 1 && colocation,
           type,
@@ -175,89 +200,141 @@ export default function TenantWizard({
           paymentDay,
           payerName,
           payerIban,
-          depositMonths: hasDeposit ? depositMonths : 0,
+          depositMonths: guaranteeReached && hasDeposit ? depositMonths : 0,
           depositForm,
         }),
       });
       if (res.status === 401) {
-        window.location.assign(`/connexion?next=/app/biens/locataire?lot=${unitId}`);
-        return;
+        const here = `/app/biens/locataire?${leaseId ? `bail=${leaseId}` : `lot=${unitId}`}`;
+        window.location.assign(`/connexion?next=${encodeURIComponent(here)}`);
+        return null;
       }
       if (res.status === 409) {
         setSaveError(d.location.alreadyLet);
-        setSaving(false);
-        return;
+        return null;
       }
       if (!res.ok) {
         setSaveError(d.location.saveFailed);
-        setSaving(false);
-        return;
+        return null;
       }
-      const created = (await res.json()) as {
+      const saved = (await res.json()) as {
         leaseId: string;
-        status: "active";
-        issues?: Array<{ severity: string; message: string }>;
+        contactIds: string[];
+        completed: RentalStep[];
+        issues?: Array<{ message: string }>;
       };
-      setLeaseId(created.leaseId);
-      setLeaseStatus(created.status);
-      setCompliance((created.issues ?? []).map((i) => i.message));
-      setStep(nextStep(CREATION_STEP));
-      return;
+      setLeaseId(saved.leaseId);
+      setCompleted(saved.completed);
+      setCompliance((saved.issues ?? []).map((i) => i.message));
+      // The people now have their contact ids, so the next save updates
+      // rather than creates them.
+      setPeople((list) => {
+        let k = 0;
+        return list.map((p) => (hasName(p) ? { ...p, contactId: saved.contactIds[k++] ?? p.contactId } : p));
+      });
+      return saved.leaseId;
     } catch {
       setSaveError(d.location.saveFailed);
+      return null;
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
+  const busy = saving || activating;
 
-  // A dossier written before lifecycle and compliance were told apart is
-  // still a draft: this is its way into force, from the same review step.
+  /** The rental becomes active: the one move that changes the lot's state. */
   const activate = async () => {
-    if (!leaseId) return;
     setActivating(true);
     setActivateError(null);
     try {
-      const res = await fetch(`/api/baux/${leaseId}`, {
+      const id = await save("activation");
+      if (!id) return;
+      const res = await fetch(`/api/baux/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "activate" }),
       });
       if (res.ok) {
-        setLeaseStatus("active");
+        router.push(`/app/biens/${propertyId}?onglet=location`);
         router.refresh();
-      } else {
-        setActivateError(d.bien.draftActivateFailed);
-      }
-    } catch {
-      setActivateError(d.bien.draftActivateFailed);
-    }
-    setActivating(false);
-  };
-
-  const filled = { tenant: nameOk, rent: rentOk };
-
-  /**
-   * Moving on. Leaving the creation step writes the rental the first time and
-   * only the first time; every other step, and every later visit to this one,
-   * simply advances. Nothing here inspects whether a section was filled in to
-   * decide which step comes next: that is what used to lose steps.
-   */
-  const advance = () => {
-    if (saving) return;
-    if (!canLeave(step, filled)) return;
-    if (shouldCreateOnLeaving(step, leaseId)) {
-      if (!canSubmit) return;
-      if (real) {
-        void save();
         return;
       }
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      setActivateError(data.error === "incomplete" ? d.location.activationIncomplete : d.bien.draftActivateFailed);
+    } catch {
+      setActivateError(d.bien.draftActivateFailed);
+    } finally {
+      setActivating(false);
     }
-    setStep(nextStep(step));
+  };
+
+  /**
+   * Moving on. Leaving a step saves the dossier first, then advances to the
+   * very next step. Nothing here inspects whether a section was filled in to
+   * decide which step comes next: that is what used to lose steps.
+   */
+  const advance = async () => {
+    if (busy) return;
+    if (!canLeave(step, filled)) return;
+    let id = leaseId;
+    if (real) {
+      id = await save(step);
+      if (!id) return;
+    }
+    const to = nextStep(step);
+    setStep(to);
+    syncUrl(id, to);
+  };
+
+  /**
+   * Leaving the insurance step records the policy the owner typed, if any,
+   * as its own row, then moves on like every other step.
+   */
+  const advanceInsurance = async () => {
+    if (busy) return;
+    if (real && leaseId && insurer.trim() !== "" && !insuranceDone) {
+      setSaving(true);
+      try {
+        const res = await fetch("/api/assurances/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            leaseId,
+            kind: "rent_guarantee",
+            provider: insurer,
+            policyNumber: insurancePolicy,
+            expiresOn: insuranceExpires,
+          }),
+        });
+        if (res.ok) setInsuranceDone(true);
+      } finally {
+        setSaving(false);
+      }
+    }
+    await advance();
   };
 
   const back = () => {
-    if (saving) return;
-    setStep(prevStep(step));
+    if (busy) return;
+    const to = prevStep(step);
+    setStep(to);
+    syncUrl(leaseId, to);
   };
+
+  /** Stop here: the dossier is saved as a draft and the owner is back on the property. */
+  const saveAndLeave = async () => {
+    if (busy) return;
+    setLeaving(true);
+    try {
+      if (real && !(await save(step))) return;
+    } finally {
+      setLeaving(false);
+    }
+    router.push(`/app/biens/${propertyId}?onglet=location`);
+    router.refresh();
+  };
+  // Before a dossier exists nothing can be saved until someone is named.
+  const canSaveLater = leaseId !== null || nameOk;
 
   const slide = (dir: 1 | -1) =>
     reduced
@@ -277,7 +354,8 @@ export default function TenantWizard({
     guarantee: d.location.titleGuarantee,
     inspection: d.location.titleInspection,
     insurance: d.location.titleInsurance,
-    review: d.location.titleReview,
+    documents: d.location.titleReview,
+    activation: d.location.titleActivation,
   };
 
   // What an owner has actually told Morada about this tenancy. The percentage
@@ -294,6 +372,11 @@ export default function TenantWizard({
     { label: d.location.checkDocuments, done: false },
   ];
   const completion = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
+  const missing: Array<{ step: RentalStep; label: string }> = [
+    ...(nameOk ? [] : [{ step: "tenant" as const, label: d.location.titleTenant }]),
+    ...(rentOk ? [] : [{ step: "rent" as const, label: d.location.titleRent }]),
+  ];
+  const ready = missing.length === 0;
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -313,12 +396,42 @@ export default function TenantWizard({
     </>
   );
 
-  const Footer = ({ onNext, nextLabel }: { onNext: () => void; nextLabel?: string }) => (
-    <div className="mt-6 flex justify-end">
-      <Button type="submit" onClick={onNext}>
-        {nextLabel ?? d.common.next}
-      </Button>
+  /**
+   * The same three moves on every step: back, save and continue later, next.
+   * Next is a plain button; a form's submit (the Enter key) calls the same
+   * move, so a click never saves twice.
+   */
+  const Footer = ({ onNext, nextLabel, canNext = true }: { onNext?: () => void; nextLabel?: string; canNext?: boolean }) => (
+    <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+      {isFirstStep(step) ? (
+        <Link
+          href={`/app/biens/${propertyId}`}
+          className="tactile inline-flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
+        >
+          {d.common.back}
+        </Link>
+      ) : (
+        <Button type="button" variant="ghost" onClick={back} disabled={busy}>
+          {d.common.back}
+        </Button>
+      )}
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <Button type="button" variant="secondary" onClick={() => void saveAndLeave()} disabled={!canSaveLater || busy} loading={leaving}>
+          {d.location.saveLater}
+        </Button>
+        {onNext && (
+          <Button type="button" onClick={onNext} disabled={!canNext || busy} loading={busy && !leaving}>
+            {nextLabel ?? d.common.next}
+          </Button>
+        )}
+      </div>
     </div>
+  );
+
+  const errorLine = saveError && (
+    <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+      {saveError}
+    </p>
   );
 
   const overlay = (
@@ -354,7 +467,7 @@ export default function TenantWizard({
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (nameOk) advance();
+                  if (nameOk) void advance();
                 }}
               >
                 <div className="space-y-5">
@@ -430,8 +543,8 @@ export default function TenantWizard({
                     <p className="mt-2 text-xs leading-relaxed text-ink-soft">{d.location.colocationHint}</p>
                   </div>
                 )}
-
-                <Footer onNext={() => nameOk && advance()} />
+                {errorLine}
+                <Footer onNext={() => void advance()} canNext={nameOk} />
               </form>
             </motion.div>
           )}
@@ -443,7 +556,7 @@ export default function TenantWizard({
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  advance();
+                  void advance();
                 }}
               >
                 <Field label={d.location.leaseType}>
@@ -460,12 +573,8 @@ export default function TenantWizard({
                     <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                   </Field>
                 </div>
-                <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button type="submit">{d.common.next}</Button>
-                </div>
+                {errorLine}
+                <Footer onNext={() => void advance()} />
               </form>
             </motion.div>
           )}
@@ -477,7 +586,7 @@ export default function TenantWizard({
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (rentOk) advance();
+                  if (rentOk) void advance();
                 }}
               >
                 <div className="grid grid-cols-2 gap-3">
@@ -506,7 +615,8 @@ export default function TenantWizard({
                   </Field>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.location.rentHint}</p>
-                <Footer onNext={() => rentOk && advance()} />
+                {errorLine}
+                <Footer onNext={() => void advance()} canNext={rentOk} />
               </form>
             </motion.div>
           )}
@@ -518,7 +628,7 @@ export default function TenantWizard({
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  advance();
+                  void advance();
                 }}
               >
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.payerHint}</p>
@@ -536,12 +646,8 @@ export default function TenantWizard({
                     />
                   </Field>
                 </div>
-                <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button type="submit">{d.common.next}</Button>
-                </div>
+                {errorLine}
+                <Footer onNext={() => void advance()} />
               </form>
             </motion.div>
           )}
@@ -553,7 +659,7 @@ export default function TenantWizard({
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  advance();
+                  void advance();
                 }}
               >
                 <fieldset>
@@ -606,17 +712,8 @@ export default function TenantWizard({
                   </div>
                 )}
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.location.guaranteeHint}</p>
-
-                {saveError && (
-                  <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                    {saveError}
-                  </p>
-                )}
-                <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={!canSubmit} loading={saving}>
-                    {shouldCreateOnLeaving(step, leaseId) ? d.location.createRental : d.common.next}
-                  </Button>
-                </div>
+                {errorLine}
+                <Footer onNext={() => void advance()} />
               </form>
             </motion.div>
           )}
@@ -626,26 +723,32 @@ export default function TenantWizard({
               {Heading}
               <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.inspectionHint}</p>
-                {real && leaseId ? (
-                  <Link
-                    href={`/app/biens/etat-des-lieux?bail=${leaseId}&type=entry&retour=${encodeURIComponent(
-                      `/app/biens/locataire?bail=${leaseId}&etape=${stepNumber(nextStep(step))}`,
-                    )}`}
-                    onClick={() => setEdlDone(true)}
-                    className="tactile mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+                {real ? (
+                  <Button
+                    className="mt-4"
+                    loading={saving}
+                    onClick={async () => {
+                      // The dossier is saved before leaving for the inventory,
+                      // which is a journey of its own and hands back here.
+                      const id = await save(step);
+                      if (!id) return;
+                      setEdlDone(true);
+                      router.push(
+                        `/app/biens/etat-des-lieux?bail=${id}&type=entry&retour=${encodeURIComponent(
+                          `/app/biens/locataire?bail=${id}&etape=${stepNumber(nextStep(step))}`,
+                        )}`,
+                      );
+                    }}
                   >
                     <Icon name="plus" size={15} />
                     {d.location.inspectionStart}
-                  </Link>
+                  </Button>
                 ) : (
                   <p className="mt-4 text-sm text-ink-soft">{notice}</p>
                 )}
-                <div className="mt-6 flex items-center justify-between">
-                  <button onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button onClick={() => advance()}>{d.common.next}</Button>
-                </div>
+                {edlDone && <p className="mt-3 text-sm font-semibold text-emerald-700">{d.location.checkInspection}</p>}
+                {errorLine}
+                <Footer onNext={() => void advance()} />
               </div>
             </motion.div>
           )}
@@ -655,27 +758,9 @@ export default function TenantWizard({
               {Heading}
               <form
                 className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
-                onSubmit={async (e) => {
+                onSubmit={(e) => {
                   e.preventDefault();
-                  if (!real || !leaseId || insurer.trim() === "") {
-                    advance();
-                    return;
-                  }
-                  setSaving(true);
-                  const res = await fetch("/api/assurances/create", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      leaseId,
-                      kind: "rent_guarantee",
-                      provider: insurer,
-                      policyNumber: insurancePolicy,
-                      expiresOn: insuranceExpires,
-                    }),
-                  });
-                  setSaving(false);
-                  if (res.ok) setInsuranceDone(true);
-                  advance();
+                  void advanceInsurance();
                 }}
               >
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.insuranceHint}</p>
@@ -692,41 +777,17 @@ export default function TenantWizard({
                     </Field>
                   </div>
                 </div>
-                <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={() => advance()} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button type="submit" loading={saving}>
-                    {d.common.next}
-                  </Button>
-                </div>
+                {insuranceDone && <p className="mt-3 text-sm font-semibold text-emerald-700">{d.location.checkInsurance}</p>}
+                {errorLine}
+                <Footer onNext={() => void advanceInsurance()} />
               </form>
             </motion.div>
           )}
 
-          {step === "review" && (
+          {step === "documents" && (
             <motion.div key="t8" {...slide(1)}>
               {Heading}
               <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-                {real && leaseId && leaseStatus === "draft" && (
-                  <div role="status" className="mb-5 rounded-xl bg-amber-50 px-4 py-3.5">
-                    <p className="text-sm font-semibold text-amber-900">{d.location.draftResume}</p>
-                    {activateError && (
-                      <p role="alert" className="mt-2 text-sm font-semibold text-red-700">
-                        {activateError}
-                      </p>
-                    )}
-                    <Button className="mt-3" size="sm" loading={activating} onClick={() => void activate()}>
-                      {d.location.activate}
-                    </Button>
-                  </div>
-                )}
-                {real && leaseId && leaseStatus === "active" && existing?.status === "draft" && (
-                  <p role="status" className="mb-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                    {d.location.activated}
-                  </p>
-                )}
-
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-display text-lg font-bold text-ink">
                     {d.location.dossierComplete.replace("{pct}", String(completion))}
@@ -759,20 +820,81 @@ export default function TenantWizard({
                   </div>
                 )}
 
-                <p className="mt-4 text-xs leading-relaxed text-ink-soft">{d.location.reviewNote}</p>
+                <p className="mt-4 text-xs leading-relaxed text-ink-soft">{d.location.documentsNote}</p>
+                {errorLine}
+                <Footer onNext={() => void advance()} />
+              </div>
+            </motion.div>
+          )}
 
-                <div className="mt-6 flex flex-col gap-2.5">
-                  {real && leaseId ? (
-                    <Button onClick={() => router.push(`/app/baux/${leaseId}`)}>{d.location.openRental}</Button>
-                  ) : (
-                    <p role="status" className="rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800">
+          {step === "activation" && (
+            <motion.div key="t9" {...slide(1)}>
+              {Heading}
+              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.checkTenant}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-ink">
+                      {named.length > 0 ? named.map((p) => `${p.firstName} ${p.lastName}`.trim()).join(", ") : d.common.none}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.totalPreview}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{totalPreview ? `${totalPreview} €` : d.common.none}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.startDate}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{startDate || d.common.none}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.paymentDay}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{paymentDay}</dd>
+                  </div>
+                </dl>
+
+                <p className="mt-5 text-sm leading-relaxed text-ink-soft">{d.location.activationHint}</p>
+
+                {!ready && (
+                  <div role="status" className="mt-4 rounded-xl bg-amber-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-amber-900">{d.location.activationMissing}</p>
+                    <ul className="mt-1.5 space-y-1">
+                      {missing.map((m) => (
+                        <li key={m.step}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStep(m.step);
+                              syncUrl(leaseId, m.step);
+                            }}
+                            className="text-sm font-semibold text-brand-700 hover:underline"
+                          >
+                            {m.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {activateError && (
+                  <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                    {activateError}
+                  </p>
+                )}
+                {errorLine}
+
+                {real ? (
+                  <Footer onNext={() => void activate()} nextLabel={d.location.activate} canNext={ready} />
+                ) : (
+                  <>
+                    <p role="status" className="mt-6 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800">
                       {notice}
                     </p>
-                  )}
-                  <Button variant="secondary" onClick={() => router.push(`/app/biens/${propertyId}?onglet=location`)}>
-                    {d.location.backToProperty}
-                  </Button>
-                </div>
+                    <Footer />
+                  </>
+                )}
+                <p className="sr-only" aria-live="polite">
+                  {activating ? d.location.activate : ""}
+                </p>
               </div>
             </motion.div>
           )}

@@ -3,6 +3,7 @@ import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { ChipLink } from "@/components/gestion/filters";
 import PropertyPhoto from "@/components/gestion/PropertyPhoto";
+import { dossierOf } from "@/lib/gestion/dossier";
 import { getDemo } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
 import {
@@ -60,16 +61,15 @@ function OccupancyBadge({ card, d }: { card: PropertyCard; d: Dict }) {
 function SingleTenancy({ line, demo, d, locale }: { line: UnitLine; demo: DemoData; d: Dict; locale: Locale }) {
   const meta = rentStatusMeta(d);
   if (line.vacant) {
-    // A dossier recorded but never started is said as such: the lot is free,
-    // and the owner can see there is something to finish on the sheet.
+    // A dossier in preparation is said as such: the lot is free, and the
+    // owner can see who it names and how far it got before opening the sheet.
     const draft = line.drafts[line.drafts.length - 1];
+    const progress = draft ? dossierOf(demo, draft) : null;
     return (
       <div className="mt-3 border-t border-sand-100 pt-3">
-        <p className="text-sm text-ink-soft">{d.common.none}</p>
-        <p className="mt-0.5 text-sm text-ink-soft">
-          {draft
-            ? fmt(d.biens.draftInProgress, { tenant: demo.leaseTenantNames(draft).join(", ") || d.common.none })
-            : d.biens.noTenant}
+        <p className="truncate text-sm text-ink-soft">{draft ? demo.leaseTenantNames(draft).join(", ") || d.common.none : d.common.none}</p>
+        <p className="mt-0.5 text-sm tabular-nums text-ink-soft">
+          {progress ? fmt(d.biens.draftProgress, { done: progress.done, total: progress.total }) : d.biens.noTenant}
         </p>
       </div>
     );
@@ -103,7 +103,9 @@ function SingleTenancy({ line, demo, d, locale }: { line: UnitLine; demo: DemoDa
 }
 
 /** A building: how the month is going across its lots, in one bar. */
-function BuildingTenancy({ card, d, locale }: { card: PropertyCard; d: Dict; locale: Locale }) {
+function BuildingTenancy({ card, demo, d, locale }: { card: PropertyCard; demo: DemoData; d: Dict; locale: Locale }) {
+  // A lot with a dossier in preparation is said as such, like a single home is.
+  const drafts = card.lots.flatMap((line) => (line.vacant && line.drafts.length > 0 ? [{ line, progress: dossierOf(demo, line.drafts[line.drafts.length - 1]) }] : []));
   const segments: Array<{ key: string; n: number; label: string; bar: string; dot: string }> = [
     {
       key: "paid",
@@ -141,6 +143,13 @@ function BuildingTenancy({ card, d, locale }: { card: PropertyCard; d: Dict; loc
         {" \u00b7 "}
         {plural(locale, card.vacant, d.biens.vacantOneN, d.biens.vacantManyN)}
       </p>
+      {drafts.map(({ line, progress }) => (
+        <p key={line.unit.id} className="mt-1 truncate text-sm tabular-nums text-ink-soft">
+          {line.unit.label}
+          {" \u00b7 "}
+          {fmt(d.biens.draftProgress, { done: progress.done, total: progress.total })}
+        </p>
+      ))}
       {total > 0 ? (
         <>
           <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
@@ -336,7 +345,7 @@ export default async function BiensPage({
                       {single ? (
                         <SingleTenancy line={single} demo={demo} d={d} locale={locale} />
                       ) : (
-                        <BuildingTenancy card={card} d={d} locale={locale} />
+                        <BuildingTenancy card={card} demo={demo} d={d} locale={locale} />
                       )}
                     </div>
                   </div>

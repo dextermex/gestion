@@ -258,6 +258,8 @@ export interface DemoLease {
   vatOption?: { aedApprovalRef: string; decisionDate: string; effectiveFrom: string; tenantDeductionRatioPct: number };
   indexationClause?: { baseIndexValue: number; minMonthsBetween: number; series: string };
   noticeInfo?: { direction: "tenant" | "landlord"; ground: string; arReceivedOn: string; earliestEnd: string };
+  /** A draft's memory of the guided rental: steps completed, the payer's name. */
+  dossier?: { completed: string[]; step: string; payerName: string | null };
 }
 
 // RF refs are engine-generated (leaseRF) at seed time in the UI layer.

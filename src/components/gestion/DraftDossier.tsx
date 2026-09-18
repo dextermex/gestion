@@ -6,17 +6,18 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/pro/ui";
 
 /**
- * What an owner can do with a rental dossier that was recorded but never
- * started. Resuming reopens the guided flow on its last step; activating
- * makes it the tenancy in force (the lot is occupied, the ledger opens);
- * discarding removes a draft that carries nothing. The three are the only
- * ways out of a draft, and all three change the database, never the screen
- * alone. A sample cabinet can only resume: it has nothing to persist.
+ * What an owner can do with a rental dossier in preparation. Resuming
+ * reopens the guided flow at its first incomplete step; activating makes it
+ * the tenancy in force (the lot is occupied, the ledger opens) and is only
+ * offered once the dossier names someone and a rent; discarding removes a
+ * dossier that carries nothing. All three change the database, never the
+ * screen alone. A sample cabinet can only resume: it has nothing to persist.
  */
 
 type Labels = {
   resume: string;
   activate: string;
+  activateIncomplete: string;
   discard: string;
   discardConfirm: string;
   confirm: string;
@@ -30,11 +31,14 @@ export default function DraftDossierActions({
   leaseId,
   propertyId,
   real,
+  ready,
   labels,
 }: {
   leaseId: string;
   propertyId: string;
   real: boolean;
+  /** Someone is named and a rent is set: the dossier may become a tenancy. */
+  ready: boolean;
   labels: Labels;
 }) {
   const router = useRouter();
@@ -59,6 +63,7 @@ export default function DraftDossierActions({
       }
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (action === "discard" && data.error === "not_empty") setError(labels.discardBlocked);
+      else if (action === "activate" && data.error === "incomplete") setError(labels.activateIncomplete);
       else setError(action === "activate" ? labels.activateFailed : labels.failed);
     } catch {
       setError(labels.failed);
@@ -70,14 +75,21 @@ export default function DraftDossierActions({
     <div className="mt-3">
       <div className="flex flex-wrap items-center gap-2">
         <Link
-          href={`/app/biens/locataire?bail=${encodeURIComponent(leaseId)}&etape=8`}
-          className="tactile inline-flex min-h-9 items-center rounded-xl border border-sand-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-ink transition hover:border-brand-200"
+          href={`/app/biens/locataire?bail=${encodeURIComponent(leaseId)}`}
+          className="tactile inline-flex min-h-9 items-center rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
         >
           {labels.resume}
         </Link>
         {real && !confirming && (
           <>
-            <Button size="sm" loading={busy === "activate"} disabled={busy !== null} onClick={() => act("activate")}>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={busy === "activate"}
+              disabled={busy !== null || !ready}
+              title={ready ? undefined : labels.activateIncomplete}
+              onClick={() => act("activate")}
+            >
               {labels.activate}
             </Button>
             <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => setConfirming(true)}>
@@ -86,6 +98,7 @@ export default function DraftDossierActions({
           </>
         )}
       </div>
+      {real && !ready && <p className="mt-2 text-xs text-ink-soft">{labels.activateIncomplete}</p>}
       {real && confirming && (
         <div className="mt-3 rounded-xl border border-sand-200 bg-sand-50 p-3.5">
           <p className="text-sm text-ink">{labels.discardConfirm}</p>

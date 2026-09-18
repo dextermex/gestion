@@ -94,7 +94,7 @@ const isoToday = (): string => new Date().toISOString().slice(0, 10);
 
 /** The guided form collects seven of the eight mandatory mentions; the
  *  capital investi declaration is the one it cannot. */
-function mentionsFor(type: LeaseInput["type"]): Record<string, string> {
+export function mentionsFor(type: LeaseInput["type"]): Record<string, string> {
   return {
     parties_identity: "ok",
     property_designation: "ok",
@@ -292,15 +292,18 @@ type LeaseRow = {
 
 /**
  * A draft becomes the tenancy in force: the lot is occupied from its start
- * date and its ledger opens. Only a draft can be activated, and only onto a
- * lot with no other live lease. Rows written before lifecycle and compliance
- * were told apart come back to life through here.
+ * date and its ledger opens. Only a draft can be activated, only one that
+ * names someone and a rent (there is no tenancy without either), and only
+ * onto a lot with no other live lease. This is the single doorway of the
+ * guided rental into "active"; every earlier step only saves the dossier.
  */
 export async function activateLease(
   ctx: OrgContext,
   leaseId: string,
   today: string = isoToday(),
-): Promise<{ ok: true; periodsOpened: number } | { error: "not_found" | "not_draft" | "already_let" | "storage_failed" }> {
+): Promise<
+  { ok: true; periodsOpened: number } | { error: "not_found" | "not_draft" | "already_let" | "incomplete" | "storage_failed" }
+> {
   const { g, org } = ctx;
   const { data: lease, error: findErr } = await g
     .from("leases")
@@ -315,6 +318,19 @@ export async function activateLease(
   const row = lease as LeaseRow | null;
   if (!row) return { error: "not_found" };
   if (row.status !== "draft") return { error: "not_draft" };
+
+  const { data: parties, error: partiesErr } = await g
+    .from("lease_parties")
+    .select("id,moved_in_on")
+    .eq("org_id", org.id)
+    .eq("lease_id", leaseId)
+    .eq("role", "tenant");
+  if (partiesErr) {
+    console.error("activation parties lookup failed:", partiesErr.code, partiesErr.message);
+    return { error: "storage_failed" };
+  }
+  const tenants = (parties as Array<{ id: string; moved_in_on: string | null }> | null) ?? [];
+  if (tenants.length === 0 || row.rent_cents <= 0) return { error: "incomplete" };
 
   const { data: busy, error: busyErr } = await g
     .from("leases")
@@ -340,6 +356,17 @@ export async function activateLease(
     return { error: "storage_failed" };
   }
   if (!updated?.length) return { error: "not_found" };
+
+  // Everyone on the lease moved in on the day it starts.
+  const arriving = tenants.filter((p) => !p.moved_in_on).map((p) => p.id);
+  if (arriving.length > 0) {
+    const { error } = await g
+      .from("lease_parties")
+      .update({ moved_in_on: row.start_date })
+      .eq("org_id", org.id)
+      .in("id", arriving);
+    if (error) console.error("move-in date update failed:", error.code, error.message);
+  }
 
   const periodsOpened = await openLedger(
     ctx,

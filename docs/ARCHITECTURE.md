@@ -58,16 +58,36 @@ auto-post is reversible (`reversed_at`) and audited.
 keys, rent falls due each month), `notice`, `ended`. Whether the written lease is
 **complete** under the 2006/2024 law (the eight mentions, the deposit ceiling, the pacte
 de colocation) is a different fact: `validateLeaseDraft` derives it from the recorded
-data, the dossier and the lease sheet show it, and nothing stores it. Recording a rental
-the owner has agreed (`createLease`, both doorways) makes it `active` and opens its
-ledger on the spot; the document generator still refuses to print a non-compliant lease.
-Deriving the first from the second is exactly the bug that once left a let property
-reading as vacant: a residential lease recorded through the guided flow can never carry
-the capital investi declaration. `draft` remains for a lease that has genuinely not
-started (and for rows written before this rule): it never occupies a lot, is shown on the
-property as a dossier in preparation, and leaves through `activateLease` or
-`discardDraft`. A lease has as many `g_lease_parties` as people who sign it; `colocation`
-is the owner's explicit answer, never a head count.
+data, the dossier and the lease sheet show it, and nothing stores it. Deriving the first
+from the second is exactly the bug that once left a let property reading as vacant: a
+residential lease recorded through the guided flow can never carry the capital investi
+declaration. The document generator still refuses to print a non-compliant lease. A lease
+has as many `g_lease_parties` as people who sign it; `colocation` is the owner's explicit
+answer, never a head count.
+
+### The rental dossier is a draft lease, saved as the owner goes
+
+The guided rental (`/app/biens/locataire`, nine steps in `src/lib/gestion/rental-flow.ts`)
+writes the dossier to the database from its first step: `POST /api/locations/save` →
+`saveRentalDraft` creates or updates one `g_leases` row with `status = draft`, its people
+as contacts and `g_lease_parties`, its guarantee as a `g_deposits` row, its payer account
+as an `g_iban_bindings` row, and the flow's memory (which steps are completed, the step
+saved from, the payer's name) in `details.dossier`. Every step offers Back, "Enregistrer et
+continuer plus tard" and Next; both Next and save-later write the same request, so closing
+the tab, refreshing or signing out loses nothing. A lot carries at most one dossier: a save
+without a lease id continues the draft already on that lot rather than doubling it, and
+"Ajouter un locataire" on such a lot redirects to it.
+
+A draft never occupies its lot and owes nothing: the portfolio projection lists it under
+`UnitLine.drafts`, the Biens card and the property sheet say "Dossier en préparation ·
+X/9 étapes", and `dossierOf` (`src/lib/gestion/dossier.ts`) computes X from the rows plus
+the memory (an inventory done from the property later counts; a rent cleared later reopens
+its step; a row written before the flow kept a memory is read from its rows alone).
+"Reprendre" reopens the flow at the first step not completed, with everything saved.
+Only the ninth step, or "Activer la location" on the sheet, calls `activateLease`: it
+refuses a dossier with nobody on it or no rent (`incomplete`), a lot already let
+(`already_let`), and anything not a draft; otherwise it sets `active`, dates the
+move-in and opens the ledger. `discardDraft` removes a draft that carries nothing.
 
 The ledger keeps growing on its own: `gestion.roll_rent_periods()` (pg_cron, nightly)
 applies the same month rule as `openLedger` to every live lease, inserting only what is
@@ -86,8 +106,10 @@ from the server on `pageshow`.
 
 `scripts/e2e-real.mjs` runs the rental lifecycle on the real path, with a real Supabase
 session, the app's own API routes and its server-rendered pages (PostgREST under RLS,
-`getDemo()` → `buildRealData()`), then reloads in a browser. It needs a disposable Supabase
-project and network access to it; the unit suite stays offline.
+`getDemo()` → `buildRealData()`): a dossier saved and left from three steps, the property
+read for "X/9 étapes" and "Reprendre" after a real browser reload, then the activation
+and the occupied lot. It needs a disposable Supabase project and network access to it;
+the unit suite (`lifecycle.test.ts`) covers the same functions offline.
 
 ### Registered letters gate legal effect
 

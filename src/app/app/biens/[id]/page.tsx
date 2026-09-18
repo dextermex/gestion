@@ -7,6 +7,7 @@ import PropertyPhoto from "@/components/gestion/PropertyPhoto";
 import ModifyMenu from "@/components/gestion/ModifyMenu";
 import DraftDossierActions from "@/components/gestion/DraftDossier";
 import { propertyMenu } from "@/lib/gestion/property-menu";
+import { dossierOf } from "@/lib/gestion/dossier";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
 import { buildPortfolio, findCard, occupancyOf, type PropertyCard, type UnitLine } from "@/lib/gestion/portfolio";
@@ -91,10 +92,11 @@ function AddTenantLink({ unitId, d, className = "" }: { unitId: string; d: Dict;
 }
 
 /**
- * Dossiers recorded on this property that never started. They are said as
- * such rather than hidden: the lot is free, nothing is owed, and the owner
- * can resume, activate or discard each one from here. Nothing is shown
- * when there is none.
+ * Dossiers in preparation on this property. They are said as such rather
+ * than hidden: the lot is free, nothing is owed, and the owner can see how
+ * far each one got ("3/9 étapes"), resume it at its first incomplete step,
+ * activate it once it names someone and a rent, or discard it. Nothing is
+ * shown when there is none.
  */
 function DraftDossiers({
   card,
@@ -115,41 +117,49 @@ function DraftDossiers({
     <Panel title={d.bien.draftDossierTitle}>
       <p className="text-sm leading-relaxed text-ink-soft">{d.bien.draftDossierBody}</p>
       <ul className="mt-3 divide-y divide-sand-100">
-        {drafts.map(({ lease, unit }) => (
-          <li key={lease.id} className="py-3.5 first:pt-0 last:pb-0">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-display text-sm font-bold text-ink">
-                  {demo.leaseTenantNames(lease).join(", ") || d.common.none}
-                </p>
-                <p className="mt-0.5 text-xs tabular-nums text-ink-soft">
-                  {unit.label}
-                  {" \u00b7 "}
-                  {fmt(d.biens.perMonth, { amount: eurosWhole(lease.rentCents + lease.chargesCents, locale) })}
-                  {" \u00b7 "}
-                  {d.location.startDate} {formatDate(lease.startDate, locale)}
-                </p>
+        {drafts.map(({ lease, unit }) => {
+          const progress = dossierOf(demo, lease);
+          return (
+            <li key={lease.id} className="py-3.5 first:pt-0 last:pb-0">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-display text-sm font-bold text-ink">
+                    {demo.leaseTenantNames(lease).join(", ") || d.common.none}
+                  </p>
+                  <p className="mt-0.5 text-xs tabular-nums text-ink-soft">
+                    {unit.label}
+                    {" \u00b7 "}
+                    {fmt(d.biens.perMonth, { amount: eurosWhole(lease.rentCents + lease.chargesCents, locale) })}
+                    {" \u00b7 "}
+                    {d.location.startDate} {formatDate(lease.startDate, locale)}
+                  </p>
+                  <p className="mt-1.5 font-display text-sm font-bold tabular-nums text-amber-800">
+                    {fmt(d.bien.draftProgress, { done: progress.done, total: progress.total })}
+                  </p>
+                </div>
+                <Badge className="bg-amber-100 text-amber-800">{d.status.lease.draft}</Badge>
               </div>
-              <Badge className="bg-amber-100 text-amber-800">{d.status.lease.draft}</Badge>
-            </div>
-            <DraftDossierActions
-              leaseId={lease.id}
-              propertyId={card.property.id}
-              real={real}
-              labels={{
-                resume: d.bien.draftResume,
-                activate: d.bien.draftActivate,
-                discard: d.bien.draftDiscard,
-                discardConfirm: d.bien.draftDiscardConfirm,
-                confirm: d.bien.draftConfirm,
-                cancel: d.common.cancel,
-                activateFailed: d.bien.draftActivateFailed,
-                discardBlocked: d.bien.draftDiscardBlocked,
-                failed: d.modify.failed,
-              }}
-            />
-          </li>
-        ))}
+              <DraftDossierActions
+                leaseId={lease.id}
+                propertyId={card.property.id}
+                real={real}
+                ready={progress.ready}
+                labels={{
+                  resume: d.bien.draftResume,
+                  activate: d.bien.draftActivate,
+                  activateIncomplete: d.bien.draftActivateIncomplete,
+                  discard: d.bien.draftDiscard,
+                  discardConfirm: d.bien.draftDiscardConfirm,
+                  confirm: d.bien.draftConfirm,
+                  cancel: d.common.cancel,
+                  activateFailed: d.bien.draftActivateFailed,
+                  discardBlocked: d.bien.draftDiscardBlocked,
+                  failed: d.modify.failed,
+                }}
+              />
+            </li>
+          );
+        })}
       </ul>
     </Panel>
   );
@@ -1059,6 +1069,8 @@ export default async function BienDetailPage({
   const p = card.property;
   const single = card.single;
   const multi = card.lots.length > 1;
+  // A single lot that is free but has a dossier in preparation says how far it got.
+  const singleDraft = single?.vacant && single.drafts.length > 0 ? dossierOf(demo, single.drafts[single.drafts.length - 1]) : null;
   const visible = TABS.filter((t) => (t === "lots" ? multi : true));
   const tab: Tab = (visible as readonly string[]).includes(onglet ?? "") ? (onglet as Tab) : "apercu";
   const tabHref = (t: Tab) => (t === "apercu" ? `/app/biens/${p.id}` : `/app/biens/${p.id}?onglet=${t}`);
@@ -1121,10 +1133,8 @@ export default async function BienDetailPage({
                 value={single.vacant ? d.biens.noTenant : single.tenantNames.join(", ")}
                 sub={
                   single.vacant
-                    ? single.drafts.length > 0
-                      ? fmt(d.biens.draftInProgress, {
-                          tenant: demo.leaseTenantNames(single.drafts[single.drafts.length - 1]).join(", ") || d.common.none,
-                        })
+                    ? singleDraft
+                      ? fmt(d.biens.draftProgress, { done: singleDraft.done, total: singleDraft.total })
                       : undefined
                     : fmt(d.bien.tenantSince, { date: formatDate(single.lease!.startDate, locale) })
                 }

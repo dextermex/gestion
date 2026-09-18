@@ -106,7 +106,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ ok: true, repriced });
 }
 
-function lifecycleError(code: "not_found" | "not_draft" | "already_let" | "not_empty" | "storage_failed") {
+function lifecycleError(code: "not_found" | "not_draft" | "already_let" | "not_empty" | "incomplete" | "storage_failed") {
   if (code === "not_found") return NextResponse.json({ error: code }, { status: 404 });
   if (code === "storage_failed") return NextResponse.json({ error: code }, { status: 502 });
   return NextResponse.json({ error: code }, { status: 409 });
