@@ -58,3 +58,24 @@ l'espace sur le premier segment via `gestion.media_org(text)`, qui renvoie
 NULL si ce segment n'est pas un uuid. Bricoler une URL ne donne donc jamais
 accès au bucket d'un autre cabinet. Vérifié après application : 7 buckets,
 18 policies sur storage.objects, colonne `bedrooms` présente.
+
+## 0014 · 2026-09-19 · un dossier et un bail par lot
+
+Le cycle de vie d'un lot (libre, brouillon, location active, départ,
+historique, libre) reposait sur l'application seule : deux brouillons sur le
+même lot existaient déjà en production. `0014_one_lease_per_lot.sql`
+(migration `gestion_one_lease_per_lot`) ajoute la fonction
+`gestion.enforce_one_lease_per_lot()` (security definer, search_path vide) et
+le déclencheur `leases_one_per_lot` sur `gestion.leases`, avant insertion et
+avant tout changement de `status` ou de `unit_id`, sous un verrou consultatif
+par lot : au plus un brouillon par lot, au plus un bail en cours par lot,
+aucun brouillon sur un lot loué. Les refus portent le code 23505 et un
+message stable que l'application traduit.
+
+Les lignes existantes ne sont pas touchées : les deux brouillons du lot
+« Maison » restent modifiables et se retirent depuis la fiche du bien.
+Vérifié après application dans une transaction annulée : second bail actif
+refusé, brouillon sur lot loué refusé, troisième brouillon refusé, mise à
+jour d'un brouillon existant acceptée. `public.g_can` toujours sur
+`60d98f80cccaa74f02b4afb1ebd6b859`, 3 baux, aucun objet de `public` touché.
+Réversible : drop du déclencheur puis de la fonction.

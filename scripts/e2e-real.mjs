@@ -259,6 +259,37 @@ check("sheet shows the monthly total", /1\s?400,00\s?€/.test(sheet.text));
 check("sheet shows the next due date", sheet.text.includes(expectedNextDueLabel), `(expected ${expectedNextDueLabel})`);
 check("sheet is not late on day one", !/CE MOIS-CI\s+En retard/i.test(sheet.text));
 
+// ── 7b. The departure: recorded step by step, then confirmed; the lot is free again, history keeps the tenant ──
+const progress = await patch(`/api/baux/${leaseId}`, { action: "departure", departure: { step: 4, endDate: today, keysReturned: true, keysReturnedOn: today, depositOutcome: "released", releasedAmount: "2 500", metersDone: true } });
+check("PATCH departure progress", progress.status === 200 && progress.json.ok === true, `(status ${progress.status})`);
+sheet = await get(`/app/biens/${propertyId}?onglet=location`);
+check("sheet says Départ en préparation · 3/7 étapes and still Occupé", /Départ en préparation · 3\/7 étapes/.test(sheet.text) && /Occupé/.test(sheet.text));
+check("the departure page opens on the saved step", /Étape 4\/7/.test((await get(`/app/biens/depart?bail=${leaseId}`)).text));
+check("a dossier cannot be started on the let lot meanwhile", (await post("/api/locations/save", { unitId, step: "tenant", tenants: [{ firstName: "Trop", lastName: "Tôt" }] })).status === 409);
+
+const closed = await post(`/api/baux/${leaseId}/cloture`, { endDate: today, keysReturned: true, keysReturnedOn: today, depositOutcome: "released", releasedAmount: "2 500", decompteIssuedOn: "" });
+check("POST cloture", closed.status === 200 && closed.json.ok === true, `(status ${closed.status} ${JSON.stringify(closed.json).slice(0, 120)})`);
+check("future periods were dropped", (closed.json.droppedPeriods ?? 0) >= 1, `(${closed.json.droppedPeriods})`);
+check("cloture cannot run twice", (await post(`/api/baux/${leaseId}/cloture`, { endDate: today, depositOutcome: "released" })).status === 409);
+
+biens = await get("/app/biens");
+const freeCard = biens.text.match(new RegExp(`${propertyName}.{0,400}`))?.[0] ?? "";
+check("Biens shows the property Libre again", /Libre/.test(freeCard) && !/Occupé/.test(freeCard), `(${freeCard.slice(0, 160)})`);
+sheet = await get(`/app/biens/${propertyId}`);
+check("sheet offers Ajouter un nouveau locataire", sheet.text.includes("Ajouter un nouveau locataire"));
+check("sheet no longer shows the departure in preparation", !/Départ en préparation/.test(sheet.text));
+const history = await get(`/app/biens/${propertyId}?onglet=historique`);
+check("Historique keeps the former tenants", history.text.includes(`Anna Weber ${stamp}`) && history.text.includes(`Luc Weber ${stamp}`));
+
+// ── 7c. The next tenant is a brand-new dossier; the former tenancy is not touched ──
+const fresh = await post("/api/locations/save", { unitId, step: "rent", tenants: [{ firstName: "Nora", lastName: `Adam ${stamp}` }], type: "residential", startDate: today, rent: "1 300", paymentDay: "1" });
+check("a new dossier opens on the freed lot", fresh.status === 200 && fresh.json.leaseId && fresh.json.leaseId !== leaseId, `(status ${fresh.status})`);
+const secondActivation = await patch(`/api/baux/${fresh.json.leaseId}`, { action: "activate" });
+check("the new tenancy activates on its own ledger", secondActivation.status === 200 && (secondActivation.json.periodsOpened ?? 0) >= 1);
+sheet = await get(`/app/biens/${propertyId}?onglet=location`);
+check("the sheet now names the new tenant only", sheet.text.includes(`Nora Adam ${stamp}`) && /Occupé/.test(sheet.text) && !new RegExp(`Location · .{0,200}Anna Weber ${stamp}`).test(sheet.text));
+check("Historique still names the former tenants", (await get(`/app/biens/${propertyId}?onglet=historique`)).text.includes(`Anna Weber ${stamp}`));
+
 // ── 8. A fresh request on a new connection, then a real browser reload ──
 const again = await get("/app/biens");
 check("a fresh request still shows the property occupied", new RegExp(`${propertyName}.{0,400}Occupé`).test(again.text));
@@ -269,12 +300,12 @@ await withBrowser("tenancy survives a reload", async (page) => {
   await page.reload({ waitUntil: "networkidle" });
   const after = await mainText(page);
   const cardOf = (t) => t.match(new RegExp(`${propertyName}.{0,300}`))?.[0] ?? "";
-  check("browser: property occupied with both tenants", /Occupé/.test(cardOf(before)) && cardOf(before).includes("Anna Weber"));
-  check("browser: same after a full reload", /Occupé/.test(cardOf(after)) && cardOf(after).includes("Luc Weber") && /1\s?400\s?€\/mois/.test(cardOf(after)));
-  await page.goto(`${BASE}/app/biens/${propertyId}`, { waitUntil: "networkidle" });
+  check("browser: property occupied by the new tenant", /Occupé/.test(cardOf(before)) && cardOf(before).includes("Nora Adam"));
+  check("browser: same after a full reload, former tenants gone from the card", /Occupé/.test(cardOf(after)) && !cardOf(after).includes("Anna Weber") && /1\s?300\s?€\/mois/.test(cardOf(after)));
+  await page.goto(`${BASE}/app/biens/${propertyId}?onglet=historique`, { waitUntil: "networkidle" });
   await page.reload({ waitUntil: "networkidle" });
-  const sheetText = await mainText(page);
-  check("browser: sheet after reload shows the next due date", sheetText.includes(expectedNextDueLabel));
+  const historyText = await mainText(page);
+  check("browser: history after reload still names the former tenants", historyText.includes(`Anna Weber ${stamp}`));
 });
 
 console.log(failures === 0 ? "\nE2E: all checks passed" : `\nE2E: ${failures} check(s) failed`);

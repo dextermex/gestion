@@ -26,12 +26,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     depositOutcome: outcome,
     releasedCents: parseEuroInput(str(body.releasedAmount, 20)) ?? 0,
     keysReturned: body.keysReturned === true,
+    keysReturnedOn: ISO.test(str(body.keysReturnedOn, 10)) ? str(body.keysReturnedOn, 10) : null,
     decompteIssuedOn: ISO.test(str(body.decompteIssuedOn, 10)) ? str(body.decompteIssuedOn, 10) : null,
   });
 
   if ("error" in result) {
     if (result.error === "storage_failed") return dbError(result.context, result.detail);
-    const status = result.error === "not_found" ? 404 : result.error === "already_ended" ? 409 : 400;
+    const status = result.error === "not_found" ? 404 : result.error === "already_ended" || result.error === "not_live" ? 409 : 400;
     return NextResponse.json({ error: result.error }, { status });
   }
   return NextResponse.json(result);

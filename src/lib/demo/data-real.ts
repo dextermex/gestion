@@ -53,6 +53,23 @@ function dossierOf(details: Row): DemoLease["dossier"] | undefined {
   };
 }
 
+/** A departure being recorded, if the running lease carries one. */
+function departureOf(details: Row): DemoLease["departure"] | undefined {
+  const raw = details.departure as Row | undefined;
+  if (!raw || typeof raw !== "object") return undefined;
+  const step = Number(raw.step);
+  return {
+    step: Number.isFinite(step) && step >= 1 ? Math.min(Math.round(step), 7) : 1,
+    endDate: sOr(raw.endDate, null),
+    keysReturned: raw.keysReturned === true,
+    keysReturnedOn: sOr(raw.keysReturnedOn, null),
+    depositOutcome: s(raw.depositOutcome) || "release_pending",
+    releasedAmount: s(raw.releasedAmount),
+    decompteIssuedOn: sOr(raw.decompteIssuedOn, null),
+    metersDone: raw.metersDone === true,
+  };
+}
+
 export async function buildRealData(org: Org, accessToken: string): Promise<DemoData> {
   const client = authedClient(accessToken);
   return buildRealDataFrom(client.schema("gestion"), org, (paths) => signMedia(client, paths));
@@ -288,6 +305,7 @@ export async function buildRealDataFrom(
       vatOption: (l.vat_option as DemoLease["vatOption"]) ?? undefined,
       indexationClause: (l.indexation_clause as DemoLease["indexationClause"]) ?? undefined,
       dossier: dossierOf(details),
+      departure: departureOf(details),
     };
   });
   const leaseIndex = new Map(LEASES.map((l) => [l.id, l]));

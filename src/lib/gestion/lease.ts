@@ -352,6 +352,9 @@ export async function activateLease(
     .eq("id", leaseId)
     .select("id");
   if (updErr) {
+    // The database keeps the same rule (one live lease per lot) and says so
+    // with a unique violation when two activations race.
+    if (updErr.code === "23505") return { error: "already_let" };
     console.error("lease activation failed:", updErr.code, updErr.message);
     return { error: "storage_failed" };
   }
@@ -389,6 +392,21 @@ export async function activateLease(
  * that happened (a period, a payment, an inventory, a policy), because at
  * that point it is a tenancy to close, not a note to discard.
  */
+/**
+ * A dossier in preparation is abandoned.
+ *
+ * Only a draft can be discarded, and a draft never occupied its lot, so
+ * everything hanging off it existed for it alone: the people's places on
+ * it, its guarantee, its payer bindings, its inventory sessions with their
+ * items, its insurance. All of that goes with it. The people stay as
+ * contacts, the lot and the property are untouched, and no other tenancy on
+ * the lot, running or ended, is read or written. Money is the one exception:
+ * a period something was allocated to, or a payment attached to the row,
+ * means this is not a draft-only dossier, and the owner sorts that out first.
+ *
+ * This is also how a lot that carries a running tenancy and a stale draft
+ * from before the one-dossier rule is cleaned up.
+ */
 export async function discardDraft(
   ctx: OrgContext,
   leaseId: string,
@@ -407,31 +425,112 @@ export async function discardDraft(
   if (!lease) return { error: "not_found" };
   if (lease.status !== "draft") return { error: "not_draft" };
 
-  const dependents = await Promise.all(
-    ["rent_periods", "payments", "edl_sessions", "insurance_policies"].map((table) =>
-      g.from(table).select("id").eq("org_id", org.id).eq("lease_id", leaseId).limit(1),
-    ),
-  );
-  for (const { data, error } of dependents) {
-    if (error) {
-      console.error("discard dependents lookup failed:", error.code, error.message);
-      return { error: "storage_failed" };
-    }
-    if ((data ?? []).length > 0) return { error: "not_empty" };
+  const [{ data: statuses, error: statusErr }, { data: payments, error: payErr }] = await Promise.all([
+    g.from("rent_period_status").select("id,allocated_cents").eq("lease_id", leaseId),
+    g.from("payments").select("id").eq("org_id", org.id).eq("lease_id", leaseId).limit(1),
+  ]);
+  if (statusErr || payErr) {
+    const e = statusErr ?? payErr;
+    console.error("discard money lookup failed:", e?.code, e?.message);
+    return { error: "storage_failed" };
+  }
+  const paidInto = ((statuses as Array<{ allocated_cents: number }> | null) ?? []).some((p) => (p.allocated_cents ?? 0) > 0);
+  if (paidInto || ((payments as unknown[] | null) ?? []).length > 0) return { error: "not_empty" };
+
+  // The insurance is the one draft-only row the database would keep (its
+  // lease reference is set to null rather than cascaded): it goes first.
+  const { error: insErr } = await g.from("insurance_policies").delete().eq("org_id", org.id).eq("lease_id", leaseId);
+  if (insErr) {
+    console.error("draft insurance removal failed:", insErr.code, insErr.message);
+    return { error: "storage_failed" };
   }
 
-  // Parties, deposit and payer bindings cascade with the lease row.
+  // Parties, guarantee, payer bindings, inventory sessions (and their items),
+  // periods and notices cascade with the lease row.
   const { data: gone, error: delErr } = await g
     .from("leases")
     .delete()
     .eq("org_id", org.id)
     .eq("id", leaseId)
+    .eq("status", "draft")
     .select("id");
   if (delErr) {
     console.error("draft discard failed:", delErr.code, delErr.message);
     return { error: "storage_failed" };
   }
   if (!gone?.length) return { error: "not_found" };
+  return { ok: true };
+}
+
+/** Where a departure being recorded stands, kept on the lease row as the owner goes. */
+export interface DepartureProgress {
+  /** 1-based step reached, out of the seven the flow walks. */
+  step: number;
+  endDate: string | null;
+  keysReturned: boolean;
+  keysReturnedOn: string | null;
+  depositOutcome: ClosureOutcome;
+  releasedAmount: string;
+  decompteIssuedOn: string | null;
+  metersDone: boolean;
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const dayOrNull = (v: unknown): string | null => (typeof v === "string" && ISO_DAY.test(v) ? v : null);
+
+/** The departure progress a request carries, read once and not believed. */
+export function readDeparture(raw: unknown): DepartureProgress | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const step = Math.round(Number(r.step));
+  if (!Number.isFinite(step) || step < 1 || step > 7) return null;
+  return {
+    step,
+    endDate: dayOrNull(r.endDate),
+    keysReturned: r.keysReturned === true,
+    keysReturnedOn: dayOrNull(r.keysReturnedOn),
+    depositOutcome: (CLOSURE_OUTCOMES as readonly string[]).includes(String(r.depositOutcome))
+      ? (String(r.depositOutcome) as ClosureOutcome)
+      : "release_pending",
+    releasedAmount: typeof r.releasedAmount === "string" ? r.releasedAmount.trim().slice(0, 20) : "",
+    decompteIssuedOn: dayOrNull(r.decompteIssuedOn),
+    metersDone: r.metersDone === true,
+  };
+}
+
+/**
+ * Saves where a departure stands, so the owner can stop on any step (the
+ * exit inventory is a journey of its own) and come back. Nothing about the
+ * tenancy changes: it stays in force, its ledger keeps running, and only
+ * the confirmation (`closeLease`) ends it.
+ */
+export async function saveDeparture(
+  ctx: OrgContext,
+  leaseId: string,
+  progress: DepartureProgress,
+  today: string = isoToday(),
+): Promise<{ ok: true } | { error: "not_found" | "not_live" | "storage_failed" }> {
+  const { g, org } = ctx;
+  const { data: lease, error: findErr } = await g
+    .from("leases")
+    .select("id,status,details")
+    .eq("org_id", org.id)
+    .eq("id", leaseId)
+    .maybeSingle();
+  if (findErr) {
+    console.error("departure lease lookup failed:", findErr.code, findErr.message);
+    return { error: "storage_failed" };
+  }
+  if (!lease) return { error: "not_found" };
+  if (!(LIVE_STATUSES as readonly string[]).includes(String(lease.status))) return { error: "not_live" };
+
+  const details = { ...((lease.details as Record<string, unknown> | null) ?? {}), departure: { ...progress, savedOn: today } };
+  const { data, error } = await g.from("leases").update({ details }).eq("org_id", org.id).eq("id", leaseId).select("id");
+  if (error) {
+    console.error("departure save failed:", error.code, error.message);
+    return { error: "storage_failed" };
+  }
+  if (!data?.length) return { error: "not_found" };
   return { ok: true };
 }
 
@@ -444,6 +543,8 @@ export interface ClosureInput {
   depositOutcome: ClosureOutcome;
   releasedCents: number;
   keysReturned: boolean;
+  /** The day the keys came back; the end date when not said. */
+  keysReturnedOn?: string | null;
   decompteIssuedOn: string | null;
 }
 
@@ -456,7 +557,7 @@ export interface ClosureResult {
 }
 
 export type ClosureFailure =
-  | { error: "not_found" | "already_ended" | "end_before_start" }
+  | { error: "not_found" | "already_ended" | "not_live" | "end_before_start" }
   | { error: "storage_failed"; context: string; detail: { code?: string; message?: string } | null };
 
 /** The first day of the month after `date`. Periods from here on are future. */
@@ -488,21 +589,25 @@ export async function closeLease(
   const { g, org } = ctx;
   const { data: lease, error: findErr } = await g
     .from("leases")
-    .select("id,status,start_date,unit_id")
+    .select("id,status,start_date,unit_id,details")
     .eq("org_id", org.id)
     .eq("id", leaseId)
     .maybeSingle();
   if (findErr) return { error: "storage_failed", context: "closure lease lookup", detail: findErr };
   if (!lease) return { error: "not_found" };
   if (lease.status === "ended") return { error: "already_ended" };
+  if (lease.status === "draft") return { error: "not_live" };
 
   const endDate = input.endDate ?? today;
   if (endDate <= (lease.start_date as string)) return { error: "end_before_start" };
 
-  // 1. The lease closes. Its rows stay exactly where they are.
+  // 1. The lease closes. Its rows stay exactly where they are; only the
+  //    memory of the departure being recorded is spent.
+  const details = { ...((lease.details as Record<string, unknown> | null) ?? {}) };
+  delete details.departure;
   const { data: closed, error: closeErr } = await g
     .from("leases")
-    .update({ status: "ended", end_date: endDate })
+    .update({ status: "ended", end_date: endDate, details })
     .eq("org_id", org.id)
     .eq("id", leaseId)
     .select("id");
@@ -554,7 +659,7 @@ export async function closeLease(
     .maybeSingle();
   if (deposit) {
     const patch: Record<string, unknown> = { status: input.depositOutcome };
-    if (input.keysReturned) patch.key_handover_on = endDate;
+    if (input.keysReturned) patch.key_handover_on = input.keysReturnedOn ?? endDate;
     if (input.releasedCents > 0) patch.released_balance_cents = input.releasedCents;
     if (input.decompteIssuedOn) patch.decompte_issued_on = input.decompteIssuedOn;
     const { error: depErr } = await g.from("deposits").update(patch).eq("org_id", org.id).eq("id", deposit.id);

@@ -271,7 +271,11 @@ export function propertyMenu(
       },
       { id: "edl", label: d.hubs.edl, href: `/app/biens/etat-des-lieux?bail=${lease.id}` },
       { id: "leaseInsurance", label: d.modify.rentalInsurance, topic: insuranceTopic(d, leasePolicy, { title: d.modify.rentalInsurance, defaultKind: "rent_guarantee", extra: { leaseId: lease.id } }) },
-      { id: "departure", label: d.modify.departure, href: `/app/biens/depart?bail=${lease.id}` },
+      {
+        id: "departure",
+        label: lease.departure ? d.bien.departureResume : d.modify.departure,
+        href: `/app/biens/depart?bail=${lease.id}`,
+      },
     ];
 
     groups.push({
@@ -279,9 +283,17 @@ export function propertyMenu(
       entries,
     });
   } else if (single) {
+    // A dossier in preparation is resumed, never doubled; a lot that had a
+    // tenant before takes a new one.
+    const draft = single.drafts[single.drafts.length - 1];
+    const hadTenant = demo.LEASES.some((l) => l.unitId === single.unit.id && l.status === "ended");
     groups.push({
       label: d.modify.groupRental,
-      entries: [{ id: "addTenant", label: d.bien.addTenant, href: `/app/biens/locataire?lot=${single.unit.id}` }],
+      entries: [
+        draft
+          ? { id: "resumeDossier", label: d.bien.resumeDossier, href: `/app/biens/locataire?bail=${draft.id}` }
+          : { id: "addTenant", label: hadTenant ? d.bien.addNewTenant : d.bien.addTenant, href: `/app/biens/locataire?lot=${single.unit.id}` },
+      ],
     });
   }
 

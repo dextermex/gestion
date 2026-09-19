@@ -208,9 +208,17 @@ export default async function BailDetailPage({
           l.endDate ? ` · ${fmt(d.baux.until, { date: formatDate(l.endDate, locale) })}` : ` · ${d.baux.indefinite}`
         }`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <MetaBadge meta={leaseTypeMeta(d)[l.type]} />
             <MetaBadge meta={leaseStatusMeta(d)[l.status]} />
+            {(l.status === "active" || l.status === "notice") && (
+              <Link
+                href={`/app/biens/depart?bail=${l.id}`}
+                className="tactile inline-flex min-h-9 items-center rounded-xl border border-sand-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-ink shadow-sm transition hover:border-brand-300 hover:text-brand-700"
+              >
+                {l.departure ? d.bien.departureResume : d.modify.departure}
+              </Link>
+            )}
           </div>
         }
       />

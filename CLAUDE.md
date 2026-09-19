@@ -4,7 +4,7 @@ Luxembourg property-management SaaS, sibling of Morada.lu. App UI in four langua
 FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
 
 ## Commands
-- `npm run dev` / `npm run build` / `npm test` (vitest, 204 tests) / `npm run lint`
+- `npm run dev` / `npm run build` / `npm test` (vitest, 208 tests) / `npm run lint`
 
 ## Non-negotiables
 1. **Legal constants are data** — only `src/domain/legal/params.ts` (→ `legal_params`

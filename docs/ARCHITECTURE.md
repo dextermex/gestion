@@ -87,7 +87,44 @@ its step; a row written before the flow kept a memory is read from its rows alon
 Only the ninth step, or "Activer la location" on the sheet, calls `activateLease`: it
 refuses a dossier with nobody on it or no rent (`incomplete`), a lot already let
 (`already_let`), and anything not a draft; otherwise it sets `active`, dates the
-move-in and opens the ledger. `discardDraft` removes a draft that carries nothing.
+move-in and opens the ledger.
+
+### One lot, one dossier, one tenancy: the rule lives in the database
+
+Migration 0014 puts a trigger on `gestion.leases` (`leases_one_per_lot`, before insert
+and before any change of `status` or `unit_id`, under an advisory lock per lot): at
+most one draft per lot, at most one live lease (`active`, `notice`) per lot, and no
+draft on a lot that is let. It refuses with a unique violation carrying a stable
+message ("gestion: one draft dossier per lot", "gestion: lot already let") that
+`saveRentalDraft` and `activateLease` translate. Rows that predate the rule are left
+alone: a lot carrying a running tenancy and a stale draft keeps both, the sheet marks
+the draft obsolete (no resume, no activation) and offers only to abandon it.
+
+The lot's lifecycle, as every screen reads it: Libre, Brouillon (the dossier, resumed
+by "Reprendre le dossier" wherever "Ajouter un locataire" used to be), Location active
+(no second dossier, no add-tenant action), Départ (the seven-step flow below), Ancien
+locataire in Historique, Libre again ("Ajouter un nouveau locataire"), a brand-new
+dossier, a new tenancy on its own ledger. The former tenancy is never read or written
+by the next one.
+
+`discardDraft` abandons a dossier with everything that existed for it alone: parties,
+guarantee, payer bindings, inventory sessions and items, insurance (the one row the
+database sets to null rather than cascades, so it is deleted explicitly). The people
+stay as contacts; the lot, the property and any other tenancy are untouched. The only
+refusal is money: a period with an allocation or a payment on the row (`not_empty`).
+
+### The departure is seven saved steps, and one confirmation
+
+`/app/biens/depart` walks the date, the exit état des lieux (a journey of its own that
+hands back to step 3), the meter readings (written on the meters, dated the departure),
+the keys, what is still owed (with the count of future periods that will go), the
+guarantee, and the confirmation. Each move saves where the departure stands in
+`leases.details.departure` (`PATCH /api/baux/[id]`, `action: departure`); the tenancy
+stays in force until `POST /api/baux/[id]/cloture` calls `closeLease`, which sets
+`ended` and the end date, dates the move-out on the parties, drops the unpaid future
+periods, records the deposit outcome and the key handover, and clears the departure
+memory. The property sheet, the lease sheet and the Modifier menu offer the departure
+on every running tenancy, as "Reprendre le départ" once one is under way.
 
 The ledger keeps growing on its own: `gestion.roll_rent_periods()` (pg_cron, nightly)
 applies the same month rule as `openLedger` to every live lease, inserting only what is

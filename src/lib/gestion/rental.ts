@@ -263,17 +263,36 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
       })
       .select("id,seq,status,unit_id,details")
       .single();
-    if (insErr || !created) return fail("dossier lease insert", insErr);
-    lease = created as Row;
-    // The database assigns the lease number; the permanent structured
-    // reference is derived from it plus a stable per-workspace prefix.
-    const orgSeq = (parseInt(org.id.replace(/-/g, "").slice(0, 6), 16) % 9000) + 1000;
-    const { error: rfErr } = await g
-      .from("leases")
-      .update({ rf_reference: leaseRF(orgSeq, created.seq as number) })
-      .eq("org_id", org.id)
-      .eq("id", created.id);
-    if (rfErr) console.error("lease rf update failed:", rfErr.code, rfErr.message);
+    if (insErr?.code === "23505") {
+      // The database keeps the lot's rules too (one live lease, one dossier)
+      // and says so with a unique violation. A lot let meanwhile is refused;
+      // a dossier that appeared meanwhile (two first saves racing) is the one
+      // to continue with.
+      if (/already let/.test(insErr.message ?? "")) return { error: "already_let" };
+      const { data: again, error: againErr } = await g
+        .from("leases")
+        .select("id,status,unit_id,details")
+        .eq("org_id", org.id)
+        .eq("unit_id", input.unitId)
+        .eq("status", "draft")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (againErr || !again?.length) return fail("dossier lease insert", insErr);
+      lease = again[0] as Row;
+    } else if (insErr || !created) {
+      return fail("dossier lease insert", insErr);
+    } else {
+      lease = created as Row;
+      // The database assigns the lease number; the permanent structured
+      // reference is derived from it plus a stable per-workspace prefix.
+      const orgSeq = (parseInt(org.id.replace(/-/g, "").slice(0, 6), 16) % 9000) + 1000;
+      const { error: rfErr } = await g
+        .from("leases")
+        .update({ rf_reference: leaseRF(orgSeq, created.seq as number) })
+        .eq("org_id", org.id)
+        .eq("id", created.id);
+      if (rfErr) console.error("lease rf update failed:", rfErr.code, rfErr.message);
+    }
   }
   const leaseId = String(lease.id);
 

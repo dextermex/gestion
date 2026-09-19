@@ -79,14 +79,27 @@ function Rows({ items }: { items: Array<{ k: string; v: React.ReactNode }> }) {
   );
 }
 
-function AddTenantLink({ unitId, d, className = "" }: { unitId: string; d: Dict; className?: string }) {
+/**
+ * The one thing a free lot offers, by what it holds: a dossier in
+ * preparation is resumed (never doubled), a lot that had a tenant before
+ * takes a new one, a lot that never had one takes its first. A lot that is
+ * let offers nothing here: its tenancy has its own actions.
+ */
+function LotAction({ line, demo, d, className = "" }: { line: UnitLine; demo: DemoData; d: Dict; className?: string }) {
+  if (!line.vacant) return null;
+  const draft = line.drafts[line.drafts.length - 1];
+  const hadTenant = demo.LEASES.some((l) => l.unitId === line.unit.id && l.status === "ended");
+  const href = draft
+    ? `/app/biens/locataire?bail=${encodeURIComponent(draft.id)}`
+    : `/app/biens/locataire?lot=${encodeURIComponent(line.unit.id)}`;
+  const label = draft ? d.bien.resumeDossier : hadTenant ? d.bien.addNewTenant : d.bien.addTenant;
   return (
     <Link
-      href={`/app/biens/locataire?lot=${encodeURIComponent(unitId)}`}
+      href={href}
       className={`tactile inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 ${className}`}
     >
-      <Icon name="plus" size={15} />
-      {d.bien.addTenant}
+      {!draft && <Icon name="plus" size={15} />}
+      {label}
     </Link>
   );
 }
@@ -111,13 +124,15 @@ function DraftDossiers({
   locale: Locale;
   real: boolean;
 }) {
-  const drafts = card.lots.flatMap((line) => line.drafts.map((lease) => ({ lease, unit: line.unit })));
+  // A dossier beside a running tenancy predates the one-dossier rule: it is
+  // said to be obsolete, and can only be abandoned.
+  const drafts = card.lots.flatMap((line) => line.drafts.map((lease) => ({ lease, unit: line.unit, obsolete: !line.vacant })));
   if (drafts.length === 0) return null;
   return (
     <Panel title={d.bien.draftDossierTitle}>
       <p className="text-sm leading-relaxed text-ink-soft">{d.bien.draftDossierBody}</p>
       <ul className="mt-3 divide-y divide-sand-100">
-        {drafts.map(({ lease, unit }) => {
+        {drafts.map(({ lease, unit, obsolete }) => {
           const progress = dossierOf(demo, lease);
           return (
             <li key={lease.id} className="py-3.5 first:pt-0 last:pb-0">
@@ -144,10 +159,12 @@ function DraftDossiers({
                 propertyId={card.property.id}
                 real={real}
                 ready={progress.ready}
+                obsolete={obsolete}
                 labels={{
                   resume: d.bien.draftResume,
                   activate: d.bien.draftActivate,
                   activateIncomplete: d.bien.draftActivateIncomplete,
+                  obsolete: d.bien.draftObsolete,
                   discard: d.bien.draftDiscard,
                   discardConfirm: d.bien.draftDiscardConfirm,
                   confirm: d.bien.draftConfirm,
@@ -265,7 +282,7 @@ function Overview({
           <div className="py-2 text-center">
             <p className="font-display text-base font-bold text-ink">{d.bien.vacantTitle}</p>
             <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">{d.bien.vacantBody}</p>
-            <AddTenantLink unitId={single.unit.id} d={d} className="mt-3.5" />
+            <LotAction line={single} demo={demo} d={d} className="mt-3.5" />
           </div>
         </Panel>
       ) : (
@@ -406,7 +423,7 @@ function Overview({
   );
 }
 
-function Lots({ card, d, locale }: { card: PropertyCard; d: Dict; locale: Locale }) {
+function Lots({ card, demo, d, locale }: { card: PropertyCard; demo: DemoData; d: Dict; locale: Locale }) {
   const meta = rentStatusMeta(d);
   return (
     <div className="space-y-5">
@@ -429,7 +446,7 @@ function Lots({ card, d, locale }: { card: PropertyCard; d: Dict; locale: Locale
               {line.vacant ? (
                 <>
                   <Badge className="bg-sand-100 text-ink-soft">{d.biens.vacantLabel}</Badge>
-                  <AddTenantLink unitId={line.unit.id} d={d} />
+                  <LotAction line={line} demo={demo} d={d} />
                 </>
               ) : (
                 <>
@@ -491,7 +508,7 @@ function Rental({
           icon="key"
           title={d.bien.vacantTitle}
           body={d.bien.vacantBody}
-          action={first ? <AddTenantLink unitId={first.unit.id} d={d} /> : undefined}
+          action={first ? <LotAction line={first} demo={demo} d={d} /> : undefined}
         />
         <DraftDossiers card={card} demo={demo} d={d} locale={locale} real={real} />
       </div>
@@ -578,6 +595,19 @@ function Rental({
                     ))}
                   </ul>
                 </div>
+              </div>
+              {/* Every running tenancy ends the same way: through the guided
+                  departure, resumable where it stands. */}
+              <div className="mt-5 flex flex-col gap-2.5 border-t border-sand-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm tabular-nums text-ink-soft">
+                  {lease.departure ? fmt(d.bien.departureInProgress, { done: Math.max(0, lease.departure.step - 1), total: 7 }) : ""}
+                </p>
+                <Link
+                  href={`/app/biens/depart?bail=${lease.id}`}
+                  className="tactile inline-flex min-h-9 items-center justify-center rounded-xl border border-sand-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-ink shadow-sm transition hover:border-brand-300 hover:text-brand-700"
+                >
+                  {lease.departure ? d.bien.departureResume : d.modify.departure}
+                </Link>
               </div>
             </Panel>
 
@@ -1200,7 +1230,7 @@ export default async function BienDetailPage({
       </div>
 
       {tab === "apercu" && <Overview card={card} demo={demo} d={d} locale={locale} real={real} />}
-      {tab === "lots" && <Lots card={card} d={d} locale={locale} />}
+      {tab === "lots" && <Lots card={card} demo={demo} d={d} locale={locale} />}
       {tab === "location" && <Rental card={card} demo={demo} d={d} locale={locale} real={real} />}
       {tab === "technique" && <Technical card={card} demo={demo} d={d} locale={locale} />}
       {tab === "interventions" && <Interventions card={card} demo={demo} d={d} locale={locale} />}

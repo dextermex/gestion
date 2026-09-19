@@ -6,7 +6,9 @@ import {
   discardDraft,
   effectiveMonth,
   normalizePaymentDay,
+  readDeparture,
   repriceOpenPeriods,
+  saveDeparture,
 } from "@/lib/gestion/lease";
 
 /**
@@ -43,6 +45,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (body.action === "discard") {
     const result = await discardDraft(ctx, id);
+    if ("error" in result) return lifecycleError(result.error);
+    return NextResponse.json({ ok: true });
+  }
+  if (body.action === "departure") {
+    // Where a departure being recorded stands. The tenancy itself does not
+    // change until the closure route confirms it.
+    const progress = readDeparture(body.departure);
+    if (!progress) return NextResponse.json({ error: "invalid" }, { status: 400 });
+    const result = await saveDeparture(ctx, id, progress);
     if ("error" in result) return lifecycleError(result.error);
     return NextResponse.json({ ok: true });
   }
@@ -106,7 +117,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ ok: true, repriced });
 }
 
-function lifecycleError(code: "not_found" | "not_draft" | "already_let" | "not_empty" | "incomplete" | "storage_failed") {
+function lifecycleError(code: "not_found" | "not_draft" | "not_live" | "already_let" | "not_empty" | "incomplete" | "storage_failed") {
   if (code === "not_found") return NextResponse.json({ error: code }, { status: 404 });
   if (code === "storage_failed") return NextResponse.json({ error: code }, { status: 502 });
   return NextResponse.json({ error: code }, { status: 409 });

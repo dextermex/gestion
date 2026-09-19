@@ -260,6 +260,17 @@ export interface DemoLease {
   noticeInfo?: { direction: "tenant" | "landlord"; ground: string; arReceivedOn: string; earliestEnd: string };
   /** A draft's memory of the guided rental: steps completed, the payer's name. */
   dossier?: { completed: string[]; step: string; payerName: string | null };
+  /** A departure being recorded on a running lease: the step reached and what was entered. */
+  departure?: {
+    step: number;
+    endDate: string | null;
+    keysReturned: boolean;
+    keysReturnedOn: string | null;
+    depositOutcome: string;
+    releasedAmount: string;
+    decompteIssuedOn: string | null;
+    metersDone: boolean;
+  };
 }
 
 // RF refs are engine-generated (leaseRF) at seed time in the UI layer.

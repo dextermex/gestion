@@ -18,6 +18,7 @@ type Labels = {
   resume: string;
   activate: string;
   activateIncomplete: string;
+  obsolete: string;
   discard: string;
   discardConfirm: string;
   confirm: string;
@@ -32,6 +33,7 @@ export default function DraftDossierActions({
   propertyId,
   real,
   ready,
+  obsolete = false,
   labels,
 }: {
   leaseId: string;
@@ -39,6 +41,8 @@ export default function DraftDossierActions({
   real: boolean;
   /** Someone is named and a rent is set: the dossier may become a tenancy. */
   ready: boolean;
+  /** The lot is let by another tenancy: this dossier can only be abandoned. */
+  obsolete?: boolean;
   labels: Labels;
 }) {
   const router = useRouter();
@@ -57,8 +61,8 @@ export default function DraftDossierActions({
       });
       if (res.ok) {
         setConfirming(false);
-        router.refresh();
         if (action === "activate") router.push(`/app/biens/${propertyId}?onglet=location`);
+        router.refresh();
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -73,32 +77,41 @@ export default function DraftDossierActions({
 
   return (
     <div className="mt-3">
+      {obsolete && (
+        <p role="status" className="mb-2.5 rounded-xl bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
+          {labels.obsolete}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href={`/app/biens/locataire?bail=${encodeURIComponent(leaseId)}`}
-          className="tactile inline-flex min-h-9 items-center rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
-        >
-          {labels.resume}
-        </Link>
+        {!obsolete && (
+          <Link
+            href={`/app/biens/locataire?bail=${encodeURIComponent(leaseId)}`}
+            className="tactile inline-flex min-h-9 items-center rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+          >
+            {labels.resume}
+          </Link>
+        )}
         {real && !confirming && (
           <>
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={busy === "activate"}
-              disabled={busy !== null || !ready}
-              title={ready ? undefined : labels.activateIncomplete}
-              onClick={() => act("activate")}
-            >
-              {labels.activate}
-            </Button>
-            <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => setConfirming(true)}>
+            {!obsolete && (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={busy === "activate"}
+                disabled={busy !== null || !ready}
+                title={ready ? undefined : labels.activateIncomplete}
+                onClick={() => act("activate")}
+              >
+                {labels.activate}
+              </Button>
+            )}
+            <Button size="sm" variant={obsolete ? "secondary" : "ghost"} disabled={busy !== null} onClick={() => setConfirming(true)}>
               {labels.discard}
             </Button>
           </>
         )}
       </div>
-      {real && !ready && <p className="mt-2 text-xs text-ink-soft">{labels.activateIncomplete}</p>}
+      {real && !ready && !obsolete && <p className="mt-2 text-xs text-ink-soft">{labels.activateIncomplete}</p>}
       {real && confirming && (
         <div className="mt-3 rounded-xl border border-sand-200 bg-sand-50 p-3.5">
           <p className="text-sm text-ink">{labels.discardConfirm}</p>

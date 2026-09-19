@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fr } from "@/lib/i18n/fr";
 import type { OrgContext } from "@/lib/gestion/api";
 import { parseDossierInput, payerTenantIndex, saveRentalDraft, type DossierInput } from "@/lib/gestion/rental";
-import { activateLease, closeLease, discardDraft, openLedger } from "@/lib/gestion/lease";
+import { activateLease, closeLease, discardDraft, openLedger, readDeparture, saveDeparture } from "@/lib/gestion/lease";
 import { dueDateFor, ledgerMonths, nextDueOn as nextDueByRule } from "@/lib/gestion/ledger";
 import { dossierOf } from "@/lib/gestion/dossier";
 import { buildRealDataFrom } from "@/lib/demo/data-real";
@@ -382,6 +382,217 @@ describe("the lifecycle of a rental", () => {
   });
 });
 
+describe("the lifecycle of a lot: free, dossier, tenancy, departure, history, free again", () => {
+  let db: FakeDb;
+  let ctx: OrgContext;
+  let propertyId: string;
+  let unitId: string;
+
+  const draftRow = () => ({ org_id: ORG, unit_id: unitId, status: "draft", start_date: today, rent_cents: 0 });
+  const activeRow = () => ({ org_id: ORG, unit_id: unitId, status: "active", start_date: today, rent_cents: 100000 });
+  const cardNow = async () => findCard(buildPortfolio(await hydrate(db)), propertyId)!;
+
+  beforeEach(() => {
+    db = new FakeDb(today);
+    ctx = ctxFor(db);
+    ({ propertyId, unitId } = seedProperty(db));
+  });
+
+  it("walks the whole cycle with one dossier and one tenancy at a time, and never mixes two tenants", async () => {
+    // ── Libre ──
+    let card = await cardNow();
+    expect(occupancyOf(card)).toBe("vacant");
+    expect(card.single!.drafts).toEqual([]);
+
+    // ── Brouillon: a second "Ajouter un locataire" continues it, the database refuses a second row ──
+    const first = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "tenant", tenants: [ANNA] }));
+    if ("error" in first) throw new Error(first.error);
+    const again = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "tenant", tenants: [{ ...ANNA, contactId: first.contactIds[0] }] }));
+    if ("error" in again) throw new Error(again.error);
+    expect(again.leaseId).toBe(first.leaseId);
+    const forced = await db.from("leases").insert(draftRow()).select("id").single();
+    expect(forced.error).toMatchObject({ code: "23505", message: "gestion: one draft dossier per lot" });
+    card = await cardNow();
+    expect(occupancyOf(card)).toBe("vacant");
+    expect(card.single!.drafts.map((l) => l.id)).toEqual([first.leaseId]);
+
+    // ── Location active ──
+    const priced = await saveRentalDraft(
+      ctx,
+      fr,
+      dossier({ leaseId: first.leaseId, unitId, step: "guarantee", tenants: [{ ...ANNA, contactId: first.contactIds[0] }], startDate: thisMonth, rent: "1 000", paymentDay: "1", depositMonths: 2, depositForm: "cash" }),
+    );
+    if ("error" in priced) throw new Error(priced.error);
+    expect(await activateLease(ctx, first.leaseId, today)).toEqual({ ok: true, periodsOpened: 2 });
+    card = await cardNow();
+    expect(occupancyOf(card)).toBe("occupied");
+    expect(card.single!.tenantNames).toEqual(["Anna Weber"]);
+    expect(card.single!.drafts).toEqual([]);
+
+    // ── While it runs: no new dossier, no second tenancy, in the code and in the database ──
+    expect(await saveRentalDraft(ctx, fr, dossier({ unitId, step: "tenant", tenants: [{ firstName: "Nora" }] }))).toEqual({ error: "already_let" });
+    expect((await db.from("leases").insert(draftRow()).select("id").single()).error).toMatchObject({ code: "23505", message: "gestion: lot already let" });
+    expect((await db.from("leases").insert(activeRow()).select("id").single()).error).toMatchObject({ code: "23505", message: "gestion: lot already let" });
+    expect(await closeLease(ctx, "nope", { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today)).toEqual({ error: "not_found" });
+
+    // ── Départ, recorded step by step, then confirmed ──
+    const progress = readDeparture({ step: 4, endDate: lastDayOfMonth, keysReturned: true, keysReturnedOn: lastDayOfMonth, depositOutcome: "released", releasedAmount: "2 000", metersDone: true });
+    expect(progress).not.toBeNull();
+    expect(await saveDeparture(ctx, first.leaseId, progress!, today)).toEqual({ ok: true });
+    let demo = await hydrate(db);
+    expect(demo.LEASES.find((l) => l.id === first.leaseId)!.departure).toMatchObject({ step: 4, endDate: lastDayOfMonth, keysReturned: true, metersDone: true });
+    // Nothing has changed for the tenancy yet: still in force, still occupying the lot.
+    expect(occupancyOf(findCard(buildPortfolio(demo), propertyId)!)).toBe("occupied");
+    expect(demo.LEASES.find((l) => l.id === first.leaseId)!.status).toBe("active");
+
+    const closed = await closeLease(
+      ctx,
+      first.leaseId,
+      { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 200000, keysReturned: true, keysReturnedOn: lastDayOfMonth, decompteIssuedOn: null },
+      today,
+    );
+    if ("error" in closed) throw new Error(closed.error);
+    expect(closed.droppedPeriods).toBe(1);
+    expect(await closeLease(ctx, first.leaseId, { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today)).toEqual({
+      error: "already_ended",
+    });
+
+    // ── Ancien locataire in Historique, lot Libre ──
+    demo = await hydrate(db);
+    card = findCard(buildPortfolio(demo), propertyId)!;
+    expect(occupancyOf(card)).toBe("vacant");
+    expect(card.single!.drafts).toEqual([]);
+    expect(card.single!.tenantNames).toEqual([]);
+    const former = demo.LEASES.find((l) => l.id === first.leaseId)!;
+    expect(former.status).toBe("ended");
+    expect(former.endDate).toBe(lastDayOfMonth);
+    expect(former.departure).toBeUndefined();
+    expect(demo.leaseTenantNames(former)).toEqual(["Anna Weber"]);
+    expect(demo.ENDED_LEASES.map((l) => l.id)).toEqual([first.leaseId]);
+    expect(demo.RENT_PERIODS.filter((rp) => rp.leaseId === first.leaseId).map((rp) => rp.period)).toEqual([thisMonth.slice(0, 7)]);
+    expect(demo.DEPOSITS.find((x) => x.leaseId === first.leaseId)).toMatchObject({ status: "released" });
+    expect(db.table("deposits").find((x) => x.lease_id === first.leaseId)!.key_handover_on).toBe(lastDayOfMonth);
+    expect(db.table("lease_parties").filter((p) => p.lease_id === first.leaseId).map((p) => p.moved_out_on)).toEqual([lastDayOfMonth]);
+
+    // ── Nouveau brouillon: a new dossier, never the former tenant's ──
+    const next = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "rent", tenants: [{ firstName: "Nora", lastName: "Adam" }], rent: "1 300", startDate: today, paymentDay: "1" }));
+    if ("error" in next) throw new Error(next.error);
+    expect(next.leaseId).not.toBe(first.leaseId);
+    demo = await hydrate(db);
+    expect(demo.LEASES).toHaveLength(2);
+    expect(findCard(buildPortfolio(demo), propertyId)!.single!.drafts.map((l) => l.id)).toEqual([next.leaseId]);
+    const untouched = demo.LEASES.find((l) => l.id === first.leaseId)!;
+    expect(untouched).toMatchObject({ status: "ended", rentCents: 100000, endDate: lastDayOfMonth });
+    expect(demo.leaseTenantNames(untouched)).toEqual(["Anna Weber"]);
+    expect(demo.leaseTenantNames(demo.LEASES.find((l) => l.id === next.leaseId)!)).toEqual(["Nora Adam"]);
+
+    // ── Nouvelle location active, on its own ledger ──
+    expect(await activateLease(ctx, next.leaseId, today)).toEqual({ ok: true, periodsOpened: 2 });
+    demo = await hydrate(db);
+    card = findCard(buildPortfolio(demo), propertyId)!;
+    expect(occupancyOf(card)).toBe("occupied");
+    expect(card.single!.tenantNames).toEqual(["Nora Adam"]);
+    expect(card.single!.monthlyCents).toBe(130000);
+    expect(demo.RENT_PERIODS.filter((rp) => rp.leaseId === next.leaseId).every((rp) => rp.totalCents === 130000)).toBe(true);
+    expect(demo.RENT_PERIODS.filter((rp) => rp.leaseId === first.leaseId)).toHaveLength(1);
+    const history = demo.LEASES.filter((l) => l.unitId === unitId).sort((a, b) => a.seq - b.seq);
+    expect(history.map((l) => [l.status, demo.leaseTenantNames(l).join(",")])).toEqual([
+      ["ended", "Anna Weber"],
+      ["active", "Nora Adam"],
+    ]);
+  });
+
+  it("abandons a dossier with everything that existed only for it, and touches nothing else", async () => {
+    // A running tenancy on the neighbouring lot, and a dossier on this one
+    // with people, a guarantee, a payer account, an inventory and an insurance.
+    const other = db.insertRow("units", { org_id: ORG, property_id: propertyId, label: "Studio", kind: "dwelling" });
+    const running = await letTo(ctx, String(other.id), { firstName: "Nora", lastName: "Adam" }, "900");
+    const d = await saveRentalDraft(
+      ctx,
+      fr,
+      dossier({ unitId, step: "guarantee", tenants: [ANNA, LUC], rent: "1 000", startDate: thisMonth, payerName: "Anna Weber", payerIban: "LU28 0019 4006 4475 0000", depositMonths: 2, depositForm: "cash" }),
+    );
+    if ("error" in d) throw new Error(d.error);
+    const session = db.insertRow("edl_sessions", { org_id: ORG, lease_id: d.leaseId, kind: "entry", status: "in_progress" });
+    db.insertRow("edl_items", { org_id: ORG, session_id: session.id, room: "Entrée", category: "paint", condition: "good" });
+    db.insertRow("insurance_policies", { org_id: ORG, lease_id: d.leaseId, kind: "rent_guarantee", provider: "Foyer" });
+    db.insertRow("tickets", { org_id: ORG, lease_id: running.leaseId, unit_id: other.id, title: "Chauffage", status: "open" });
+
+    const before = {
+      contacts: db.table("contacts").length,
+      units: db.table("units").length,
+      runningPeriods: db.table("rent_periods").filter((rp) => rp.lease_id === running.leaseId).length,
+    };
+    expect(await discardDraft(ctx, d.leaseId)).toEqual({ ok: true });
+
+    // Gone: the dossier and what hung off it.
+    expect(db.table("leases").map((l) => l.id)).toEqual([running.leaseId]);
+    for (const t of ["lease_parties", "deposits", "iban_bindings", "edl_sessions", "insurance_policies", "rent_periods"]) {
+      expect(db.table(t).filter((r) => r.lease_id === d.leaseId), t).toEqual([]);
+    }
+    expect(db.table("edl_items").filter((r) => r.session_id === session.id)).toEqual([]);
+    // Kept: the people, the lots, the property, the running tenancy and everything of it.
+    expect(db.table("contacts").length).toBe(before.contacts);
+    expect(db.table("units").length).toBe(before.units);
+    expect(db.table("properties").length).toBe(1);
+    expect(db.table("rent_periods").filter((rp) => rp.lease_id === running.leaseId).length).toBe(before.runningPeriods);
+    expect(db.table("tickets").filter((t) => t.lease_id === running.leaseId)).toHaveLength(1);
+    const demo = await hydrate(db);
+    const card = findCard(buildPortfolio(demo), propertyId)!;
+    expect(card.lots.map((line) => [line.unit.id, line.vacant, line.drafts.length])).toEqual([
+      [unitId, true, 0],
+      [String(other.id), false, 0],
+    ]);
+    expect(demo.CONTACTS.map((c) => c.name).sort()).toEqual(["Anna Weber", "Luc Weber", "Nora Adam"]);
+    // The lot is free for a fresh dossier straight away.
+    const fresh = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "tenant", tenants: [{ firstName: "Paul" }] }));
+    if ("error" in fresh) throw new Error(fresh.error);
+    expect(fresh.leaseId).not.toBe(d.leaseId);
+  });
+
+  it("refuses to abandon a dossier that money was allocated to", async () => {
+    const lease = db.insertRow("leases", draftRow());
+    const period = db.insertRow("rent_periods", { org_id: ORG, lease_id: lease.id, period: thisMonth, due_date: thisMonth, rent_cents: 50000 });
+    const payment = db.insertRow("payments", { org_id: ORG, lease_id: lease.id, amount_cents: 50000, received_on: today });
+    db.insertRow("payment_allocations", { org_id: ORG, payment_id: payment.id, rent_period_id: period.id, amount_cents: 50000 });
+    expect(await discardDraft(ctx, String(lease.id))).toEqual({ error: "not_empty" });
+    expect(db.table("leases")).toHaveLength(1);
+  });
+
+  it("lets an obsolete dossier be removed from a lot that is let, without touching the tenancy", async () => {
+    // Before the one-dossier rule, a lot could end up with a running tenancy
+    // and a stale draft beside it. The rule does not touch existing rows: the
+    // draft stays readable, cannot be activated, and can be abandoned.
+    const stale = db.insertRow("leases", { ...draftRow(), rent_cents: 50000 });
+    const staleContact = db.insertRow("contacts", { org_id: ORG, first_name: "Old", last_name: "Draft" });
+    db.insertRow("lease_parties", { org_id: ORG, lease_id: stale.id, contact_id: staleContact.id, role: "tenant" });
+    db.insertRow("deposits", { org_id: ORG, lease_id: stale.id, form: "cash", amount_cents: 100, status: "pending" });
+    const live = db.insertRow("leases", activeRow());
+    const nora = db.insertRow("contacts", { org_id: ORG, first_name: "Nora", last_name: "Adam" });
+    db.insertRow("lease_parties", { org_id: ORG, lease_id: live.id, contact_id: nora.id, role: "tenant", moved_in_on: today });
+    await openLedger(ctx, { id: String(live.id), startDate: today, endDate: null, rentCents: 100000, chargesCents: 0, paymentDay: 1 }, today);
+
+    let card = await cardNow();
+    expect(occupancyOf(card)).toBe("occupied");
+    expect(card.single!.lease!.id).toBe(live.id);
+    expect(card.single!.drafts.map((l) => l.id)).toEqual([stale.id]);
+    // Editing the stale draft's terms is still allowed; activating it is not.
+    expect((await db.from("leases").update({ charges_cents: 1 }).eq("id", stale.id).select("id")).error).toBeNull();
+    expect(await activateLease(ctx, String(stale.id), today)).toEqual({ error: "already_let" });
+
+    expect(await discardDraft(ctx, String(stale.id))).toEqual({ ok: true });
+    card = await cardNow();
+    expect(occupancyOf(card)).toBe("occupied");
+    expect(card.single!.lease!.id).toBe(live.id);
+    expect(card.single!.drafts).toEqual([]);
+    expect(db.table("deposits")).toEqual([]);
+    expect(db.table("rent_periods").filter((rp) => rp.lease_id === live.id)).toHaveLength(2);
+    expect(db.table("contacts")).toHaveLength(2);
+    // Nothing but a draft can be discarded.
+    expect(await discardDraft(ctx, String(live.id))).toEqual({ error: "not_draft" });
+  });
+});
+
 describe("each property sees only the dossiers on its own lots", () => {
   let db: FakeDb;
   let ctx: OrgContext;
@@ -483,10 +694,12 @@ describe("a draft written before the flow kept its own memory", () => {
   let propertyId: string;
   let unitId: string;
 
-  const seedDraft = (rent = 90000, withTenant = true) => {
+  /** A second lot on the same property, for a second draft. */
+  const anotherLot = () => String(db.insertRow("units", { org_id: ORG, property_id: propertyId, label: "Studio", kind: "dwelling" }).id);
+  const seedDraft = (rent = 90000, withTenant = true, unit = unitId) => {
     const lease = db.insertRow("leases", {
       org_id: ORG,
-      unit_id: unitId,
+      unit_id: unit,
       status: "draft",
       start_date: today,
       rent_cents: rent,
@@ -549,37 +762,48 @@ describe("a draft written before the flow kept its own memory", () => {
 
   it("cannot be activated while nobody is on it or no rent is set", async () => {
     expect(await activateLease(ctx, seedDraft(90000, false), today)).toEqual({ error: "incomplete" });
-    expect(await activateLease(ctx, seedDraft(0), today)).toEqual({ error: "incomplete" });
+    expect(await activateLease(ctx, seedDraft(0, true, anotherLot()), today)).toEqual({ error: "incomplete" });
     expect(occupancyOf(findCard(buildPortfolio(await hydrate(db)), propertyId)!)).toBe("vacant");
   });
 
   it("cannot be activated onto a lot another tenancy already occupies", async () => {
-    // The tenancy first, the stale draft after: a save on the lot would
-    // otherwise continue the draft rather than start a second dossier.
-    await letTo(ctx, unitId, { firstName: "Nora", lastName: "Adam" }, "1 300");
+    // The stale draft first, then the tenancy written straight in (the
+    // database refuses a draft on a lot that is already let, so this is the
+    // only order such a pair can exist in).
     const draftId = seedDraft();
+    const live = db.insertRow("leases", { org_id: ORG, unit_id: unitId, status: "active", start_date: today, rent_cents: 130000 });
+    const nora = db.insertRow("contacts", { org_id: ORG, first_name: "Nora", last_name: "Adam" });
+    db.insertRow("lease_parties", { org_id: ORG, lease_id: live.id, contact_id: nora.id, role: "tenant" });
     expect(await activateLease(ctx, draftId, today)).toEqual({ error: "already_let" });
     expect(await saveRentalDraft(ctx, fr, dossier({ unitId, step: "tenant", firstName: "Late" }))).toEqual({ error: "already_let" });
+    // And the database itself refuses a draft beside a running tenancy, and
+    // a second draft beside a first one.
+    const let2 = anotherLot();
+    db.insertRow("leases", { org_id: ORG, unit_id: let2, status: "active", start_date: today, rent_cents: 1 });
+    expect(() => seedDraft(1, true, let2)).toThrow(/lot already let/);
+    expect(() => seedDraft(1, true)).toThrow(/one draft dossier per lot/);
   });
 
-  it("can be discarded while it carries nothing, and the people stay", async () => {
+  it("can be discarded, and the people stay", async () => {
     const draftId = seedDraft();
-    const keep = seedDraft(100);
+    const keep = seedDraft(100, true, anotherLot());
     expect(await discardDraft(ctx, draftId)).toEqual({ ok: true });
 
     const demo = await hydrate(db);
     expect(demo.LEASES.map((l) => l.id)).toEqual([keep]);
     expect(demo.DEPOSITS.map((x) => x.leaseId)).toEqual([keep]);
     expect(demo.CONTACTS).toHaveLength(2);
-    expect(findCard(buildPortfolio(demo), propertyId)!.single!.drafts.map((l) => l.id)).toEqual([keep]);
+    expect(findCard(buildPortfolio(demo), propertyId)!.lots.flatMap((line) => line.drafts.map((l) => l.id))).toEqual([keep]);
   });
 
-  it("refuses to discard anything that already happened", async () => {
+  it("refuses to discard anything money went into, and anything that is not a draft", async () => {
     const draftId = seedDraft();
-    db.insertRow("rent_periods", { org_id: ORG, lease_id: draftId, period: thisMonth, due_date: thisMonth, rent_cents: 90000 });
+    const period = db.insertRow("rent_periods", { org_id: ORG, lease_id: draftId, period: thisMonth, due_date: thisMonth, rent_cents: 90000 });
+    const payment = db.insertRow("payments", { org_id: ORG, lease_id: draftId, amount_cents: 90000, received_on: today });
+    db.insertRow("payment_allocations", { org_id: ORG, payment_id: payment.id, rent_period_id: period.id, amount_cents: 90000 });
     expect(await discardDraft(ctx, draftId)).toEqual({ error: "not_empty" });
 
-    const running = await letTo(ctx, unitId, { firstName: "Nora" }, "1 300");
+    const running = await letTo(ctx, anotherLot(), { firstName: "Nora" }, "1 300");
     expect(await discardDraft(ctx, running.leaseId)).toEqual({ error: "not_draft" });
     expect(await discardDraft(ctx, "nope")).toEqual({ error: "not_found" });
   });

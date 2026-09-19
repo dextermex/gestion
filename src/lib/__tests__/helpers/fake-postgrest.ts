@@ -102,9 +102,28 @@ const CHECKS: Record<string, (row: Row) => string | null> = {
   rent_periods: (r) => (n(r.rent_cents) < 0 ? "rent_periods_rent_cents_check" : null),
 };
 
-/** Foreign keys that cascade when a lease row goes, and those set to null. */
-const LEASE_CASCADE = ["lease_parties", "deposits", "iban_bindings", "rent_periods", "edl_sessions", "insurance_policies"];
-const LEASE_SET_NULL = ["payments", "tickets", "workflows"];
+/** Foreign keys that cascade when a lease row goes, and those set to null (0003, 0004, 0010). */
+const LEASE_CASCADE = ["lease_parties", "deposits", "iban_bindings", "rent_periods", "edl_sessions", "notice_records", "defects", "payment_plans", "arrears_actions"];
+const LEASE_SET_NULL = ["payments", "tickets", "workflows", "insurance_policies"];
+const EDL_CASCADE = ["edl_items"];
+
+const LIVE = new Set(["active", "notice"]);
+
+/**
+ * The trigger `leases_one_per_lot` (0014): at most one draft and one live
+ * lease per lot, checked on insert and on any change of status or lot, and
+ * refused as a unique violation carrying a stable message.
+ */
+function lotRule(rows: Row[], row: Row): DbError | null {
+  const others = rows.filter((r) => r !== row && r.id !== row.id && r.unit_id === row.unit_id);
+  if (row.status === "draft") {
+    if (others.some((r) => r.status === "draft")) return { code: "23505", message: "gestion: one draft dossier per lot" };
+    if (others.some((r) => LIVE.has(String(r.status)))) return { code: "23505", message: "gestion: lot already let" };
+  } else if (LIVE.has(String(row.status))) {
+    if (others.some((r) => LIVE.has(String(r.status)))) return { code: "23505", message: "gestion: lot already let" };
+  }
+  return null;
+}
 
 export class FakeDb {
   private tables = new Map<string, Row[]>();
@@ -129,7 +148,7 @@ export class FakeDb {
   insertRow(table: string, row: Row): Row {
     const stored = this.prepare(table, row);
     const conflict = this.conflictOf(table, stored);
-    if (conflict) throw new Error(conflict.message);
+    if (conflict) throw Object.assign(new Error(conflict.message), { code: conflict.code });
     this.table(table).push(stored);
     return stored;
   }
@@ -150,6 +169,7 @@ export class FakeDb {
       const clash = this.table(table).some((r) => r !== row && key.every((k) => r[k] === row[k]));
       if (clash) return { code: "23505", message: `duplicate key value violates unique constraint on ${key.join(",")}` };
     }
+    if (table === "leases") return lotRule(this.table(table), row);
     return null;
   }
 
@@ -188,6 +208,8 @@ export class FakeDb {
   }
 
   removeLease(id: unknown): void {
+    const sessions = new Set(this.table("edl_sessions").filter((r) => r.lease_id === id).map((r) => r.id));
+    for (const t of EDL_CASCADE) this.replace(t, this.table(t).filter((r) => !sessions.has(r.session_id)));
     for (const t of LEASE_CASCADE) this.replace(t, this.table(t).filter((r) => r.lease_id !== id));
     for (const t of LEASE_SET_NULL) for (const r of this.table(t)) if (r.lease_id === id) r.lease_id = null;
   }
@@ -225,7 +247,9 @@ class FakeQuery implements PromiseLike<Result> {
     private table: string,
   ) {}
 
-  select(): this {
+  // The columns are accepted for the caller's sake and ignored: rows come back whole.
+  select(columns?: string): this {
+    void columns;
     this.wantRows = true;
     return this;
   }
@@ -338,11 +362,19 @@ class FakeQuery implements PromiseLike<Result> {
         }
         case "update": {
           const rows = this.matching();
+          // Like `update of status, unit_id`: the lot rule only runs when one of them is set.
+          const touchesLot = this.table === "leases" && ("status" in this.patch || "unit_id" in this.patch);
           for (const r of rows) {
+            const before = { ...r };
             Object.assign(r, this.patch);
             GENERATED[this.table]?.(r);
             const check = CHECKS[this.table]?.(r);
             if (check) return { data: null, error: { code: "23514", message: check } };
+            const rule = touchesLot ? lotRule(this.db.table(this.table), r) : null;
+            if (rule) {
+              Object.assign(r, before);
+              return { data: null, error: rule };
+            }
           }
           return this.wantRows ? this.shaped(rows.map((r) => ({ ...r }))) : { data: null, error: null };
         }
