@@ -15,10 +15,22 @@ import type { Dict } from "@/lib/i18n/fr";
  * user metadata, e-mail confirmation) — so there is no second account system
  * and no page between here and the existing dashboard.
  */
-export default function WelcomeAuth({ d, next, locale }: { d: Dict; next: string; locale: Locale }) {
-  const [tab, setTab] = useState<"signin" | "signup">("signin");
+export default function WelcomeAuth({
+  d,
+  next,
+  locale,
+  initialTab = "signin",
+  initialEmail = "",
+}: {
+  d: Dict;
+  next: string;
+  locale: Locale;
+  initialTab?: "signin" | "signup";
+  initialEmail?: string;
+}) {
+  const [tab, setTab] = useState<"signin" | "signup">(initialTab);
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");

@@ -25,6 +25,8 @@ export interface ShellData {
   sampleCabinet: string | null;
   /** True once a real Morada session is driving the screen. */
   signedIn: boolean;
+  /** The account is a tenant somewhere: the tenant space is one click away. */
+  tenant: boolean;
   /** "owner" hides the cabinet-only surfaces (AML) everywhere. */
   workspaceKind: string;
   orgShortName: string;
@@ -420,20 +422,22 @@ export default function GestionShell({
             {/* One account, two roles: the owner space is this one, the
                 tenant space is /locataire. Switching is a navigation, never a
                 second sign-in. */}
-            <nav
-              aria-label={d.shell.roleAria}
-              className="ml-1 hidden gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 md:flex"
-            >
-              <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
-                {d.shell.roleOwner}
-              </span>
-              <Link
-                href="/locataire"
-                className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            {shell.tenant && (
+              <nav
+                aria-label={d.shell.roleAria}
+                className="ml-1 hidden gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 md:flex"
               >
-                {d.shell.roleTenant}
-              </Link>
-            </nav>
+                <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
+                  {d.shell.roleOwner}
+                </span>
+                <Link
+                  href="/locataire"
+                  className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                >
+                  {d.shell.roleTenant}
+                </Link>
+              </nav>
+            )}
 
             <div className="flex-1" />
 

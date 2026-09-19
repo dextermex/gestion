@@ -9,7 +9,7 @@
  */
 
 import * as fr from "./data";
-import type { DemoBankTx, DemoContact, DemoInsurance, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DemoBankTx, DemoContact, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
 import type { OpenInvoice } from "@/domain/banking/matching";
 
 /** Merge per-id string overrides into a copy of the FR rows. Throws at module
@@ -359,6 +359,15 @@ export const DOCUMENTS: DemoDocument[] = overlay(fr.DOCUMENTS, {
   "d-7": { name: "CDD · SCI Uelzecht (RBE, Associés-Register, UBO).pdf", relatedLabel: "SCI Uelzecht" },
   "d-8": { name: "Décompte Syndic 2025 · Residenz Uelzecht (AG approuvéiert).pdf", relatedLabel: "Residenz Uelzecht" },
   "d-9": { name: "Kandidatur-Dossier T. Schmit (net zréckbehalen).zip", relatedLabel: "Lokal Rez Nordstad" },
+});
+
+// ─── Tenant portal invitations ──────────────────────────────────────────────
+
+export const INVITES: DemoInvite[] = overlay(fr.INVITES, {
+  "inv-3b": { email: "jang.weis@pt.lu" },
+  "inv-3c": { email: "nathalie.klein@gmail.com" },
+  "inv-1a": { email: "l.wagener@education.lu" },
+  "inv-bert": { email: "marco.steffen@pt.lu" },
 });
 
 // ─── Open invoices helper for the matching engine demo ──────────────────────

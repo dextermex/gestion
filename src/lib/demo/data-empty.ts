@@ -81,6 +81,7 @@ export function buildEmptyData(org: Org): DemoData {
     },
     LEASE_TANTIEMES: {},
     DOCUMENTS: [],
+    INVITES: [],
 
     // The dataset's lookup helpers, closed over the empty collections above.
     // A page can only obtain an id from a collection, so with nothing to

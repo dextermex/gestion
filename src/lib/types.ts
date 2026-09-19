@@ -10,6 +10,7 @@
 
 import type { Dict } from "@/lib/i18n/fr";
 import { INTL_LOCALE, type Locale } from "@/lib/i18n/config";
+import type { InviteState, RequestState } from "@/lib/portal/types";
 
 export type Meta = { label: string; color: string };
 
@@ -142,6 +143,22 @@ const ROLE_COLORS: Record<ContactRole, string> = {
   other: "bg-sand-100 text-ink-soft",
 };
 
+// The tenant portal: an invitation's five states as the owner sees them, and
+// the three states a tenant follows on a request.
+const INVITE_COLORS: Record<InviteState, string> = {
+  none: "bg-sand-100 text-ink-soft",
+  sent: "bg-amber-100 text-amber-800",
+  accepted: "bg-emerald-100 text-emerald-800",
+  expired: "bg-neutral-200 text-neutral-600",
+  revoked: "bg-neutral-200 text-neutral-600",
+};
+
+const REQUEST_STATE_COLORS: Record<RequestState, string> = {
+  sent: "bg-amber-100 text-amber-800",
+  in_progress: "bg-brand-100 text-brand-800",
+  resolved: "bg-emerald-100 text-emerald-800",
+};
+
 // ─── Meta factories (labels from the dictionary) ────────────────────────────
 
 function withLabels<K extends string>(
@@ -169,6 +186,16 @@ export const deadlineStatusMeta = (d: Dict) => withLabels(DEADLINE_COLORS, d.sta
 export const amlTierMeta = (d: Dict) => withLabels(AML_TIER_COLORS, d.status.amlTier);
 export const riskBandMeta = (d: Dict) => withLabels(RISK_COLORS, d.status.risk);
 export const contactRoleMeta = (d: Dict) => withLabels(ROLE_COLORS, d.status.role);
+export const inviteStateMeta = (d: Dict) =>
+  withLabels(INVITE_COLORS, {
+    none: d.baux.portalStateNone,
+    sent: d.baux.portalStateSent,
+    accepted: d.baux.portalStateAccepted,
+    expired: d.baux.portalStateExpired,
+    revoked: d.baux.portalStateRevoked,
+  });
+export const requestStateMeta = (d: Dict) =>
+  withLabels(REQUEST_STATE_COLORS, { sent: d.tenant.stateSent, in_progress: d.tenant.stateInProgress, resolved: d.tenant.stateResolved });
 
 export const depositFormLabels = (d: Dict) => d.status.depositForm;
 export const workflowStateLabel = (d: Dict, state: string): string =>

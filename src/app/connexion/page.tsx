@@ -14,11 +14,14 @@ function safeNext(raw: string | undefined): string {
 export default async function WelcomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; onglet?: string; email?: string }>;
 }) {
   const { locale, d } = await getI18n();
   const params = await searchParams;
   const next = safeNext(params.next);
   if (await getSession()) redirect(next);
-  return <WelcomeAuth d={d} next={next} locale={locale} />;
+  // An invitation link lands here with the sign-up tab open and the invited
+  // address filled in: the account is created for that address, nothing else.
+  const email = typeof params.email === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(params.email) ? params.email.slice(0, 160) : "";
+  return <WelcomeAuth d={d} next={next} locale={locale} initialTab={params.onglet === "inscription" ? "signup" : "signin"} initialEmail={email} />;
 }

@@ -100,7 +100,9 @@ function tenantFrom(raw: unknown, defaultLanguage: string): TenantInput | null {
     contactId: str(t.contactId, 64) || null,
     firstName,
     lastName,
-    email: str(t.email, 160) || null,
+    // Lower-cased: the address is how a person is recognised again (a
+    // returning tenant, a second lot) and how their account is matched.
+    email: str(t.email, 160).toLowerCase() || null,
     phone: str(t.phone, 40) || null,
     language: LANGUAGES.includes(language) ? language : defaultLanguage,
   };
@@ -324,25 +326,66 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
       contactIds.push(t.contactId);
       continue;
     }
-    // display_name is a generated column: the parts go in, the label comes out.
-    const { data: contact, error: contactErr } = await g
-      .from("contacts")
-      .insert({
-        org_id: org.id,
-        kind: "natural",
-        first_name: t.firstName || null,
-        last_name: t.lastName || null,
-        email: t.email,
-        phone: t.phone,
-        language: t.language,
-      })
-      .select("id")
-      .single();
-    if (contactErr || !contact) return fail("tenant contact insert", contactErr);
-    const contactId = String(contact.id);
+    // One person, one contact: a tenant already known by this e-mail (a
+    // former tenant coming back, someone taking a second lot) is the same
+    // row again, so their history and their portal account follow them.
+    let contactId: string | null = null;
+    let needsRole = true;
+    if (t.email) {
+      const { data: known, error: knownErr } = await g
+        .from("contacts")
+        .select("id")
+        .eq("org_id", org.id)
+        .eq("email", t.email)
+        .is("archived_at", null)
+        .limit(1);
+      if (knownErr) return fail("tenant contact lookup", knownErr);
+      const found = ((known as Row[] | null) ?? [])[0];
+      if (found) {
+        contactId = String(found.id);
+        const { error } = await g
+          .from("contacts")
+          .update({ first_name: t.firstName || null, last_name: t.lastName || null, phone: t.phone, language: t.language })
+          .eq("org_id", org.id)
+          .eq("id", contactId);
+        if (error) console.error("tenant contact update failed:", error.code, error.message);
+        const { data: roles } = await g
+          .from("contact_roles")
+          .select("id")
+          .eq("contact_id", contactId)
+          .eq("role", "tenant")
+          .is("ended_on", null)
+          .limit(1);
+        needsRole = ((roles as Row[] | null) ?? []).length === 0;
+      }
+    }
+    if (!contactId) {
+      // display_name is a generated column: the parts go in, the label comes out.
+      const { data: contact, error: contactErr } = await g
+        .from("contacts")
+        .insert({
+          org_id: org.id,
+          kind: "natural",
+          first_name: t.firstName || null,
+          last_name: t.lastName || null,
+          email: t.email,
+          phone: t.phone,
+          language: t.language,
+        })
+        .select("id")
+        .single();
+      if (contactErr || !contact) return fail("tenant contact insert", contactErr);
+      contactId = String(contact.id);
+    }
+    // The same person named twice in one dossier is one party, not two;
+    // someone already on this lease (resumed without their id) stays put.
+    if (contactIds.includes(contactId)) continue;
     contactIds.push(contactId);
-    const { error: roleErr } = await g.from("contact_roles").insert({ org_id: org.id, contact_id: contactId, role: "tenant" });
-    if (roleErr) console.error("tenant role insert failed:", roleErr.code, roleErr.message);
+    if (existing.has(contactId)) continue;
+    if (needsRole) {
+      const { error: roleErr } = await g.from("contact_roles").insert({ org_id: org.id, contact_id: contactId, role: "tenant" });
+      if (roleErr) console.error("tenant role insert failed:", roleErr.code, roleErr.message);
+    }
     const { error: linkErr } = await g
       .from("lease_parties")
       .insert({ org_id: org.id, lease_id: leaseId, contact_id: contactId, role: "tenant" });

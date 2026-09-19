@@ -5,21 +5,23 @@ import { usePathname } from "next/navigation";
 
 export default function TenantTabs({
   tabs,
+  label,
 }: {
   tabs: Array<{ href: string; label: string }>;
+  label: string;
 }) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/locataire" ? pathname === "/locataire" : pathname.startsWith(href);
   return (
-    <nav className="no-scrollbar -mb-px flex gap-1 overflow-x-auto" aria-label="Espace locataire">
+    <nav className="no-scrollbar -mb-px flex gap-1 overflow-x-auto" aria-label={label}>
       {tabs.map((t) => (
         <Link
           key={t.href}
           href={t.href}
           aria-current={isActive(t.href) ? "page" : undefined}
           className={
-            "flex shrink-0 items-center border-b-2 px-3.5 py-2.5 text-sm font-semibold transition max-sm:min-h-11 " +
+            "flex shrink-0 items-center border-b-2 px-3 py-2.5 text-sm font-semibold transition max-sm:min-h-11 max-sm:px-2.5 " +
             (isActive(t.href)
               ? "border-brand-600 text-brand-800"
               : "border-transparent text-ink-soft hover:border-sand-200 hover:text-ink")

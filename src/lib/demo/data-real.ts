@@ -10,6 +10,7 @@ import type {
   DemoDocument,
   DemoEdl,
   DemoInsurance,
+  DemoInvite,
   DemoLease,
   DemoMeter,
   DemoProperty,
@@ -130,6 +131,7 @@ export async function buildRealDataFrom(
     messageRows,
     documentRows,
     insuranceRows,
+    inviteRows,
   ] = await Promise.all([
     q(
       "properties",
@@ -139,7 +141,7 @@ export async function buildRealDataFrom(
     q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished", "created_at"),
     q(
       "contacts",
-      "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes",
+      "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes,user_id",
       "created_at",
     ),
     q("contact_roles", "contact_id,role,ended_on"),
@@ -171,9 +173,11 @@ export async function buildRealDataFrom(
     q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", "read_on"),
     q("workflows", "id,kind,unit_id,lease_id,current_state,blocked_reason,started_at,completed_at"),
     q("conversations", "id,scope_type,scope_id,subject,last_message_at"),
-    q("messages", "conversation_id,sender_kind,sender_contact_id,body,sent_at,read_at", "sent_at"),
+    q("messages", "conversation_id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,read_at", "sent_at"),
     q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,created_at"),
     q("insurance_policies", "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes", "created_at"),
+    // The token is never selected: it is returned once, when the invitation is created.
+    q("portal_invites", "id,contact_id,lease_id,email,expires_at,accepted_at,revoked_at,sent_at,delivery,created_at", "created_at"),
   ]);
 
   // ── Contacts ──
@@ -198,7 +202,9 @@ export async function buildRealDataFrom(
     iban: sOr(c.iban, undefined),
     bankHolderName: sOr(c.bank_holder_name, undefined),
     notes: sOr(c.notes, undefined),
+    portalLinked: typeof c.user_id === "string" && c.user_id !== "",
   }));
+  const contactByUser = new Map(contactRows.filter((c) => typeof c.user_id === "string" && c.user_id !== "").map((c) => [s(c.user_id), s(c.id)]));
 
   // ── Properties & units ──
   // photo_url holds a bucket path, not a link: one batched signing call,
@@ -509,6 +515,7 @@ export async function buildRealDataFrom(
       messages: msgs.map((m) => ({
         from:
           contactIndex.get(s(m.sender_contact_id))?.name ??
+          contactIndex.get(contactByUser.get(s(m.sender_user_id)) ?? "")?.name ??
           (s(m.sender_kind) === "manager" ? org.name : "Système"),
         kind: (["tenant", "manager", "owner", "artisan", "system"].includes(s(m.sender_kind))
           ? s(m.sender_kind)
@@ -553,6 +560,19 @@ export async function buildRealDataFrom(
     notes: s(i.notes),
   }));
 
+  const INVITES: DemoInvite[] = inviteRows.map((i) => ({
+    id: s(i.id),
+    contactId: s(i.contact_id),
+    leaseId: sOr(i.lease_id, null),
+    email: s(i.email),
+    expiresAt: s(i.expires_at),
+    acceptedAt: sOr(i.accepted_at, null),
+    revokedAt: sOr(i.revoked_at, null),
+    sentAt: sOr(i.sent_at, null),
+    delivery: i.delivery === "email" || i.delivery === "link" ? i.delivery : null,
+    createdAt: s(i.created_at),
+  }));
+
   const ENDED_LEASES: DemoData["ENDED_LEASES"] = LEASES.filter((l) => l.status === "ended").map((l) => ({
     id: l.id,
     label: labelOfUnit(l.unitId),
@@ -581,6 +601,7 @@ export async function buildRealDataFrom(
     CONVERSATIONS,
     DOCUMENTS,
     INSURANCES,
+    INVITES,
     contactById: (id: string) => contactIndex.get(id)!,
     propertyById: (id: string) => propertyIndex.get(id)!,
     unitById: (id: string) => unitIndex.get(id)!,

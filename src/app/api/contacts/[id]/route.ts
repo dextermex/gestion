@@ -33,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   patch.updated_at = new Date().toISOString();
   const { data, error } = await g.from("contacts").update(patch).eq("org_id", org.id).eq("id", id).select("id");
+  // One live contact per e-mail in a workspace (contacts_email_active_key):
+  // the editor is told which field, instead of a generic failure.
+  if (error?.code === "23505") return NextResponse.json({ error: "email_taken" }, { status: 409 });
   if (error) return dbError("contact update", error);
   if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
   return NextResponse.json({ ok: true });

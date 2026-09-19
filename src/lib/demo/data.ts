@@ -10,6 +10,7 @@ import { leaseRF } from "@/domain/banking/rf";
 import type { CapitalComponent } from "@/domain/indexation/engine";
 import type { AcquisitionFacts } from "@/domain/fiscal/amortisation";
 import type { BankTransaction, IbanBinding, OpenInvoice } from "@/domain/banking/matching";
+import type { InviteRow } from "@/lib/portal/types";
 import type {
   BankTxStatus,
   ContactRole,
@@ -57,15 +58,17 @@ export interface DemoContact {
   amlTier?: "light" | "full_cdd";
   riskBand?: "low" | "medium" | "high";
   notes?: string;
+  /** A Morada account is attached to this person: their tenant space is open. */
+  portalLinked?: boolean;
 }
 
 export const CONTACTS: DemoContact[] = [
-  { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"] },
+  { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
   { id: "c-jeanne", kind: "natural", name: "Jeanne Muller", email: "jeanne.muller@gmail.com", phone: "+352 621 654 321", language: "fr", roles: ["tenant"] },
   { id: "c-santos", kind: "natural", name: "Ana Santos", email: "ana.santos@gmail.com", phone: "+352 691 222 333", language: "pt", roles: ["tenant"] },
   { id: "c-weber", kind: "natural", name: "Lucas Weber", email: "l.weber@education.lu", phone: "+352 621 888 111", language: "lu", roles: ["tenant"] },
   { id: "c-dubois", kind: "natural", name: "Claire Dubois", email: "claire.dubois@outlook.com", phone: "+352 691 444 555", language: "fr", roles: ["tenant"] },
-  { id: "c-hoffmann", kind: "natural", name: "Marc Hoffmann", email: "marc.hoffmann@pt.lu", phone: "+352 621 777 999", language: "de", roles: ["tenant"] },
+  { id: "c-hoffmann", kind: "natural", name: "Marc Hoffmann", email: "marc.hoffmann@pt.lu", phone: "+352 621 777 999", language: "de", roles: ["tenant"], portalLinked: true },
   { id: "c-krier", kind: "natural", name: "Paul Krier", email: "p.krier@krier-fils.lu", phone: "+352 621 300 200", language: "lu", roles: ["artisan"], notes: "Chauffage et sanitaire, intervient sous 48 h" },
   { id: "c-da-silva", kind: "natural", name: "José Da Silva", email: "contact@dasilva-peinture.lu", phone: "+352 691 600 700", language: "pt", roles: ["artisan"], notes: "Peinture, sols" },
   { id: "c-elektro", kind: "legal", name: "Elektro Thill Sàrl", email: "info@elektrothill.lu", phone: "+352 26 44 55 66", language: "de", roles: ["artisan"] },
@@ -911,6 +914,20 @@ export const DOCUMENTS: DemoDocument[] = [
   { id: "d-7", name: "CDD · SCI Beaulieu (RBE, registre associés, UBO).pdf", klass: "id_document", retentionClass: "aml_5y_from_end", retentionUntil: null, sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 1_240, createdAt: "2026-02-10" },
   { id: "d-8", name: "Décompte syndic 2025 · Résidence Beaulieu (AG approuvé).pdf", klass: "decompte", retentionClass: "accounting_10y", retentionUntil: "2036-05-30", sealed: false, relatedLabel: "Résidence Beaulieu", sizeKb: 1_860, createdAt: "2026-05-30" },
   { id: "d-9", name: "Dossier candidature T. Schmit (non retenu).zip", klass: "other", retentionClass: "applicant_3m", retentionUntil: "2026-10-30", sealed: false, relatedLabel: "Local RDC Kirchberg", sizeKb: 3_100, createdAt: "2026-07-30" },
+];
+
+// ─── Tenant portal invitations ──────────────────────────────────────────────
+// One row per invitation, as the owner reads them: the token never appears.
+// The states the owner sees derive from these dates (see inviteState()).
+
+export type DemoInvite = InviteRow;
+
+export const INVITES: DemoInvite[] = [
+  { id: "inv-3b", contactId: "c-muller", leaseId: "l-3b", email: "jean.muller@pt.lu", expiresAt: "2023-04-19T09:00:00.000Z", acceptedAt: "2023-04-06T18:22:00.000Z", revokedAt: null, sentAt: "2023-04-05T09:00:00.000Z", delivery: "email", createdAt: "2023-04-05T09:00:00.000Z" },
+  { id: "inv-3c", contactId: "c-jeanne", leaseId: "l-3c", email: "jeanne.muller@gmail.com", expiresAt: "2026-09-02T10:15:00.000Z", acceptedAt: null, revokedAt: null, sentAt: "2026-08-19T10:15:00.000Z", delivery: "email", createdAt: "2026-08-19T10:15:00.000Z" },
+  { id: "inv-2a", contactId: "c-santos", leaseId: "l-2a", email: "ana.santos@gmail.com", expiresAt: "2026-06-15T08:00:00.000Z", acceptedAt: null, revokedAt: null, sentAt: "2026-06-01T08:00:00.000Z", delivery: "link", createdAt: "2026-06-01T08:00:00.000Z" },
+  { id: "inv-1a", contactId: "c-weber", leaseId: "l-1a", email: "l.weber@education.lu", expiresAt: "2026-08-24T14:00:00.000Z", acceptedAt: null, revokedAt: "2026-08-12T16:40:00.000Z", sentAt: "2026-08-10T14:00:00.000Z", delivery: "email", createdAt: "2026-08-10T14:00:00.000Z" },
+  { id: "inv-bert", contactId: "c-hoffmann", leaseId: "l-bert", email: "marc.hoffmann@pt.lu", expiresAt: "2026-08-20T11:00:00.000Z", acceptedAt: "2026-08-07T07:12:00.000Z", revokedAt: null, sentAt: "2026-08-06T11:00:00.000Z", delivery: "email", createdAt: "2026-08-06T11:00:00.000Z" },
 ];
 
 // ─── Open invoices helper for the matching engine demo ──────────────────────

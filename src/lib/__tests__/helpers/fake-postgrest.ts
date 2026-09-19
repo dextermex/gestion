@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { OrgContext } from "@/lib/gestion/api";
 import type { GestionReader } from "@/lib/demo/data-real";
 
@@ -11,9 +11,14 @@ import type { GestionReader } from "@/lib/demo/data-real";
  * lifecycle tests run the real functions against one database and assert
  * what the pages would compute from it, without a network.
  *
+ * It also plays the tenant portal's side of the database (0006, 0015): a
+ * client bound to a tenant account sees only what the portal policies
+ * return, may insert only what they allow, and the portal RPCs (my_home,
+ * invitations, acceptance, preview) run the same checks as their SQL.
+ *
  * It is not a SQL engine. It supports exactly the builder calls the code
  * makes: select / insert / upsert / update / delete, eq / is / in / gte,
- * order / limit, single / maybeSingle, and an awaited `{ data, error }`.
+ * order / limit, single / maybeSingle, rpc, and an awaited `{ data, error }`.
  */
 
 export type Row = Record<string, unknown>;
@@ -102,6 +107,12 @@ const CHECKS: Record<string, (row: Row) => string | null> = {
   rent_periods: (r) => (n(r.rent_cents) < 0 ? "rent_periods_rent_cents_check" : null),
 };
 
+/** Who a client speaks for: the manager (org-scoped by the code, unfiltered here), a tenant account, or nobody. */
+export type Principal = { kind: "manager" } | { kind: "tenant"; userId: string; email: string } | { kind: "anon" };
+
+const TENANT_ROLES = new Set(["tenant", "colocataire"]);
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 /** Foreign keys that cascade when a lease row goes, and those set to null (0003, 0004, 0010). */
 const LEASE_CASCADE = ["lease_parties", "deposits", "iban_bindings", "rent_periods", "edl_sessions", "notice_records", "defects", "payment_plans", "arrears_actions"];
 const LEASE_SET_NULL = ["payments", "tickets", "workflows", "insurance_policies"];
@@ -130,6 +141,220 @@ export class FakeDb {
   private leaseSeq = 0;
 
   constructor(public today: string) {}
+
+  /** now(), as the database would write it. */
+  nowIso(): string {
+    return `${this.today}T12:00:00.000Z`;
+  }
+
+  // ── The portal predicates (0006, 0015), as functions of the rows ──
+
+  /** gestion.portal_tenant_lease: the account is a tenant party of the lease. */
+  tenantLease(leaseId: unknown, userId: string): boolean {
+    return this.table("lease_parties").some(
+      (lp) =>
+        lp.lease_id === leaseId &&
+        TENANT_ROLES.has(String(lp.role)) &&
+        this.table("contacts").some((c) => c.id === lp.contact_id && c.user_id === userId),
+    );
+  }
+  tenantLiveLease(leaseId: unknown, userId: string): boolean {
+    return this.tenantLease(leaseId, userId) && this.table("leases").some((l) => l.id === leaseId && LIVE.has(String(l.status)));
+  }
+  tenantTicket(ticketId: unknown, userId: string): boolean {
+    return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && this.tenantLease(t.lease_id, userId));
+  }
+  private tenantConversation(conversationId: unknown, userId: string): boolean {
+    return this.table("conversations").some((cv) => cv.id === conversationId && cv.scope_type === "ticket" && this.tenantTicket(cv.scope_id, userId));
+  }
+
+  /** What a tenant account may read of a table: the `*_portal` select policies. */
+  visibleToTenant(table: string, row: Row, userId: string): boolean {
+    switch (table) {
+      case "rent_periods":
+      case "rent_period_status":
+      case "lease_parties":
+      case "deposits":
+      case "edl_sessions":
+        return this.tenantLease(row.lease_id, userId);
+      case "insurance_policies":
+        return row.lease_id != null && this.tenantLease(row.lease_id, userId);
+      case "payment_allocations":
+        return this.table("rent_periods").some((rp) => rp.id === row.rent_period_id && this.tenantLease(rp.lease_id, userId));
+      case "documents":
+        return (
+          (row.related_type === "lease" && row.related_id != null && this.tenantLease(row.related_id, userId)) ||
+          (row.related_type === "ticket" && row.related_id != null && this.tenantTicket(row.related_id, userId))
+        );
+      case "tickets":
+        return row.lease_id != null && this.tenantLease(row.lease_id, userId);
+      case "conversations":
+        return row.scope_type === "ticket" && row.scope_id != null && this.tenantTicket(row.scope_id, userId);
+      case "messages":
+        return this.tenantConversation(row.conversation_id, userId);
+      default:
+        return false; // leases, units, properties, contacts, payments, bank tables, invites: nothing
+    }
+  }
+
+  /** What a tenant account may insert: the `*_portal_insert` policies. */
+  insertAllowedForTenant(table: string, row: Row, userId: string): boolean {
+    switch (table) {
+      case "tickets":
+        return row.lease_id != null && row.source === "tenant" && this.tenantLiveLease(row.lease_id, userId);
+      case "documents":
+        return (
+          row.related_type === "ticket" && row.related_id != null && row.class === "photo" && row.uploaded_by === userId &&
+          this.table("tickets").some((t) => t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId))
+        );
+      case "conversations":
+        return row.scope_type === "ticket" && row.scope_id != null && this.tenantTicket(row.scope_id, userId);
+      case "messages":
+        return row.sender_kind === "tenant" && row.sender_user_id === userId && this.tenantConversation(row.conversation_id, userId);
+      default:
+        return false;
+    }
+  }
+
+  // ── The portal RPCs (0006, 0015), with the same checks as their SQL ──
+
+  callRpc(name: string, args: Row, principal: Principal): Result {
+    const raise = (message: string): Result => ({ data: null, error: { code: "P0001", message } });
+    const uid = principal.kind === "tenant" ? principal.userId : null;
+    switch (name) {
+      case "my_home": {
+        if (!uid) return { data: [], error: null };
+        const rows = this.table("leases")
+          .filter((l) => this.tenantLease(l.id, uid))
+          .map((l) => {
+            const u = this.table("units").find((x) => x.id === l.unit_id) ?? {};
+            const p = this.table("properties").find((x) => x.id === u.property_id) ?? {};
+            return {
+              lease_id: l.id, org_id: l.org_id, unit_id: u.id, property_id: p.id, lease_status: l.status, lease_type: l.lease_type,
+              start_date: l.start_date, end_date: l.end_date, rent_cents: l.rent_cents, charges_cents: l.charges_cents,
+              charges_regime: l.charges_regime, payment_day: l.payment_day, rf_reference: l.rf_reference, furnished: l.furnished,
+              colocation: l.colocation, last_adjustment_on: l.last_adjustment_on, previous_rent_cents: l.previous_rent_cents,
+              unit_label: u.label, unit_floor: u.floor, unit_area_sqm: u.area_sqm, unit_rooms: u.rooms, unit_bedrooms: u.bedrooms,
+              property_name: p.name, property_address: p.address, property_commune: p.commune, energy_class: p.energy_class,
+              cpe_issued_on: p.cpe_issued_on, syndic_name: p.syndic_name, smoke_detectors_confirmed: p.smoke_detectors_confirmed,
+              photo_url: p.photo_url,
+            };
+          })
+          .sort((a, b) => (String(a.start_date) < String(b.start_date) ? 1 : -1));
+        return { data: rows, error: null };
+      }
+      case "my_lease_parties": {
+        if (!uid) return { data: [], error: null };
+        const rows = this.table("lease_parties")
+          .filter((lp) => this.tenantLease(lp.lease_id, uid))
+          .map((lp) => {
+            const c = this.table("contacts").find((x) => x.id === lp.contact_id) ?? {};
+            return { lease_id: lp.lease_id, contact_id: c.id, display_name: c.display_name, role: lp.role, moved_in_on: lp.moved_in_on, moved_out_on: lp.moved_out_on, is_me: c.user_id === uid };
+          });
+        return { data: rows, error: null };
+      }
+      case "my_managers": {
+        if (!uid) return { data: [], error: null };
+        const orgIds = [...new Set(this.table("leases").filter((l) => this.tenantLease(l.id, uid)).map((l) => l.org_id))];
+        const rows = orgIds.map((orgId) => {
+          const a = this.table("agencies").find((x) => x.id === orgId) ?? { id: orgId, name: "" };
+          const m = this.table("crm_members").find((x) => x.agency_id === orgId && x.role === "owner" && x.status === "active");
+          return { org_id: orgId, name: a.name, email: (a.email as string | undefined) || m?.email || null, phone: (a.phone as string | undefined) || m?.phone || null };
+        });
+        return { data: rows, error: null };
+      }
+      case "portal_invite_lease": {
+        if (principal.kind !== "manager") return raise("gestion: not allowed");
+        const lease = this.table("leases").find((l) => l.id === args.p_lease);
+        if (!lease) return raise("gestion: lease not found");
+        if (!LIVE.has(String(lease.status))) return raise("gestion: lease not live");
+        const party = this.table("lease_parties").some((lp) => lp.lease_id === args.p_lease && lp.contact_id === args.p_contact && TENANT_ROLES.has(String(lp.role)));
+        if (!party) return raise("gestion: not a party");
+        const contact = this.table("contacts").find((c) => c.id === args.p_contact);
+        if (!contact) return raise("gestion: not a party");
+        if (contact.user_id) return raise("gestion: already linked");
+        const email = String(contact.email ?? "");
+        if (!EMAIL.test(email)) return raise("gestion: no email");
+        for (const inv of this.table("portal_invites")) {
+          if (inv.contact_id === args.p_contact && !inv.accepted_at && !inv.revoked_at) inv.revoked_at = this.nowIso();
+        }
+        const row = this.insertRow("portal_invites", {
+          org_id: lease.org_id, contact_id: args.p_contact, lease_id: args.p_lease, role: "tenant", email: email.toLowerCase(),
+          token: randomBytes(32).toString("hex"), expires_at: `${this.plusDays(14)}T12:00:00.000Z`, sent_at: this.nowIso(), delivery: "link",
+          accepted_at: null, accepted_by: null, revoked_at: null,
+        });
+        return { data: [{ invite_id: row.id, token: row.token, email: row.email, expires_at: row.expires_at }], error: null };
+      }
+      case "portal_invite_delivered": {
+        if (principal.kind !== "manager") return raise("gestion: not allowed");
+        const inv = this.table("portal_invites").find((i) => i.id === args.p_invite);
+        if (!inv) return raise("gestion: not allowed");
+        inv.delivery = args.p_delivery;
+        inv.sent_at = this.nowIso();
+        return { data: true, error: null };
+      }
+      case "portal_revoke": {
+        if (principal.kind !== "manager") return raise("gestion: not allowed");
+        const inv = this.table("portal_invites").find((i) => i.id === args.p_invite);
+        if (!inv) return raise("gestion: not allowed");
+        if (inv.accepted_at || inv.revoked_at) return { data: false, error: null };
+        inv.revoked_at = this.nowIso();
+        return { data: true, error: null };
+      }
+      case "gestion_invite_preview": {
+        const token = String(args.p_token ?? "");
+        const inv = token.length >= 32 ? this.table("portal_invites").find((i) => i.token === token) : undefined;
+        if (!inv) return { data: { state: "unknown" }, error: null };
+        const state = inv.accepted_at ? "accepted" : inv.revoked_at ? "revoked" : String(inv.expires_at) < this.nowIso() ? "expired" : "pending";
+        const c = this.table("contacts").find((x) => x.id === inv.contact_id) ?? {};
+        const l = this.table("leases").find((x) => x.id === inv.lease_id) ?? {};
+        const u = this.table("units").find((x) => x.id === l.unit_id) ?? {};
+        const p = this.table("properties").find((x) => x.id === u.property_id) ?? {};
+        const a = this.table("agencies").find((x) => x.id === inv.org_id) ?? {};
+        const addr = (p.address as Row | undefined) ?? {};
+        return {
+          data: {
+            state, mine: uid !== null && inv.accepted_by === uid,
+            first_name: c.first_name ?? String(c.display_name ?? "").split(" ")[0], email: inv.email, org_name: a.name ?? null,
+            property_name: p.name ?? null,
+            address: { street: addr.street ?? null, number: addr.number ?? null, postal_code: addr.postal_code ?? null, city: addr.city ?? null },
+            unit_label: u.label ?? null, lease_status: l.status ?? null, expires_at: inv.expires_at,
+          },
+          error: null,
+        };
+      }
+      case "portal_accept": {
+        if (!uid || principal.kind !== "tenant") return raise("gestion: sign in first");
+        const inv = this.table("portal_invites").find((i) => i.token === args.p_token);
+        if (!inv) return raise("gestion: invitation unknown");
+        if (inv.accepted_at) {
+          if (inv.accepted_by === uid) return { data: { org_id: inv.org_id, role: inv.role, lease_id: inv.lease_id, already: true }, error: null };
+          return raise("gestion: invitation used");
+        }
+        if (inv.revoked_at) return raise("gestion: invitation revoked");
+        if (String(inv.expires_at) < this.nowIso()) return raise("gestion: invitation expired");
+        if (EMAIL.test(String(inv.email)) && String(inv.email).toLowerCase() !== principal.email.toLowerCase()) return raise("gestion: wrong account");
+        const contact = this.table("contacts").find((c) => c.id === inv.contact_id);
+        if (contact?.user_id && contact.user_id !== uid) return raise("gestion: contact linked elsewhere");
+        if (this.table("contacts").some((c) => c.org_id === inv.org_id && c.user_id === uid && c.id !== inv.contact_id)) {
+          return raise("gestion: account linked to another contact");
+        }
+        if (contact && !contact.user_id) contact.user_id = uid;
+        inv.accepted_at = this.nowIso();
+        inv.accepted_by = uid;
+        return { data: { org_id: inv.org_id, role: inv.role, lease_id: inv.lease_id, already: false }, error: null };
+      }
+      default:
+        return { data: null, error: { code: "PGRST202", message: `unknown rpc ${name}` } };
+    }
+  }
+
+  /** today + n days, ISO date. */
+  plusDays(days: number): string {
+    const d = new Date(`${this.today}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
 
   replace(name: string, rows: Row[]): void {
     this.tables.set(name, rows);
@@ -215,16 +440,47 @@ export class FakeDb {
   }
 
   from(table: string): FakeQuery {
-    return new FakeQuery(this, table);
+    return new FakeQuery(this, table, { kind: "manager" });
   }
 
   schema(): FakeDb {
     return this;
   }
 
-  /** The database as the write layer sees it. */
+  rpc(name: string, args: Row = {}): Promise<Result> {
+    return Promise.resolve(this.callRpc(name, args, { kind: "manager" }));
+  }
+
+  /** The database as the write layer sees it: the manager's client. */
   client(): OrgContext["g"] & GestionReader {
     return this as unknown as OrgContext["g"] & GestionReader;
+  }
+
+  /** The database as a tenant account sees it: the portal policies decide every row. */
+  tenantClient(user: { id: string; email: string }): OrgContext["g"] & GestionReader {
+    return new FakeClient(this, { kind: "tenant", userId: user.id, email: user.email }) as unknown as OrgContext["g"] & GestionReader;
+  }
+
+  /** The database as nobody: only the public preview answers. */
+  anonClient(): Pick<OrgContext["g"], "rpc"> {
+    return new FakeClient(this, { kind: "anon" }) as unknown as Pick<OrgContext["g"], "rpc">;
+  }
+}
+
+/** A client bound to a principal other than the manager. */
+class FakeClient {
+  constructor(
+    private db: FakeDb,
+    private principal: Principal,
+  ) {}
+  from(table: string): FakeQuery {
+    return new FakeQuery(this.db, table, this.principal);
+  }
+  schema(): FakeClient {
+    return this;
+  }
+  rpc(name: string, args: Row = {}): Promise<Result> {
+    return Promise.resolve(this.db.callRpc(name, args, this.principal));
   }
 }
 
@@ -245,6 +501,7 @@ class FakeQuery implements PromiseLike<Result> {
   constructor(
     private db: FakeDb,
     private table: string,
+    private principal: Principal,
   ) {}
 
   // The columns are accepted for the caller's sake and ignored: rows come back whole.
@@ -316,8 +573,16 @@ class FakeQuery implements PromiseLike<Result> {
       .then(onFulfilled, onRejected);
   }
 
+  /** Row-level security first, the query's own filters second. */
   private matching(): Row[] {
-    return this.db.rowsOf(this.table).filter((r) => this.filters.every((f) => f(r)));
+    const rows = this.db.rowsOf(this.table);
+    const visible =
+      this.principal.kind === "manager"
+        ? rows
+        : this.principal.kind === "tenant"
+          ? rows.filter((r) => this.db.visibleToTenant(this.table, r, (this.principal as { userId: string }).userId))
+          : [];
+    return visible.filter((r) => this.filters.every((f) => f(r)));
   }
 
   private shaped(rows: Row[]): Result {
@@ -349,6 +614,10 @@ class FakeQuery implements PromiseLike<Result> {
         case "upsert": {
           const written: Row[] = [];
           for (const raw of this.payload) {
+            if (this.principal.kind === "anon") return { data: null, error: { code: "42501", message: "permission denied" } };
+            if (this.principal.kind === "tenant" && !this.db.insertAllowedForTenant(this.table, raw, this.principal.userId)) {
+              return { data: null, error: { code: "42501", message: `new row violates row-level security policy for table "${this.table}"` } };
+            }
             const row = this.db.prepare(this.table, raw);
             const conflict = this.db.conflictOf(this.table, row);
             if (conflict) {

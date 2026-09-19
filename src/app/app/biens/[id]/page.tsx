@@ -5,6 +5,8 @@ import { Icon } from "@/components/pro/icons";
 import { CollapsiblePanel, LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import PropertyPhoto from "@/components/gestion/PropertyPhoto";
 import ModifyMenu from "@/components/gestion/ModifyMenu";
+import InvitePanel from "@/components/gestion/InvitePanel";
+import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
 import DraftDossierActions from "@/components/gestion/DraftDossier";
 import { propertyMenu } from "@/lib/gestion/property-menu";
 import { dossierOf } from "@/lib/gestion/dossier";
@@ -25,6 +27,7 @@ import {
   rentStatusMeta,
   ticketSeverityMeta,
   ticketStatusMeta,
+  inviteStateMeta,
 } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt, ordinalDay, plural } from "@/lib/i18n/config";
@@ -609,6 +612,14 @@ function Rental({
                   {lease.departure ? d.bien.departureResume : d.modify.departure}
                 </Link>
               </div>
+              <InvitePanel
+                compact
+                leaseId={lease.id}
+                sample={!real}
+                parties={partyInvitations(demo, lease, d, locale, !real)}
+                labels={inviteLabels(d)}
+                stateMeta={inviteStateMeta(d)}
+              />
             </Panel>
 
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -1278,6 +1289,7 @@ function modifyLabels(d: Dict) {
     save: d.common.save,
     saved: d.modify.saved,
     failed: d.modify.failed,
+    emailTaken: d.modify.emailTaken,
     photoCurrent: d.modify.photoCurrent,
     photoChoose: d.modify.photoChoose,
     photoRemove: d.modify.photoRemove,

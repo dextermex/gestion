@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import TenantInvite from "@/components/gestion/TenantInvite";
+import InvitePanel from "@/components/gestion/InvitePanel";
 import { getDemo, isSampleData } from "@/lib/demo";
+import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
 import {
   depositFormLabels,
   depositStatusMeta,
@@ -12,6 +13,7 @@ import {
   formatDate,
   formatMonth,
   initials,
+  inviteStateMeta,
   leaseStatusMeta,
   leaseTypeMeta,
   rentStatusMeta,
@@ -55,6 +57,7 @@ export default async function BailDetailPage({
     DEPOSITS,
     DOCUMENTS,
     EDLS,
+    INVITES,
     LEASES,
     RENT_PERIODS,
     TODAY,
@@ -437,6 +440,16 @@ export default async function BailDetailPage({
               </p>
             </Panel>
 
+            {/* The tenant's own space: one invitation per party, its state read
+                from the same rows the tenant's acceptance writes. */}
+            <InvitePanel
+              leaseId={l.id}
+              sample={sample}
+              parties={partyInvitations({ INVITES, TODAY, contactById }, l, d, locale, sample)}
+              labels={inviteLabels(d)}
+              stateMeta={inviteStateMeta(d)}
+            />
+
             <Panel
               title={d.baux.docsTitle}
               action={
@@ -689,27 +702,6 @@ export default async function BailDetailPage({
             )}
           </Panel>
 
-          {/* The tenant portal invitation flow is demonstrated on the sample
-              cabinets; the real token-based onboarding is not live yet, so a
-              real account gets no pretend send button. */}
-          {sample && (
-            <Panel title={d.baux.portalTitle}>
-              <p className="mb-3 text-xs leading-relaxed text-ink-soft">{d.baux.portalBody}</p>
-              <div className="space-y-3">
-                {l.tenantContactIds.map((cid) => {
-                  const c = contactById(cid);
-                  return (
-                    <TenantInvite
-                      key={cid}
-                      d={d}
-                      tenantName={c.name}
-                      link={`https://app.morada.lu/locataire/onboarding?bail=${l.rfReference}`}
-                    />
-                  );
-                })}
-              </div>
-            </Panel>
-          )}
         </div>
       )}
     </div>

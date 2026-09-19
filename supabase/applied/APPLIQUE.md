@@ -79,3 +79,30 @@ refusé, brouillon sur lot loué refusé, troisième brouillon refusé, mise à
 jour d'un brouillon existant acceptée. `public.g_can` toujours sur
 `60d98f80cccaa74f02b4afb1ebd6b859`, 3 baux, aucun objet de `public` touché.
 Réversible : drop du déclencheur puis de la fonction.
+
+## 0015 · 2026-09-19 · le portail locataire
+
+`0015_tenant_portal.sql` (migrations `gestion_tenant_portal` puis
+`gestion_invite_preview_public`) complète 0006 pour que l'espace locataire
+lise le vrai dossier et que l'invitation soit réelle. Tout est additif :
+colonnes `lease_id`, `revoked_at`, `sent_at`, `delivery` sur
+`gestion.portal_invites` ; prédicats `portal_tenant_live_lease`,
+`portal_tenant_property`, `portal_tenant_ticket`, `media_segment` ; policies
+de lecture `*_portal` sur `deposits`, `edl_sessions`, `insurance_policies`,
+`payment_allocations`, `documents`, `conversations`, `messages` et d'écriture
+sur `tickets` (bail en cours, `source = tenant`), `documents` (photo d'une
+demande), `conversations`, `messages` (au nom du compte) ; policies de
+stockage sur `gestion-media` (photo du bien en lecture, dossier
+`<org>/tickets/<bail>/` en lecture et dépôt) ; `my_home()` recréée avec les
+colonnes de « Mon bail », `my_lease_parties()`, `my_managers()` ;
+`portal_invite_lease`, `portal_invite_delivered`, `portal_revoke`,
+`portal_invite_preview`, `portal_accept` (verrou de ligne, idempotente pour
+le même compte, adresse du compte vérifiée). Le rôle `anon` ne reçoit aucun
+droit sur le schéma `gestion` : `public.gestion_invite_preview` relaie la
+prévisualisation, comme `public.gestion_onboard` relaie l'ouverture d'un
+espace.
+
+Vérifié après application : `public.g_can` toujours sur
+`60d98f80cccaa74f02b4afb1ebd6b859`, prévisualisation anonyme d'un jeton
+inconnu = `{state: unknown}`, policies et fonctions présentes, aucune ligne
+existante modifiée. Réversible : voir l'en-tête du fichier.

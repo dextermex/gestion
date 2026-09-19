@@ -25,6 +25,7 @@ export interface ModifyLabels {
   save: string;
   saved: string;
   failed: string;
+  emailTaken: string;
   /** Photos editor. */
   photoCurrent: string;
   photoChoose: string;
@@ -206,7 +207,13 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
         router.refresh();
         return;
       }
-      setError(labels.failed);
+      if (res.status === 401) {
+        // The session lapsed while the editor was open: sign in and come back here.
+        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(data.error === "email_taken" ? labels.emailTaken : labels.failed);
     } catch {
       setError(labels.failed);
     }
@@ -274,6 +281,10 @@ function SpecialEditorView({
     try {
       const res = await fetch(input, init);
       if (res.ok) return true;
+      if (res.status === 401) {
+        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        return false;
+      }
       setError(labels.failed);
     } catch {
       setError(labels.failed);

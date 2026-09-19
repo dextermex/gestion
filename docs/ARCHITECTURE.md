@@ -130,6 +130,40 @@ The ledger keeps growing on its own: `gestion.roll_rent_periods()` (pg_cron, nig
 applies the same month rule as `openLedger` to every live lease, inserting only what is
 missing and never rewriting a period.
 
+### The tenant portal is the same rows, read under the tenant's token
+
+There is no tenant copy of anything. A tenant is a `contacts` row with a `user_id`
+(their Morada account, the same `auth.users` as the owner's); `gestion.portal_tenant_lease`
+says whether the signed-in account is a tenant party of a lease, and every `*_portal`
+policy (0006, 0015) is that predicate applied to the lease's ledger, guarantee, états
+des lieux, insurance, documents, interventions and threads. `my_home()`,
+`my_lease_parties()` and `my_managers()` are the only doors to `leases`, `units`,
+`properties`, `contacts` and the cabinet, each returning the restricted columns a tenant
+may see; the tables themselves answer a tenant with nothing. Payments, bank rows,
+internal notes and other tenants' contact details are behind no portal policy at all.
+
+`src/lib/portal/tenant-space.ts` builds `TenantSpace` from those reads under the
+visitor's own JWT (`getTenantView()` in `space.ts`); the four tenant pages render it and
+derive the rest (`paymentsOf`, `rentSituation`, `alertsFor`). A tenant's request is an
+intervention (`tickets`, `source = tenant`) inserted under the tenant's token, its photos
+are `documents` of the ticket in the lease's storage folder (`<org>/tickets/<lease>/`),
+its follow-ups are `messages` on the ticket's conversation; the owner's Interventions and
+Messages screens read exactly these rows.
+
+Invitations are `portal_invites` rows minted by `portal_invite_lease` (a party of a live
+lease, an e-mail, a token returned once and never listed): sending again revokes the open
+one, `portal_revoke` dates a revocation, and the five owner-side states (Non invité,
+envoyée, acceptée, expirée, révoquée) derive from the row's dates in `inviteState()`.
+`public.gestion_invite_preview` shows the link's holder enough to recognise the home
+before signing in; `portal_accept` links the account to the contact inside one
+transaction (row lock, idempotent for the same account, refused for another address,
+another account or a used, revoked or expired link). The rental wizard reuses a contact
+already known by its e-mail, so a returning tenant keeps one contact, one account and
+their whole history; an account that is a tenant and has no workspace is sent to
+`/locataire` instead of being provisioned a management space, and opens one on purpose
+(`POST /api/espace/creer`). E-mail leaves through Resend when `RESEND_API_KEY` is set;
+otherwise the invitation is still valid and the owner passes the link on.
+
 ### The ledger's calendar is one rule, and the checklist reads the rows
 
 `src/lib/gestion/ledger.ts` decides which months a live lease's ledger holds and when

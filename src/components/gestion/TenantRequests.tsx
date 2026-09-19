@@ -1,208 +1,201 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge, Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
-import type { Dict } from "@/lib/i18n/fr";
+import { useRouter } from "next/navigation";
+import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
+import type { RequestLabels } from "@/lib/portal/labels";
+import { REQUEST_KINDS, TECHNICAL_CATEGORIES, type RequestKind } from "@/lib/portal/types";
 
 /**
- * Tenant request flows: technical (breakdown, leak, heating…) and
- * administrative (attestation, contact change, lease question…). Demo build:
- * submitting shows the standard notice. The gas category surfaces the
- * emergency numbers before anything else.
+ * A new request, in two steps: what it is about (a technical problem, a
+ * document, a question, anything else), then the few details that let the
+ * manager act. A technical problem lands as an intervention in its
+ * category; photos travel with it. The request is written through the API
+ * under the tenant's own session and the page then reads it back.
  */
 
-export type RequestKind = "technique" | "administrative";
-
-export interface TenantTicketRow {
-  id: string;
-  ref: string;
-  title: string;
-  statusLabel: string;
-  statusColor: string;
-  dateLabel: string;
-}
+const MAX_FILES = 5;
+const MAX_BYTES = 8 * 1024 * 1024;
 
 export default function TenantRequests({
-  d,
-  initial,
-  tickets,
+  labels,
+  canCreate,
+  sampleNote,
+  initialOpen = false,
 }: {
-  d: Dict;
-  initial?: RequestKind;
-  tickets: TenantTicketRow[];
+  labels: RequestLabels;
+  /** The tenant has a tenancy in force: a request has somewhere to land. */
+  canCreate: boolean;
+  /** On a sample cabinet, the form is shown but nothing is written. */
+  sampleNote: string | null;
+  initialOpen?: boolean;
 }) {
-  const [open, setOpen] = useState<RequestKind | null>(initial ?? null);
+  const router = useRouter();
+  const [open, setOpen] = useState(initialOpen);
+  const [kind, setKind] = useState<RequestKind | null>(null);
+  const [category, setCategory] = useState<string>("heating");
+  const [severity, setSeverity] = useState<"routine" | "priority" | "urgent">("routine");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [state, setState] = useState<"idle" | "sending" | "uploading" | "failed" | "noLease" | "sample">("idle");
 
   useEffect(() => {
-    if (initial) setOpen(initial);
-  }, [initial]);
+    if (initialOpen) setOpen(true);
+  }, [initialOpen]);
 
-  return (
-    <div>
-      <div className="stagger-rise grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <button
-          onClick={() => setOpen("technique")}
-          className="tactile rounded-2xl border border-sand-200 bg-white p-5 text-left shadow-sm transition hover:border-brand-200 hover:shadow-md"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="m14.7 6.3 3 3L8 19H5v-3l9.7-9.7ZM13 21h8M16 5l3 3" />
-            </svg>
-          </span>
-          <p className="mt-3 font-display text-base font-bold text-ink">{d.tenant.quickTech}</p>
-          <p className="mt-1 text-sm leading-relaxed text-ink-soft">{d.tenant.quickTechSub}</p>
-        </button>
-        <button
-          onClick={() => setOpen("administrative")}
-          className="tactile rounded-2xl border border-sand-200 bg-white p-5 text-left shadow-sm transition hover:border-brand-200 hover:shadow-md"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM9 13h6M9 17h4" />
-            </svg>
-          </span>
-          <p className="mt-3 font-display text-base font-bold text-ink">{d.tenant.quickAdmin}</p>
-          <p className="mt-1 text-sm leading-relaxed text-ink-soft">{d.tenant.quickAdminSub}</p>
-        </button>
-      </div>
-
-      <div className="mt-6">
-        <h2 className="mb-3 font-display text-lg font-bold text-ink">{d.tenant.reqListTitle}</h2>
-        <div className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
-          <ul className="divide-y divide-sand-100">
-            {tickets.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{t.title}</p>
-                  <p className="text-xs text-ink-soft">
-                    {t.ref} · {t.dateLabel}
-                  </p>
-                </div>
-                <Badge className={t.statusColor}>{t.statusLabel}</Badge>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <RequestModal d={d} kind={open} onClose={() => setOpen(null)} />
-    </div>
-  );
-}
-
-function RequestModal({
-  d,
-  kind,
-  onClose,
-}: {
-  d: Dict;
-  kind: RequestKind | null;
-  onClose: () => void;
-}) {
-  const [category, setCategory] = useState("heating");
-  const [submitted, setSubmitted] = useState(false);
-  useEffect(() => {
-    setSubmitted(false);
+  const reset = () => {
+    setKind(null);
     setCategory("heating");
-  }, [kind]);
+    setSeverity("routine");
+    setTitle("");
+    setDescription("");
+    setFiles([]);
+    setState("idle");
+  };
+  const close = () => {
+    setOpen(false);
+    reset();
+  };
 
-  const techCategories = [
-    { id: "heating", label: d.tenant.catHeating },
-    { id: "plumbing", label: d.tenant.catPlumbing },
-    { id: "electric", label: d.tenant.catElectric },
-    { id: "damp", label: d.tenant.catDamp },
-    { id: "lock", label: d.tenant.catLock },
-    { id: "gas", label: d.tenant.catGas },
-    { id: "other", label: d.tenant.catOther },
-  ];
-  const admTypes = [
-    { id: "attestation", label: d.tenant.admAttestation },
-    { id: "contact", label: d.tenant.admContact },
-    { id: "question", label: d.tenant.admQuestion },
-    { id: "depart", label: d.tenant.admDepart },
-    { id: "other", label: d.tenant.admOther },
-  ];
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kind) return;
+    if (sampleNote) {
+      setState("sample");
+      return;
+    }
+    setState("sending");
+    try {
+      const res = await fetch("/api/locataire/demandes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, category: kind === "technical" ? category : null, severity: kind === "technical" ? severity : "routine", title, description }),
+      });
+      if (res.status === 401) {
+        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { error?: string; id?: string };
+      if (!res.ok || !data.id) {
+        setState(data.error === "no_live_lease" ? "noLease" : "failed");
+        return;
+      }
+      if (files.length > 0) {
+        setState("uploading");
+        const body = new FormData();
+        for (const f of files) body.append("files", f);
+        // Photos that fail to upload do not undo the request: it exists, the owner has it.
+        await fetch(`/api/locataire/demandes/${data.id}/pieces`, { method: "POST", body }).catch(() => null);
+      }
+      setOpen(false);
+      router.push(`/locataire/demandes/${data.id}`);
+      router.refresh();
+    } catch {
+      setState("failed");
+    }
+  };
+
+  const pickFiles = (list: FileList | null) => {
+    const chosen = Array.from(list ?? []).filter((f) => f.type.startsWith("image/") && f.size <= MAX_BYTES).slice(0, MAX_FILES);
+    setFiles(chosen);
+  };
+
+  if (!canCreate) return null;
 
   return (
-    <Modal
-      open={kind !== null}
-      onClose={onClose}
-      title={kind === "administrative" ? d.tenant.quickAdmin : d.tenant.quickTech}
-      closeLabel={d.common.close}
-    >
-      {kind && (
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setSubmitted(true);
-          }}
-        >
-          {kind === "technique" ? (
-            <>
-              <Field label={d.tenant.formCategory}>
-                <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-                  {techCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {category === "gas" && (
-                <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm font-semibold text-red-800">
-                  {d.tenant.gasWarning}
-                </p>
-              )}
-              <Field label={d.tenant.formUrgency}>
-                <Select defaultValue="routine">
-                  <option value="routine">{d.tenant.urgRoutine}</option>
-                  <option value="priority">{d.tenant.urgPriority}</option>
-                  <option value="urgent">{d.tenant.urgUrgent}</option>
-                </Select>
-              </Field>
-              <Field label={d.tenant.formDesc} hint={d.tenant.formDescHint}>
-                <Textarea required maxLength={2000} />
-              </Field>
-              <Field label={d.tenant.formPhoto}>
-                <Input type="file" accept="image/*" multiple className="py-2 text-xs" />
-              </Field>
-              <label className="flex items-start gap-2.5 text-sm text-ink">
-                <input type="checkbox" className="mt-1" />
-                {d.tenant.formAccess}
-              </label>
-            </>
-          ) : (
-            <>
-              <Field label={d.tenant.admType}>
-                <Select defaultValue="attestation">
-                  {admTypes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label={d.tenant.formMessage}>
-                <Textarea required maxLength={2000} />
-              </Field>
-            </>
-          )}
-
-          {submitted && (
-            <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-              {d.tenant.reqSent}
-            </p>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              {d.common.cancel}
-            </Button>
-            <Button type="submit">{d.tenant.formSend}</Button>
+    <>
+      <Button onClick={() => setOpen(true)}>{labels.open}</Button>
+      <Modal open={open} onClose={close} title={kind ? labels.kinds[kind][0] : labels.open} closeLabel={labels.close}>
+        {!kind ? (
+          <div>
+            <p className="mb-3 text-sm text-ink-soft">{labels.kind}</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {REQUEST_KINDS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKind(k)}
+                  className="tactile rounded-2xl border border-sand-200 bg-white p-4 text-left shadow-sm transition hover:border-brand-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                >
+                  <p className="font-display text-base font-bold text-ink">{labels.kinds[k][0]}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-soft">{labels.kinds[k][1]}</p>
+                </button>
+              ))}
+            </div>
           </div>
-        </form>
-      )}
-    </Modal>
+        ) : (
+          <form className="space-y-4" onSubmit={submit}>
+            {kind === "technical" && (
+              <>
+                <Field label={labels.category}>
+                  <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+                    {TECHNICAL_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {labels.categories[c]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {category === "gas" && (
+                  <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm font-semibold text-red-800">
+                    {labels.gasWarning}
+                  </p>
+                )}
+                <Field label={labels.urgency}>
+                  <Select value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}>
+                    {(["routine", "priority", "urgent"] as const).map((u) => (
+                      <option key={u} value={u}>
+                        {labels.urgencies[u]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </>
+            )}
+            <Field label={labels.title} hint={labels.titleHint}>
+              <Input required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+            </Field>
+            <Field label={labels.description} hint={labels.descriptionHint}>
+              <Textarea required={kind === "technical"} maxLength={4000} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
+            </Field>
+            <Field label={labels.photos} hint={labels.photosHint}>
+              <Input type="file" accept="image/*" multiple className="py-2 text-xs" onChange={(e) => pickFiles(e.target.files)} />
+              {files.length > 0 && <p className="mt-1 text-xs text-ink-soft">{files.map((f) => f.name).join(", ")}</p>}
+            </Field>
+
+            {state === "failed" && (
+              <p role="alert" className="text-xs font-semibold text-red-700">
+                {labels.failed}
+              </p>
+            )}
+            {state === "noLease" && (
+              <p role="alert" className="text-xs font-semibold text-red-700">
+                {labels.noLease}
+              </p>
+            )}
+            {state === "sample" && sampleNote && (
+              <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                {sampleNote}
+              </p>
+            )}
+
+            <div className="flex flex-wrap justify-between gap-2">
+              <Button type="button" variant="ghost" onClick={() => setKind(null)} disabled={state === "sending" || state === "uploading"}>
+                {labels.back}
+              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" onClick={close} disabled={state === "sending" || state === "uploading"}>
+                  {labels.cancel}
+                </Button>
+                <Button type="submit" loading={state === "sending" || state === "uploading"}>
+                  {state === "uploading" ? labels.uploading : state === "sending" ? labels.sending : labels.send}
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
+    </>
   );
 }
