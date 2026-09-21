@@ -96,7 +96,9 @@ test("the owner records the departure", async ({ page }) => {
   await nextStep(page, "Plus tard"); // the exit inventory, later
   await nextUntil(page, page.getByRole("button", { name: "Confirmer le départ" }), 6); // meters, keys, outstanding, deposit
   await page.getByRole("button", { name: "Confirmer le départ" }).click();
-  await expect(page.getByText("est enregistré.")).toBeVisible({ timeout: 30_000 });
+  // The done screen's own heading: the shell's dataset note also says
+  // "rien n'est enregistré", so a looser match would pass before the closure.
+  await expect(page.getByRole("heading", { level: 1, name: /Le départ de .+ est enregistré\./ })).toBeVisible({ timeout: 30_000 });
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
   await expect(page.getByRole("link", { name: "Ajouter un nouveau locataire" })).toBeVisible();
 });
