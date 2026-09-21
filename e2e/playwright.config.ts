@@ -26,6 +26,10 @@ export default defineConfig({
   use: {
     baseURL,
     locale: "fr-LU",
+    // A control that never becomes clickable, or a page that never loads,
+    // fails here with its name rather than at the end of the test's budget.
+    actionTimeout: 20_000,
+    navigationTimeout: 45_000,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "off",

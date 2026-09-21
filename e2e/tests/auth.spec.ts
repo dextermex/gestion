@@ -13,7 +13,7 @@ const bruno = { first: "Bruno", last: "Muller", email: mail("bruno") };
 
 test("the management space is not public", async ({ page }) => {
   await page.goto("/app");
-  await expect(page).toHaveURL(/\/connexion\?next=%2Fapp/);
+  await expect(page).toHaveURL(/\/connexion\?next=(%2F|\/)app/);
   await expect(page.locator("#signin-form")).toBeVisible();
   const res = await page.goto("/api/biens/create");
   expect(res?.status(), "an API route answers a stranger with 401 or 405, never data").toBeGreaterThanOrEqual(401);
