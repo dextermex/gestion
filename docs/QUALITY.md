@@ -8,7 +8,7 @@ touches the hosted Supabase project or its data.
 
 | Layer | Where | What it proves |
 | --- | --- | --- |
-| Typecheck, lint, unit and integration tests, production build | `.github/workflows/ci.yml`, job **checks** | The code compiles, follows the rules (including `react/no-unstable-nested-components`), the 245 vitest tests pass, `next build` succeeds. Each is its own named step, so a red run says which one. |
+| Typecheck, lint, unit and integration tests, production build | `.github/workflows/ci.yml`, job **checks** | The code compiles, follows the rules (including `react/no-unstable-nested-components`), the 249 vitest tests pass, `next build` succeeds. Each is its own named step, so a red run says which one. |
 | Database security audit | job **e2e**, step *Database security audit* | On the assembled schema: every `gestion` table has row-level security on and a policy, `anon` has no usage, grant or executable function in `gestion`, the public invitation preview answers `unknown` to a made-up token, every definer function pins `search_path`, the media bucket is private. `e2e/db/rls-audit.sql`. |
 | End-to-end, real browser, real backend | job **e2e**, step *End-to-end tests* | The built app (`next start`) against a throwaway local Supabase: sign-up, sign-in, sign-out, two accounts on one browser, Safari-style autofill, property creation, rental dossier to activation, tenant invitation accepted from the link by a new account, cross-account isolation, departure, and the typing checks (a field keeps the caret). Chromium desktop for everything, WebKit in an iPhone 14 viewport for the door and the typing checks. |
 
@@ -19,14 +19,24 @@ The `gestion` schema delegates identity and permissions to Morada's
 suite's database is built from **Morada's migrations first**, then this
 repository's `supabase/applied` files, in production order:
 
+- `e2e/db/base/base_public.sql` is Morada's `public` schema as it stood
+  before its migration history begins: the first Morada migration already
+  assumes `public.agencies`, `public.listings` and a handful of other tables
+  and functions that were created before the repository kept migrations.
+  The file recreates exactly those objects as the hosted project defines
+  them today (a read-only catalog snapshot; `snapshot-base.sql` next to it
+  holds the queries and the rule for deciding what belongs there). Later
+  migrations that touch these tables are written `if not exists` and replay
+  over it cleanly. Refresh it when a base table or function changes in
+  production.
 - `e2e/db/morada/` is a vendored copy of `dextermex/morada`'s
   `supabase/migrations` (its `MANIFEST.md` records the source commit). When
   Morada's schema changes, refresh it from a checkout and commit the result:
-  `npm run e2e:morada:sync -- ../morada`.
+  `npm run e2e:morada:sync -- ../morada` (the base directory is left alone).
 - `e2e/db/prepare.mjs` assembles `e2e/supabase/migrations/` (generated,
   ignored by git): a prelude (extensions, the realtime publication), the
-  Morada files, then `0001`…`0017` renamed with later timestamps. `0099_rollback`
-  is never included.
+  base snapshot, the Morada files, then `0001`…`0018` renamed with later
+  timestamps. `0099_rollback` is never included.
 - `e2e/supabase/config.toml` is the local stack's configuration: `gestion`
   exposed through the API as on the hosted project, e-mail confirmations off
   so a sign-up returns a session, disposable keys, no seed.
@@ -100,6 +110,8 @@ from the route and the commit.
 - A red **e2e** step: open the uploaded report, read the trace. If a label
   changed, update the helper; if the schema changed, refresh the vendored
   Morada copy or add the new `supabase/applied` file (the prepare script
-  picks it up by name).
+  picks it up by name). A Morada migration failing on a missing `public`
+  object means the base snapshot is behind production: refresh it with the
+  queries in `e2e/db/base/snapshot-base.sql`.
 - The suite does not replace a real device: Safari on an iPhone, and the
   production deployment, are still checked by hand after a release.

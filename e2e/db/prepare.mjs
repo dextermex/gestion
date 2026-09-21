@@ -3,8 +3,12 @@
 //
 //   1. a prelude that makes a fresh local stack look like the project the
 //      schema was written against (publication, extensions);
-//   2. Morada's own migrations, vendored in e2e/db/morada (see MANIFEST.md);
-//   3. this repository's supabase/applied files, in order, minus the
+//   2. Morada's `public` schema as it stood before its migration history
+//      begins (e2e/db/base/base_*.sql, snapshotted from the hosted project:
+//      the first Morada migration already assumes `public.agencies` and a
+//      handful of other tables);
+//   3. Morada's own migrations, vendored in e2e/db/morada (see MANIFEST.md);
+//   4. this repository's supabase/applied files, in order, minus the
 //      rollback script.
 //
 // The output directory is generated and ignored by git. Nothing here is a
@@ -34,6 +38,14 @@ $$;
 `;
 writeFileSync(path.join(out, "20260101000000_e2e_prelude.sql"), prelude);
 
+// Right after the prelude, before the first Morada file (2026-07-11).
+const base = path.join(here, "base");
+const baseFiles = readdirSync(base).filter((f) => /^base_.*\.sql$/.test(f)).sort();
+baseFiles.forEach((f, i) => {
+  const stamp = `2026010100${String(i + 1).padStart(4, "0")}`;
+  writeFileSync(path.join(out, `${stamp}_${f}`), readFileSync(path.join(base, f)));
+});
+
 const morada = path.join(here, "morada");
 const moradaFiles = readdirSync(morada).filter((f) => f.endsWith(".sql")).sort();
 for (const f of moradaFiles) writeFileSync(path.join(out, f), readFileSync(path.join(morada, f)));
@@ -48,4 +60,7 @@ gestionFiles.forEach((f, i) => {
   writeFileSync(path.join(out, `${stamp}_gestion_${f}`), readFileSync(path.join(applied, f)));
 });
 
-console.log(`${1 + moradaFiles.length + gestionFiles.length} migrations assembled in ${path.relative(root, out)}: prelude, ${moradaFiles.length} Morada, ${gestionFiles.length} gestion`);
+console.log(
+  `${1 + baseFiles.length + moradaFiles.length + gestionFiles.length} migrations assembled in ${path.relative(root, out)}: ` +
+    `prelude, ${baseFiles.length} base, ${moradaFiles.length} Morada, ${gestionFiles.length} gestion`,
+);

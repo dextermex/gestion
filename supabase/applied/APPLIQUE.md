@@ -135,3 +135,26 @@ les quatre comptes en base (deux locataires : vrai, 1 logement ; deux
 gestionnaires : faux, 0), `public.g_can` toujours sur
 `60d98f80cccaa74f02b4afb1ebd6b859`. Réversible : `portal_invite_lease`
 telle qu'en 0015, drop de `is_tenant()`.
+
+## 0018 · 2026-09-21 · droits d'exécution explicites sur les fonctions
+
+`0018_function_grants.sql` (migration `gestion_function_grants`) vient de la
+première exécution de l'audit de sécurité de la base
+(`e2e/db/rls-audit.sql`) sur le schéma complet rejoué localement : huit
+fonctions du schéma gestion créées sans clause de droits gardaient le droit
+d'exécution par défaut de PUBLIC (`can`, `member_orgs`, `role_extra_defaults`,
+`portal_tenant_lease`, `portal_owner_property`, `portal_owner_lease`,
+`media_org`, `media_segment`). Le rôle anon n'a pas d'USAGE sur le schéma,
+rien n'était donc accessible ; la garantie ne reposait que sur ce seul verrou.
+Même geste qu'en 0015 : révocation de PUBLIC et d'anon, droit explicite à
+`authenticated` pour les sept fonctions que les policies (tables et stockage)
+évaluent au nom de l'utilisateur connecté ; `role_extra_defaults`, appelée
+seulement depuis `can()` (security definer), reste au propriétaire. Aucune
+signature, aucun corps, aucune ligne modifiés. Vérifié après application :
+aucune fonction de gestion exécutable par anon, vingt exécutables par
+`authenticated` ; en se faisant passer pour un compte gestionnaire, 7 biens,
+6 baux, 11 lignes de `rent_period_status`, 2 objets `gestion-media` visibles
+et `can(org, 'properties.read')` vrai ; pour un compte locataire, 1 logement
+dans `my_home()`, `is_tenant()` vrai, 1 objet `gestion-media` visible ;
+`public.g_can` toujours sur `60d98f80cccaa74f02b4afb1ebd6b859`. Réversible :
+`grant execute on function ... to public` pour chacune.

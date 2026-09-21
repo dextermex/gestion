@@ -36,7 +36,8 @@ writeFileSync(
     `by \`e2e/db/sync-morada-schema.mjs\`.\n\n` +
     `These files are applied to a throwaway local Supabase in CI, before this repository's \`supabase/applied\` files, ` +
     `because the \`gestion\` schema delegates identity and permissions to Morada's \`public.agencies\`, \`public.crm_members\` ` +
-    `and \`public.gestion_onboard\`. They are never applied to production from here.\n\n` +
+    `and \`public.gestion_onboard\`. They are never applied to production from here. ` +
+    `The \`public\` objects that predate this history live in \`e2e/db/base\`, which this script does not touch.\n\n` +
     files.map((f) => `- ${f}`).join("\n") +
     "\n",
 );
