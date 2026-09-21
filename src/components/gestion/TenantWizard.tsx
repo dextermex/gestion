@@ -252,7 +252,7 @@ export default function TenantWizard({
         body: JSON.stringify({ action: "activate" }),
       });
       if (res.ok) {
-        router.push(`/app/biens/${propertyId}?onglet=location`);
+        router.push(`/app/biens/${propertyId}?onglet=location&lot=${unitId}`);
         router.refresh();
         return;
       }
@@ -327,7 +327,7 @@ export default function TenantWizard({
     } finally {
       setLeaving(false);
     }
-    router.push(`/app/biens/${propertyId}?onglet=location`);
+    router.push(`/app/biens/${propertyId}?onglet=location&lot=${unitId}`);
     router.refresh();
   };
   // Before a dossier exists nothing can be saved until someone is named.

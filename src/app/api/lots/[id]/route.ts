@@ -58,6 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.bedrooms = b === null ? null : Math.round(b);
   }
   if (has(body, "furnished")) patch.furnished = body.furnished === true;
+  if (has(body, "photoUrl") && body.photoUrl === null) patch.photo_url = null;
 
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
   const { data, error } = await g.from("units").update(patch).eq("org_id", org.id).eq("id", id).select("id");

@@ -29,7 +29,7 @@ const n = (v: unknown): number => (typeof v === "number" ? v : 0);
 
 const DEFAULTS: Record<string, () => Row> = {
   properties: () => ({ archived_at: null, is_copropriete: false, smoke_detectors_confirmed: false, photo_url: null }),
-  units: () => ({ archived_at: null, furnished: false, kind: "dwelling", floor: null, area_sqm: 0, rooms: 0, bedrooms: null }),
+  units: () => ({ archived_at: null, furnished: false, kind: "dwelling", floor: null, area_sqm: 0, rooms: 0, bedrooms: null, photo_url: null }),
   contacts: () => ({
     archived_at: null,
     kind: "natural",
@@ -237,7 +237,7 @@ export class FakeDb {
               unit_label: u.label, unit_floor: u.floor, unit_area_sqm: u.area_sqm, unit_rooms: u.rooms, unit_bedrooms: u.bedrooms,
               property_name: p.name, property_address: p.address, property_commune: p.commune, energy_class: p.energy_class,
               cpe_issued_on: p.cpe_issued_on, syndic_name: p.syndic_name, smoke_detectors_confirmed: p.smoke_detectors_confirmed,
-              photo_url: p.photo_url,
+              photo_url: u.photo_url ?? p.photo_url,
             };
           })
           .sort((a, b) => (String(a.start_date) < String(b.start_date) ? 1 : -1));

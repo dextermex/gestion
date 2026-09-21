@@ -33,7 +33,7 @@ export interface EditTopic {
 
 /** Editors that are not a flat form: they own their own small interface. */
 export type SpecialEditor =
-  | { kind: "photos"; propertyId: string; currentUrl: string | null }
+  | { kind: "photos"; propertyId: string; currentUrl: string | null; unitId?: string }
   | { kind: "payers"; leaseId: string; payers: string[] }
   | {
       kind: "indexation";

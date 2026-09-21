@@ -421,7 +421,7 @@ function PhotosEditor({
           <Button
             variant="ghost"
             onClick={async () => {
-              const ok = await call(`/api/biens/${special.propertyId}`, {
+              const ok = await call(special.unitId ? `/api/lots/${special.unitId}` : `/api/biens/${special.propertyId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ photoUrl: null }),
@@ -442,6 +442,7 @@ function PhotosEditor({
             const body = new FormData();
             body.append("file", file);
             body.append("propertyId", special.propertyId);
+            if (special.unitId) body.append("unitId", special.unitId);
             if (await call("/api/biens/photo", { method: "POST", body })) done();
           }}
         >

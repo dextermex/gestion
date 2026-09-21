@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as fr from "@/lib/demo/data";
 import type { DemoData } from "@/lib/demo";
-import { buildPortfolio, findCard, nextDueOn, occupancyOf } from "@/lib/gestion/portfolio";
+import { buildPortfolio, findCard, isLettable, lotCard, nextDueOn, occupancyOf } from "@/lib/gestion/portfolio";
+import { buildingStats, lotFamilyCounts, lotFamilyOf, sortedUnits, unitComposition } from "@/lib/gestion/building";
 import type { DemoLease } from "@/lib/demo/data";
 
 /**
@@ -195,5 +196,81 @@ describe("the next due date on a card", () => {
     expect(after.lots.find((l) => l.lease?.id === lease.id)!.lease!.endDate).toBe("2026-09-23");
     expect(after.nextDue === null || after.nextDue <= "2026-09-23" || after.lots.length > 1).toBe(true);
     if (after.lots.length === 1) expect(after.nextDue).toBeNull();
+  });
+});
+
+describe("a building and its lots", () => {
+  const beaulieu = findCard(cards, "p-beaulieu")!;
+
+  it("derives the building's figures from its lots and never types them", () => {
+    const stats = buildingStats(beaulieu);
+    const lettable = demo.UNITS.filter((u) => u.propertyId === "p-beaulieu" && u.kind !== "parking");
+    expect(stats.lots).toBe(demo.UNITS.filter((u) => u.propertyId === "p-beaulieu").length);
+    expect(stats.lettable).toBe(lettable.length);
+    expect(stats.occupied + stats.vacant).toBe(stats.lettable);
+    expect(stats.occupancyRate).toBeCloseTo(stats.occupied / stats.lettable);
+    expect(stats.monthlyCents).toBe(beaulieu.monthlyCents);
+    expect(stats.late).toBe(beaulieu.lots.filter((l) => l.status === "late").length);
+    expect(stats.partial).toBe(beaulieu.lots.filter((l) => l.status === "partial").length);
+  });
+
+  it("has no occupancy rate when nothing can be let", () => {
+    const empty = buildPortfolio({ ...demo, PROPERTIES: [demo.PROPERTIES[0]], UNITS: [], LEASES: [] })[0];
+    expect(buildingStats(empty).occupancyRate).toBeNull();
+    expect(buildingStats(empty).lots).toBe(0);
+  });
+
+  it("sorts lots into the four families the grid filters by, annexes included", () => {
+    const counts = lotFamilyCounts(beaulieu);
+    expect(counts.apartments).toBe(5);
+    expect(counts.parking).toBe(1);
+    expect(counts.commercial + counts.other).toBe(0);
+    expect(lotFamilyOf({ kind: "office" })).toBe("commercial");
+    expect(lotFamilyOf({ kind: "cellar" })).toBe("other");
+    expect(unitComposition(beaulieu)).toEqual([
+      { kind: "dwelling", n: 5 },
+      { kind: "parking", n: 1 },
+    ]);
+    // Top floor first, the ground floor last, the basement below it.
+    expect(sortedUnits(beaulieu).map((u) => u.label)).toEqual(["Apt 3B", "Apt 3C", "Apt 2A", "Apt 1A", "Studio RDC", "Parking P1"]);
+  });
+
+  it("cuts a building down to one lot that reads like a home", () => {
+    const lot = lotCard(beaulieu, "u-b-3b", demo.TODAY)!;
+    expect(lot.scope).toBe("lot");
+    expect(lot.single?.unit.id).toBe("u-b-3b");
+    expect(lot.lots).toHaveLength(1);
+    expect(lot.annexes).toEqual([]);
+    expect(lot.occupied).toBe(1);
+    expect(lot.vacant).toBe(0);
+    expect(lot.monthlyCents).toBe(lot.single!.monthlyCents);
+    expect(lot.nextDue).toBe(nextDueOn(demo.TODAY, lot.single!.lease!.paymentDay));
+    expect(occupancyOf(lot)).toBe("occupied");
+    // The building itself is untouched.
+    expect(beaulieu.scope).toBe("property");
+    expect(beaulieu.single).toBeNull();
+  });
+
+  it("reads an annex as a lot of its own, with nothing let on it", () => {
+    const parking = lotCard(beaulieu, "u-b-p1", demo.TODAY)!;
+    expect(parking.single?.unit.kind).toBe("parking");
+    expect(parking.single?.vacant).toBe(true);
+    expect(parking.monthlyCents).toBe(0);
+    expect(parking.nextDue).toBeNull();
+    expect(isLettable(parking.single!.unit)).toBe(false);
+  });
+
+  it("refuses a lot of another building", () => {
+    expect(lotCard(beaulieu, "u-bert", demo.TODAY)).toBeNull();
+    expect(lotCard(beaulieu, "nope", demo.TODAY)).toBeNull();
+  });
+
+  it("lets an office like a shop", () => {
+    const office = { id: "u-off", propertyId: "p-kirchberg", label: "Bureau 2", kind: "office" as const, floor: "2e", areaSqm: 80, rooms: 0, furnished: false };
+    const withOffice = buildPortfolio({ ...demo, UNITS: [...demo.UNITS, office] });
+    const kirchberg = findCard(withOffice, "p-kirchberg")!;
+    expect(kirchberg.kind).toBe("commercial");
+    expect(kirchberg.lots.some((l) => l.unit.id === "u-off" && l.vacant)).toBe(true);
+    expect(isLettable(office)).toBe(true);
   });
 });

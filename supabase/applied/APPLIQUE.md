@@ -106,3 +106,13 @@ Vérifié après application : `public.g_can` toujours sur
 `60d98f80cccaa74f02b4afb1ebd6b859`, prévisualisation anonyme d'un jeton
 inconnu = `{state: unknown}`, policies et fonctions présentes, aucune ligne
 existante modifiée. Réversible : voir l'en-tête du fichier.
+
+## 0016 · 2026-09-21 · la photo d'un lot
+
+`0016_unit_photo.sql` (migration `gestion_unit_photo`) ajoute la colonne
+nullable `gestion.units.photo_url` (chemin dans `gestion-media`, dossier du
+bien, mêmes policies de stockage) et recrée `gestion.my_home()` à signature
+identique pour préférer la photo du lot à celle du bien. Additif ; aucune
+ligne modifiée. Vérifié après application : colonne présente, fonction
+recréée, `public.g_can` toujours sur `60d98f80cccaa74f02b4afb1ebd6b859`.
+Réversible : drop de la colonne, puis `my_home()` telle qu'en 0015.

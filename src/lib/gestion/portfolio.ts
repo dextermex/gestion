@@ -20,7 +20,12 @@ export type PropertyKind = "building" | "house" | "apartment" | "commercial";
 
 /** Lots that can carry a lease of their own. A parking space or a cellar is
  *  part of a home, not a home, and must not count as a vacancy. */
-const LETTABLE: ReadonlySet<DemoUnit["kind"]> = new Set(["dwelling", "commercial"]);
+const LETTABLE: ReadonlySet<DemoUnit["kind"]> = new Set(["dwelling", "commercial", "office"]);
+
+/** Whether a lot can carry a lease of its own. */
+export function isLettable(unit: Pick<DemoUnit, "kind">): boolean {
+  return LETTABLE.has(unit.kind);
+}
 
 const LIVE: ReadonlySet<DemoLease["status"]> = new Set(["active", "notice"]);
 
@@ -59,11 +64,14 @@ export type PropertyCard = {
   single: UnitLine | null;
   /** Earliest upcoming due date across live leases, for "next payment". */
   nextDue: string | null;
+  /** A whole property, or one lot of a building read as a sheet of its own
+   *  (`lotCard`): the same shape, so every tab renders either. */
+  scope: "property" | "lot";
 };
 
 function kindOf(p: DemoProperty, units: DemoUnit[]): PropertyKind {
   const dwellings = units.filter((u) => u.kind === "dwelling");
-  const commercial = units.filter((u) => u.kind === "commercial");
+  const commercial = units.filter((u) => u.kind === "commercial" || u.kind === "office");
   if (commercial.length > 0 && dwellings.length === 0) return "commercial";
   if (dwellings.length === 1 && units.filter((u) => LETTABLE.has(u.kind)).length === 1) {
     return p.isCopropriete ? "apartment" : "house";
@@ -137,8 +145,39 @@ export function buildPortfolio(demo: DemoData): PropertyCard[] {
       mix,
       single: lots.length === 1 ? lots[0] : null,
       nextDue: due[0] ?? null,
+      scope: "property",
     };
   });
+}
+
+/**
+ * One lot of a building, as a sheet of its own: the building's card cut down
+ * to that lot, with the lot as its `single` tenancy. An annex (a parking, a
+ * cellar) gets the same shape with nothing let on it. Null when the lot is
+ * not in this building, which is what a tampered URL hits.
+ */
+export function lotCard(card: PropertyCard, unitId: string, today: string): PropertyCard | null {
+  const line =
+    card.lots.find((l) => l.unit.id === unitId) ??
+    card.annexes
+      .filter((u) => u.id === unitId)
+      .map<UnitLine>((unit) => ({ unit, lease: null, tenantNames: [], drafts: [], monthlyCents: 0, period: null, status: null, vacant: true }))[0];
+  if (!line) return null;
+  const mix: Partial<Record<RentStatus, number>> = line.status ? { [line.status]: 1 } : {};
+  const nextDue = line.lease ? nextDueOn(today, line.lease.paymentDay, line.lease.startDate, line.lease.endDate) : null;
+  return {
+    ...card,
+    lots: [line],
+    annexes: [],
+    occupied: line.vacant ? 0 : 1,
+    vacant: line.vacant ? 1 : 0,
+    monthlyCents: line.monthlyCents,
+    areaSqm: line.unit.areaSqm,
+    mix,
+    single: line,
+    nextDue,
+    scope: "lot",
+  };
 }
 
 export { nextDueOn };

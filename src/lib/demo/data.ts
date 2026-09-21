@@ -201,11 +201,13 @@ export const PROPERTIES: DemoProperty[] = [
   },
 ];
 
+export type UnitKind = "dwelling" | "commercial" | "office" | "parking" | "cellar" | "other";
+
 export interface DemoUnit {
   id: string;
   propertyId: string;
   label: string;
-  kind: "dwelling" | "commercial" | "parking";
+  kind: UnitKind;
   floor: string;
   areaSqm: number;
   /** Total habitable rooms ("pièces"). */
@@ -214,6 +216,8 @@ export interface DemoUnit {
   bedrooms?: number;
   furnished: boolean;
   vacantSince?: string;
+  /** The lot's own photograph, once uploaded; the property's cover stands in otherwise. */
+  photoUrl?: string | null;
 }
 
 export const UNITS: DemoUnit[] = [

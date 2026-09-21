@@ -50,7 +50,7 @@ export default async function AjouterLocatairePage({
 
     // A lot already under a live lease cannot take a second one.
     const live = demo.LEASES.find((l) => l.unitId === unit.id && (l.status === "active" || l.status === "notice"));
-    if (live) redirect(`/app/biens/${property.id}?onglet=location`);
+    if (live) redirect(`/app/biens/${property.id}?onglet=location&lot=${unit.id}`);
 
     // A dossier already in preparation here is continued, never doubled.
     const draft = demo.LEASES.filter((l) => l.unitId === unit.id && l.status === "draft").sort((a, b) => b.seq - a.seq)[0];
@@ -76,7 +76,7 @@ export default async function AjouterLocatairePage({
   const unit = demo.UNITS.find((u) => u.id === lease.unitId);
   const property = unit ? demo.PROPERTIES.find((p) => p.id === unit.propertyId) : undefined;
   if (!unit || !property) notFound();
-  if (lease.status !== "draft") redirect(`/app/biens/${property.id}?onglet=location`);
+  if (lease.status !== "draft") redirect(`/app/biens/${property.id}?onglet=location&lot=${unit.id}`);
 
   const progress = dossierOf(demo, lease);
   const startStep: RentalStep = etape ? stepAt(Number(etape)) : progress.resumeStep;

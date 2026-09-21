@@ -31,6 +31,7 @@ type Labels = {
 export default function DraftDossierActions({
   leaseId,
   propertyId,
+  unitId,
   real,
   ready,
   obsolete = false,
@@ -38,6 +39,8 @@ export default function DraftDossierActions({
 }: {
   leaseId: string;
   propertyId: string;
+  /** The lot the dossier is on: a building sends the owner to that lot's sheet. */
+  unitId?: string;
   real: boolean;
   /** Someone is named and a rent is set: the dossier may become a tenancy. */
   ready: boolean;
@@ -61,7 +64,7 @@ export default function DraftDossierActions({
       });
       if (res.ok) {
         setConfirming(false);
-        if (action === "activate") router.push(`/app/biens/${propertyId}?onglet=location`);
+        if (action === "activate") router.push(`/app/biens/${propertyId}?onglet=location${unitId ? `&lot=${unitId}` : ""}`);
         router.refresh();
         return;
       }

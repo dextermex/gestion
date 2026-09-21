@@ -138,7 +138,7 @@ export async function buildRealDataFrom(
       "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url",
       "created_at",
     ),
-    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished", "created_at"),
+    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url", "created_at"),
     q(
       "contacts",
       "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes,user_id",
@@ -209,7 +209,7 @@ export async function buildRealDataFrom(
   // ── Properties & units ──
   // photo_url holds a bucket path, not a link: one batched signing call,
   // skipped entirely when no property has a photograph yet.
-  const signed = await sign(propertyRows.map((p) => s(p.photo_url)).filter(Boolean));
+  const signed = await sign([...propertyRows.map((p) => s(p.photo_url)), ...unitRows.map((u) => s(u.photo_url))].filter(Boolean));
   const unitsByProperty = new Map<string, number>();
   for (const u of unitRows) {
     unitsByProperty.set(s(u.property_id), (unitsByProperty.get(s(u.property_id)) ?? 0) + 1);
@@ -240,12 +240,13 @@ export async function buildRealDataFrom(
     id: s(u.id),
     propertyId: s(u.property_id),
     label: s(u.label),
-    kind: (["dwelling", "commercial", "parking"].includes(s(u.kind)) ? s(u.kind) : "dwelling") as DemoUnit["kind"],
+    kind: (["dwelling", "commercial", "office", "parking", "cellar", "other"].includes(s(u.kind)) ? s(u.kind) : "dwelling") as DemoUnit["kind"],
     floor: s(u.floor),
     areaSqm: n(u.area_sqm),
     rooms: n(u.rooms),
     bedrooms: typeof u.bedrooms === "number" ? u.bedrooms : undefined,
     furnished: b(u.furnished),
+    photoUrl: signed.get(s(u.photo_url)) ?? null,
   }));
 
   // ── Leases ──

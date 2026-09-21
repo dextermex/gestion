@@ -30,6 +30,10 @@ export function propertyMenu(
 ): { groups: MenuGroup[]; hasLease: boolean } {
   const p = card.property;
   const single = card.single;
+  // One lot of a building: its own characteristics and photo, its tenancy,
+  // its own tabs. The building's facts are edited from the building's page.
+  const lotScope = card.scope === "lot" && single !== null;
+  const base = lotScope ? `/app/biens/${p.id}/lots/${single.unit.id}` : `/app/biens/${p.id}`;
   const live = card.lots.find((l) => l.lease) ?? null;
   const lease = live?.lease ?? null;
   // Everyone on the lease is a tenant in their own right, so each one gets
@@ -118,16 +122,28 @@ export function propertyMenu(
     extra: { propertyId: p.id },
   });
 
-  const bien: MenuGroup = {
-    label: d.modify.groupProperty,
-    entries: [
-      { id: "info", label: d.modify.propertyInfo, topic: info },
-      { id: "photos", label: d.modify.photos, special: { kind: "photos", propertyId: p.id, currentUrl: p.photoUrl } },
-      characteristics,
-      { id: "technical", label: d.modify.technical, topic: technical },
-      { id: "propertyInsurance", label: d.modify.propertyInsurance, topic: propertyInsurance },
-    ],
-  };
+  const bien: MenuGroup = lotScope
+    ? {
+        label: d.modify.lot,
+        entries: [
+          characteristics,
+          {
+            id: "lotPhoto",
+            label: d.modify.lotPhoto,
+            special: { kind: "photos", propertyId: p.id, currentUrl: single.unit.photoUrl ?? null, unitId: single.unit.id },
+          },
+        ],
+      }
+    : {
+        label: d.modify.groupProperty,
+        entries: [
+          { id: "info", label: d.modify.propertyInfo, topic: info },
+          { id: "photos", label: d.modify.photos, special: { kind: "photos", propertyId: p.id, currentUrl: p.photoUrl } },
+          characteristics,
+          { id: "technical", label: d.modify.technical, topic: technical },
+          { id: "propertyInsurance", label: d.modify.propertyInsurance, topic: propertyInsurance },
+        ],
+      };
 
   /* ------------------------------- the tenancy ------------------------------- */
 
@@ -302,14 +318,18 @@ export function propertyMenu(
   groups.push({
     label: d.modify.groupManagement,
     entries: [
-      { id: "documents", label: d.bien.tabDocuments, href: `/app/biens/${p.id}?onglet=documents` },
-      { id: "interventions", label: d.bien.tabInterventions, href: `/app/biens/${p.id}?onglet=interventions` },
-      { id: "history", label: d.bien.tabHistory, href: `/app/biens/${p.id}?onglet=historique` },
-      {
-        id: "archive",
-        label: d.modify.archive,
-        special: { kind: "archive", propertyId: p.id, propertyName: p.name, blocked: card.occupied > 0 },
-      },
+      { id: "documents", label: d.bien.tabDocuments, href: `${base}?onglet=documents` },
+      { id: "interventions", label: d.bien.tabInterventions, href: `${base}?onglet=interventions` },
+      { id: "history", label: d.bien.tabHistory, href: `${base}?onglet=historique` },
+      ...(lotScope
+        ? []
+        : [
+            {
+              id: "archive",
+              label: d.modify.archive,
+              special: { kind: "archive" as const, propertyId: p.id, propertyName: p.name, blocked: card.occupied > 0 },
+            },
+          ]),
     ],
   });
 

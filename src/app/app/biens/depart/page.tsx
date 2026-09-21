@@ -23,7 +23,7 @@ export default async function DepartPage({ searchParams }: { searchParams: Promi
   const property = unit ? demo.PROPERTIES.find((p) => p.id === unit.propertyId) : undefined;
   if (!unit || !property) notFound();
   if (lease.status === "ended") redirect(`/app/biens/${property.id}?onglet=historique`);
-  if (lease.status === "draft") redirect(`/app/biens/${property.id}?onglet=location`);
+  if (lease.status === "draft") redirect(`/app/biens/${property.id}?onglet=location&lot=${unit.id}`);
 
   // What the ledger says is still open, and what the guarantee holds. Both
   // are read, never asserted: the owner decides what to do about them.

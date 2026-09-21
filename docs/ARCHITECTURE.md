@@ -164,6 +164,22 @@ their whole history; an account that is a tenant and has no workspace is sent to
 (`POST /api/espace/creer`). E-mail leaves through Resend when `RESEND_API_KEY` is set;
 otherwise the invitation is still valid and the owner passes the link on.
 
+### A building is read as a whole, and each lot as a sheet of its own
+
+`/app/biens/[id]` renders a home (one lettable lot) as one sheet, and a building as a
+whole: the photograph, the name, four figures (`buildingStats()` in
+`src/lib/gestion/building.ts`: lots, occupied and free, occupancy rate, monthly total,
+late rents) and its lots as cards (`LotGrid`, filtered by family, searched, shown as a
+grid or a list). Every figure is derived from the portfolio projection, the same one the
+Biens cards use, so a building can never disagree with its lots. A lot opens at
+`/app/biens/[id]/lots/[unitId]` with the tabs of a home, computed on `lotCard()`: the
+building's card cut down to that lot with `scope: "lot"`, so the shared tab renderers
+(`sheet.tsx`) narrow their lookups to that lot's units. The tenancy, the wizard, the
+departure, the tenant portal and the documents are the same rows and the same flows: a
+building's "Location" link is sent to the lot it names. Lots carry a photograph of
+their own (`units.photo_url`, 0016) in the property's storage folder; the tenant's home
+shows it first.
+
 ### The ledger's calendar is one rule, and the checklist reads the rows
 
 `src/lib/gestion/ledger.ts` decides which months a live lease's ledger holds and when

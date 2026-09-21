@@ -191,7 +191,7 @@ export default function DepartureWizard({
     } finally {
       setLeaving(false);
     }
-    router.push(`/app/biens/${lease.propertyId}?onglet=location`);
+    router.push(`/app/biens/${lease.propertyId}?onglet=location&lot=${lease.unitId}`);
     router.refresh();
   };
 
@@ -322,7 +322,7 @@ export default function DepartureWizard({
     <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
       {step === 1 ? (
         <Link
-          href={`/app/biens/${lease.propertyId}?onglet=location`}
+          href={`/app/biens/${lease.propertyId}?onglet=location&lot=${lease.unitId}`}
           className="tactile inline-flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
         >
           {d.common.back}
@@ -357,7 +357,7 @@ export default function DepartureWizard({
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 1 || step > TOTAL ? (
           <Link
-            href={`/app/biens/${lease.propertyId}?onglet=location`}
+            href={`/app/biens/${lease.propertyId}?onglet=location&lot=${lease.unitId}`}
             className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
           >
             <BackIcon />

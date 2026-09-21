@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   const propertyId = String(form?.get("propertyId") ?? "");
+  // A lot's own photograph lives in its property's folder, under the same policies.
+  const unitId = String(form?.get("unitId") ?? "");
   if (!(file instanceof File) || !propertyId) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
@@ -51,6 +53,17 @@ export async function POST(req: NextRequest) {
     .eq("id", propertyId)
     .maybeSingle();
   if (findErr || !property) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (unitId) {
+    const { data: unit, error: unitErr } = await client
+      .schema("gestion")
+      .from("units")
+      .select("id")
+      .eq("org_id", org.id)
+      .eq("property_id", propertyId)
+      .eq("id", unitId)
+      .maybeSingle();
+    if (unitErr || !unit) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
   const path = `${org.id}/${propertyId}/${randomUUID()}.${ext}`;
   const { error: upErr } = await client.storage
@@ -61,12 +74,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "upload_failed" }, { status: 502 });
   }
 
-  const { error: setErr } = await client
-    .schema("gestion")
-    .from("properties")
-    .update({ photo_url: path })
-    .eq("org_id", org.id)
-    .eq("id", propertyId);
+  const { error: setErr } = unitId
+    ? await client.schema("gestion").from("units").update({ photo_url: path }).eq("org_id", org.id).eq("id", unitId)
+    : await client.schema("gestion").from("properties").update({ photo_url: path }).eq("org_id", org.id).eq("id", propertyId);
   if (setErr) {
     // The object is orphaned rather than silently half-applied; say so.
     console.error("photo_url update failed:", setErr.code, setErr.message);
