@@ -125,7 +125,12 @@ export async function provisionDefaultWorkspace(): Promise<Identity | null> {
       .maybeSingle();
     const name = displayNameFrom(profile.data ?? null, session.email);
     const { error } = await db.rpc("gestion_onboard", { p_name: name, p_kind: "owner" });
-    if (error) return null;
+    if (error) {
+      // Named in the server log so a blank first visit can be traced; the
+      // message is the database's, the person is not in it.
+      console.error("[workspace] gestion_onboard failed:", error.code, error.message);
+      return null;
+    }
   }
 
   // Resolve again from scratch; getIdentity() is cached per request and would
@@ -136,10 +141,14 @@ export async function provisionDefaultWorkspace(): Promise<Identity | null> {
   ]);
   const memberships = membershipRes.data ?? [];
   const displayName = displayNameFrom(profileRes.data ?? null, session.email);
-  if (memberships.length === 0) return null;
+  if (memberships.length === 0) {
+    console.error("[workspace] no active membership after provisioning:", membershipRes.error?.code, membershipRes.error?.message);
+    return null;
+  }
 
   const ids = memberships.map((m) => m.agency_id as string);
   const agenciesRes = await db.from("agencies").select("id, name, kind").in("id", ids);
+  if (agenciesRes.error) console.error("[workspace] agencies unreadable after provisioning:", agenciesRes.error.code, agenciesRes.error.message);
   const workspaces: Workspace[] = (agenciesRes.data ?? [])
     .map((a) => ({
       id: a.id as string,

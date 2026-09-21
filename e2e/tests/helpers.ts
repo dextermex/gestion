@@ -77,12 +77,22 @@ export async function accountEmailInShell(page: Page): Promise<string> {
   return email;
 }
 
-/** Click "Suivant" until the given control shows up, at most `max` times. */
+/**
+ * Click "Suivant" until the given control shows up, at most `max` times.
+ * Leaving a step saves the dossier first, so the next screen appears only
+ * once the server has answered: each click waits for the step's heading to
+ * change before looking again, and a step that refuses to be left (a
+ * validation the flow did not satisfy) fails here, naming that heading.
+ */
 async function nextUntil(page: Page, target: ReturnType<Page["getByRole"]>, max = 10): Promise<void> {
+  const next = page.getByRole("button", { name: "Suivant", exact: true }).first();
+  const heading = page.getByRole("heading", { level: 1 }).first();
   for (let i = 0; i < max; i++) {
-    if (await target.isVisible().catch(() => false)) return;
-    await page.getByRole("button", { name: "Suivant", exact: true }).first().click();
-    await page.waitForTimeout(250);
+    await expect(target.or(next).first()).toBeVisible();
+    if (await target.isVisible()) return;
+    const before = (await heading.textContent()) ?? "";
+    await next.click();
+    await expect(heading, `the step "${before}" should hand over to the next one`).not.toHaveText(before, { timeout: 30_000 });
   }
   await expect(target).toBeVisible();
 }
