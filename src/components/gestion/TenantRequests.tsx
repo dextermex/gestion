@@ -154,7 +154,7 @@ export default function TenantRequests({
               </>
             )}
             <Field label={labels.title} hint={labels.titleHint}>
-              <Input required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+              <Input required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
             </Field>
             <Field label={labels.description} hint={labels.descriptionHint}>
               <Textarea required={kind === "technical"} maxLength={4000} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />

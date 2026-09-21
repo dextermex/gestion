@@ -89,7 +89,7 @@ export default function LotCreate({ propertyId, labels, sampleNote }: { property
         <form className="space-y-4" onSubmit={submit}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={labels.label}>
-              <Input required maxLength={60} value={label} onChange={(e) => setLabel(e.target.value)} autoFocus />
+              <Input required maxLength={60} value={label} onChange={(e) => setLabel(e.target.value)} />
             </Field>
             <Field label={labels.kind}>
               <Select value={kind} onChange={(e) => setKind(e.target.value as keyof LotCreateLabels["kinds"])}>

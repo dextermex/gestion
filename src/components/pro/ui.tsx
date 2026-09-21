@@ -274,6 +274,21 @@ export function InlineError({ children }: { children: React.ReactNode }) {
 
 /* ----------------------------------- Modal --------------------------------- */
 
+/**
+ * The latest value of a prop, readable from an effect without being one of
+ * its dependencies. An effect that opens a dialog or moves focus must run on
+ * the open transition only: a callback prop written inline by the parent has
+ * a new identity on every render, and listing it as a dependency turns each
+ * keystroke in the dialog into a re-run that steals the focus.
+ */
+export function useLatest<T>(value: T): React.RefObject<T> {
+  const ref = useRef(value);
+  useEffect(() => {
+    ref.current = value;
+  });
+  return ref;
+}
+
 export function Modal({
   open,
   onClose,
@@ -291,10 +306,17 @@ export function Modal({
 }) {
   const reduced = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
+  const close = useLatest(onClose);
 
   // Keyboard contract: Escape closes; focus moves into the dialog on open,
   // Tab wraps inside it, and focus returns to the trigger on close. The page
   // behind stops scrolling while the dialog is up.
+  //
+  // All of it runs on the open transition and nothing else. `onClose` is
+  // read through a ref: were it a dependency, the inline handler a parent
+  // passes on every render would re-run this effect on every keystroke in
+  // the dialog, and the focus call would pull the caret out of the field
+  // after one character.
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -302,7 +324,7 @@ export function Modal({
     document.documentElement.style.overflow = "hidden";
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close.current();
       if (e.key === "Tab" && panelRef.current) {
         const focusables = panelRef.current.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -325,7 +347,7 @@ export function Modal({
       document.documentElement.style.overflow = "";
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open, close]);
 
   return (
     <AnimatePresence>

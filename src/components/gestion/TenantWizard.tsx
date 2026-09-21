@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Select } from "@/components/pro/ui";
+import { WizardFooter } from "@/components/gestion/WizardChrome";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 import {
@@ -393,36 +394,22 @@ export default function TenantWizard({
     </>
   );
 
-  /**
-   * The same three moves on every step: back, save and continue later, next.
-   * Next is a plain button; a form's submit (the Enter key) calls the same
-   * move, so a click never saves twice.
-   */
-  const Footer = ({ onNext, nextLabel, canNext = true }: { onNext?: () => void; nextLabel?: string; canNext?: boolean }) => (
-    <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-      {isFirstStep(step) ? (
-        <Link
-          href={`/app/biens/${propertyId}`}
-          className="tactile inline-flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
-        >
-          {d.common.back}
-        </Link>
-      ) : (
-        <Button type="button" variant="ghost" onClick={back} disabled={busy}>
-          {d.common.back}
-        </Button>
-      )}
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-        <Button type="button" variant="secondary" onClick={() => void saveAndLeave()} disabled={!canSaveLater || busy} loading={leaving}>
-          {d.location.saveLater}
-        </Button>
-        {onNext && (
-          <Button type="button" onClick={onNext} disabled={!canNext || busy} loading={busy && !leaving}>
-            {nextLabel ?? d.common.next}
-          </Button>
-        )}
-      </div>
-    </div>
+  // The same three moves on every step: back, save and continue later, next.
+  // Next is a plain button; a form's submit (the Enter key) calls the same
+  // move, so a click never saves twice.
+  const footer = (moves: { onNext?: () => void; nextLabel?: string; canNext?: boolean } = {}) => (
+    <WizardFooter
+      d={d}
+      backHref={isFirstStep(step) ? `/app/biens/${propertyId}` : null}
+      onBack={back}
+      busy={busy}
+      leaving={leaving}
+      canSaveLater={canSaveLater}
+      onSaveLater={() => void saveAndLeave()}
+      onNext={moves.onNext}
+      nextLabel={moves.nextLabel}
+      canNext={moves.canNext}
+    />
   );
 
   const errorLine = saveError && (
@@ -541,7 +528,7 @@ export default function TenantWizard({
                   </div>
                 )}
                 {errorLine}
-                <Footer onNext={() => void advance()} canNext={nameOk} />
+                {footer({ onNext: () => void advance(), canNext: nameOk })}
               </form>
             </motion.div>
           )}
@@ -571,7 +558,7 @@ export default function TenantWizard({
                   </Field>
                 </div>
                 {errorLine}
-                <Footer onNext={() => void advance()} />
+                {footer({ onNext: () => void advance() })}
               </form>
             </motion.div>
           )}
@@ -613,7 +600,7 @@ export default function TenantWizard({
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.location.rentHint}</p>
                 {errorLine}
-                <Footer onNext={() => void advance()} canNext={rentOk} />
+                {footer({ onNext: () => void advance(), canNext: rentOk })}
               </form>
             </motion.div>
           )}
@@ -644,7 +631,7 @@ export default function TenantWizard({
                   </Field>
                 </div>
                 {errorLine}
-                <Footer onNext={() => void advance()} />
+                {footer({ onNext: () => void advance() })}
               </form>
             </motion.div>
           )}
@@ -710,7 +697,7 @@ export default function TenantWizard({
                 )}
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.location.guaranteeHint}</p>
                 {errorLine}
-                <Footer onNext={() => void advance()} />
+                {footer({ onNext: () => void advance() })}
               </form>
             </motion.div>
           )}
@@ -745,7 +732,7 @@ export default function TenantWizard({
                 )}
                 {edlDone && <p className="mt-3 text-sm font-semibold text-emerald-700">{d.location.checkInspection}</p>}
                 {errorLine}
-                <Footer onNext={() => void advance()} />
+                {footer({ onNext: () => void advance() })}
               </div>
             </motion.div>
           )}
@@ -776,7 +763,7 @@ export default function TenantWizard({
                 </div>
                 {insuranceDone && <p className="mt-3 text-sm font-semibold text-emerald-700">{d.location.checkInsurance}</p>}
                 {errorLine}
-                <Footer onNext={() => void advanceInsurance()} />
+                {footer({ onNext: () => void advanceInsurance() })}
               </form>
             </motion.div>
           )}
@@ -819,7 +806,7 @@ export default function TenantWizard({
 
                 <p className="mt-4 text-xs leading-relaxed text-ink-soft">{d.location.documentsNote}</p>
                 {errorLine}
-                <Footer onNext={() => void advance()} />
+                {footer({ onNext: () => void advance() })}
               </div>
             </motion.div>
           )}
@@ -880,13 +867,13 @@ export default function TenantWizard({
                 {errorLine}
 
                 {real ? (
-                  <Footer onNext={() => void activate()} nextLabel={d.location.activate} canNext={ready} />
+                  footer({ onNext: () => void activate(), nextLabel: d.location.activate, canNext: ready })
                 ) : (
                   <>
                     <p role="status" className="mt-6 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800">
                       {notice}
                     </p>
-                    <Footer />
+                    {footer()}
                   </>
                 )}
                 <p className="sr-only" aria-live="polite">

@@ -12,6 +12,15 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
+    // A component declared inside another component is a new component on
+    // every render: React unmounts and remounts everything under it, so an
+    // input there loses focus after each keystroke. Declare components at
+    // module scope, or write a plain function that returns elements.
+    rules: {
+      "react/no-unstable-nested-components": ["error", { allowAsProps: false }],
+    },
+  },
+  {
     ignores: [
       "node_modules/**",
       ".next/**",

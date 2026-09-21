@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Select } from "@/components/pro/ui";
+import { StepCard, WizardFooter } from "@/components/gestion/WizardChrome";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 
@@ -307,40 +308,25 @@ export default function DepartureWizard({
     </>
   );
 
-  const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">{children}</div>
-  );
-
   const errorLine = error && (
     <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
       {error}
     </p>
   );
 
-  /** The same three moves on every step: back, save and continue later, next. */
-  const Footer = ({ onNext, nextLabel, canNext = true }: { onNext: () => void; nextLabel?: string; canNext?: boolean }) => (
-    <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-      {step === 1 ? (
-        <Link
-          href={`/app/biens/${lease.propertyId}?onglet=location&lot=${lease.unitId}`}
-          className="tactile inline-flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
-        >
-          {d.common.back}
-        </Link>
-      ) : (
-        <Button type="button" variant="ghost" onClick={back} disabled={saving}>
-          {d.common.back}
-        </Button>
-      )}
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-        <Button type="button" variant="secondary" onClick={() => void saveAndLeave()} disabled={saving} loading={leaving}>
-          {d.location.saveLater}
-        </Button>
-        <Button type="button" onClick={onNext} disabled={!canNext || saving} loading={saving && !leaving}>
-          {nextLabel ?? d.common.next}
-        </Button>
-      </div>
-    </div>
+  // The same three moves on every step: back, save and continue later, next.
+  const footer = (moves: { onNext: () => void; nextLabel?: string; canNext?: boolean }) => (
+    <WizardFooter
+      d={d}
+      backHref={step === 1 ? `/app/biens/${lease.propertyId}?onglet=location&lot=${lease.unitId}` : null}
+      onBack={back}
+      busy={saving}
+      leaving={leaving}
+      onSaveLater={() => void saveAndLeave()}
+      onNext={moves.onNext}
+      nextLabel={moves.nextLabel}
+      canNext={moves.canNext}
+    />
   );
 
   const summary = [
@@ -381,7 +367,7 @@ export default function DepartureWizard({
           {step === 1 && (
             <motion.div key="s1" {...slide(-1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 {ex && ex.step > 1 && (
                   <p role="status" className="mb-4 rounded-xl bg-sand-50 px-3.5 py-2.5 text-sm text-ink-soft">
                     {d.departure.resumeHint.replace("{n}", String(ex.step))}
@@ -392,15 +378,15 @@ export default function DepartureWizard({
                 </Field>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.departure.dateNote}</p>
                 {errorLine}
-                <Footer onNext={() => void advance()} canNext={dateOk} />
-              </Card>
+                {footer({ onNext: () => void advance(), canNext: dateOk })}
+              </StepCard>
             </motion.div>
           )}
 
           {step === 2 && (
             <motion.div key="s2" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 {lease.hasExitEdl ? (
                   <p className="rounded-xl bg-emerald-50 p-3.5 text-sm font-semibold text-emerald-800">{d.departure.edlDone}</p>
                 ) : (
@@ -417,15 +403,15 @@ export default function DepartureWizard({
                   </>
                 )}
                 {errorLine}
-                <Footer onNext={() => void advance()} nextLabel={lease.hasExitEdl ? undefined : d.departure.edlSkip} />
-              </Card>
+                {footer({ onNext: () => void advance(), nextLabel: lease.hasExitEdl ? undefined : d.departure.edlSkip })}
+              </StepCard>
             </motion.div>
           )}
 
           {step === 3 && (
             <motion.div key="s3" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 <p className="text-sm leading-relaxed text-ink-soft">{d.departure.metersHint}</p>
                 {lease.meters.length === 0 ? (
                   <p className="mt-4 rounded-xl bg-sand-50 px-3.5 py-3 text-sm text-ink-soft">{d.departure.metersNone}</p>
@@ -455,15 +441,15 @@ export default function DepartureWizard({
                 )}
                 {metersDone && <p className="mt-3 text-sm font-semibold text-emerald-700">{d.departure.titleMeters}</p>}
                 {errorLine}
-                <Footer onNext={() => void recordMeters()} />
-              </Card>
+                {footer({ onNext: () => void recordMeters() })}
+              </StepCard>
             </motion.div>
           )}
 
           {step === 4 && (
             <motion.div key="s4" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 <p className="text-sm leading-relaxed text-ink-soft">{d.departure.keysHint}</p>
                 <label className="mt-4 flex items-start gap-2.5">
                   <input
@@ -482,15 +468,15 @@ export default function DepartureWizard({
                   </div>
                 )}
                 {errorLine}
-                <Footer onNext={() => void advance()} />
-              </Card>
+                {footer({ onNext: () => void advance() })}
+              </StepCard>
             </motion.div>
           )}
 
           {step === 5 && (
             <motion.div key="s5" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 {lease.outstandingLabel ? (
                   <p className="rounded-xl bg-amber-50 p-3.5 text-sm text-ink">
                     {d.departure.outstandingIs}{" "}
@@ -504,15 +490,15 @@ export default function DepartureWizard({
                 </p>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.departure.outstandingNote}</p>
                 {errorLine}
-                <Footer onNext={() => void advance()} />
-              </Card>
+                {footer({ onNext: () => void advance() })}
+              </StepCard>
             </motion.div>
           )}
 
           {step === 6 && (
             <motion.div key="s6" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 {lease.depositLabel ? (
                   <p className="text-sm text-ink-soft">
                     {d.departure.depositHeld}{" "}
@@ -541,15 +527,15 @@ export default function DepartureWizard({
                   </Field>
                 </div>
                 {errorLine}
-                <Footer onNext={() => void advance()} />
-              </Card>
+                {footer({ onNext: () => void advance() })}
+              </StepCard>
             </motion.div>
           )}
 
           {step === 7 && (
             <motion.div key="s7" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 <dl className="divide-y divide-sand-100">
                   {summary.map((r) => (
                     <div key={r.k} className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
@@ -560,8 +546,8 @@ export default function DepartureWizard({
                 </dl>
                 <p className="mt-4 rounded-xl bg-sand-50 px-3.5 py-3 text-sm leading-relaxed text-ink-soft">{d.departure.confirmNote}</p>
                 {errorLine}
-                <Footer onNext={() => void confirm()} nextLabel={d.departure.confirm} />
-              </Card>
+                {footer({ onNext: () => void confirm(), nextLabel: d.departure.confirm })}
+              </StepCard>
             </motion.div>
           )}
 

@@ -216,6 +216,29 @@ either side still revokes the other's session server-side. The invitation page c
 the signed-in address with the invited one and `portal_accept` refuses any other account,
 so a link opened on the wrong account is named, never attached.
 
+### A field keeps the caret: two rules, two guards
+
+Every input on every screen is typed into one key at a time, on a phone as much as on a
+desk. Two things took the caret away after one character, and both are now forbidden
+by construction:
+
+- **No component is declared inside another component.** A `const Card = () => …` inside
+  a wizard is a new component type on every render, so React unmounts and remounts
+  everything under it, the field included, on each keystroke. Wrappers live at module
+  scope (`WizardChrome.tsx`: `StepCard`, `WizardFooter`), and what changes is passed as
+  props. The lint rule `react/no-unstable-nested-components` fails the build on any new
+  one.
+- **A dialog's focus effect runs on the open transition only.** `Modal` and the meter
+  sheet move focus into the panel when they open and give it back when they close; that
+  effect depends on `open` alone and reads `onClose` through `useLatest()`, because the
+  inline handler every screen passes is a new function on each render and, as a
+  dependency, it re-ran the effect (and its focus call) on every keystroke.
+  `src/components/__tests__/focus.test.tsx` types into a dialog and a wizard step under
+  jsdom, re-rendering the owner on each key, and asserts the caret stays.
+
+`autoFocus` is used nowhere: on iOS it does not open the keyboard, and a field-level
+workaround is not a fix.
+
 ### A building is read as a whole, and each lot as a sheet of its own
 
 `/app/biens/[id]` renders a home (one lettable lot) as one sheet, and a building as a

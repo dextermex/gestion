@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Button, Field, Input, Select, Textarea } from "@/components/pro/ui";
+import { Button, Field, Input, Select, Textarea, useLatest } from "@/components/pro/ui";
 import { METER_UNITS } from "@/lib/types";
 import type { MeterKind } from "@/lib/types";
 import type { Dict } from "@/lib/i18n/fr";
@@ -91,20 +91,23 @@ function MeterSheet({
     }
   };
 
+  // On the open transition only: see Modal in pro/ui.tsx for why `onClose`
+  // is read through a ref rather than listed as a dependency.
+  const close = useLatest(onClose);
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
     const previouslyFocused = document.activeElement as HTMLElement | null;
     panelRef.current?.focus();
     document.documentElement.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close.current();
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
       document.documentElement.style.overflow = "";
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open, close]);
 
   return (
     <AnimatePresence>

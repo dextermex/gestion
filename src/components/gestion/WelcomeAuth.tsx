@@ -284,7 +284,6 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
           autoComplete="email"
           autoCapitalize="none"
           spellCheck={false}
-          autoFocus
           required
           maxLength={160}
           defaultValue={initialEmail}
@@ -419,7 +418,7 @@ function SignUpForm({
     <form id="signup-form" role="tabpanel" aria-labelledby="tab-signup" onSubmit={signUp} className="mt-5 space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <Field label={d.auth.firstName}>
-          <Input id="signup-first-name" name="given-name" autoComplete="given-name" autoFocus required maxLength={60} />
+          <Input id="signup-first-name" name="given-name" autoComplete="given-name" required maxLength={60} />
         </Field>
         <Field label={d.auth.lastName}>
           <Input id="signup-last-name" name="family-name" autoComplete="family-name" required maxLength={60} />

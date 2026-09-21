@@ -3,9 +3,12 @@ import path from "path";
 
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    // Engines and libraries run under node; a component test asks for jsdom
+    // with a `@vitest-environment jsdom` comment on its first line.
     environment: "node",
   },
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

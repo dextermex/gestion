@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Textarea } from "@/components/pro/ui";
+import { StepCard } from "@/components/gestion/WizardChrome";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 
@@ -195,10 +196,6 @@ export default function EdlWizard({
     </>
   );
 
-  const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">{children}</div>
-  );
-
   const overlay = (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
@@ -231,7 +228,7 @@ export default function EdlWizard({
           {step === 0 && (
             <motion.div key="rooms" {...slide(-1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 <p className="text-sm leading-relaxed text-ink-soft">{d.edlWizard.roomsHint}</p>
                 <ul className="mt-4 space-y-2">
                   {rooms.map((r) => (
@@ -277,14 +274,14 @@ export default function EdlWizard({
                     {d.common.next}
                   </Button>
                 </div>
-              </Card>
+              </StepCard>
             </motion.div>
           )}
 
           {step >= 1 && step <= rooms.length && rooms[step - 1] && (
             <motion.div key={`room-${rooms[step - 1].key}`} {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 <p className="text-sm leading-relaxed text-ink-soft">{d.edlWizard.roomHint}</p>
                 <ul className="mt-4 space-y-3">
                   {CATEGORIES.map((cat) => {
@@ -330,14 +327,14 @@ export default function EdlWizard({
                   </button>
                   <Button onClick={() => setStep(step + 1)}>{d.common.next}</Button>
                 </div>
-              </Card>
+              </StepCard>
             </motion.div>
           )}
 
           {step === metersStep && (
             <motion.div key="meters" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 <p className="text-sm leading-relaxed text-ink-soft">{d.edlWizard.metersHint}</p>
                 {meters.length === 0 ? (
                   <p className="mt-4 text-sm text-ink-soft">{d.biens.metersNone}</p>
@@ -360,14 +357,14 @@ export default function EdlWizard({
                 <div className="mt-6 flex justify-end">
                   <Button onClick={() => setStep(keysStep)}>{d.common.next}</Button>
                 </div>
-              </Card>
+              </StepCard>
             </motion.div>
           )}
 
           {step === keysStep && (
             <motion.div key="keys" {...slide(1)}>
               {Heading}
-              <Card>
+              <StepCard>
                 <Field label={d.edlWizard.completedOn}>
                   <Input type="date" value={completedAt} onChange={(e) => setCompletedAt(e.target.value)} />
                 </Field>
@@ -424,7 +421,7 @@ export default function EdlWizard({
                     {d.edlWizard.finish}
                   </Button>
                 </div>
-              </Card>
+              </StepCard>
             </motion.div>
           )}
 
