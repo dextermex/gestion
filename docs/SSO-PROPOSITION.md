@@ -300,3 +300,15 @@ miroir à `true`, ce qui reconstruit localStorage au premier écrit de session.
 5. Demander une réinitialisation de mot de passe et suivre le lien reçu :
    le comportement doit être identique à aujourd'hui. C'est le test qui
    justifie de ne pas avoir pris `@supabase/ssr`.
+
+## État au 21 septembre 2026
+
+Côté Gestion, l'adaptateur est en place (étape 2) avec deux précisions
+apportées à la relecture des comptes multiples : la déconnexion efface le
+cookie de domaine parent *et* son jumeau limité à l'hôte, et la session
+localStorage n'est adoptée qu'une seule fois (marqueur `morada_auth.cookie`) ;
+ensuite l'absence du cookie vaut déconnexion, un miroir périmé ne reconnecte
+jamais le compte précédent. Côté Morada, le clone de référence du 27 août
+2026 lit toujours sa session dans localStorage seul : l'étape 1 n'y est pas
+déployée, les deux origines ne partagent donc pas encore la connexion.
+

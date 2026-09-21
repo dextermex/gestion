@@ -50,17 +50,28 @@ function readCookie(name: string): string | null {
   return null;
 }
 
-function writeCookie(name: string, value: string, maxAge: number): void {
+function writeCookie(name: string, value: string, maxAge: number, domain = domainAttr()): void {
   if (typeof document === "undefined") return;
   const secure = window.location.protocol === "https:" ? "; secure" : "";
   document.cookie =
     `${encodeURIComponent(name)}=${value}` +
-    `; path=/; max-age=${maxAge}; samesite=lax${secure}${domainAttr()}`;
+    `; path=/; max-age=${maxAge}; samesite=lax${secure}${domain}`;
 }
 
+/**
+ * Both scopes go: the parent-domain cookie this file writes, and a host-only
+ * twin an earlier build or another deployment on this host may have left.
+ * The browser sends both back under one name, and whichever came first would
+ * be read as the session, so a sign-out that erased only one could leave the
+ * previous account signed in.
+ */
 function eraseCookie(name: string): void {
   writeCookie(name, "", 0);
+  if (domainAttr() !== "") writeCookie(name, "", 0, "");
 }
+
+/** Set once the cookie has been written on this browser: from then on, the cookie is the record. */
+const adoptedMarker = (key: string): string => `${key}.cookie`;
 
 /**
  * Even base64url, a session runs past the per-cookie limit, so it is split
@@ -106,7 +117,18 @@ export function createCookieStorage(opts: { mirrorToLocalStorage: boolean }) {
         }
       }
       // Nobody is logged out by the switch: an existing localStorage session
-      // is adopted on first read and promoted to the shared cookie.
+      // is adopted on first read and promoted to the shared cookie. Once,
+      // though. After the cookie has been the record on this browser, its
+      // absence means signed out (here, or on another Morada origin sharing
+      // it), and a stale mirror must never sign the previous account back in.
+      if (local()?.getItem(adoptedMarker(key)) === "1") {
+        try {
+          local()?.removeItem(key);
+        } catch {
+          /* ignore */
+        }
+        return null;
+      }
       const legacy = local()?.getItem(key) ?? null;
       if (legacy !== null) storage.setItem(key, legacy);
       return legacy;
@@ -124,12 +146,11 @@ export function createCookieStorage(opts: { mirrorToLocalStorage: boolean }) {
       }
       // Phase 1 keeps localStorage in step, so reverting the deploy logs
       // nobody out. Phase 3 drops this.
-      if (opts.mirrorToLocalStorage) {
-        try {
-          local()?.setItem(key, value);
-        } catch {
-          /* quota or private browsing — the cookie is the source of truth */
-        }
+      try {
+        if (opts.mirrorToLocalStorage) local()?.setItem(key, value);
+        local()?.setItem(adoptedMarker(key), "1");
+      } catch {
+        /* quota or private browsing — the cookie is the source of truth */
       }
     },
 

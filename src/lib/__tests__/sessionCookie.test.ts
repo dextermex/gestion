@@ -26,7 +26,9 @@ function fakeBrowser(hostname = "app.morada.lu") {
 
   (globalThis as unknown as { document: unknown }).document = {
     get cookie() {
-      return [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+      // The browser sends every cookie whose name matches, whatever its
+      // domain scope, under the bare name.
+      return [...jar].map(([k, v]) => `${k.split("@")[0]}=${v}`).join("; ");
     },
     set cookie(raw: string) {
       // A browser silently drops an oversized cookie: record it instead so a
@@ -38,8 +40,11 @@ function fakeBrowser(hostname = "app.morada.lu") {
       const [pair, ...attrs] = raw.split("; ");
       const eq = pair.indexOf("=");
       const name = pair.slice(0, eq);
-      if (attrs.includes("max-age=0")) jar.delete(name);
-      else jar.set(name, pair.slice(eq + 1));
+      // A host-only cookie and a parent-domain one are two cookies.
+      const domain = attrs.find((a) => a.startsWith("domain="))?.slice("domain=".length) ?? "";
+      const id = domain ? `${name}@${domain}` : name;
+      if (attrs.includes("max-age=0")) jar.delete(id);
+      else jar.set(id, pair.slice(eq + 1));
     },
   };
   return store;
@@ -141,6 +146,31 @@ describe("sessionCookie", () => {
     const s = createCookieStorage({ mirrorToLocalStorage: true });
     expect(s.getItem(KEY)).toBe(value);
     expect(jar.size).toBeGreaterThan(0); // promoted to the shared cookie
+  });
+
+  it("adopts a localStorage session once: after the cookie has been the record, its absence is a sign-out", () => {
+    const store = fakeBrowser();
+    const s = createCookieStorage({ mirrorToLocalStorage: true });
+    s.setItem(KEY, bigSession());
+    // Signed out on another Morada origin sharing the cookie: the cookie is
+    // gone, the mirror on this origin is not.
+    for (const id of [...jar.keys()]) jar.delete(id);
+    expect(store.get(KEY)).toBeDefined();
+    expect(s.getItem(KEY)).toBeNull();
+    expect(jar.size).toBe(0); // nothing was promoted back
+    expect(store.get(KEY)).toBeUndefined(); // and the stale mirror is gone
+  });
+
+  it("erases a host-only twin of the cookie on sign-out, not only the shared one", () => {
+    const s = createCookieStorage({ mirrorToLocalStorage: true });
+    // Left by a build that wrote host-scoped cookies, or by a preview on this host.
+    jar.set(KEY, "b64.eyJhY2Nlc3NfdG9rZW4iOiJvbGQifQ");
+    s.setItem(KEY, '{"access_token":"new"}');
+    expect(jar.size).toBe(1); // writing already cleared the twin
+    jar.set(KEY, "b64.eyJhY2Nlc3NfdG9rZW4iOiJvbGQifQ");
+    s.removeItem(KEY);
+    expect(jar.size).toBe(0);
+    expect(s.getItem(KEY)).toBeNull();
   });
 
   it("keeps localStorage in step while the mirror is on, so a revert is free", () => {

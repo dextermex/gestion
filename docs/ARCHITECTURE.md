@@ -176,6 +176,46 @@ of being provisioned a management space, and opens one on purpose
 (`POST /api/espace/creer`). E-mail leaves through Resend when `RESEND_API_KEY` is set;
 otherwise the invitation is still valid and the owner passes the link on.
 
+### The door: two forms, and a session that is chosen, never assumed
+
+`/connexion` is the only way in, for a manager and a tenant alike, and it runs against
+the Morada account system (`auth.users`, the same sign-up shape as morada.lu). Four
+rules keep two accounts on one browser from tripping over each other:
+
+- **"Se connecter" and "Créer un compte" are two components with two states**, mounted
+  one at a time and remounted on every switch. What a password manager put in one never
+  travels into the other; an address is handed across only on purpose (an invitation
+  link, or "this address already has an account", which opens sign-in on it).
+- **Fields are read from the form at submit time**, not from React state: Safari fills
+  saved credentials without firing input events, and a controlled input would submit
+  empty strings over a visibly filled form. The fields say what they are (`email`,
+  `current-password`, `new-password`, `given-name`, `family-name`) and nothing fights
+  the password manager.
+- **The account system's answers are read into stable outcomes** (`src/lib/auth/outcomes.ts`,
+  by error code first, message second): wrong credentials, an unconfirmed address (with
+  the confirmation link on offer again), too many attempts, an unreachable system, and an
+  address that already has an account, whichever way Supabase says it (the
+  `user_already_exists` error, or, with e-mail enumeration protection on, the look-alike
+  user with no identity that would otherwise read as "check your inbox").
+- **A visitor the cookie already identifies is shown that and chooses**: continue with
+  that account, or "Utiliser un autre compte", which signs the previous account out
+  everywhere (global scope, cookie and mirror cleared whatever the network did) before
+  the forms appear. The door never bounces a signed-in visitor past itself, so a second
+  account can always be created or signed into from it. Only a session arriving from a
+  link (the confirmation e-mail) is followed automatically.
+
+The session itself lives in the `morada_auth` cookie on `.morada.lu`
+(`src/lib/sessionCookie.ts`), read and verified server-side on every request
+(`getUser`, never a decoded token). A sign-out erases both the parent-domain cookie and
+any host-only twin; a localStorage session is adopted into the cookie once, on the first
+run after the switch, and never again: once the cookie has been the record on a browser,
+its absence means signed out, so a stale mirror cannot sign the previous account back in.
+morada.lu's own client still keeps its session in localStorage only (reference clone of
+27 August 2026), so the two origins do not yet share a sign-in; a global sign-out on
+either side still revokes the other's session server-side. The invitation page compares
+the signed-in address with the invited one and `portal_accept` refuses any other account,
+so a link opened on the wrong account is named, never attached.
+
 ### A building is read as a whole, and each lot as a sheet of its own
 
 `/app/biens/[id]` renders a home (one lettable lot) as one sheet, and a building as a

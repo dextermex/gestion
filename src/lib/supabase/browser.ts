@@ -29,7 +29,13 @@ export function getSupabase(): SupabaseClient {
   return client;
 }
 
-/** Sign out here and everywhere: the shared cookie is cleared too. */
+/**
+ * Sign out here and everywhere: every session of this account is revoked
+ * (this browser, morada.lu, other devices), and the shared cookie and its
+ * localStorage mirror are cleared whatever the account system answered. The
+ * next account to sign in on this browser starts from nothing of the
+ * previous one.
+ */
 export async function signOutEverywhere(): Promise<void> {
   const db = getSupabase();
   try {
@@ -37,6 +43,10 @@ export async function signOutEverywhere(): Promise<void> {
   } catch {
     // Channel teardown is best-effort.
   }
-  await db.auth.signOut();
+  try {
+    await db.auth.signOut({ scope: "global" });
+  } catch {
+    // Unreachable account system: the local session still goes, below.
+  }
   createCookieStorage({ mirrorToLocalStorage: true }).removeItem(STORAGE_KEY);
 }
