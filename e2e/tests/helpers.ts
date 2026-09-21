@@ -164,9 +164,25 @@ export async function leaseIdOf(page: Page, propertyId: string): Promise<string>
   return decodeURIComponent(id);
 }
 
+/**
+ * The floating "Bien démarrer" card sits over the bottom-left of a laptop
+ * viewport and takes the clicks meant for what lies under it. A person folds
+ * it with its own button; so does the flow, once per browser (the choice is
+ * remembered), before reaching for anything at the bottom of a page.
+ */
+export async function foldGettingStarted(page: Page): Promise<void> {
+  const card = page.getByRole("region", { name: "Bien démarrer avec Morada Gestion" });
+  const fold = card.getByRole("button", { name: "Réduire", exact: true });
+  if (await fold.isVisible().catch(() => false)) {
+    await fold.click();
+    await expect(card).toBeHidden();
+  }
+}
+
 /** Invite the lease's tenant and read the link the owner is handed (no mail leaves in tests). */
 export async function inviteTenant(page: Page, propertyId: string): Promise<{ token: string; link: string }> {
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
+  await foldGettingStarted(page);
   await page.getByRole("button", { name: "Inviter le locataire" }).first().click();
   const code = page.locator("code").filter({ hasText: "/invitation/" }).first();
   await expect(code).toBeVisible({ timeout: 30_000 });

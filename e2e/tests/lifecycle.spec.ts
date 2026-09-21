@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHouse, daysFromNow, inviteTenant, leaseIdOf, letLot, mail, PASSWORD, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus } from "./helpers";
+import { createHouse, daysFromNow, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, PASSWORD, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus } from "./helpers";
 
 /**
  * One tenancy, start to finish, on the real database: the owner creates a
@@ -87,6 +87,7 @@ test("another manager sees none of it", async ({ page }) => {
 test("the owner records the departure", async ({ page }) => {
   await signIn(page, owner.email);
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
+  await foldGettingStarted(page);
   await page.getByRole("link", { name: "Enregistrer le départ du locataire" }).click();
   await page.waitForURL(/\/app\/biens\/depart\?bail=/);
   await page.getByLabel("Date de fin du bail").fill(daysFromNow(45));
