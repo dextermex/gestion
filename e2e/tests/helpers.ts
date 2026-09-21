@@ -55,8 +55,9 @@ export async function leaveSignedInAccountIfAny(page: Page): Promise<void> {
   }
 }
 
-/** Sign out from the management shell, through its account menu. */
+/** Sign out from the management shell, through its account menu (wizard screens have no shell: start from the dashboard). */
 export async function signOutFromShell(page: Page): Promise<void> {
+  await page.goto("/app");
   await page.getByRole("button", { name: "Mon compte" }).click();
   await page.getByRole("button", { name: "Se déconnecter" }).click();
   await page.waitForURL(/\/connexion/, { timeout: 30_000 });
@@ -84,17 +85,22 @@ export async function accountEmailInShell(page: Page): Promise<string> {
  * change before looking again, and a step that refuses to be left (a
  * validation the flow did not satisfy) fails here, naming that heading.
  */
-async function nextUntil(page: Page, target: ReturnType<Page["getByRole"]>, max = 10): Promise<void> {
+export async function nextUntil(page: Page, target: ReturnType<Page["getByRole"]>, max = 10): Promise<void> {
   const next = page.getByRole("button", { name: "Suivant", exact: true }).first();
-  const heading = page.getByRole("heading", { level: 1 }).first();
   for (let i = 0; i < max; i++) {
     await expect(target.or(next).first()).toBeVisible();
     if (await target.isVisible()) return;
-    const before = (await heading.textContent()) ?? "";
-    await next.click();
-    await expect(heading, `the step "${before}" should hand over to the next one`).not.toHaveText(before, { timeout: 30_000 });
+    await nextStep(page, "Suivant");
   }
   await expect(target).toBeVisible();
+}
+
+/** Press the step's move-on button (by its exact name) and wait for the next step's heading. */
+export async function nextStep(page: Page, name: string): Promise<void> {
+  const heading = page.getByRole("heading", { level: 1 }).first();
+  const before = (await heading.textContent()) ?? "";
+  await page.getByRole("button", { name, exact: true }).first().click();
+  await expect(heading, `the step "${before}" should hand over to the next one`).not.toHaveText(before, { timeout: 30_000 });
 }
 
 /**

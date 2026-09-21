@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHouse, daysFromNow, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, PASSWORD, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus } from "./helpers";
+import { createHouse, daysFromNow, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextStep, nextUntil, PASSWORD, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus } from "./helpers";
 
 /**
  * One tenancy, start to finish, on the real database: the owner creates a
@@ -40,7 +40,8 @@ test("the tenant is invited; the link is refused to the wrong account", async ({
   ({ token } = await inviteTenant(page, propertyId));
   // The owner, still signed in, opens the tenant's link: named, not attached.
   await page.goto(`/invitation/${token}`);
-  await expect(page.getByRole("alert")).toContainText(tenant.email);
+  // The page's own notice (the framework's route announcer is an alert too).
+  await expect(page.getByRole("alert").filter({ hasText: tenant.email })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/invitation/${token}`));
   await page.goto("/locataire");
   // The owner is no tenant: the tenant space has nothing for this account.
@@ -51,7 +52,7 @@ test("the tenant creates an account from the link and sees the home", async ({ p
   await signIn(page, owner.email);
   await signOutFromShell(page);
   await page.goto(`/invitation/${token}`);
-  await expect(page.getByText(houseName)).toBeVisible();
+  await expect(page.getByText(houseName).first()).toBeVisible();
   await page.getByRole("link", { name: "Créer mon compte" }).click();
   await expect(page.locator("#signup-email")).toHaveValue(tenant.email);
   await page.locator("#signup-first-name").fill(tenant.first);
@@ -91,12 +92,9 @@ test("the owner records the departure", async ({ page }) => {
   await page.getByRole("link", { name: "Enregistrer le départ du locataire" }).click();
   await page.waitForURL(/\/app\/biens\/depart\?bail=/);
   await page.getByLabel("Date de fin du bail").fill(daysFromNow(45));
-  await page.getByRole("button", { name: "Suivant", exact: true }).click(); // date → EDL
-  await page.getByRole("button", { name: "Plus tard", exact: true }).click(); // EDL later
-  await page.getByRole("button", { name: "Suivant", exact: true }).click(); // meters
-  await page.getByRole("button", { name: "Suivant", exact: true }).click(); // keys
-  await page.getByRole("button", { name: "Suivant", exact: true }).click(); // outstanding
-  await page.getByRole("button", { name: "Suivant", exact: true }).click(); // deposit
+  await nextStep(page, "Suivant"); // date → inventory
+  await nextStep(page, "Plus tard"); // the exit inventory, later
+  await nextUntil(page, page.getByRole("button", { name: "Confirmer le départ" }), 6); // meters, keys, outstanding, deposit
   await page.getByRole("button", { name: "Confirmer le départ" }).click();
   await expect(page.getByText("est enregistré.")).toBeVisible({ timeout: 30_000 });
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
