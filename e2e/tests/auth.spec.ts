@@ -15,8 +15,10 @@ test("the management space is not public", async ({ page }) => {
   await page.goto("/app");
   await expect(page).toHaveURL(/\/connexion\?next=(%2F|\/)app/);
   await expect(page.locator("#signin-form")).toBeVisible();
-  const res = await page.goto("/api/biens/create");
-  expect(res?.status(), "an API route answers a stranger with 401 or 405, never data").toBeGreaterThanOrEqual(401);
+  // Asked as a request, not a navigation: a bare 4xx with no body is a
+  // navigation error to Chromium, and the status is what matters here.
+  const res = await page.request.get("/api/biens/create");
+  expect(res.status(), "an API route answers a stranger with 401 or 405, never data").toBeGreaterThanOrEqual(401);
 });
 
 test("a new account is created on the door and lands in its own space", async ({ page }) => {
