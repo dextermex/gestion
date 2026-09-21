@@ -146,7 +146,11 @@ export async function letLot(page: Page, unitId: string, tenant: Person, rent = 
   await page.getByLabel("Charges mensuelles").fill("150");
   await nextUntil(page, page.getByRole("button", { name: "Activer la location" }), 8);
   await page.getByRole("button", { name: "Activer la location" }).click();
-  await expect(page.getByText("est locataire.")).toBeVisible({ timeout: 30_000 });
+  // Activation lands on the property's Location tab, where the tenant now
+  // appears with the day the tenancy started.
+  await page.waitForURL(/\/app\/biens\/[^/?]+\?onglet=location/, { timeout: 30_000 });
+  await expect(page.getByText(`${tenant.first} ${tenant.last}`).first()).toBeVisible();
+  await expect(page.getByText(/Locataire depuis le/).first()).toBeVisible();
 }
 
 /** The lease id, read from the departure link the property's Location tab offers. */
