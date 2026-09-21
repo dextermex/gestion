@@ -324,6 +324,15 @@ indexation-lag payment, a review-queue third-party payer, a deposit settlement w
 pending justification, and a vacancy past the INOL threshold. Pages call the real engines
 over this data — swapping in Supabase changes the data source, not a single computation.
 
+## Quality gates
+
+Continuous integration, the end-to-end suite against a throwaway local Supabase, the
+database security audit and error monitoring are described in docs/QUALITY.md. In
+one line: every push runs typecheck, lint, 249 tests and the build, then the real
+flows (sign-up, sign-in, two accounts on one browser, property, rental dossier to
+activation, invitation accepted by a new account, isolation, departure, typing) in a
+real browser through the same policies as production.
+
 ## Production wiring (next)
 
 1. Create the Supabase project (EU — Frankfurt/Paris), `supabase db push`.

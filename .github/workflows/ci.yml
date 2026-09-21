@@ -1,0 +1,87 @@
+# Every push and every pull request: the four checks a contributor runs
+# locally, each as its own named step so a red run says which one, then the
+# end-to-end suite against a throwaway Supabase. See docs/QUALITY.md.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  CI: "1"
+
+jobs:
+  checks:
+    name: Typecheck, lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit and integration tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+
+  e2e:
+    name: End-to-end (local Supabase, real browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Assemble the database (Morada schema, then this repository's migrations)
+        run: node e2e/db/prepare.mjs
+      - name: Start a throwaway Supabase and apply the schema
+        run: supabase start --workdir e2e -x studio,edge-runtime,logflare,vector,postgres-meta,imgproxy,supavisor
+      - name: Point the app at it (disposable local keys, no service role used)
+        run: |
+          eval "$(supabase status --workdir e2e -o env)"
+          echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:4321" >> "$GITHUB_ENV"
+          echo "E2E_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+      - name: Database security audit (RLS on every table, anon locked out, definers pinned)
+        run: psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -f e2e/db/rls-audit.sql
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Build the app against the local stack
+        run: npm run build
+      - name: End-to-end tests
+        env:
+          E2E_WEBKIT: "1"
+        run: npm run e2e
+      - name: Keep the report when something failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14
+      - name: Stop the throwaway Supabase
+        if: always()
+        run: supabase stop --workdir e2e --no-backup

@@ -1,0 +1,73 @@
+# The throwaway Supabase the end-to-end suite runs against (see docs/QUALITY.md).
+# Started with `supabase start --workdir e2e` after `node e2e/db/prepare.mjs`
+# has assembled ./migrations. Never points at, and never resembles, the
+# hosted project: no data, disposable keys, confirmations off so a sign-up
+# returns a session and the suite never has to read an e-mail.
+project_id = "morada-gestion-e2e"
+
+[api]
+enabled = true
+port = 54321
+# `gestion` is exposed exactly as it is on the hosted project, so the app's
+# `.schema("gestion")` calls reach the same tables behind the same policies.
+schemas = ["public", "graphql_public", "gestion"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[api.tls]
+enabled = false
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = false
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = false
+
+[local_smtp]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:4321"
+additional_redirect_urls = ["http://127.0.0.1:4321/**", "http://localhost:4321/**"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+enable_signup = true
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+minimum_password_length = 6
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = false
+enable_confirmations = false
+secure_password_change = false
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false

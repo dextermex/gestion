@@ -4,7 +4,24 @@ Luxembourg property-management SaaS, sibling of Morada.lu. App UI in four langua
 FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
 
 ## Commands
-- `npm run dev` / `npm run build` / `npm test` (vitest, 245 tests) / `npm run lint`
+- `npm run dev` / `npm run build` / `npm test` (vitest, 249 tests) / `npm run lint` /
+  `npm run typecheck`
+- `npm run e2e` (Playwright, real browser against a throwaway local Supabase; needs
+  Docker: see docs/QUALITY.md for the four commands that bring the stack up)
+
+## Safety net (read docs/QUALITY.md before touching it)
+- CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests and build on every push
+  and PR, then the E2E job: a local Supabase built from `e2e/db/morada` (vendored
+  Morada migrations) + `supabase/applied`, the RLS audit (`e2e/db/rls-audit.sql`),
+  and the Playwright flows in `e2e/tests/`. Never make a check pass by weakening a
+  policy or reaching for the service-role key: the app has none, and the suite reads
+  every row through the same policies as production.
+- Error monitoring is `@sentry/nextjs`, errors only, off without
+  `NEXT_PUBLIC_SENTRY_DSN`; all options and the redaction live in
+  `src/lib/monitoring.ts`. Nothing that names a person leaves the building.
+- Two rules keep a field's caret while typing: no component declared inside another
+  (lint rule `react/no-unstable-nested-components`), and a dialog's focus effect runs
+  on the open transition only (`useLatest`). `src/components/__tests__/focus.test.tsx`.
 
 ## Non-negotiables
 1. **Legal constants are data** — only `src/domain/legal/params.ts` (→ `legal_params`

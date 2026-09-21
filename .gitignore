@@ -37,3 +37,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# end-to-end (generated at run time, see docs/QUALITY.md)
+/e2e/supabase/migrations/
+/e2e/supabase/.branches/
+/e2e/supabase/.temp/
+/playwright-report/
+/test-results/
+
+# supabase cli scratch (created by npx supabase)
+/supabase/.temp/

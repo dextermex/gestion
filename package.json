@@ -9,11 +9,20 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:empty": "MORADA_PREVIEW_EMPTY=1 PORT=4321 next start & sleep 8; bash scripts/check-empty.sh; s=$?; kill %1; exit $s"
+    "check:empty": "MORADA_PREVIEW_EMPTY=1 PORT=4321 next start & sleep 8; bash scripts/check-empty.sh; s=$?; kill %1; exit $s",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:db:prepare": "node e2e/db/prepare.mjs",
+    "e2e:db:start": "npx --yes supabase@2 start --workdir e2e -x studio,edge-runtime,logflare,vector,postgres-meta,imgproxy,supavisor",
+    "e2e:db:stop": "npx --yes supabase@2 stop --workdir e2e --no-backup",
+    "e2e:db:env": "npx --yes supabase@2 status --workdir e2e -o env",
+    "e2e:db:audit": "psql \"${E2E_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -v ON_ERROR_STOP=1 -f e2e/db/rls-audit.sql",
+    "e2e:morada:sync": "node e2e/db/sync-morada-schema.mjs"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
     "@fontsource-variable/inter": "^5.2.8",
+    "@sentry/nextjs": "^10.75.1",
     "@supabase/supabase-js": "^2.110.0",
     "clsx": "^2.1.1",
     "motion": "^12.42.2",
@@ -25,6 +34,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
