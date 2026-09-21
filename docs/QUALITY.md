@@ -79,6 +79,21 @@ property name is unique per run (`mail("owner")`), because the database is
 real and shared between the spec files. Files that build on each other's
 state use `test.describe.configure({ mode: "serial" })` and one worker.
 
+Three things the first runs taught:
+
+- Leaving a wizard step saves the dossier before the next screen appears:
+  move with `nextStep(page, "Suivant")` or `nextUntil(page, target)`, which
+  wait for the next step's heading, never with a bare click followed by
+  another click.
+- Assert on headings and roles, not on loose text. The shell repeats phrases
+  ("rien n'est enregistré" in the dataset switcher), and the framework's
+  route announcer is an `alert` too.
+- The floating "Bien démarrer" card covers the bottom-left of a laptop
+  viewport and takes the clicks meant for what lies under it: call
+  `foldGettingStarted(page)` before reaching for a control at the bottom of
+  a page, as a person would fold it. The overlap itself is a usability point
+  still to be addressed in the card, not in the tests.
+
 ## Error monitoring
 
 `@sentry/nextjs`, errors only, off unless `NEXT_PUBLIC_SENTRY_DSN` is set.
