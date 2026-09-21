@@ -134,10 +134,15 @@ export async function provisionDefaultWorkspace(): Promise<Identity | null> {
   }
 
   // Resolve again from scratch; getIdentity() is cached per request and would
-  // hand back the pre-provisioning answer.
+  // hand back the pre-provisioning answer. The same goes one level down: the
+  // framework memoizes identical GET requests for the length of a render, so
+  // a read that repeats getIdentity()'s exact query would be answered from
+  // the first, still-empty result without reaching the database. A fresh
+  // abort signal is the documented way to opt a request out of that.
+  const fresh = () => new AbortController().signal;
   const [profileRes, membershipRes] = await Promise.all([
-    db.from("profiles").select("first_name, last_name").eq("id", session.userId).maybeSingle(),
-    db.from("crm_members").select("agency_id, role").eq("user_id", session.userId).eq("status", "active"),
+    db.from("profiles").select("first_name, last_name").eq("id", session.userId).abortSignal(fresh()).maybeSingle(),
+    db.from("crm_members").select("agency_id, role").eq("user_id", session.userId).eq("status", "active").abortSignal(fresh()),
   ]);
   const memberships = membershipRes.data ?? [];
   const displayName = displayNameFrom(profileRes.data ?? null, session.email);
@@ -147,7 +152,7 @@ export async function provisionDefaultWorkspace(): Promise<Identity | null> {
   }
 
   const ids = memberships.map((m) => m.agency_id as string);
-  const agenciesRes = await db.from("agencies").select("id, name, kind").in("id", ids);
+  const agenciesRes = await db.from("agencies").select("id, name, kind").in("id", ids).abortSignal(fresh());
   if (agenciesRes.error) console.error("[workspace] agencies unreadable after provisioning:", agenciesRes.error.code, agenciesRes.error.message);
   const workspaces: Workspace[] = (agenciesRes.data ?? [])
     .map((a) => ({
