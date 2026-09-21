@@ -99,6 +99,10 @@ test("the owner records the departure", async ({ page }) => {
   // The done screen's own heading: the shell's dataset note also says
   // "rien n'est enregistré", so a looser match would pass before the closure.
   await expect(page.getByRole("heading", { level: 1, name: /Le départ de .+ est enregistré\./ })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Ajouter un nouveau locataire" })).toBeVisible();
+  // The lot is free again: no departure to record, and the tenancy is history.
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
-  await expect(page.getByRole("link", { name: "Ajouter un nouveau locataire" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enregistrer le départ du locataire" })).toHaveCount(0);
+  await page.goto(`/app/biens/${propertyId}?onglet=historique`);
+  await expect(page.getByText(`${tenant.first} ${tenant.last}`).first()).toBeVisible();
 });

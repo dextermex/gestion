@@ -261,8 +261,12 @@ export default function DepartureWizard({
         return;
       }
       setResult((await res.json()) as { droppedPeriods: number });
+      // The done screen is this component's own state. Refreshing the route
+      // here would re-run the page for a lease that has just ended, and that
+      // page sends ended leases to the property's history: the confirmation
+      // would vanish before it was read. The screens it links to are dynamic
+      // and read the closed lease for themselves.
       setStep(TOTAL + 1);
-      router.refresh();
     } catch {
       setError(d.departure.saveFailed);
     } finally {
