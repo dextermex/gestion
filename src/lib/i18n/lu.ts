@@ -1767,6 +1767,7 @@ export const lu: Dict = {
     managerTitle: "Är Gestioun",
     managerWrite: "Eng Noriicht schreiwen",
     managerCall: "Uruffen",
+    othersTitle: "Är aner lafend Locatiounen",
     pastTitle: "Fréier Locatiounen",
     pastRange: "Vum {from} bis den {to}",
     pastOpen: "Kucken",

@@ -19,10 +19,3 @@ export async function withTenant(): Promise<TenantContext | NextResponse> {
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   return { g: authedClient(session.accessToken).schema("gestion"), session };
 }
-
-/** The origin the invitation links point at: the request's own host, as the proxy saw it. */
-export function originOf(req: Request): string {
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "app.morada.lu";
-  const proto = req.headers.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}

@@ -6,7 +6,7 @@ import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { buildSearchIndex } from "@/lib/demo/search";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
-import { tenantLeaseIds } from "@/lib/portal/tenant-space";
+import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -34,9 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!identity) redirect("/connexion?next=/app");
 
   // One account, two roles. Whether this account is a tenant anywhere is the
-  // same question the tenant space starts with, asked once per request.
+  // predicate the tenant space starts from (`gestion.is_tenant()`), asked
+  // once per request and answered yes or no.
   const session = process.env.MORADA_PREVIEW_EMPTY === "1" ? null : await getSession();
-  const tenantLeases = session ? await tenantLeaseIds(authedClient(session.accessToken).schema("gestion")) : [];
+  const tenant = session ? await isTenant(authedClient(session.accessToken).schema("gestion")) : false;
 
   // A first-time account gets its management space silently and lands in the
   // dashboard like everyone else: one continuous product, no onboarding
@@ -46,7 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // a tenant, not (yet) a manager, and is not given a workspace it never
     // asked for. Its own space is the tenant one; a management space is
     // opened on purpose, from there (POST /api/espace/creer), when wanted.
-    if (tenantLeases.length > 0) redirect("/locataire");
+    if (tenant) redirect("/locataire");
     const email = identity.email;
     identity = await provisionDefaultWorkspace();
     if (!identity?.active) return <ProvisionError d={d} email={email} />;
@@ -66,7 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     signedIn: true,
     // The tenant space is offered only to an account that is a tenant
     // somewhere (or on a sample cabinet, where the sample tenant stands in).
-    tenant: tenantLeases.length > 0 || sampleCabinet !== null,
+    tenant: tenant || sampleCabinet !== null,
     // The dataset seam carries the kind for demo and real alike: on "real",
     // ORG is built from the signed-in workspace.
     workspaceKind: demo.ORG.kind,

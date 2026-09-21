@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (has(body, "firstName")) patch.first_name = str(body.firstName, 80) || null;
   if (has(body, "lastName")) patch.last_name = str(body.lastName, 80) || null;
   if (has(body, "legalName")) patch.legal_name = str(body.legalName, 160) || null;
-  if (has(body, "email")) patch.email = str(body.email, 160) || null;
+  if (has(body, "email")) patch.email = str(body.email, 160).toLowerCase() || null;
   if (has(body, "phone")) patch.phone = str(body.phone, 40) || null;
   if (has(body, "language") && ["fr", "en", "de", "lu"].includes(str(body.language, 2))) {
     patch.language = str(body.language, 2);

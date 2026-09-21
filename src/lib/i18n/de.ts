@@ -1762,6 +1762,7 @@ export const de: Dict = {
     managerTitle: "Ihre Verwaltung",
     managerWrite: "Nachricht schreiben",
     managerCall: "Anrufen",
+    othersTitle: "Ihre weiteren laufenden Mietverhältnisse",
     pastTitle: "Frühere Mietverhältnisse",
     pastRange: "Vom {from} bis zum {to}",
     pastOpen: "Ansehen",

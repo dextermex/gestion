@@ -101,6 +101,7 @@ export function tenantSpaceFromSample(demo: DemoData): TenantSpace {
     me: { name, firstName: name.split(/\s+/)[0] ?? "", email: tenant?.email ?? "" },
     today: demo.TODAY,
     current,
+    others: [],
     past: [],
     managers: [{ orgId: demo.ORG.id, name: demo.ORG.shortName, email: demo.ORG.managerEmail || null, phone: null }],
     requests,

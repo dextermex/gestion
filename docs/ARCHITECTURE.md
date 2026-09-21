@@ -143,8 +143,12 @@ may see; the tables themselves answer a tenant with nothing. Payments, bank rows
 internal notes and other tenants' contact details are behind no portal policy at all.
 
 `src/lib/portal/tenant-space.ts` builds `TenantSpace` from those reads under the
-visitor's own JWT (`getTenantView()` in `space.ts`); the four tenant pages render it and
-derive the rest (`paymentsOf`, `rentSituation`, `alertsFor`). A tenant's request is an
+visitor's own JWT (`getTenantView()` in `space.ts`), asking for the leases' and the
+requests' own documents and threads by id; the four tenant pages render it and derive the
+rest (`paymentsOf`, `rentSituation`, `alertsFor`). The home page is the latest tenancy in
+force; another one running at the same time is listed as running (`others`), and only
+ended ones are former (`past`). Late means due before today, the line the ledger's own
+status draws. A tenant's request is an
 intervention (`tickets`, `source = tenant`) inserted under the tenant's token, its photos
 are `documents` of the ticket in the lease's storage folder (`<org>/tickets/<lease>/`),
 its follow-ups are `messages` on the ticket's conversation; the owner's Interventions and
@@ -152,15 +156,23 @@ Messages screens read exactly these rows.
 
 Invitations are `portal_invites` rows minted by `portal_invite_lease` (a party of a live
 lease, an e-mail, a token returned once and never listed): sending again revokes the open
-one, `portal_revoke` dates a revocation, and the five owner-side states (Non invité,
-envoyée, acceptée, expirée, révoquée) derive from the row's dates in `inviteState()`.
+one of that lease (0017; a person on two lots keeps the other lot's link), `portal_revoke`
+dates a revocation, and the five owner-side states (Non invité, envoyée, acceptée, expirée,
+révoquée) derive from the row's dates in `inviteState()`. The link in the e-mail is built on
+`APP_URL` (`NEXT_PUBLIC_APP_URL`, else the production origin), never on the request's Host
+header.
 `public.gestion_invite_preview` shows the link's holder enough to recognise the home
 before signing in; `portal_accept` links the account to the contact inside one
 transaction (row lock, idempotent for the same account, refused for another address,
 another account or a used, revoked or expired link). The rental wizard reuses a contact
-already known by its e-mail, so a returning tenant keeps one contact, one account and
-their whole history; an account that is a tenant and has no workspace is sent to
-`/locataire` instead of being provisioned a management space, and opens one on purpose
+already known by its e-mail when it is the same person (a natural contact of that name,
+whatever the case the address was typed in), so a returning tenant keeps one contact, one
+account and their whole history; another person, or a company, on the same address is
+never folded onto that card: the workspace keeps one live contact per address
+(`contacts_email_active_key`) and the dossier answers `email_taken`. Every path that
+writes a contact lower-cases the address. An account that is a tenant and has no workspace
+(`gestion.is_tenant()`, the predicate behind `my_home()`) is sent to `/locataire` instead
+of being provisioned a management space, and opens one on purpose
 (`POST /api/espace/creer`). E-mail leaves through Resend when `RESEND_API_KEY` is set;
 otherwise the invitation is still valid and the owner passes the link on.
 

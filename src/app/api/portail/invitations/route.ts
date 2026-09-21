@@ -4,7 +4,7 @@ import { getDict, getI18n } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { formatDate } from "@/lib/types";
 import { sendInvitation } from "@/lib/portal/invitations";
-import { originOf } from "@/lib/portal/session";
+import { APP_URL } from "@/lib/constants";
 
 /**
  * "Inviter le locataire": the owner names a party of a live lease, the
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const outcome = await sendInvitation(ctx, dict, {
     leaseId,
     contactId,
-    baseUrl: originOf(req),
+    baseUrl: APP_URL,
     vars: {
       firstName: String(contact.first_name ?? "") || String(contact.display_name ?? "").split(" ")[0] || "",
       orgName: org.name,

@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const name = String(body.name ?? "").trim().slice(0, 120);
   const kind = body.kind === "legal" ? "legal" : "natural";
-  const email = String(body.email ?? "").trim().slice(0, 160) || null;
+  // Lower-cased, like everywhere a contact is written: one spelling per address.
+  const email = String(body.email ?? "").trim().slice(0, 160).toLowerCase() || null;
   const phone = String(body.phone ?? "").trim().slice(0, 40) || null;
   const role = (ROLES as readonly string[]).includes(String(body.role)) ? String(body.role) : "tenant";
   if (!name) return NextResponse.json({ error: "invalid" }, { status: 400 });

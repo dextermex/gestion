@@ -77,12 +77,21 @@ export interface DossierResult {
 }
 
 export type DossierFailure =
-  | { error: "not_found" | "already_let" | "not_draft" | "wrong_lot" }
+  | { error: "not_found" | "already_let" | "not_draft" | "wrong_lot" | "email_taken" }
   | { error: "storage_failed"; context: string; detail: { code?: string; message?: string } | null };
 
 const LANGUAGES = ["fr", "en", "de", "lu"];
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+/** A value as a PostgREST `ilike` pattern that matches it literally, whatever its case. */
+const literalPattern = (v: string): string => v.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+/** Two spellings of a person's name, compared the way a reader would: case, accents and spacing aside. */
+const sameName = (a: { first: string; last: string }, b: { first: string; last: string }): boolean => {
+  const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return norm(a.first) === norm(b.first) && norm(a.last) === norm(b.last);
+};
 
 /** IBAN as stored elsewhere in the product: upper case, no spaces. */
 export function normalizeIban(raw: string): string | null {
@@ -322,6 +331,10 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
         })
         .eq("org_id", org.id)
         .eq("id", t.contactId);
+      // The workspace keeps one live contact per e-mail: an address moved
+      // onto this person while another contact still holds it is refused,
+      // and said so, rather than silently kept as it was.
+      if (error?.code === "23505") return { error: "email_taken" };
       if (error) console.error("tenant contact update failed:", error.code, error.message);
       contactIds.push(t.contactId);
       continue;
@@ -329,23 +342,31 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
     // One person, one contact: a tenant already known by this e-mail (a
     // former tenant coming back, someone taking a second lot) is the same
     // row again, so their history and their portal account follow them.
+    // "The same" means the same person: a natural contact of that name,
+    // whatever the case the address or the name was typed in. A contact
+    // that merely shares the address (a company, a spouse on one mailbox)
+    // is somebody else and is never overwritten; the address then stays
+    // theirs and the dossier says so.
     let contactId: string | null = null;
     let needsRole = true;
     if (t.email) {
       const { data: known, error: knownErr } = await g
         .from("contacts")
-        .select("id")
+        .select("id,kind,first_name,last_name")
         .eq("org_id", org.id)
-        .eq("email", t.email)
+        .ilike("email", literalPattern(t.email))
         .is("archived_at", null)
-        .limit(1);
+        .limit(5);
       if (knownErr) return fail("tenant contact lookup", knownErr);
-      const found = ((known as Row[] | null) ?? [])[0];
+      const found = ((known as Row[] | null) ?? []).find(
+        (c) => c.kind === "natural" && sameName({ first: String(c.first_name ?? ""), last: String(c.last_name ?? "") }, { first: t.firstName, last: t.lastName }),
+      );
       if (found) {
         contactId = String(found.id);
+        // Identity stays as the contact has it; only what the dossier adds moves.
         const { error } = await g
           .from("contacts")
-          .update({ first_name: t.firstName || null, last_name: t.lastName || null, phone: t.phone, language: t.language })
+          .update({ ...(t.phone ? { phone: t.phone } : {}), language: t.language })
           .eq("org_id", org.id)
           .eq("id", contactId);
         if (error) console.error("tenant contact update failed:", error.code, error.message);
@@ -374,6 +395,7 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
         })
         .select("id")
         .single();
+      if (contactErr?.code === "23505") return { error: "email_taken" };
       if (contactErr || !contact) return fail("tenant contact insert", contactErr);
       contactId = String(contact.id);
     }

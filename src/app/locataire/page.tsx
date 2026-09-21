@@ -7,7 +7,7 @@ import { fmt } from "@/lib/i18n/config";
 import { getTenantView } from "@/lib/portal/space";
 import { paymentsOf } from "@/lib/portal/tenant-space";
 import { alertsFor, rentSituation } from "@/lib/portal/view";
-import { euros, formatDate, requestStateMeta } from "@/lib/types";
+import { euros, formatDate, leaseStatusMeta, requestStateMeta } from "@/lib/types";
 
 /**
  * "Mon logement": the home, the rent at a glance, what is worth knowing,
@@ -27,6 +27,7 @@ export default async function TenantHomePage() {
   const alerts = ended ? [] : alertsFor(lease, space.payments, space.today);
   const open = space.requests.filter((r) => r.leaseId === lease.id && r.state !== "resolved");
   const stateMeta = requestStateMeta(d);
+  const leaseMeta = leaseStatusMeta(d);
   const situationLabel = { ok: d.tenant.rentOk, pending: d.tenant.rentPending, partial: d.tenant.rentPartial, late: d.tenant.rentLate }[situation];
   const situationColor = {
     ok: "bg-emerald-100 text-emerald-800",
@@ -191,6 +192,22 @@ export default async function TenantHomePage() {
           )}
         </Panel>
       </div>
+
+      {space.others.length > 0 && (
+        <Panel title={d.tenant.othersTitle} className="mt-5">
+          <ul className="divide-y divide-sand-100">
+            {space.others.map((o) => (
+              <li key={o.id} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">{`${o.unit.label} · ${o.property.name}`}</p>
+                  <p className="text-xs text-ink-soft">{fmt(d.tenant.pastRange, { from: formatDate(o.startDate, locale), to: o.endDate ? formatDate(o.endDate, locale) : d.tenant.leaseEndOpen })}</p>
+                </div>
+                <MetaBadge meta={leaseMeta[o.status as keyof typeof leaseMeta] ?? leaseMeta.active} />
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       {space.past.length > 0 && !ended && (
         <Panel title={d.tenant.pastTitle} className="mt-5">

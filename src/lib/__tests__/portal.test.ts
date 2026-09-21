@@ -8,7 +8,7 @@ import { orgFromWorkspace } from "@/lib/demo/data-empty";
 import { addDays, addMonths } from "@/domain/dates";
 import { createInvitation, invitationLink, invitationMail, revokeInvitation, sendInvitation } from "@/lib/portal/invitations";
 import { acceptInvitation, previewInvitation } from "@/lib/portal/accept";
-import { buildTenantSpace, paymentsOf, tenantLeaseIds } from "@/lib/portal/tenant-space";
+import { buildTenantSpace, isTenant, paymentsOf, tenantLeaseIds } from "@/lib/portal/tenant-space";
 import { addTenantMessage, attachTenantFiles, createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { attachmentFolder, inviteFor, inviteState, requestKindOf, requestState, ticketCategoryFor } from "@/lib/portal/types";
 import { alertsFor, rentSituation } from "@/lib/portal/view";
@@ -400,6 +400,83 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(mine.past.map((l) => l.id)).toEqual([rental.leaseId]);
   });
 
+  it("keeps a second lot's invitation apart from the first, and lists both tenancies as running", async () => {
+    // Anna rents the house, then a studio of the same cabinet: one contact, two live leases.
+    const house = await letTo(ctx, unitId, [ANNA], "1 250", addDays(today, -60));
+    const { unitId: studioUnit } = seedProperty(db, ORG, "Studio Gare");
+    const studio = await letTo(ctx, studioUnit, [ANNA], "900");
+    expect(studio.contactIds).toEqual(house.contactIds);
+    const [annaContact] = house.contactIds;
+
+    // Inviting her for the studio leaves the house's invitation open.
+    const forHouse = await createInvitation(ctx, { leaseId: house.leaseId, contactId: annaContact });
+    if ("error" in forHouse) throw new Error(forHouse.error);
+    const forStudio = await createInvitation(ctx, { leaseId: studio.leaseId, contactId: annaContact });
+    if ("error" in forStudio) throw new Error(forStudio.error);
+    const demo = await hydrate(db);
+    expect(inviteState(inviteFor(demo.INVITES, annaContact, house.leaseId)!, db.nowIso())).toBe("sent");
+    expect(inviteState(inviteFor(demo.INVITES, annaContact, studio.leaseId)!, db.nowIso())).toBe("sent");
+    // Sending the house's again replaces the house's, and only that one.
+    const houseAgain = await createInvitation(ctx, { leaseId: house.leaseId, contactId: annaContact });
+    if ("error" in houseAgain) throw new Error(houseAgain.error);
+    expect((await previewInvitation(db.anonClient(), forHouse.token)).state).toBe("revoked");
+    expect((await previewInvitation(db.anonClient(), forStudio.token)).state).toBe("pending");
+    expect((await previewInvitation(db.anonClient(), houseAgain.token)).state).toBe("pending");
+
+    // Either link opens the account onto both tenancies.
+    expect(await acceptInvitation(db.tenantClient(anna), forStudio.token)).toMatchObject({ ok: true });
+    expect(await isTenant(db.tenantClient(anna))).toBe(true);
+    expect(await isTenant(db.tenantClient(stranger))).toBe(false);
+    expect(await isTenant(db.anonClient() as Parameters<typeof isTenant>[0])).toBe(false);
+    expect((await tenantLeaseIds(db.tenantClient(anna))).sort()).toEqual([house.leaseId, studio.leaseId].sort());
+
+    // The home page is the latest tenancy; the other one is running, not former.
+    const mine = await space(db, anna);
+    expect(mine.current?.id).toBe(studio.leaseId);
+    expect(mine.others.map((l) => l.id)).toEqual([house.leaseId]);
+    expect(mine.past).toEqual([]);
+    expect(mine.others[0].status).toBe("active");
+  });
+
+  it("recognises a returning tenant however the address was stored, and never folds another person onto them", async () => {
+    // A card from before addresses were lower-cased: found again, kept as it is.
+    const legacy = db.insertRow("contacts", { org_id: ORG, kind: "natural", first_name: "Anna", last_name: "Weber", email: "Anna.Weber@Example.lu", phone: "+352 621 000 009" });
+    const rental = await letTo(ctx, unitId, [{ firstName: " anna ", lastName: "WEBER", email: "ANNA.WEBER@EXAMPLE.LU" }]);
+    expect(rental.contactIds).toEqual([legacy.id]);
+    expect(db.table("contacts").filter((c) => c.last_name === "Weber")).toHaveLength(1);
+    const card = db.table("contacts").find((c) => c.id === legacy.id)!;
+    expect([card.first_name, card.last_name, card.email, card.phone]).toEqual(["Anna", "Weber", "Anna.Weber@Example.lu", "+352 621 000 009"]);
+    expect(db.table("contact_roles").filter((r) => r.contact_id === legacy.id && r.role === "tenant")).toHaveLength(1);
+
+    // Somebody else on Nora's mailbox is not Nora: the address is taken, nothing is overwritten, nobody is added.
+    const { unitId: studioUnit } = seedProperty(db, ORG, "Studio Gare");
+    const nora = await saveRentalDraft(ctx, fr, dossier({ unitId: studioUnit, step: "tenant", tenants: [NORA] }));
+    if ("error" in nora) throw new Error(nora.error);
+    const [noraContact] = nora.contactIds;
+    const { unitId: parkingUnit } = seedProperty(db, ORG, "Parking Gare");
+    const sam = { firstName: "Sam", lastName: "Adam", email: "NORA.adam@example.lu" };
+    expect(await saveRentalDraft(ctx, fr, dossier({ unitId: parkingUnit, step: "tenant", tenants: [sam] }))).toEqual({ error: "email_taken" });
+    expect(db.table("contacts").find((c) => c.id === noraContact)!.first_name).toBe("Nora");
+    expect(db.table("contacts").filter((c) => c.first_name === "Sam")).toHaveLength(0);
+
+    // A company writing from an address is not a person either.
+    db.insertRow("contacts", { org_id: ORG, kind: "legal", legal_name: "Weber Sàrl", email: "contact@weber.lu" });
+    const paul = { firstName: "Paul", lastName: "Weber", email: "contact@weber.lu" };
+    expect(await saveRentalDraft(ctx, fr, dossier({ unitId: parkingUnit, step: "tenant", tenants: [paul] }))).toEqual({ error: "email_taken" });
+    expect(db.table("contacts").find((c) => c.email === "contact@weber.lu")!.kind).toBe("legal");
+
+    // Moving an address onto someone already on the dossier while another card holds it: refused the same way.
+    const moved = await saveRentalDraft(ctx, fr, dossier({ unitId: studioUnit, leaseId: nora.leaseId, step: "tenant", tenants: [{ contactId: noraContact, ...NORA, email: "contact@weber.lu" }] }));
+    expect(moved).toEqual({ error: "email_taken" });
+    expect(db.table("contacts").find((c) => c.id === noraContact)!.email).toBe("nora.adam@example.lu");
+
+    // A wildcard typed in an address matches nothing but itself.
+    const wild = await saveRentalDraft(ctx, fr, dossier({ unitId: parkingUnit, step: "tenant", tenants: [{ firstName: "Anna", lastName: "Weber", email: "a%@example.lu" }] }));
+    if ("error" in wild) throw new Error(wild.error);
+    expect(wild.contactIds).toHaveLength(1);
+    expect(wild.contactIds).not.toContain(legacy.id);
+  });
+
   it("gives a tenant nothing of another tenant, another property, or the owner's private data", async () => {
     // Anna in Maison Weber, Luc in a second property of the same cabinet, Nora at another cabinet.
     const rentalA = await letTo(ctx, unitId, [ANNA]);
@@ -565,6 +642,15 @@ describe("the portal's vocabulary", () => {
     expect(rentSituation(paymentsOf({ ...lease, periods: [p("2026-09", "2026-09-01", 1000, 400, "partial")] }, "2026-09-19"))).toBe("late");
     expect(rentSituation(paymentsOf({ ...lease, periods: [p("2026-09", "2026-09-25", 1000, 0, "pending")] }, "2026-09-19"))).toBe("pending");
     expect(rentSituation(null)).toBe("ok");
+    // The due day itself is "to pay", not "behind": late starts the day after, where the ledger's status starts it.
+    const dueToday = paymentsOf({ ...lease, periods: [p("2026-09", "2026-09-19", 1000, 0, "pending")] }, "2026-09-19");
+    expect(dueToday.outstandingCents).toBe(0);
+    expect(dueToday.nextDueOn).toBe("2026-09-19");
+    expect(dueToday.nextDueCents).toBe(1000);
+    expect(rentSituation(dueToday)).toBe("pending");
+    const dueYesterday = paymentsOf({ ...lease, periods: [p("2026-09", "2026-09-19", 1000, 0, "late")] }, "2026-09-20");
+    expect(dueYesterday.outstandingCents).toBe(1000);
+    expect(rentSituation(dueYesterday)).toBe("late");
   });
 
   it("raises the few alerts worth a line on the home page", () => {

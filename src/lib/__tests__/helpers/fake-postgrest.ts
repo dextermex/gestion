@@ -243,6 +243,10 @@ export class FakeDb {
           .sort((a, b) => (String(a.start_date) < String(b.start_date) ? 1 : -1));
         return { data: rows, error: null };
       }
+      case "is_tenant": {
+        if (!uid) return { data: false, error: null };
+        return { data: this.table("leases").some((l) => this.tenantLease(l.id, uid)), error: null };
+      }
       case "my_lease_parties": {
         if (!uid) return { data: [], error: null };
         const rows = this.table("lease_parties")
@@ -276,7 +280,9 @@ export class FakeDb {
         const email = String(contact.email ?? "");
         if (!EMAIL.test(email)) return raise("gestion: no email");
         for (const inv of this.table("portal_invites")) {
-          if (inv.contact_id === args.p_contact && !inv.accepted_at && !inv.revoked_at) inv.revoked_at = this.nowIso();
+          if (inv.contact_id === args.p_contact && (inv.lease_id === args.p_lease || inv.lease_id == null) && !inv.accepted_at && !inv.revoked_at) {
+            inv.revoked_at = this.nowIso();
+          }
         }
         const row = this.insertRow("portal_invites", {
           org_id: lease.org_id, contact_id: args.p_contact, lease_id: args.p_lease, role: "tenant", email: email.toLowerCase(),
@@ -389,11 +395,24 @@ export class FakeDb {
     return stored;
   }
 
-  conflictOf(table: string, row: Row): DbError | null {
+  /** The unique indexes, checked on every insert and update. */
+  uniqueConflictOf(table: string, row: Row): DbError | null {
     for (const key of UNIQUE[table] ?? []) {
       const clash = this.table(table).some((r) => r !== row && key.every((k) => r[k] === row[k]));
       if (clash) return { code: "23505", message: `duplicate key value violates unique constraint on ${key.join(",")}` };
     }
+    // contacts_email_active_key (0002): one live contact per e-mail and workspace.
+    if (table === "contacts" && row.email != null && row.archived_at == null) {
+      const clash = this.table(table).some((r) => r !== row && r.org_id === row.org_id && r.email === row.email && r.archived_at == null);
+      if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "contacts_email_active_key"' };
+    }
+    return null;
+  }
+
+  /** What an insert runs into: the unique indexes, then the lot's rules. */
+  conflictOf(table: string, row: Row): DbError | null {
+    const unique = this.uniqueConflictOf(table, row);
+    if (unique) return unique;
     if (table === "leases") return lotRule(this.table(table), row);
     return null;
   }
@@ -542,6 +561,20 @@ class FakeQuery implements PromiseLike<Result> {
     this.filters.push((r) => values.includes(r[key]));
     return this;
   }
+  /** PostgREST `ilike`: `%` and `_` are wildcards unless escaped with a backslash; case is ignored. */
+  ilike(key: string, pattern: string): this {
+    let source = "^";
+    for (let i = 0; i < pattern.length; i++) {
+      const c = pattern[i];
+      if (c === "\\" && i + 1 < pattern.length) source += pattern[++i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      else if (c === "%") source += ".*";
+      else if (c === "_") source += ".";
+      else source += c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    const re = new RegExp(`${source}$`, "i");
+    this.filters.push((r) => typeof r[key] === "string" && re.test(r[key] as string));
+    return this;
+  }
   gte(key: string, value: unknown): this {
     this.filters.push((r) => String(r[key]) >= String(value));
     return this;
@@ -639,7 +672,7 @@ class FakeQuery implements PromiseLike<Result> {
             GENERATED[this.table]?.(r);
             const check = CHECKS[this.table]?.(r);
             if (check) return { data: null, error: { code: "23514", message: check } };
-            const rule = touchesLot ? lotRule(this.db.table(this.table), r) : null;
+            const rule = touchesLot ? lotRule(this.db.table(this.table), r) : this.db.uniqueConflictOf(this.table, r);
             if (rule) {
               Object.assign(r, before);
               return { data: null, error: rule };

@@ -116,3 +116,22 @@ identique pour préférer la photo du lot à celle du bien. Additif ; aucune
 ligne modifiée. Vérifié après application : colonne présente, fonction
 recréée, `public.g_can` toujours sur `60d98f80cccaa74f02b4afb1ebd6b859`.
 Réversible : drop de la colonne, puis `my_home()` telle qu'en 0015.
+
+## 0017 · 2026-09-21 · l'invitation d'un bail, et « est-il locataire ? »
+
+`0017_portal_invite_scope.sql` (migration `gestion_portal_invite_scope`)
+corrige deux points relevés en relecture du portail. `portal_invite_lease`
+est recréée à signature identique : un nouvel envoi ne révoque plus que
+l'invitation ouverte du même bail (ou une ancienne ligne sans bail), plus
+celles des autres baux de la même personne. `gestion.is_tenant()` est
+ajoutée (security definer, `authenticated` seulement) : vrai si le compte
+courant est partie tenant ou colocataire d'au moins un bail, le prédicat de
+`my_home()` sans en assembler les lignes ; la mise en page de l'espace de
+gestion la demande à chaque requête à la place de `my_home()`. Additif ;
+aucune ligne modifiée, aucune invitation ouverte au moment de l'application.
+Vérifié après application : clause de révocation présente, `is_tenant()`
+exécutable par `authenticated` seulement et d'accord avec `my_home()` pour
+les quatre comptes en base (deux locataires : vrai, 1 logement ; deux
+gestionnaires : faux, 0), `public.g_can` toujours sur
+`60d98f80cccaa74f02b4afb1ebd6b859`. Réversible : `portal_invite_lease`
+telle qu'en 0015, drop de `is_tenant()`.

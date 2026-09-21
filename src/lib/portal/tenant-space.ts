@@ -141,8 +141,10 @@ export interface TenantSpace {
   userId: string;
   me: { name: string; firstName: string; email: string };
   today: string;
-  /** The tenancy in force, if the tenant has one. */
+  /** The tenancy in force, if the tenant has one: the latest one to start. */
   current: TenantLease | null;
+  /** Other tenancies in force at the same time (a second lot, a parking): running, not ended. */
+  others: TenantLease[];
   /** Tenancies that ended: the tenant keeps reading them. */
   past: TenantLease[];
   managers: Array<{ orgId: string; name: string; email: string | null; phone: string | null }>;
@@ -188,6 +190,7 @@ export async function buildTenantSpace(
       me: { name: opts.displayName, firstName: opts.displayName.split(/\s+/)[0] ?? "", email: opts.email },
       today: opts.today,
       current: null,
+      others: [],
       past: [],
       managers: [],
       requests: [],
@@ -197,15 +200,23 @@ export async function buildTenantSpace(
 
   // Each table filters to the tenant's own rows by policy; the `in` only
   // narrows what is asked for, it never widens what comes back.
-  const [periodRows, lineRows, depositRows, edlRows, insuranceRows, documentRows, ticketRows, conversationRows] = await Promise.all([
+  const [periodRows, lineRows, depositRows, edlRows, insuranceRows, ticketRows] = await Promise.all([
     read("rent_period_status", "id,lease_id,period,due_date,total_cents,allocated_cents,status", (q) => q.in("lease_id", leaseIds).order("period")),
     read("rent_periods", "id,lease_id,rent_cents,charges_cents,other_cents,vat_cents", (q) => q.in("lease_id", leaseIds)),
     read("deposits", "id,lease_id,form,amount_cents,status,received_on,key_handover_on", (q) => q.in("lease_id", leaseIds)),
     read("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256", (q) => q.in("lease_id", leaseIds)),
     read("insurance_policies", "id,lease_id,kind,provider,policy_number,expires_on", (q) => q.in("lease_id", leaseIds)),
-    read("documents", "id,class,name,storage_path,related_type,related_id,created_at", (q) => q.order("created_at", { ascending: false })),
     read("tickets", "id,lease_id,category,severity,status,title,description,created_at,updated_at,closed_at", (q) => q.in("lease_id", leaseIds).order("created_at", { ascending: false })),
-    read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "ticket")),
+  ]);
+  // The documents and threads the space shows are the leases' and the
+  // requests' own: asked for by those ids, not "everything the policy lets
+  // through" and sorted out in memory.
+  const ticketIds = ticketRows.map((t) => s(t.id));
+  const [documentRows, conversationRows] = await Promise.all([
+    read("documents", "id,class,name,storage_path,related_type,related_id,created_at", (q) =>
+      q.in("related_id", [...leaseIds, ...ticketIds]).order("created_at", { ascending: false }),
+    ),
+    ticketIds.length > 0 ? read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "ticket").in("scope_id", ticketIds)) : Promise.resolve([] as Row[]),
   ]);
   const conversationIds = conversationRows.map((c) => s(c.id));
   const messageRows = conversationIds.length > 0
@@ -299,9 +310,14 @@ export async function buildTenantSpace(
     };
   });
 
-  const live = leases.filter((l) => l.status === "active" || l.status === "notice").sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+  // The home page is one tenancy: the latest one in force. Another one
+  // running at the same time is not "former", it is listed as running.
+  const byStart = (a: TenantLease, b: TenantLease) => (a.startDate < b.startDate ? 1 : -1);
+  const isLive = (l: TenantLease) => l.status === "active" || l.status === "notice";
+  const live = leases.filter(isLive).sort(byStart);
   const current = live[0] ?? null;
-  const past = leases.filter((l) => l !== current).sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+  const others = live.filter((l) => l !== current);
+  const past = leases.filter((l) => !isLive(l)).sort(byStart);
 
   const conversationByTicket = new Map(conversationRows.map((c) => [s(c.scope_id), s(c.id)]));
   const requests: TenantRequest[] = ticketRows.map((t) => {
@@ -338,6 +354,7 @@ export async function buildTenantSpace(
     me: { name: meName, firstName: firstNameOf(allParties, opts.displayName), email: opts.email },
     today: opts.today,
     current,
+    others,
     past,
     managers: managerRows.map((m) => ({ orgId: s(m.org_id), name: s(m.name), email: s(m.email) || null, phone: s(m.phone) || null })),
     requests,
@@ -351,7 +368,10 @@ export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "
   const sorted = [...lease.periods].sort((a, b) => (a.period < b.period ? -1 : 1));
   const thisMonth = sorted.find((p) => p.period === month) ?? null;
   const open = sorted.filter((p) => p.allocatedCents < p.totalCents && p.status !== "written_off");
-  const outstandingCents = open.filter((p) => p.dueDate <= today).reduce((a, p) => a + (p.totalCents - p.allocatedCents), 0);
+  // Late is "due before today", the same line the ledger's own status draws
+  // (`due_date < current_date`): the day the rent falls due it is still to pay,
+  // not behind.
+  const outstandingCents = open.filter((p) => p.dueDate < today).reduce((a, p) => a + (p.totalCents - p.allocatedCents), 0);
   const upcoming = open.find((p) => p.dueDate >= today) ?? null;
   const nextDue = upcoming ? upcoming.dueDate : nextDueOn(today, lease.paymentDay, lease.startDate, lease.endDate);
   const nextDueCents = upcoming ? upcoming.totalCents - upcoming.allocatedCents : sorted.length > 0 ? sorted[sorted.length - 1].totalCents : 0;
@@ -360,8 +380,7 @@ export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "
 
 /**
  * Whether the signed-in account is a tenant anywhere, and where: the same
- * `my_home()` the space is built from, kept to its ids. Cheap enough for a
- * layout to ask on every request.
+ * `my_home()` the space is built from, kept to its ids.
  */
 export async function tenantLeaseIds(g: Pick<GestionReader, "rpc">): Promise<string[]> {
   const { data, error } = await g.rpc("my_home");
@@ -370,4 +389,19 @@ export async function tenantLeaseIds(g: Pick<GestionReader, "rpc">): Promise<str
     return [];
   }
   return ((data as Row[] | null) ?? []).map((h) => s(h.lease_id)).filter((id) => id !== "");
+}
+
+/**
+ * The yes-or-no version the management layout asks on every request:
+ * `gestion.is_tenant()` (0017) is the predicate behind `my_home()` and
+ * nothing more, so no lease, lot or property row is assembled just to be
+ * counted. An error reads as "not a tenant", the safe side for a layout.
+ */
+export async function isTenant(g: Pick<GestionReader, "rpc">): Promise<boolean> {
+  const { data, error } = await g.rpc("is_tenant");
+  if (error) {
+    console.error("tenant lookup failed:", error.code, error.message);
+    return false;
+  }
+  return data === true;
 }

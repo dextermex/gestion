@@ -1773,6 +1773,7 @@ export const fr = {
     managerTitle: "Votre gestionnaire",
     managerWrite: "Écrire un message",
     managerCall: "Appeler",
+    othersTitle: "Vos autres locations en cours",
     pastTitle: "Anciennes locations",
     pastRange: "Du {from} au {to}",
     pastOpen: "Consulter",

@@ -211,7 +211,7 @@ export default function TenantWizard({
       }
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setSaveError(data.error === "already_let" ? d.location.alreadyLet : d.location.saveFailed);
+        setSaveError(data.error === "already_let" ? d.location.alreadyLet : data.error === "email_taken" ? d.modify.emailTaken : d.location.saveFailed);
         return null;
       }
       const saved = (await res.json()) as {

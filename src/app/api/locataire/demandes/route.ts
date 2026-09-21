@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/portal/session";
-import { attachTenantFiles, createTenantRequest, parseRequestInput, type UploadedFile } from "@/lib/portal/requests";
+import { createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { ticketRef } from "@/lib/portal/types";
 
 /**
  * A tenant's new request. The lease it lands on is not taken from the
  * request: it is the tenancy in force that `my_home()` returns for this
- * account, so a forged id changes nothing. Photos were uploaded by the
- * browser to the lease's own storage folder; here they become documents of
- * the intervention, and a path outside that folder is dropped.
+ * account, so a forged id changes nothing. Photos are not part of this
+ * body: the browser sends them afterwards to `/api/locataire/demandes/[id]/pieces`,
+ * which stores each file and only then records it, so no document row ever
+ * names a file that does not exist.
  */
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
@@ -34,14 +35,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: created.error }, { status: created.error === "forbidden" ? 403 : created.error === "invalid" ? 400 : 502 });
   }
 
-  const files: UploadedFile[] = (Array.isArray(body.files) ? body.files : [])
-    .map((f) => (f ?? {}) as Record<string, unknown>)
-    .map((f) => ({ path: str(f.path, 300), name: str(f.name, 160), mime: str(f.mime, 80), sizeBytes: Number(f.sizeBytes) || 0 }))
-    .filter((f) => f.path !== "");
-  let attached = 0;
-  if (files.length > 0) {
-    const result = await attachTenantFiles(g, user, lease, created.id, files);
-    if (!("error" in result)) attached = result.attached;
-  }
-  return NextResponse.json({ ok: true, id: created.id, ref: ticketRef(created.id), attached });
+  return NextResponse.json({ ok: true, id: created.id, ref: ticketRef(created.id) });
 }

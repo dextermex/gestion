@@ -1762,6 +1762,7 @@ export const en: Dict = {
     managerTitle: "Your manager",
     managerWrite: "Write a message",
     managerCall: "Call",
+    othersTitle: "Your other current tenancies",
     pastTitle: "Former tenancies",
     pastRange: "From {from} to {to}",
     pastOpen: "View",
