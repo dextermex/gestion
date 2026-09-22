@@ -1,19 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fr } from "@/lib/i18n/fr";
 import type { OrgContext } from "@/lib/gestion/api";
-import { parseDossierInput, saveRentalDraft, type DossierInput } from "@/lib/gestion/rental";
-import { activateLease, closeLease } from "@/lib/gestion/lease";
-import { buildRealDataFrom } from "@/lib/demo/data-real";
-import { orgFromWorkspace } from "@/lib/demo/data-empty";
+import { saveRentalDraft } from "@/lib/gestion/rental";
+import { closeLease } from "@/lib/gestion/lease";
 import { addDays, addMonths } from "@/domain/dates";
 import { createInvitation, invitationLink, invitationMail, revokeInvitation, sendInvitation } from "@/lib/portal/invitations";
 import { acceptInvitation, previewInvitation } from "@/lib/portal/accept";
-import { buildTenantSpace, isTenant, paymentsOf, tenantLeaseIds } from "@/lib/portal/tenant-space";
+import { isTenant, paymentsOf, tenantLeaseIds } from "@/lib/portal/tenant-space";
 import { addTenantMessage, attachTenantFiles, createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { attachmentFolder, inviteFor, inviteState, requestKindOf, requestState, ticketCategoryFor } from "@/lib/portal/types";
 import { alertsFor, rentSituation } from "@/lib/portal/view";
 import type { TenantLease } from "@/lib/portal/tenant-space";
 import { FakeDb } from "./helpers/fake-postgrest";
+import { ORG, OTHER_ORG, ctxFor, dossier, hydrate, letTo, seedProperty, space } from "./helpers/tenancy";
 
 /**
  * The tenant portal, end to end, on one database.
@@ -25,8 +24,6 @@ import { FakeDb } from "./helpers/fake-postgrest";
  * same rows: there is one record of a tenancy, read two ways.
  */
 
-const ORG = "0f0f0f0f-0000-4000-8000-00000000c0de";
-const OTHER_ORG = "0f0f0f0f-0000-4000-8000-00000000beef";
 const today = new Date().toISOString().slice(0, 10);
 const thisMonth = `${today.slice(0, 7)}-01`;
 const nextMonth = addMonths(thisMonth, 1);
@@ -40,48 +37,6 @@ const anna = { id: "user-anna", email: "anna.weber@example.lu" };
 const luc = { id: "user-luc", email: "luc.weber@example.lu" };
 const nora = { id: "user-nora", email: "nora.adam@example.lu" };
 const stranger = { id: "user-stranger", email: "someone.else@example.lu" };
-
-function ctxFor(db: FakeDb, org = ORG): OrgContext {
-  return { g: db.client(), org: { id: org, name: "Cabinet Test", kind: "owner", role: "owner" }, userId: "user-owner" };
-}
-
-async function hydrate(db: FakeDb) {
-  return buildRealDataFrom(db.client(), orgFromWorkspace({ id: ORG, name: "Cabinet Test", kind: "owner" }), async () => new Map());
-}
-
-function seedProperty(db: FakeDb, org = ORG, name = "Maison Weber"): { propertyId: string; unitId: string } {
-  const property = db.insertRow("properties", {
-    org_id: org,
-    name,
-    type: "house",
-    address: { street: "Rue de la Gare", number: "12", postal_code: "8001", city: "Strassen" },
-    commune: "Strassen",
-    energy_class: "C",
-    photo_url: `${org}/photo-${name}.jpg`,
-  });
-  const unit = db.insertRow("units", { org_id: org, property_id: property.id, label: "Maison", kind: "dwelling", area_sqm: 120, rooms: 5 });
-  return { propertyId: String(property.id), unitId: String(unit.id) };
-}
-
-const dossier = (body: Record<string, unknown>): DossierInput => {
-  const input = parseDossierInput(body, "fr");
-  if (!input) throw new Error("unreadable dossier");
-  return input;
-};
-
-/** The owner records a tenancy and activates it: the shortest path to a let lot. */
-async function letTo(ctx: OrgContext, unitId: string, tenants: Array<Record<string, string>>, rent = "1 250", on = today) {
-  const saved = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "rent", tenants, rent, charges: "150", startDate: on, paymentDay: "1" }));
-  if ("error" in saved) throw new Error(saved.error);
-  const active = await activateLease(ctx, saved.leaseId, on);
-  if ("error" in active) throw new Error(active.error);
-  return saved;
-}
-
-/** The tenant's screens, built under the tenant's own account. */
-async function space(db: FakeDb, user: { id: string; email: string }, name = "Compte") {
-  return buildTenantSpace(db.tenantClient(user), { userId: user.id, email: user.email, displayName: name, today, sign: async () => new Map() });
-}
 
 const inviteVars = { firstName: "Anna", orgName: "Cabinet Test", propertyName: "Maison Weber", unitLabel: "Maison" };
 const fmtDate = (iso: string) => iso.slice(0, 10);
@@ -348,7 +303,7 @@ describe("the tenant portal, from the invitation to the departure", () => {
     const third = await createInvitation(ctx, { leaseId: rental.leaseId, contactId: annaContact });
     if ("error" in third) throw new Error(third.error);
     expect((await previewInvitation(db.anonClient(), "0123456789abcdef")).state).toBe("unknown");
-    expect((await previewInvitation(db.anonClient(), third.token.slice(0, 63) + "0")).state).toBe("unknown");
+    expect((await previewInvitation(db.anonClient(), third.token.slice(0, 63) + (third.token.endsWith("0") ? "1" : "0"))).state).toBe("unknown");
     expect(await acceptInvitation(db.tenantClient(anna), "not-a-token-at-all")).toEqual({ error: "unknown" });
     expect(await acceptInvitation(db.tenantClient(anna), third.token)).toMatchObject({ ok: true });
     // Once linked, a fresh invitation is pointless and refused.
@@ -607,7 +562,7 @@ describe("the portal's vocabulary", () => {
     expect(requestKindOf({ category: "administrative", description: "no tag" })).toBe("other");
     expect(["new", "triaged"].map(requestState)).toEqual(["sent", "sent"]);
     expect(["offered", "scheduled", "in_progress", "pending_tenant"].map(requestState)).toEqual(["in_progress", "in_progress", "in_progress", "in_progress"]);
-    expect(["done", "closed", "cancelled"].map(requestState)).toEqual(["resolved", "resolved", "resolved"]);
+    expect(["done", "closed", "cancelled"].map(requestState)).toEqual(["resolved", "resolved", "refused"]);
     expect(parseRequestInput({ kind: "spam", title: "x" })).toBeNull();
     expect(parseRequestInput({ kind: "technical", title: "" })).toBeNull();
     expect(parseRequestInput({ kind: "technical", title: " Fuite ", severity: "bogus" })).toEqual({ kind: "technical", category: null, title: "Fuite", description: "", severity: "routine" });

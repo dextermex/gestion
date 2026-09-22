@@ -55,6 +55,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
         <div className="mt-2 flex flex-wrap gap-1.5">
           <Badge>{fmt(d.tenant.reqOpenedOn, { date: formatDate(request.createdAt, locale) })}</Badge>
           {request.state === "resolved" && request.closedAt && <Badge>{fmt(d.tenant.reqResolvedOn, { date: formatDate(request.closedAt, locale) })}</Badge>}
+          {request.state === "refused" && request.closedAt && <Badge>{fmt(d.tenant.reqRefusedOn, { date: formatDate(request.closedAt, locale) })}</Badge>}
           {request.kind === "technical" && severityMeta[request.severity] && <MetaBadge meta={severityMeta[request.severity]} />}
         </div>
       </div>

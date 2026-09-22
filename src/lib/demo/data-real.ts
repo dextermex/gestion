@@ -124,6 +124,7 @@ export async function buildRealDataFrom(
     edlItemRows,
     edlMediaRows,
     ticketRows,
+    workOrderRows,
     meterRows,
     readingRows,
     workflowRows,
@@ -168,13 +169,14 @@ export async function buildRealDataFrom(
     q("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256"),
     q("edl_items", "id,session_id"),
     q("edl_media", "id,item_id"),
-    q("tickets", "id,unit_id,lease_id,source,category,severity,status,title,created_at,sla_due_at"),
+    q("tickets", "id,unit_id,property_id,lease_id,source,category,severity,status,title,description,created_at,updated_at,closed_at,sla_due_at"),
+    q("work_orders", "id,ticket_id,status,created_at"),
     q("meters", "id,property_id,unit_id,kind,serial_number,supplier", "created_at"),
     q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", "read_on"),
     q("workflows", "id,kind,unit_id,lease_id,current_state,blocked_reason,started_at,completed_at"),
-    q("conversations", "id,scope_type,scope_id,subject,last_message_at"),
-    q("messages", "conversation_id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,read_at", "sent_at"),
-    q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,created_at"),
+    q("conversations", "id,scope_type,scope_id,subject,last_message_at,created_at"),
+    q("messages", "id,conversation_id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,read_at", "sent_at"),
+    q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at"),
     q("insurance_policies", "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes", "created_at"),
     // The token is never selected: it is returned once, when the invitation is created.
     q("portal_invites", "id,contact_id,lease_id,email,expires_at,accepted_at,revoked_at,sent_at,delivery,created_at", "created_at"),
@@ -442,6 +444,16 @@ export async function buildRealDataFrom(
   }));
 
   // ── Tickets, meters, workflows ──
+  // A request's thread is the ticket-scoped conversation; its work order,
+  // if the owner opened one, makes it an intervention; its photos are the
+  // ticket's documents, signed for the screen.
+  const conversationByTicket = new Map(
+    conversationRows.filter((c) => s(c.scope_type) === "ticket" && s(c.scope_id) !== "").map((c) => [s(c.scope_id), s(c.id)]),
+  );
+  const workOrderByTicket = new Map<string, string>();
+  for (const w of workOrderRows) if (!workOrderByTicket.has(s(w.ticket_id))) workOrderByTicket.set(s(w.ticket_id), s(w.id));
+  const ticketPhotoRows = documentRows.filter((doc) => s(doc.related_type) === "ticket" && s(doc.storage_path) !== "");
+  const signedPhotos = await sign(ticketPhotoRows.map((doc) => s(doc.storage_path)));
   const TICKETS: DemoTicket[] = ticketRows.map((t) => ({
     id: s(t.id),
     ref: `INT-${s(t.id).slice(0, 8).toUpperCase()}`,
@@ -455,8 +467,16 @@ export async function buildRealDataFrom(
     severity: s(t.severity) as DemoTicket["severity"],
     status: s(t.status) as DemoTicket["status"],
     title: s(t.title),
+    description: sOr(t.description, null),
     createdAt: day(t.created_at),
+    updatedAt: t.updated_at ? day(t.updated_at) : day(t.created_at),
+    closedAt: t.closed_at ? day(t.closed_at) : null,
     slaDueAt: t.sla_due_at ? day(t.sla_due_at) : null,
+    conversationId: conversationByTicket.get(s(t.id)) ?? null,
+    interventionId: workOrderByTicket.get(s(t.id)) ?? null,
+    attachments: ticketPhotoRows
+      .filter((doc) => s(doc.related_id) === s(t.id))
+      .map((doc) => ({ id: s(doc.id), name: s(doc.name), url: signedPhotos.get(s(doc.storage_path)) ?? null })),
   }));
   const lastReadingByMeter = new Map<string, Row>();
   for (const r of readingRows) lastReadingByMeter.set(s(r.meter_id), r); // ordered by read_on: last wins
@@ -498,31 +518,59 @@ export async function buildRealDataFrom(
     list.push(m);
     messagesByConv.set(s(m.conversation_id), list);
   }
+  const ticketIndex = new Map(TICKETS.map((t) => [t.id, t]));
+  const tenantNamesOfLease = (leaseId: string): string[] =>
+    (leaseIndex.get(leaseId)?.tenantContactIds ?? []).map((id) => contactIndex.get(id)?.name ?? "").filter(Boolean);
   const scopeLabel = (type: string, id: string): string => {
     if (type === "lease") return labelOfLease(id);
     if (type === "unit") return labelOfUnit(id);
     if (type === "property") return propertyIndex.get(id)?.name ?? "";
     if (type === "contact") return contactIndex.get(id)?.name ?? "";
+    if (type === "ticket") {
+      const t = ticketIndex.get(id);
+      return t ? [t.ref, t.unitLabel].filter(Boolean).join(" · ") : "";
+    }
     return "";
   };
+  const SCOPE_TYPES = ["lease", "ticket", "mandate", "contact", "general"] as const;
   const CONVERSATIONS: DemoConversation[] = conversationRows.map((c) => {
     const msgs = messagesByConv.get(s(c.id)) ?? [];
+    const scopeType = (SCOPE_TYPES as readonly string[]).includes(s(c.scope_type)) ? (s(c.scope_type) as DemoConversation["scopeType"]) : "general";
+    const scopeId = sOr(c.scope_id, null);
+    const senderName = (m: Row): string =>
+      contactIndex.get(s(m.sender_contact_id))?.name ??
+      contactIndex.get(contactByUser.get(s(m.sender_user_id)) ?? "")?.name ??
+      (s(m.sender_kind) === "manager" ? org.name : "Système");
+    // The other side of the desk: the tenants of the lease or request, the
+    // contact, else whoever wrote first from outside the cabinet.
+    const partyNames =
+      scopeType === "ticket" && scopeId
+        ? tenantNamesOfLease(ticketIndex.get(scopeId)?.leaseId ?? "")
+        : scopeType === "lease" && scopeId
+          ? tenantNamesOfLease(scopeId)
+          : scopeType === "contact" && scopeId
+            ? [contactIndex.get(scopeId)?.name ?? ""].filter(Boolean)
+            : [];
+    const outsider = msgs.find((m) => s(m.sender_kind) !== "manager" && s(m.sender_kind) !== "system");
+    const lastAt = msgs.length > 0 ? s(msgs[msgs.length - 1].sent_at) : s(c.last_message_at) || s(c.created_at);
     return {
       id: s(c.id),
       subject: s(c.subject),
-      scopeLabel: scopeLabel(s(c.scope_type), s(c.scope_id)),
-      lastMessageAt: s(c.last_message_at),
+      scopeLabel: scopeLabel(scopeType, scopeId ?? ""),
+      scopeType,
+      scopeId,
+      participantName: partyNames.join(", ") || (outsider ? senderName(outsider) : org.name),
+      lastMessageAt: lastAt,
       unread: msgs.filter((m) => !m.read_at && s(m.sender_kind) !== "manager").length,
       messages: msgs.map((m) => ({
-        from:
-          contactIndex.get(s(m.sender_contact_id))?.name ??
-          contactIndex.get(contactByUser.get(s(m.sender_user_id)) ?? "")?.name ??
-          (s(m.sender_kind) === "manager" ? org.name : "Système"),
+        id: s(m.id),
+        from: senderName(m),
         kind: (["tenant", "manager", "owner", "artisan", "system"].includes(s(m.sender_kind))
           ? s(m.sender_kind)
           : "system") as DemoConversation["messages"][number]["kind"],
         body: s(m.body),
         at: s(m.sent_at),
+        readAt: m.read_at ? s(m.read_at) : null,
       })),
     };
   });

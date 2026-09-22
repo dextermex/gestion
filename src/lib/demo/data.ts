@@ -641,6 +641,12 @@ export const EDLS: DemoEdl[] = [
 
 // ─── Tickets ────────────────────────────────────────────────────────────────
 
+export interface DemoAttachment {
+  id: string;
+  name: string;
+  url: string | null;
+}
+
 export interface DemoTicket {
   id: string;
   ref: string;
@@ -653,8 +659,17 @@ export interface DemoTicket {
   severity: TicketSeverity;
   status: TicketStatus;
   title: string;
+  /** What was asked, in the requester's words; the thread continues it. */
+  description: string | null;
   createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
   slaDueAt: string | null;
+  /** The thread of this request, once opened. Same row on both sides of the portal. */
+  conversationId: string | null;
+  /** The work order that makes this request an intervention; null until the owner decides it needs one. */
+  interventionId: string | null;
+  attachments: DemoAttachment[];
   artisanContactId?: string;
   amountCents?: number;
   rechargeDecision?: { decision: "owner" | "tenant" | "split"; note: string };
@@ -664,32 +679,37 @@ export const TICKETS: DemoTicket[] = [
   {
     id: "t-1", unitId: "u-b-3b", ref: "INT-2026-0141", unitLabel: "Apt 3B · Résidence Beaulieu", leaseId: "l-3b",
     source: "tenant", category: "heating", severity: "urgent", status: "scheduled",
-    title: "Chaudière en défaut, pression à 0,4 bar", createdAt: "2026-08-19", slaDueAt: "2026-08-25",
+    title: "Chaudière en défaut, pression à 0,4 bar", description: "La pression de la chaudière retombe à 0,4 bar chaque matin. Le chauffage se coupe alors.",
+    createdAt: "2026-08-19", updatedAt: "2026-08-21", closedAt: null, slaDueAt: "2026-08-25", conversationId: "conv-1", interventionId: "wo-1", attachments: [],
     artisanContactId: "c-krier", amountCents: cents(1240),
     rechargeDecision: { decision: "owner", note: "Grosse réparation, non refacturable au locataire (blocage légal)." },
   },
   {
     id: "t-2", unitId: "u-b-2a", ref: "INT-2026-0142", unitLabel: "Apt 2A · Résidence Beaulieu", leaseId: "l-2a",
     source: "tenant", category: "damp_mould", severity: "priority", status: "in_progress",
-    title: "Trace d'humidité mur chambre 2", createdAt: "2026-08-12", slaDueAt: "2026-08-27",
+    title: "Trace d'humidité mur chambre 2", description: "Une trace sombre sur le mur de la chambre 2, sous la fenêtre.",
+    createdAt: "2026-08-12", updatedAt: "2026-08-14", closedAt: null, slaDueAt: "2026-08-27", conversationId: null, interventionId: "wo-2", attachments: [],
     artisanContactId: "c-da-silva",
   },
   {
     id: "t-3", unitId: "u-k-01", ref: "INT-2026-0139", unitLabel: "Plateau 1er · Bureaux Kirchberg", leaseId: "l-k01",
     source: "tenant", category: "electrics", severity: "routine", status: "done",
-    title: "Prise réseau défectueuse open space", createdAt: "2026-08-02", slaDueAt: "2026-08-16",
+    title: "Prise réseau défectueuse open space", description: "La prise réseau côté fenêtre de l'open space ne fonctionne plus.",
+    createdAt: "2026-08-02", updatedAt: "2026-08-08", closedAt: "2026-08-08", slaDueAt: "2026-08-16", conversationId: null, interventionId: "wo-3", attachments: [],
     artisanContactId: "c-elektro", amountCents: cents(380),
     rechargeDecision: { decision: "tenant", note: "Bail commercial : refacturation selon la clause charges (équipement du preneur)." },
   },
   {
     id: "t-4", unitId: "u-b-rdc", ref: "INT-2026-0143", unitLabel: "Studio RDC · Résidence Beaulieu", leaseId: "l-rdc",
     source: "edl_defect", category: "plumbing", severity: "routine", status: "pending_tenant",
-    title: "Joint silicone douche à refaire (défaut EDL n° 17)", createdAt: "2026-08-05", slaDueAt: null,
+    title: "Joint silicone douche à refaire (défaut EDL n° 17)", description: null,
+    createdAt: "2026-08-05", updatedAt: "2026-08-05", closedAt: null, slaDueAt: null, conversationId: null, interventionId: null, attachments: [],
   },
   {
     id: "t-5", unitId: "u-gare", ref: "INT-2026-0144", unitLabel: "Studio 4A · Studio Quartier Gare", leaseId: null,
     source: "manager", category: "common_areas", severity: "routine", status: "offered",
-    title: "Remise en peinture avant relocation", createdAt: "2026-08-18", slaDueAt: null,
+    title: "Remise en peinture avant relocation", description: null,
+    createdAt: "2026-08-18", updatedAt: "2026-08-18", closedAt: null, slaDueAt: null, conversationId: null, interventionId: "wo-5", attachments: [],
     artisanContactId: "c-da-silva", amountCents: cents(2150),
     rechargeDecision: { decision: "owner", note: "Vétusté et remise en état entre deux locataires : charge propriétaire." },
   },
@@ -759,42 +779,61 @@ export const WORKFLOWS: DemoWorkflow[] = [
 
 // ─── Messaging ──────────────────────────────────────────────────────────────
 
+export interface DemoMessage {
+  id: string;
+  from: string;
+  kind: "tenant" | "manager" | "owner" | "artisan" | "system";
+  body: string;
+  at: string;
+  /** When the desk read it; null while it waits. Only the other side's messages carry one. */
+  readAt: string | null;
+}
+
 export interface DemoConversation {
   id: string;
   subject: string;
   scopeLabel: string;
+  /** What the thread is about; a ticket-scoped thread is a tenant request's. */
+  scopeType: "lease" | "ticket" | "mandate" | "contact" | "general";
+  scopeId: string | null;
+  /** The person on the other side of the desk, as the list names the thread. */
+  participantName: string;
   lastMessageAt: string;
   unread: number;
-  messages: Array<{ from: string; kind: "tenant" | "manager" | "owner" | "artisan" | "system"; body: string; at: string }>;
+  messages: DemoMessage[];
 }
 
 export const CONVERSATIONS: DemoConversation[] = [
   {
-    id: "conv-1", subject: "Chaudière : intervention vendredi", scopeLabel: "INT-2026-0141 · Apt 3B", lastMessageAt: "2026-08-21T16:40:00", unread: 1,
+    id: "conv-1", subject: "Chaudière : intervention vendredi", scopeLabel: "INT-2026-0141 · Apt 3B", scopeType: "ticket", scopeId: "t-1",
+    participantName: "Jean Muller", lastMessageAt: "2026-08-21T16:40:00", unread: 1,
     messages: [
-      { from: "Jean Muller", kind: "tenant", body: "Bonjour, la pression est retombée à 0,4 ce matin. Photo jointe.", at: "2026-08-19T08:12:00" },
-      { from: "Cabinet Reuter", kind: "manager", body: "Merci. Krier & Fils passe vendredi entre 8 h et 10 h, le créneau vous convient ?", at: "2026-08-19T09:05:00" },
-      { from: "Paul Krier", kind: "artisan", body: "Créneau accepté. Prévoir accès à la cave (vase d'expansion).", at: "2026-08-21T16:40:00" },
+      { id: "msg-1-1", from: "Jean Muller", kind: "tenant", body: "Bonjour, la pression est retombée à 0,4 ce matin. Photo jointe.", at: "2026-08-19T08:12:00", readAt: "2026-08-19T08:40:00" },
+      { id: "msg-1-2", from: "Cabinet Reuter", kind: "manager", body: "Merci. Krier & Fils passe vendredi entre 8 h et 10 h, le créneau vous convient ?", at: "2026-08-19T09:05:00", readAt: null },
+      { id: "msg-1-3", from: "Paul Krier", kind: "artisan", body: "Créneau accepté. Prévoir accès à la cave (vase d'expansion).", at: "2026-08-21T16:40:00", readAt: null },
     ],
   },
   {
-    id: "conv-2", subject: "Attestation de logement", scopeLabel: "Bail Apt 2A", lastMessageAt: "2026-08-20T11:02:00", unread: 0,
+    id: "conv-2", subject: "Attestation de logement", scopeLabel: "Bail Apt 2A", scopeType: "lease", scopeId: "l-2a",
+    participantName: "Ana Santos", lastMessageAt: "2026-08-20T11:02:00", unread: 0,
     messages: [
-      { from: "Ana Santos", kind: "tenant", body: "Bonjour, il me faut une attestation pour la commune (déclaration d'arrivée de Lucas).", at: "2026-08-20T10:48:00" },
-      { from: "Système", kind: "system", body: "Attestation générée en libre-service (QR de vérification). Délai commune : 8 jours après l'emménagement.", at: "2026-08-20T11:02:00" },
+      { id: "msg-2-1", from: "Ana Santos", kind: "tenant", body: "Bonjour, il me faut une attestation pour la commune (déclaration d'arrivée de Lucas).", at: "2026-08-20T10:48:00", readAt: "2026-08-20T10:55:00" },
+      { id: "msg-2-2", from: "Système", kind: "system", body: "Attestation générée en libre-service (QR de vérification). Délai commune : 8 jours après l'emménagement.", at: "2026-08-20T11:02:00", readAt: "2026-08-20T11:10:00" },
     ],
   },
   {
-    id: "conv-3", subject: "Ordre permanent à mettre à jour", scopeLabel: "Bail Apt 3B", lastMessageAt: "2026-08-18T09:30:00", unread: 0,
+    id: "conv-3", subject: "Ordre permanent à mettre à jour", scopeLabel: "Bail Apt 3B", scopeType: "lease", scopeId: "l-3b",
+    participantName: "Jean Muller", lastMessageAt: "2026-08-18T09:30:00", unread: 0,
     messages: [
-      { from: "Système", kind: "system", body: "Paiement d'août reçu à l'ancien montant (1 450,00 € au lieu de 1 520,00 €). Courrier pré-rempli « mettez à jour votre ordre permanent » prêt à envoyer.", at: "2026-08-18T09:30:00" },
+      { id: "msg-3-1", from: "Système", kind: "system", body: "Paiement d'août reçu à l'ancien montant (1 450,00 € au lieu de 1 520,00 €). Courrier pré-rempli « mettez à jour votre ordre permanent » prêt à envoyer.", at: "2026-08-18T09:30:00", readAt: "2026-08-18T09:45:00" },
     ],
   },
   {
-    id: "conv-4", subject: "Décompte de gérance juillet", scopeLabel: "Mandat SCI Beaulieu", lastMessageAt: "2026-08-05T14:20:00", unread: 0,
+    id: "conv-4", subject: "Décompte de gérance juillet", scopeLabel: "Mandat SCI Beaulieu", scopeType: "mandate", scopeId: null,
+    participantName: "Marie Faber", lastMessageAt: "2026-08-05T15:01:00", unread: 0,
     messages: [
-      { from: "Cabinet Reuter", kind: "manager", body: "Décompte de juillet joint : 5 loyers encaissés, honoraires 4 % + TVA 17 %, virement du solde exécuté le 5.", at: "2026-08-05T14:20:00" },
-      { from: "Marie Faber", kind: "owner", body: "Bien reçu, merci. La facture Krier passera bien sur août ?", at: "2026-08-05T15:01:00" },
+      { id: "msg-4-1", from: "Cabinet Reuter", kind: "manager", body: "Décompte de juillet joint : 5 loyers encaissés, honoraires 4 % + TVA 17 %, virement du solde exécuté le 5.", at: "2026-08-05T14:20:00", readAt: null },
+      { id: "msg-4-2", from: "Marie Faber", kind: "owner", body: "Bien reçu, merci. La facture Krier passera bien sur août ?", at: "2026-08-05T15:01:00", readAt: "2026-08-05T15:30:00" },
     ],
   },
 ];

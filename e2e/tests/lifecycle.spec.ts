@@ -20,6 +20,10 @@ let propertyId = "";
 let unitId = "";
 let leaseId = "";
 let token = "";
+let requestId = "";
+const requestTitle = "Fuite sous l'évier";
+/** A one-pixel PNG: enough for the storage policy and the document row, which is what the flow checks. */
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 
 test("the owner creates a house", async ({ page }) => {
   await signUp(page, owner);
@@ -74,6 +78,96 @@ test("the tenant creates an account from the link and sees the home", async ({ p
   await signOutFromTenantSpace(page);
 });
 
+test("the tenant sends a request with a photo", async ({ page }) => {
+  await signIn(page, tenant.email, "/locataire");
+  await page.goto("/locataire/demandes");
+  await page.getByRole("button", { name: /nouvelle demande/i }).click();
+  const dialog = page.locator("[role=dialog]");
+  await dialog.locator("button.tactile").first().click(); // a technical problem
+  await dialog.locator("form input").first().fill(requestTitle);
+  await dialog.locator("form textarea").fill("De l'eau coule sous l'évier depuis ce matin.");
+  await dialog.locator("input[type=file]").setInputFiles({ name: "evier.png", mimeType: "image/png", buffer: PNG });
+  await dialog.locator("form button[type=submit]").click();
+  // The request is written, then its photo, then the tenant lands on it: the id is the database's.
+  await page.waitForURL(/\/locataire\/demandes\/[0-9a-f-]{36}/, { timeout: 60_000 });
+  requestId = page.url().match(/\/locataire\/demandes\/([0-9a-f-]{36})/)?.[1] ?? "";
+  expect(requestId, "the request id from the page the tenant lands on").not.toBe("");
+  await expect(page.getByRole("heading", { level: 1, name: requestTitle })).toBeVisible();
+  await expect(page.getByText("Envoyée", { exact: true })).toBeVisible();
+  // The photo went through the storage policy and is recorded on the request.
+  await expect(page.getByText("Photos jointes")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("img[alt='evier.png']")).toHaveCount(1);
+  await signOutFromTenantSpace(page);
+});
+
+test("the owner finds the request under Messages, answers, tracks it and opens an intervention", async ({ page }) => {
+  await signIn(page, owner.email);
+  await page.goto("/app/messages?onglet=demandes");
+  const row = page.getByRole("row").filter({ hasText: requestTitle });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText(`${tenant.first} ${tenant.last}`);
+  await expect(row).toContainText("À traiter");
+  await row.getByRole("button").click();
+  // The linked conversation opens: the tenant's words and photo, the request's details beside them.
+  await expect(page.getByRole("heading", { level: 2, name: requestTitle })).toBeVisible();
+  await expect(page.getByText("Demande", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Détails de la demande")).toBeVisible();
+  await expect(page.locator("img[alt='evier.png']").first()).toBeVisible();
+  // A reply, written on the same thread the tenant reads.
+  await page.locator("#messages-reply").fill("Un plombier passe jeudi matin.");
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Message envoyé" })).toBeVisible();
+  await expect(page.getByText("Un plombier passe jeudi matin.").first()).toBeVisible();
+  // The status moves to "En cours": the write is the database's, a fresh load shows it.
+  const patched = page.waitForResponse((r) => r.url().includes(`/api/demandes/${requestId}`) && r.request().method() === "PATCH");
+  await page.locator("#request-status").selectOption("in_progress");
+  expect((await patched).ok(), "the status change is accepted").toBe(true);
+  // Physical work is needed: an intervention on the same request, its thread untouched.
+  const opened = page.waitForResponse((r) => r.url().includes(`/api/demandes/${requestId}/intervention`));
+  await page.getByRole("button", { name: "Créer une intervention" }).click();
+  expect((await opened).ok(), "the intervention is created").toBe(true);
+  await expect(page.getByText("Intervention créée").first()).toBeVisible();
+  await page.goto(`/app/messages?demande=${requestId}`);
+  await expect(page.locator("#request-status")).toHaveValue("in_progress");
+  await expect(page.getByText("Un plombier passe jeudi matin.").first()).toBeVisible();
+  await expect(page.getByText("Intervention créée").first()).toBeVisible();
+  await page.goto("/app/interventions");
+  await expect(page.getByText(requestTitle)).toBeVisible();
+  await signOutFromShell(page);
+});
+
+test("the tenant reads the answer and the status, and answers back", async ({ page }) => {
+  await signIn(page, tenant.email, "/locataire");
+  await page.goto(`/locataire/demandes/${requestId}`);
+  await expect(page.getByText("Un plombier passe jeudi matin.")).toBeVisible();
+  await expect(page.getByText("En cours", { exact: true })).toBeVisible();
+  await page.locator("#tenant-thread-body").fill("Jeudi matin me convient.");
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await expect(page.getByText("Jeudi matin me convient.")).toBeVisible();
+  // The tenant's account holds no key to the desk's side, nor to a request that is not theirs.
+  const foreign = await page.request.post("/api/locataire/demandes/00000000-0000-4000-8000-000000000000/messages", { data: { body: "Bonjour" } });
+  expect(foreign.status(), "a request that is not the tenant's is not found").toBe(404);
+  const desk = await page.request.patch(`/api/demandes/${requestId}`, { data: { status: "resolved" } });
+  expect(desk.status(), "a tenant cannot set the status of their own request").toBe(403);
+  await signOutFromTenantSpace(page);
+});
+
+test("the owner resolves the request; both sides read it resolved", async ({ page }) => {
+  await signIn(page, owner.email);
+  await page.goto(`/app/messages?demande=${requestId}`);
+  await expect(page.getByText("Jeudi matin me convient.").first()).toBeVisible();
+  const patched = page.waitForResponse((r) => r.url().includes(`/api/demandes/${requestId}`) && r.request().method() === "PATCH");
+  await page.locator("#request-status").selectOption("resolved");
+  expect((await patched).ok(), "the resolution is accepted").toBe(true);
+  await page.goto("/app/messages?onglet=demandes");
+  await expect(page.getByRole("row").filter({ hasText: requestTitle })).toContainText("Résolue");
+  await signOutFromShell(page);
+  await signIn(page, tenant.email, "/locataire");
+  await page.goto(`/locataire/demandes/${requestId}`);
+  await expect(page.getByText(/^Résolue le /)).toBeVisible();
+  await signOutFromTenantSpace(page);
+});
+
 test("another manager sees none of it", async ({ page }) => {
   await signUp(page, other);
   const res = await page.goto(`/app/biens/${propertyId}`);
@@ -82,6 +176,12 @@ test("another manager sees none of it", async ({ page }) => {
   await expect(page.getByText(houseName)).toHaveCount(0);
   await page.goto(`/app/biens/depart?bail=${leaseId}`);
   await expect(page.getByText(tenant.first)).toHaveCount(0);
+  // Nor can this workspace touch the request by its id: not found, whatever the verb.
+  expect((await page.request.patch(`/api/demandes/${requestId}`, { data: { status: "resolved" } })).status()).toBe(404);
+  expect((await page.request.post(`/api/demandes/${requestId}/messages`, { data: { body: "Bonjour" } })).status()).toBe(404);
+  expect((await page.request.post(`/api/demandes/${requestId}/intervention`)).status()).toBe(404);
+  await page.goto("/app/messages");
+  await expect(page.getByText(requestTitle)).toHaveCount(0);
   await signOutFromShell(page);
 });
 
@@ -105,4 +205,18 @@ test("the owner records the departure", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Enregistrer le départ du locataire" })).toHaveCount(0);
   await page.goto(`/app/biens/${propertyId}?onglet=historique`);
   await expect(page.getByText(`${tenant.first} ${tenant.last}`).first()).toBeVisible();
+});
+
+test("the former tenant keeps the history and can no longer ask", async ({ page }) => {
+  await signIn(page, tenant.email, "/locataire");
+  await page.goto(`/locataire/demandes/${requestId}`);
+  await expect(page.getByRole("heading", { level: 1, name: requestTitle })).toBeVisible();
+  await expect(page.getByText("Un plombier passe jeudi matin.")).toBeVisible();
+  await expect(page.getByText("Jeudi matin me convient.")).toBeVisible();
+  await page.goto("/locataire/demandes");
+  await expect(page.getByText(requestTitle)).toBeVisible();
+  await expect(page.getByRole("button", { name: /nouvelle demande/i })).toHaveCount(0);
+  const refused = await page.request.post("/api/locataire/demandes", { data: { kind: "other", title: "Encore une", description: "" } });
+  expect(refused.status(), "no new request on an ended tenancy").toBe(409);
+  await signOutFromTenantSpace(page);
 });

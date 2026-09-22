@@ -148,11 +148,41 @@ requests' own documents and threads by id; the four tenant pages render it and d
 rest (`paymentsOf`, `rentSituation`, `alertsFor`). The home page is the latest tenancy in
 force; another one running at the same time is listed as running (`others`), and only
 ended ones are former (`past`). Late means due before today, the line the ledger's own
-status draws. A tenant's request is an
-intervention (`tickets`, `source = tenant`) inserted under the tenant's token, its photos
-are `documents` of the ticket in the lease's storage folder (`<org>/tickets/<lease>/`),
-its follow-ups are `messages` on the ticket's conversation; the owner's Interventions and
-Messages screens read exactly these rows.
+status draws. A tenant's request is a
+`tickets` row (`source = tenant`) inserted under the tenant's token, its photos are
+`documents` of the ticket in the lease's storage folder (`<org>/tickets/<lease>/`), and
+its thread is the ticket-scoped `conversations` row opened with it, where both sides write
+`messages`; the owner's Messages screen reads exactly these rows.
+
+### A request is a thread with a status, on both sides
+
+Nothing was added to the schema for tenant requests: the ticket is the request, the
+ticket-scoped conversation is its thread, the ticket's documents are its photos, and a
+`work_orders` row on the ticket is what makes it an intervention. The desk's Messages
+(`/app/messages`, `src/components/gestion/MessagesCenter.tsx`) shows every conversation
+of the workspace, request threads wearing a `Demande` badge, and a Demandes view that
+lists the tenants' requests with their status. The four statuses the desk tracks (à
+traiter, en cours, résolue, refusée) are the ticket's own nine folded by
+`requestStatusOf()` and written back by `ticketStatusFor()` (`new`, `in_progress`,
+`done`, `cancelled`), so the tenant's space, which reads the same column through
+`requestState()`, shows the same thing without a second field. Resolving or refusing
+dates `closed_at`; reopening clears it. Read/unread is `messages.read_at`, marked when
+the desk opens a thread, and says nothing about the request.
+
+The desk's writes live in `src/lib/gestion/requests.ts` behind `PATCH /api/demandes/[id]`
+(status), `POST /api/demandes/[id]/messages` (a reply on the request's thread, opened
+there if the tenant never wrote a follow-up), `POST /api/demandes/[id]/intervention`
+(a work order on the ticket, idempotent, the thread and photos untouched),
+`POST /api/conversations/[id]/messages` and `POST /api/conversations/[id]/lu`. Every one
+looks the ticket or conversation up in the active workspace under the caller's own
+token first, so an id from another workspace answers 404 and nothing is written; the
+existing policies (maintenance for tickets and work orders, tenants for conversations
+and messages, the portal policies on the tenant's side) decide the rest. A request is
+listed under Interventions only once it carries a work order (`isIntervention()`); the
+Interventions page and the property sheet filter on it. After the tenant leaves, the
+ticket, its thread and its photos stay with the ended lease: the former tenant still
+reads them, may still write on that thread, and can open nothing new (the insert
+policies require a lease in force); the next tenant of the lot sees none of it.
 
 Invitations are `portal_invites` rows minted by `portal_invite_lease` (a party of a live
 lease, an e-mail, a token returned once and never listed): sending again revokes the open

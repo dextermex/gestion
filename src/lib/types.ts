@@ -10,7 +10,7 @@
 
 import type { Dict } from "@/lib/i18n/fr";
 import { INTL_LOCALE, type Locale } from "@/lib/i18n/config";
-import type { InviteState, RequestState } from "@/lib/portal/types";
+import type { InviteState, RequestState, RequestStatus } from "@/lib/portal/types";
 
 export type Meta = { label: string; color: string };
 
@@ -157,6 +157,15 @@ const REQUEST_STATE_COLORS: Record<RequestState, string> = {
   sent: "bg-amber-100 text-amber-800",
   in_progress: "bg-brand-100 text-brand-800",
   resolved: "bg-emerald-100 text-emerald-800",
+  refused: "bg-red-100 text-red-700",
+};
+
+/** The desk's view of the same request: to handle, in progress, resolved, refused. */
+const REQUEST_STATUS_COLORS: Record<RequestStatus, string> = {
+  todo: "bg-amber-100 text-amber-800",
+  in_progress: "bg-brand-100 text-brand-800",
+  resolved: "bg-emerald-100 text-emerald-800",
+  refused: "bg-red-100 text-red-700",
 };
 
 // ─── Meta factories (labels from the dictionary) ────────────────────────────
@@ -195,7 +204,9 @@ export const inviteStateMeta = (d: Dict) =>
     revoked: d.baux.portalStateRevoked,
   });
 export const requestStateMeta = (d: Dict) =>
-  withLabels(REQUEST_STATE_COLORS, { sent: d.tenant.stateSent, in_progress: d.tenant.stateInProgress, resolved: d.tenant.stateResolved });
+  withLabels(REQUEST_STATE_COLORS, { sent: d.tenant.stateSent, in_progress: d.tenant.stateInProgress, resolved: d.tenant.stateResolved, refused: d.tenant.stateRefused });
+export const requestStatusMeta = (d: Dict) =>
+  withLabels(REQUEST_STATUS_COLORS, { todo: d.messages.statusTodo, in_progress: d.messages.statusInProgress, resolved: d.messages.statusResolved, refused: d.messages.statusRefused });
 
 export const depositFormLabels = (d: Dict) => d.status.depositForm;
 export const workflowStateLabel = (d: Dict, state: string): string =>

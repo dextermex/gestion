@@ -4,6 +4,7 @@ import { Icon } from "@/components/pro/icons";
 import { CollapsiblePanel, LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import InvitePanel from "@/components/gestion/InvitePanel";
 import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
+import { isIntervention } from "@/lib/portal/types";
 import DraftDossierActions from "@/components/gestion/DraftDossier";
 import { dossierOf } from "@/lib/gestion/dossier";
 import type { DemoData } from "@/lib/demo";
@@ -1026,9 +1027,10 @@ export function History({
 
 /* ------------------------------ shared lookups ---------------------------- */
 
+/** The interventions of the card's lots: a tenant request joins them once the owner opens one on it. */
 export function ticketsFor(demo: DemoData, card: PropertyCard) {
   const unitIds = unitIdsOf(demo, card);
-  return demo.TICKETS.filter((t) => unitIds.has(t.unitId))
+  return demo.TICKETS.filter((t) => unitIds.has(t.unitId) && isIntervention(t))
     .slice()
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }

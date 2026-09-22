@@ -64,7 +64,13 @@ export async function createTenantRequest(
     .select("id")
     .single();
   if (error || !data) return failure(error, "tenant request insert");
-  return { id: String(data.id) };
+  const id = String(data.id);
+  // The request's thread opens with it, so the desk lists it under
+  // Messages at once. If this insert fails the request still stands: the
+  // thread is opened on first message instead.
+  const { error: threadErr } = await g.from("conversations").insert({ org_id: lease.orgId, scope_type: "ticket", scope_id: id, subject: input.title });
+  if (threadErr) console.error("tenant request thread insert failed:", threadErr.code, threadErr.message);
+  return { id };
 }
 
 export interface UploadedFile {

@@ -79,6 +79,10 @@ const DEFAULTS: Record<string, () => Row> = {
     released_balance_cents: null,
   }),
   payment_allocations: () => ({ auto: false, reversed_at: null }),
+  tickets: () => ({ description: null, closed_at: null, sla_due_at: null }),
+  work_orders: () => ({ status: "offered", artisan_contact_id: null }),
+  conversations: () => ({ last_message_at: null }),
+  messages: () => ({ sender_contact_id: null, read_at: null }),
 };
 
 /** Columns the database computes. */
@@ -388,6 +392,8 @@ export class FakeDb {
     const stored: Row = { ...(DEFAULTS[table]?.() ?? {}), ...row };
     if (stored.id === undefined) stored.id = randomUUID();
     if (stored.created_at === undefined) stored.created_at = `${this.today}T12:00:00.000Z`;
+    // `sent_at default now()`: a message written without a clock takes the real one, so threads keep their order.
+    if (table === "messages" && stored.sent_at === undefined) stored.sent_at = new Date().toISOString();
     if (table === "leases" && stored.seq === undefined) stored.seq = ++this.leaseSeq;
     GENERATED[table]?.(stored);
     const check = CHECKS[table]?.(stored);

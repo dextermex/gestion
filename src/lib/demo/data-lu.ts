@@ -231,12 +231,14 @@ export const TICKETS: DemoTicket[] = overlay(fr.TICKETS, {
   "t-1": {
     unitLabel: "Apt 3B · Residenz Uelzecht",
     title: "Heizkessel am Feeler, Drock op 0,4 Bar",
+    description: "Den Drock vum Heizkessel fält all Moien op 0,4 Bar. D'Heizung geet dann aus.",
     rechargeDecision: { decision: "owner", note: "Grouss Reparatur, net op de Locataire refakturéierbar (legale Blockage)." },
   },
-  "t-2": { unitLabel: "Apt 2A · Residenz Uelzecht", title: "Fiichtegkeetsspuren op der Mauer, Schlofkummer 2" },
+  "t-2": { unitLabel: "Apt 2A · Residenz Uelzecht", title: "Fiichtegkeetsspuren op der Mauer, Schlofkummer 2", description: "Eng donkel Spuer op der Mauer vun der Schlofkummer 2, ënner der Fënster." },
   "t-3": {
     unitLabel: "Plateau 1. · Büroen Nordstad",
     title: "Netzwierk-Priis defekt am Open Space",
+    description: "D'Netzwierk-Priis op der Fënstersäit vum Open Space funktionéiert net méi.",
     rechargeDecision: { decision: "tenant", note: "Kommerzielle Bail: Refakturatioun no der Chargen-Klausel (Equipement vum Preneur)." },
   },
   "t-4": { unitLabel: "Studio Rez · Residenz Uelzecht", title: "Silikon-Fuge an der Dusch nei ze maachen (EDL-Defekt Nr. 17)" },
@@ -283,31 +285,34 @@ export const WORKFLOWS: DemoWorkflow[] = overlay(fr.WORKFLOWS, {
 export const CONVERSATIONS: DemoConversation[] = overlay(fr.CONVERSATIONS, {
   "conv-1": {
     subject: "Heizkessel: Interventioun freides",
+    participantName: "Jang Weis",
     messages: [
-      { from: "Jang Weis", kind: "tenant", body: "Moien, den Drock ass haut de Moien erëm op 0,4 gefall. Foto derbäi.", at: "2026-08-19T08:12:00" },
-      { from: "Cabinet Majerus", kind: "manager", body: "Merci. Kirsch & Jong komme freides tëscht 8 an 10 Auer, passt Iech de Creneau?", at: "2026-08-19T09:05:00" },
-      { from: "Pol Kirsch", kind: "artisan", body: "Creneau ugeholl. W.e.g. den Zougang zum Keller virgesinn (Expansiounsgefäss).", at: "2026-08-21T16:40:00" },
+      { id: "msg-1-1", from: "Jang Weis", kind: "tenant", body: "Moien, den Drock ass haut de Moien erëm op 0,4 gefall. Foto derbäi.", at: "2026-08-19T08:12:00", readAt: "2026-08-19T08:40:00" },
+      { id: "msg-1-2", from: "Cabinet Majerus", kind: "manager", body: "Merci. Kirsch & Jong komme freides tëscht 8 an 10 Auer, passt Iech de Creneau?", at: "2026-08-19T09:05:00", readAt: null },
+      { id: "msg-1-3", from: "Pol Kirsch", kind: "artisan", body: "Creneau ugeholl. W.e.g. den Zougang zum Keller virgesinn (Expansiounsgefäss).", at: "2026-08-21T16:40:00", readAt: null },
     ],
   },
   "conv-2": {
     subject: "Attestation de logement",
     messages: [
-      { from: "Ana Santos", kind: "tenant", body: "Moien, ech brauch eng Attestatioun fir d'Gemeng (Arrivée-Deklaratioun vum Luc).", at: "2026-08-20T10:48:00" },
-      { from: "System", kind: "system", body: "Attestatioun am Self-Service generéiert (QR-Verifikatioun). Gemengendelai: 8 Deeg nom Anzuch.", at: "2026-08-20T11:02:00" },
+      { id: "msg-2-1", from: "Ana Santos", kind: "tenant", body: "Moien, ech brauch eng Attestatioun fir d'Gemeng (Arrivée-Deklaratioun vum Luc).", at: "2026-08-20T10:48:00", readAt: "2026-08-20T10:55:00" },
+      { id: "msg-2-2", from: "System", kind: "system", body: "Attestatioun am Self-Service generéiert (QR-Verifikatioun). Gemengendelai: 8 Deeg nom Anzuch.", at: "2026-08-20T11:02:00", readAt: "2026-08-20T11:10:00" },
     ],
   },
   "conv-3": {
     subject: "Daueroptrag unzepassen",
+    participantName: "Jang Weis",
     messages: [
-      { from: "System", kind: "system", body: "August-Zuelung zum ale Montant erakomm (1 450,00 € amplaz 1 520,00 €). Virausgefëllte Bréif « Daueroptrag aktualiséieren » prett fir ze schécken.", at: "2026-08-18T09:30:00" },
+      { id: "msg-3-1", from: "System", kind: "system", body: "August-Zuelung zum ale Montant erakomm (1 450,00 € amplaz 1 520,00 €). Virausgefëllte Bréif « Daueroptrag aktualiséieren » prett fir ze schécken.", at: "2026-08-18T09:30:00", readAt: "2026-08-18T09:45:00" },
     ],
   },
   "conv-4": {
     subject: "Gérance-Décompte Juli",
     scopeLabel: "Mandat SCI Uelzecht",
+    participantName: "Marie-Josée Kieffer",
     messages: [
-      { from: "Cabinet Majerus", kind: "manager", body: "Juli-Décompte am Unhang: 5 Loyeren encaisséiert, Honorairen 4 % + TVA 17 %, Virement vum Solde den 5. exekutéiert.", at: "2026-08-05T14:20:00" },
-      { from: "Marie-Josée Kieffer", kind: "owner", body: "Gutt krut, merci. D'Rechnung Kirsch kënnt jo op den August-Décompte?", at: "2026-08-05T15:01:00" },
+      { id: "msg-4-1", from: "Cabinet Majerus", kind: "manager", body: "Juli-Décompte am Unhang: 5 Loyeren encaisséiert, Honorairen 4 % + TVA 17 %, Virement vum Solde den 5. exekutéiert.", at: "2026-08-05T14:20:00", readAt: null },
+      { id: "msg-4-2", from: "Marie-Josée Kieffer", kind: "owner", body: "Gutt krut, merci. D'Rechnung Kirsch kënnt jo op den August-Décompte?", at: "2026-08-05T15:01:00", readAt: "2026-08-05T15:30:00" },
     ],
   },
 });

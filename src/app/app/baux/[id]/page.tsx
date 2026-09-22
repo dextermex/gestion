@@ -60,6 +60,7 @@ export default async function BailDetailPage({
     INVITES,
     LEASES,
     RENT_PERIODS,
+    TICKETS,
     TODAY,
     contactById,
     leaseById,
@@ -80,9 +81,16 @@ export default async function BailDetailPage({
   const periods = RENT_PERIODS.filter((rp) => rp.leaseId === l.id).slice(-12).reverse();
   const edls = EDLS.filter((e) => e.leaseId === l.id);
   const docs = DOCUMENTS.filter((doc) => doc.relatedLabel !== "" && unitLabel.includes(doc.relatedLabel));
-  // Threads carry a human scope label, not a foreign key: the lease claims
-  // the ones naming its unit. A miss only means the tab shows its empty state.
-  const threads = CONVERSATIONS.filter((c) => unitShort.length >= 3 && c.scopeLabel.includes(unitShort));
+  // The lease's threads: its own, those of its tenants' requests, and (for
+  // threads that only carry a human label) the ones naming its unit. A miss
+  // only means the tab shows its empty state.
+  const requestIds = new Set(TICKETS.filter((t) => t.leaseId === l.id).map((t) => t.id));
+  const threads = CONVERSATIONS.filter(
+    (c) =>
+      (c.scopeType === "lease" && c.scopeId === l.id) ||
+      (c.scopeType === "ticket" && c.scopeId !== null && requestIds.has(c.scopeId)) ||
+      (c.scopeId === null && unitShort.length >= 3 && c.scopeLabel.includes(unitShort)),
+  );
 
   const rentMeta = rentStatusMeta(d);
   const depositForms = depositFormLabels(d);
@@ -685,7 +693,9 @@ export default async function BailDetailPage({
                   return (
                     <li key={c.id} className="py-3">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{c.subject}</p>
+                        <Link href={`/app/messages?fil=${encodeURIComponent(c.id)}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-ink hover:text-brand-700">
+                          {c.subject}
+                        </Link>
                         {c.unread > 0 && (
                           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
                             {c.unread}

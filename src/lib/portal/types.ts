@@ -56,12 +56,55 @@ export function requestKindOf(ticket: { category: string; description: string | 
   return (tag as RequestKind | undefined) ?? "other";
 }
 
-/** The three states a tenant follows, over the intervention system's nine. */
-export type RequestState = "sent" | "in_progress" | "resolved";
+/** The four states a tenant follows, over the intervention system's nine. */
+export type RequestState = "sent" | "in_progress" | "resolved" | "refused";
 export function requestState(status: string): RequestState {
   if (status === "new" || status === "triaged") return "sent";
-  if (status === "done" || status === "closed" || status === "cancelled") return "resolved";
+  if (status === "done" || status === "closed") return "resolved";
+  if (status === "cancelled") return "refused";
   return "in_progress";
+}
+
+/**
+ * What the owner tracks on a request: to handle, in progress, resolved, or
+ * refused. The same ticket row carries it, through the intervention
+ * system's own statuses: reading folds nine into four, writing picks the
+ * plain one of each family. Read/unread is a property of the messages,
+ * never of the request.
+ */
+export type RequestStatus = "todo" | "in_progress" | "resolved" | "refused";
+export const REQUEST_STATUSES: readonly RequestStatus[] = ["todo", "in_progress", "resolved", "refused"];
+export function requestStatusOf(ticketStatus: string): RequestStatus {
+  const state = requestState(ticketStatus);
+  return state === "sent" ? "todo" : state;
+}
+export function ticketStatusFor(status: RequestStatus): "new" | "in_progress" | "done" | "cancelled" {
+  return status === "todo" ? "new" : status === "in_progress" ? "in_progress" : status === "resolved" ? "done" : "cancelled";
+}
+/** Resolved and refused requests are closed: they keep their history and take no more work. */
+export function isRequestOpen(status: RequestStatus): boolean {
+  return status === "todo" || status === "in_progress";
+}
+
+/**
+ * A tenant's request is an intervention only once the owner says so (a work
+ * order exists on it); anything raised by the manager, the owner or an
+ * inventory defect is one from the start.
+ */
+export function isIntervention(t: { source: string; interventionId: string | null }): boolean {
+  return t.source !== "tenant" || t.interventionId !== null;
+}
+
+/**
+ * The thread id the desk's Messages uses for a request whose conversation
+ * is not open yet: the first message opens the real one, the screen then
+ * follows it. Never written to the database.
+ */
+export function pendingThreadId(requestId: string): string {
+  return `request:${requestId}`;
+}
+export function isPendingThreadId(threadId: string): boolean {
+  return threadId.startsWith("request:");
 }
 
 /** A ticket's reference as the owner's screens print it. */

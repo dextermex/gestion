@@ -4,15 +4,19 @@ import { getDemo } from "@/lib/demo";
 import { formatDate, ticketSeverityMeta, ticketStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { isIntervention } from "@/lib/portal/types";
 
 /**
- * Interventions: every ticket of the workspace, whatever its source. New
- * ones are created from the Nouveau menu; the row data is the same
+ * Interventions: the work of the workspace. Tickets raised at the desk,
+ * by an owner or by an inventory defect are interventions from the start;
+ * a tenant's request joins them once the owner decides it needs one
+ * (Messages, "Créer une intervention"). The row data is the same
  * collection the dashboard and workflows read.
  */
 export default async function InterventionsPage() {
   const { locale, d } = await getI18n();
-  const { TICKETS } = await getDemo();
+  const demo = await getDemo();
+  const TICKETS = demo.TICKETS.filter(isIntervention);
 
   if (TICKETS.length === 0)
     return <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.interventions })} body={d.common.emptyBody} />;
