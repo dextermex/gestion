@@ -162,14 +162,15 @@ test("the owner reads the chat, answers, tracks the request and opens an interve
   const opened = page.waitForResponse((r) => r.url().includes(`/api/demandes/${requestId}/intervention`));
   await dialog.getByRole("button", { name: "Créer une intervention" }).click();
   expect((await opened).ok(), "the intervention is created").toBe(true);
-  await expect(dialog.getByText("Intervention créée")).toBeVisible();
+  // The badge and the status line both say it: the badge is the one that stays.
+  await expect(dialog.getByText("Intervention créée").first()).toBeVisible();
   await page.keyboard.press("Escape");
   // A fresh load reads it all back from the database.
   await page.goto(`/app/messages?demande=${requestId}`);
   await expect(page.locator(`[data-request="${requestId}"]`)).toContainText("En cours");
   await page.locator(`[data-request="${requestId}"]`).getByRole("button", { name: "Voir la demande" }).click();
   await expect(page.getByRole("dialog").locator("#request-status")).toHaveValue("in_progress");
-  await expect(page.getByRole("dialog").getByText("Intervention créée")).toBeVisible();
+  await expect(page.getByRole("dialog").getByText("Intervention créée").first()).toBeVisible();
   await page.keyboard.press("Escape");
   await page.goto("/app/interventions");
   await expect(page.getByText(requestTitle)).toBeVisible();

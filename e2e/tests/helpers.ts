@@ -87,12 +87,15 @@ export async function accountEmailInShell(page: Page): Promise<string> {
  */
 export async function nextUntil(page: Page, target: ReturnType<Page["getByRole"]>, max = 10): Promise<void> {
   const next = page.getByRole("button", { name: "Suivant", exact: true }).first();
+  // A step handing over to the next can show the control twice for a
+  // moment (the old footer and the new one): the first is enough.
+  const wanted = target.first();
   for (let i = 0; i < max; i++) {
-    await expect(target.or(next).first()).toBeVisible();
-    if (await target.isVisible()) return;
+    await expect(wanted.or(next).first()).toBeVisible();
+    if (await wanted.isVisible()) return;
     await nextStep(page, "Suivant");
   }
-  await expect(target).toBeVisible();
+  await expect(wanted).toBeVisible();
 }
 
 /** Press the step's move-on button (by its exact name) and wait for the next step's heading. */
@@ -119,7 +122,7 @@ export async function createHouse(page: Page, name: string): Promise<{ propertyI
   await page.getByLabel("Localité").fill("Strassen");
   await page.getByRole("button", { name: "Suivant", exact: true }).click();
   await nextUntil(page, page.getByRole("button", { name: "Créer le bien" }));
-  await page.getByRole("button", { name: "Créer le bien" }).click();
+  await page.getByRole("button", { name: "Créer le bien" }).first().click();
   await expect(page.getByText(`${name} a été créé.`)).toBeVisible({ timeout: 30_000 });
 
   // The done screen's "Ajouter un locataire" carries the lot id; the finish
