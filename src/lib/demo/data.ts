@@ -680,7 +680,7 @@ export const TICKETS: DemoTicket[] = [
     id: "t-1", unitId: "u-b-3b", ref: "INT-2026-0141", unitLabel: "Apt 3B · Résidence Beaulieu", leaseId: "l-3b",
     source: "tenant", category: "heating", severity: "urgent", status: "scheduled",
     title: "Chaudière en défaut, pression à 0,4 bar", description: "La pression de la chaudière retombe à 0,4 bar chaque matin. Le chauffage se coupe alors.",
-    createdAt: "2026-08-19", updatedAt: "2026-08-21", closedAt: null, slaDueAt: "2026-08-25", conversationId: "conv-1", interventionId: "wo-1", attachments: [],
+    createdAt: "2026-08-19", updatedAt: "2026-08-21", closedAt: null, slaDueAt: "2026-08-25", conversationId: "conv-3", interventionId: "wo-1", attachments: [],
     artisanContactId: "c-krier", amountCents: cents(1240),
     rechargeDecision: { decision: "owner", note: "Grosse réparation, non refacturable au locataire (blocage légal)." },
   },
@@ -688,14 +688,14 @@ export const TICKETS: DemoTicket[] = [
     id: "t-2", unitId: "u-b-2a", ref: "INT-2026-0142", unitLabel: "Apt 2A · Résidence Beaulieu", leaseId: "l-2a",
     source: "tenant", category: "damp_mould", severity: "priority", status: "in_progress",
     title: "Trace d'humidité mur chambre 2", description: "Une trace sombre sur le mur de la chambre 2, sous la fenêtre.",
-    createdAt: "2026-08-12", updatedAt: "2026-08-14", closedAt: null, slaDueAt: "2026-08-27", conversationId: null, interventionId: "wo-2", attachments: [],
+    createdAt: "2026-08-12", updatedAt: "2026-08-14", closedAt: null, slaDueAt: "2026-08-27", conversationId: "conv-2", interventionId: "wo-2", attachments: [],
     artisanContactId: "c-da-silva",
   },
   {
     id: "t-3", unitId: "u-k-01", ref: "INT-2026-0139", unitLabel: "Plateau 1er · Bureaux Kirchberg", leaseId: "l-k01",
     source: "tenant", category: "electrics", severity: "routine", status: "done",
     title: "Prise réseau défectueuse open space", description: "La prise réseau côté fenêtre de l'open space ne fonctionne plus.",
-    createdAt: "2026-08-02", updatedAt: "2026-08-08", closedAt: "2026-08-08", slaDueAt: "2026-08-16", conversationId: null, interventionId: "wo-3", attachments: [],
+    createdAt: "2026-08-02", updatedAt: "2026-08-08", closedAt: "2026-08-08", slaDueAt: "2026-08-16", conversationId: "conv-5", interventionId: "wo-3", attachments: [],
     artisanContactId: "c-elektro", amountCents: cents(380),
     rechargeDecision: { decision: "tenant", note: "Bail commercial : refacturation selon la clause charges (équipement du preneur)." },
   },
@@ -787,6 +787,8 @@ export interface DemoMessage {
   at: string;
   /** When the desk read it; null while it waits. Only the other side's messages carry one. */
   readAt: string | null;
+  /** Set on a request's place in the conversation: the card reads the ticket. */
+  ticketId: string | null;
 }
 
 export interface DemoConversation {
@@ -805,35 +807,41 @@ export interface DemoConversation {
 
 export const CONVERSATIONS: DemoConversation[] = [
   {
-    id: "conv-1", subject: "Chaudière : intervention vendredi", scopeLabel: "INT-2026-0141 · Apt 3B", scopeType: "ticket", scopeId: "t-1",
+    id: "conv-3", subject: "Apt 3B · Résidence Beaulieu", scopeLabel: "Apt 3B · Résidence Beaulieu", scopeType: "lease", scopeId: "l-3b",
     participantName: "Jean Muller", lastMessageAt: "2026-08-21T16:40:00", unread: 1,
     messages: [
-      { id: "msg-1-1", from: "Jean Muller", kind: "tenant", body: "Bonjour, la pression est retombée à 0,4 ce matin. Photo jointe.", at: "2026-08-19T08:12:00", readAt: "2026-08-19T08:40:00" },
-      { id: "msg-1-2", from: "Cabinet Reuter", kind: "manager", body: "Merci. Krier & Fils passe vendredi entre 8 h et 10 h, le créneau vous convient ?", at: "2026-08-19T09:05:00", readAt: null },
-      { id: "msg-1-3", from: "Paul Krier", kind: "artisan", body: "Créneau accepté. Prévoir accès à la cave (vase d'expansion).", at: "2026-08-21T16:40:00", readAt: null },
+      { id: "msg-3-1", from: "Système", kind: "system", body: "Paiement d'août reçu à l'ancien montant (1 450,00 € au lieu de 1 520,00 €). Courrier pré-rempli « mettez à jour votre ordre permanent » prêt à envoyer.", at: "2026-08-18T09:30:00", readAt: "2026-08-18T09:45:00", ticketId: null },
+      { id: "msg-3-2", from: "Jean Muller", kind: "tenant", body: "Chaudière en défaut, pression à 0,4 bar", at: "2026-08-19T08:12:00", readAt: "2026-08-19T08:40:00", ticketId: "t-1" },
+      { id: "msg-3-3", from: "Jean Muller", kind: "tenant", body: "Bonjour, la pression est retombée à 0,4 ce matin. Photo jointe.", at: "2026-08-19T08:15:00", readAt: "2026-08-19T08:40:00", ticketId: null },
+      { id: "msg-3-4", from: "Cabinet Reuter", kind: "manager", body: "Merci. Krier & Fils passe vendredi entre 8 h et 10 h, le créneau vous convient ?", at: "2026-08-19T09:05:00", readAt: null, ticketId: null },
+      { id: "msg-3-5", from: "Paul Krier", kind: "artisan", body: "Créneau accepté. Prévoir accès à la cave (vase d'expansion).", at: "2026-08-21T16:40:00", readAt: null, ticketId: null },
     ],
   },
   {
-    id: "conv-2", subject: "Attestation de logement", scopeLabel: "Bail Apt 2A", scopeType: "lease", scopeId: "l-2a",
-    participantName: "Ana Santos", lastMessageAt: "2026-08-20T11:02:00", unread: 0,
+    id: "conv-2", subject: "Apt 2A · Résidence Beaulieu", scopeLabel: "Apt 2A · Résidence Beaulieu", scopeType: "lease", scopeId: "l-2a",
+    participantName: "Ana Santos, Lucas Weber", lastMessageAt: "2026-08-20T11:02:00", unread: 0,
     messages: [
-      { id: "msg-2-1", from: "Ana Santos", kind: "tenant", body: "Bonjour, il me faut une attestation pour la commune (déclaration d'arrivée de Lucas).", at: "2026-08-20T10:48:00", readAt: "2026-08-20T10:55:00" },
-      { id: "msg-2-2", from: "Système", kind: "system", body: "Attestation générée en libre-service (QR de vérification). Délai commune : 8 jours après l'emménagement.", at: "2026-08-20T11:02:00", readAt: "2026-08-20T11:10:00" },
+      { id: "msg-2-1", from: "Ana Santos", kind: "tenant", body: "Trace d'humidité mur chambre 2", at: "2026-08-12T09:10:00", readAt: "2026-08-12T10:00:00", ticketId: "t-2" },
+      { id: "msg-2-2", from: "Cabinet Reuter", kind: "manager", body: "Merci, José Da Silva passe jeudi matin pour un diagnostic.", at: "2026-08-12T10:05:00", readAt: null, ticketId: null },
+      { id: "msg-2-3", from: "Ana Santos", kind: "tenant", body: "Bonjour, il me faut une attestation pour la commune (déclaration d'arrivée de Lucas).", at: "2026-08-20T10:48:00", readAt: "2026-08-20T10:55:00", ticketId: null },
+      { id: "msg-2-4", from: "Système", kind: "system", body: "Attestation générée en libre-service (QR de vérification). Délai commune : 8 jours après l'emménagement.", at: "2026-08-20T11:02:00", readAt: "2026-08-20T11:10:00", ticketId: null },
     ],
   },
   {
-    id: "conv-3", subject: "Ordre permanent à mettre à jour", scopeLabel: "Bail Apt 3B", scopeType: "lease", scopeId: "l-3b",
-    participantName: "Jean Muller", lastMessageAt: "2026-08-18T09:30:00", unread: 0,
+    id: "conv-5", subject: "Plateau 1er · Bureaux Kirchberg", scopeLabel: "Plateau 1er · Bureaux Kirchberg", scopeType: "lease", scopeId: "l-k01",
+    participantName: "Boulangerie Bock Sàrl", lastMessageAt: "2026-08-08T17:20:00", unread: 0,
     messages: [
-      { id: "msg-3-1", from: "Système", kind: "system", body: "Paiement d'août reçu à l'ancien montant (1 450,00 € au lieu de 1 520,00 €). Courrier pré-rempli « mettez à jour votre ordre permanent » prêt à envoyer.", at: "2026-08-18T09:30:00", readAt: "2026-08-18T09:45:00" },
+      { id: "msg-5-1", from: "Boulangerie Bock Sàrl", kind: "tenant", body: "Prise réseau défectueuse open space", at: "2026-08-02T14:30:00", readAt: "2026-08-02T15:00:00", ticketId: "t-3" },
+      { id: "msg-5-2", from: "Cabinet Reuter", kind: "manager", body: "Elektro Thill intervient mercredi matin.", at: "2026-08-04T09:00:00", readAt: null, ticketId: null },
+      { id: "msg-5-3", from: "Boulangerie Bock Sàrl", kind: "tenant", body: "C'est réparé, merci.", at: "2026-08-08T17:20:00", readAt: "2026-08-08T17:45:00", ticketId: null },
     ],
   },
   {
     id: "conv-4", subject: "Décompte de gérance juillet", scopeLabel: "Mandat SCI Beaulieu", scopeType: "mandate", scopeId: null,
     participantName: "Marie Faber", lastMessageAt: "2026-08-05T15:01:00", unread: 0,
     messages: [
-      { id: "msg-4-1", from: "Cabinet Reuter", kind: "manager", body: "Décompte de juillet joint : 5 loyers encaissés, honoraires 4 % + TVA 17 %, virement du solde exécuté le 5.", at: "2026-08-05T14:20:00", readAt: null },
-      { id: "msg-4-2", from: "Marie Faber", kind: "owner", body: "Bien reçu, merci. La facture Krier passera bien sur août ?", at: "2026-08-05T15:01:00", readAt: "2026-08-05T15:30:00" },
+      { id: "msg-4-1", from: "Cabinet Reuter", kind: "manager", body: "Décompte de juillet joint : 5 loyers encaissés, honoraires 4 % + TVA 17 %, virement du solde exécuté le 5.", at: "2026-08-05T14:20:00", readAt: null, ticketId: null },
+      { id: "msg-4-2", from: "Marie Faber", kind: "owner", body: "Bien reçu, merci. La facture Krier passera bien sur août ?", at: "2026-08-05T15:01:00", readAt: "2026-08-05T15:30:00", ticketId: null },
     ],
   },
 ];

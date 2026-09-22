@@ -1,15 +1,17 @@
 import "server-only";
 import type { GestionReader } from "@/lib/demo/data-real";
+import { appendMessage, leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_KINDS, attachmentFolder, ticketCategoryFor, type RequestKind } from "@/lib/portal/types";
 
 /**
- * A tenant's request is an intervention, the same row the owner's screens
- * list under Interventions, written under the tenant's own token: the
- * database's insert policy decides that the lease is theirs and in force.
- * A technical problem lands in its category; a document request, a question
- * or anything else is an administrative intervention tagged by kind. Photos
- * are documents of the ticket, in the lease's own storage folder; a follow-
- * up is a message on the ticket's conversation.
+ * A tenant's request is a ticket, the same row the owner's screens track,
+ * written under the tenant's own token: the database's insert policy
+ * decides that the lease is theirs and in force. A technical problem lands
+ * in its category; a document request, a question or anything else is an
+ * administrative ticket tagged by kind. Photos are documents of the ticket,
+ * in the lease's own storage folder. The request then takes its place in
+ * the tenancy's conversation as a message that carries the ticket, so both
+ * sides read it where they talk.
  */
 
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -20,6 +22,14 @@ export interface NewRequestInput {
   title: string;
   description: string;
   severity: "routine" | "priority" | "urgent";
+}
+
+/** The tenancy a request or a message lands on, as `my_home()` describes it. */
+export interface TenantLeaseRef {
+  id: string;
+  orgId: string;
+  /** "Apt 3B · Résidence Beaulieu": the conversation's subject when it is opened. */
+  subject: string;
 }
 
 export function parseRequestInput(body: Record<string, unknown>): NewRequestInput | null {
@@ -42,9 +52,9 @@ function failure(error: { code?: string; message?: string } | null, context: str
 export async function createTenantRequest(
   g: GestionReader,
   user: { id: string },
-  lease: { id: string; orgId: string; unitId: string; propertyId: string },
+  lease: TenantLeaseRef & { unitId: string; propertyId: string },
   input: NewRequestInput,
-): Promise<{ id: string } | { error: RequestFailure }> {
+): Promise<{ id: string; conversationId: string | null } | { error: RequestFailure }> {
   const description = input.kind === "technical" ? input.description : `[${input.kind}] ${input.description}`.trim();
   const { data, error } = await g
     .from("tickets")
@@ -65,12 +75,16 @@ export async function createTenantRequest(
     .single();
   if (error || !data) return failure(error, "tenant request insert");
   const id = String(data.id);
-  // The request's thread opens with it, so the desk lists it under
-  // Messages at once. If this insert fails the request still stands: the
-  // thread is opened on first message instead.
-  const { error: threadErr } = await g.from("conversations").insert({ org_id: lease.orgId, scope_type: "ticket", scope_id: id, subject: input.title });
-  if (threadErr) console.error("tenant request thread insert failed:", threadErr.code, threadErr.message);
-  return { id };
+  // The request takes its place in the tenancy's conversation at once. If
+  // that fails the request still stands: the desk's first reply anchors it.
+  const thread = await leaseConversation(g, lease);
+  if ("error" in thread) {
+    console.error("tenant request thread failed:", thread.error);
+    return { id, conversationId: null };
+  }
+  const anchor = await appendMessage(g, { orgId: lease.orgId, conversationId: thread.id, senderKind: "tenant", senderUserId: user.id, body: input.title, ticketId: id, touch: false });
+  if ("error" in anchor) console.error("tenant request anchor failed:", anchor.error);
+  return { id, conversationId: thread.id };
 }
 
 export interface UploadedFile {
@@ -110,38 +124,18 @@ export async function attachTenantFiles(
   return { attached: (data as unknown[] | null)?.length ?? rows.length };
 }
 
-/** A follow-up from the tenant on their own request. The conversation is opened on first use. */
+/** A message from the tenant in the tenancy's conversation, opened on first use. */
 export async function addTenantMessage(
   g: GestionReader,
   user: { id: string },
-  lease: { orgId: string },
-  ticket: { id: string; title: string },
+  lease: TenantLeaseRef,
   body: string,
-): Promise<{ id: string } | { error: RequestFailure }> {
+): Promise<{ id: string; conversationId: string } | { error: RequestFailure }> {
   const text = str(body, 4000);
   if (!text) return { error: "invalid" };
-  const { data: existing, error: findErr } = await g
-    .from("conversations")
-    .select("id")
-    .eq("scope_type", "ticket")
-    .eq("scope_id", ticket.id)
-    .limit(1);
-  if (findErr) return failure(findErr, "tenant conversation lookup");
-  let conversationId = ((existing as Array<{ id: string }> | null) ?? [])[0]?.id;
-  if (!conversationId) {
-    const { data: created, error: createErr } = await g
-      .from("conversations")
-      .insert({ org_id: lease.orgId, scope_type: "ticket", scope_id: ticket.id, subject: ticket.title })
-      .select("id")
-      .single();
-    if (createErr || !created) return failure(createErr, "tenant conversation insert");
-    conversationId = String(created.id);
-  }
-  const { data, error } = await g
-    .from("messages")
-    .insert({ org_id: lease.orgId, conversation_id: conversationId, sender_kind: "tenant", sender_user_id: user.id, body: text })
-    .select("id")
-    .single();
-  if (error || !data) return failure(error, "tenant message insert");
-  return { id: String(data.id) };
+  const thread = await leaseConversation(g, lease);
+  if ("error" in thread) return thread;
+  const sent = await appendMessage(g, { orgId: lease.orgId, conversationId: thread.id, senderKind: "tenant", senderUserId: user.id, body: text, touch: false });
+  if ("error" in sent) return sent;
+  return { id: sent.id, conversationId: thread.id };
 }

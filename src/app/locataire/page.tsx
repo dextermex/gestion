@@ -175,11 +175,9 @@ export default async function TenantHomePage() {
                   {m.email && <p className="text-xs text-ink-soft">{m.email}</p>}
                   {m.phone && <p className="text-xs text-ink-soft">{m.phone}</p>}
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {m.email && (
-                      <a href={`mailto:${m.email}`} className="inline-block rounded-xl border border-sand-200 px-3.5 py-2 text-sm font-semibold text-brand-700 transition hover:border-brand-300">
-                        {d.tenant.managerWrite}
-                      </a>
-                    )}
+                    <Link href="/locataire/messages" className="inline-block rounded-xl border border-sand-200 px-3.5 py-2 text-sm font-semibold text-brand-700 transition hover:border-brand-300">
+                      {d.tenant.managerWrite}
+                    </Link>
                     {m.phone && (
                       <a href={`tel:${m.phone.replace(/\s/g, "")}`} className="inline-block rounded-xl border border-sand-200 px-3.5 py-2 text-sm font-semibold text-brand-700 transition hover:border-brand-300">
                         {d.tenant.managerCall}

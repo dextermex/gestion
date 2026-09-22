@@ -154,35 +154,53 @@ status draws. A tenant's request is a
 its thread is the ticket-scoped `conversations` row opened with it, where both sides write
 `messages`; the owner's Messages screen reads exactly these rows.
 
-### A request is a thread with a status, on both sides
+### One conversation per tenancy; a request is a message in it
 
-Nothing was added to the schema for tenant requests: the ticket is the request, the
-ticket-scoped conversation is its thread, the ticket's documents are its photos, and a
-`work_orders` row on the ticket is what makes it an intervention. The desk's Messages
-(`/app/messages`, `src/components/gestion/MessagesCenter.tsx`) shows every conversation
-of the workspace, request threads wearing a `Demande` badge, and a Demandes view that
-lists the tenants' requests with their status. The four statuses the desk tracks (à
-traiter, en cours, résolue, refusée) are the ticket's own nine folded by
+Messages is a chat, not a ticket queue. Each tenancy has one `conversations` row
+(`scope_type = 'lease'`, `scope_id = the lease`, one per lease by the partial unique index
+`conversations_lease_one`, 0019), and both sides write `messages` on it: the tenant from
+their space, the desk from `/app/messages`. Whoever writes first opens it
+(`src/lib/portal/thread.ts`, `leaseConversation()`; a race is settled by the index and the
+loser reads the winner's row); a tenancy nobody has written to yet is still listed at the
+desk (`lease:<id>` stand-in, `POST /api/baux/[id]/messages` opens it on the first word).
+
+A tenant's request is a `tickets` row (`source = tenant`) and, in the conversation, the
+message that carries it (`messages.ticket_id`, 0019): the card in the chat reads the
+ticket's title, status, description and photos (`documents` of the ticket in the lease's
+storage folder, `<org>/tickets/<lease>/`); the message is only its place in the thread and
+its read state. A conversation therefore holds normal messages and any number of requests
+over time, in one chronology that both sides read from the same rows. The four statuses the
+desk tracks (à traiter, en cours, résolue, refusée) are the ticket's own nine folded by
 `requestStatusOf()` and written back by `ticketStatusFor()` (`new`, `in_progress`,
-`done`, `cancelled`), so the tenant's space, which reads the same column through
-`requestState()`, shows the same thing without a second field. Resolving or refusing
-dates `closed_at`; reopening clears it. Read/unread is `messages.read_at`, marked when
-the desk opens a thread, and says nothing about the request.
+`done`, `cancelled`); the tenant's space reads the same column through `requestState()`.
+Resolving or refusing dates `closed_at`; reopening clears it. Read/unread is
+`messages.read_at`, marked when the desk opens the conversation, and says nothing about a
+request. A request becomes an intervention only when the desk opens a `work_orders` row on
+it ("Créer une intervention", idempotent; `isIntervention()` decides what Interventions
+lists); the conversation and the photos are untouched.
 
-The desk's writes live in `src/lib/gestion/requests.ts` behind `PATCH /api/demandes/[id]`
-(status), `POST /api/demandes/[id]/messages` (a reply on the request's thread, opened
-there if the tenant never wrote a follow-up), `POST /api/demandes/[id]/intervention`
-(a work order on the ticket, idempotent, the thread and photos untouched),
-`POST /api/conversations/[id]/messages` and `POST /api/conversations/[id]/lu`. Every one
-looks the ticket or conversation up in the active workspace under the caller's own
-token first, so an id from another workspace answers 404 and nothing is written; the
-existing policies (maintenance for tickets and work orders, tenants for conversations
-and messages, the portal policies on the tenant's side) decide the rest. A request is
-listed under Interventions only once it carries a work order (`isIntervention()`); the
-Interventions page and the property sheet filter on it. After the tenant leaves, the
-ticket, its thread and its photos stay with the ended lease: the former tenant still
-reads them, may still write on that thread, and can open nothing new (the insert
-policies require a lease in force); the next tenant of the lot sees none of it.
+Writes: the tenant's in `src/lib/portal/requests.ts` behind `POST /api/locataire/messages`
+(a message, on the tenancy `my_home()` names, never on an id the client supplies),
+`POST /api/locataire/demandes` (the ticket, then its anchor in the conversation) and
+`/api/locataire/demandes/[id]/pieces` (photos); the desk's in
+`src/lib/gestion/requests.ts` behind `POST /api/conversations/[id]/messages`,
+`POST /api/conversations/[id]/lu`, `POST /api/baux/[id]/messages`,
+`PATCH /api/demandes/[id]` (status), `POST /api/demandes/[id]/messages` (a reply where the
+request sits) and `POST /api/demandes/[id]/intervention`. Every desk route looks the row up
+in the active workspace under the caller's own token first, so an id from another
+workspace answers 404 and nothing is written; the policies decide the rest (maintenance
+for tickets and work orders, tenants for conversations and messages; on the portal side,
+0019 lets a tenant read and write the conversation of any lease that is theirs, anchor only
+their own ticket, and open nothing on a lease that is not theirs). The screens:
+`src/components/gestion/MessagesCenter.tsx` (Conversations, the chat with request cards and
+"Voir la demande", and Demandes, the tracking table whose rows open the conversation at the
+request) and `src/components/gestion/TenantChat.tsx` (`/locataire/messages`; Demandes keeps
+the list, a request's page links into the conversation). After the tenant leaves, the
+conversation, its requests and its photos stay with the ended lease: the former tenant still
+reads them and may still write, and can open no new request (the insert policies require a
+lease in force); the next tenant of the lot gets a conversation of their own and sees none
+of it. 0019 also folded the request-scoped threads of the first version into the tenancy's
+conversation and gave every existing tenant request its anchor.
 
 Invitations are `portal_invites` rows minted by `portal_invite_lease` (a party of a live
 lease, an e-mail, a token returned once and never listed): sending again revokes the open

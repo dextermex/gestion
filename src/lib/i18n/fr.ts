@@ -1283,8 +1283,8 @@ export const fr = {
 
   messages: {
     title: "Messages",
-    subtitle: "Un fil par sujet (bail, intervention, mandat), avec locataires, propriétaires et artisans au même endroit. Traduction automatique entre les langues.",
-    replyPlaceholder: "Répondre… (traduit automatiquement si besoin)",
+    subtitle: "Une conversation par locataire, avec ses demandes suivies au même endroit.",
+    replyPlaceholder: "Écrire un message…",
     replySent: "Message envoyé. Le locataire le voit dans son espace.",
     cardTenants: "Locataires",
     cardTenantsBody: "Une seule entrée « Nouvelle demande », la catégorie est déduite du message. En cas d'odeur de gaz, les numéros d'urgence s'affichent dès la saisie.",
@@ -1329,7 +1329,8 @@ export const fr = {
     colActivity: "Dernière activité",
     colStatus: "Statut",
     openThread: "Ouvrir la conversation",
-    noThreadYet: "Pas encore de message : répondez ci-dessous, le locataire le verra dans son espace.",
+    noThreadYet: "Pas encore de message. Écrivez ci-dessous, le locataire le verra dans son espace.",
+    viewRequest: "Voir la demande",
   },
 
   finance: {
@@ -1777,6 +1778,7 @@ export const fr = {
     navLease: "Mon bail",
     navPayments: "Paiements",
     navRequests: "Demandes",
+    navMessages: "Messages",
     signOut: "Se déconnecter",
     backToOwner: "Mon espace de gestion",
     becomeOwner: "Je gère aussi des biens : ouvrir mon espace de gestion",
@@ -1953,14 +1955,20 @@ export const fr = {
     reqRefusedOn: "Refusée le {date}",
     reqBack: "Retour aux demandes",
     threadTitle: "Suivi",
-    threadEmpty: "Pas encore de réponse. Votre gestionnaire a bien reçu la demande.",
+    threadEmpty: "Pas encore de message. Écrivez à votre gestionnaire ci-dessous.",
     threadYou: "Vous",
     threadManager: "Gestionnaire",
-    threadWrite: "Ajouter un message",
+    threadOther: "Intervenant",
+    threadWrite: "Écrire un message…",
     threadSend: "Envoyer",
     threadSent: "Message envoyé.",
     threadFailed: "Le message n'a pas pu être envoyé. Réessayez dans un instant.",
     attachments: "Photos jointes",
+    msgTitle: "Messages",
+    msgSub: "Votre conversation avec votre gestionnaire. Vos demandes y apparaissent aussi.",
+    msgView: "Voir la demande",
+    reqInChat: "Ouvrir la conversation",
+    msgPick: "Vos conversations",
 
     // L'invitation : l'e-mail, puis la page que le lien ouvre
     invite: {

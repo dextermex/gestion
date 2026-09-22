@@ -1277,8 +1277,8 @@ export const lu: Dict = {
 
   messages: {
     title: "Messagen",
-    subtitle: "Ee Fuedem pro Sujet (Bail, Interventioun, Mandat), mat Locatairen, Proprietären an Handwierker op enger Plaz. Automatesch Iwwersetzung tëscht de Sproochen.",
-    replyPlaceholder: "Äntweren… (gëtt wann néideg automatesch iwwersat)",
+    subtitle: "Eng Conversatioun pro Locataire, mat sengen Ufroen op der selwechter Plaz suivéiert.",
+    replyPlaceholder: "Message schreiwen…",
     replySent: "Message geschéckt. De Locataire gesäit en a sengem Espace.",
     cardTenants: "Locatairen",
     cardTenantsBody: "Een eenzegen Entrée « Nei Demande », d'Kategorie gëtt aus dem Message ofgeleet. Bei Gasgeroch ginn d'Noutruffnummeren direkt beim Tippe gewisen.",
@@ -1323,7 +1323,8 @@ export const lu: Dict = {
     colActivity: "Lescht Aktivitéit",
     colStatus: "Statut",
     openThread: "Conversatioun opmaachen",
-    noThreadYet: "Nach kee Message: äntwert hei ënnen, de Locataire gesäit et a sengem Espace.",
+    noThreadYet: "Nach kee Message. Schreift hei ënnen, de Locataire gesäit et a sengem Espace.",
+    viewRequest: "Ufro kucken",
   },
 
   finance: {
@@ -1771,6 +1772,7 @@ export const lu: Dict = {
     navLease: "Mäi Bail",
     navPayments: "Bezuelungen",
     navRequests: "Ufroen",
+    navMessages: "Messagen",
     signOut: "Ofmellen",
     backToOwner: "Mäi Gestiounsberäich",
     becomeOwner: "Ech verwalten och Gebaier: mäi Gestiounsberäich opmaachen",
@@ -1947,14 +1949,20 @@ export const lu: Dict = {
     reqRefusedOn: "Refuséiert den {date}",
     reqBack: "Zréck zu den Ufroen",
     threadTitle: "Suivi",
-    threadEmpty: "Nach keng Äntwert. Är Gestioun huet d'Ufro kritt.",
+    threadEmpty: "Nach kee Message. Schreift Ärem Gestionnaire hei ënnen.",
     threadYou: "Dir",
     threadManager: "Gestioun",
-    threadWrite: "Eng Noriicht derbäisetzen",
+    threadOther: "Bedeelegten",
+    threadWrite: "Message schreiwen…",
     threadSend: "Schécken",
     threadSent: "Noriicht geschéckt.",
     threadFailed: "D'Noriicht konnt net geschéckt ginn. Probéiert et gläich nach eng Kéier.",
     attachments: "Ugehaange Fotoen",
+    msgTitle: "Messagen",
+    msgSub: "Är Conversatioun mat Ärem Gestionnaire. Är Ufroe stinn och hei.",
+    msgView: "Ufro kucken",
+    reqInChat: "Conversatioun opmaachen",
+    msgPick: "Är Conversatiounen",
 
     // D'Invitatioun: d'E-Mail, dann d'Säit, déi de Link opmécht
     invite: {

@@ -2,18 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Badge, Button, Card, Select, Textarea } from "@/components/pro/ui";
-import { isPendingThreadId, isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
+import { useEffect, useRef, useState } from "react";
+import { Badge, Button, Card, Modal, Select, Textarea } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
+import { isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
 import { initials, type Meta } from "@/lib/types";
 
 /**
- * The desk's Messages: every thread of the workspace on one screen, and
- * the tenants' requests tracked among them. A request is a thread with a
- * status: the row the tenant raised, the conversation both sides write
- * on, read here from the same tables the tenant's space reads. Nothing on
- * this screen is a copy; every write goes through the API under the
- * manager's own session and the page then reads the rows back.
+ * The desk's Messages: one continuous conversation per tenancy, the way a
+ * chat reads, with the tenant's requests taking their place in it as
+ * cards. The conversation, its messages and the requests are the rows the
+ * tenant's space reads; nothing on this screen is a copy. Every write goes
+ * through the API under the manager's own session and the page then reads
+ * the rows back.
  */
 
 export interface MessageView {
@@ -21,7 +22,10 @@ export interface MessageView {
   from: string;
   kind: "tenant" | "manager" | "owner" | "artisan" | "system";
   body: string;
+  dayLabel: string;
   timeLabel: string;
+  /** Set when the message is a request's place in the conversation: the card reads the request. */
+  requestId: string | null;
 }
 
 export interface AttachmentView {
@@ -43,23 +47,27 @@ export interface RequestView {
   openedLabel: string;
   activityAt: string;
   activityLabel: string;
-  /** The thread's id: the conversation's, or a stand-in until the first message opens one. */
-  threadId: string;
+  /** The conversation the request sits in, when it has one. */
+  threadId: string | null;
   interventionId: string | null;
   attachments: AttachmentView[];
+  attachmentsLabel: string | null;
 }
 
 export interface ThreadView {
+  /** The conversation's id, or `lease:<id>` for a tenancy nobody has written to yet. */
   id: string;
+  leaseId: string | null;
   subject: string;
   scopeLabel: string;
   participantName: string;
+  /** A tenancy's conversation (the chat with a tenant), as opposed to a mandate's or a contact's. */
+  isTenancy: boolean;
   lastMessageAt: string;
   lastLabel: string;
   unread: number;
   preview: string;
-  /** Set when the thread is a tenant request's. */
-  requestId: string | null;
+  previewIsRequest: boolean;
   messages: MessageView[];
 }
 
@@ -97,6 +105,8 @@ export interface MessagesLabels {
   colStatus: string;
   openThread: string;
   noThreadYet: string;
+  viewRequest: string;
+  close: string;
 }
 
 export type Tab = "conversations" | "requests";
@@ -119,6 +129,7 @@ export default function MessagesCenter({
   labels,
   initialTab,
   initialThreadId,
+  initialRequestId,
   writable,
   sampleNote,
 }: {
@@ -128,6 +139,8 @@ export default function MessagesCenter({
   labels: MessagesLabels;
   initialTab: Tab;
   initialThreadId: string | null;
+  /** A request to land on inside its conversation. */
+  initialRequestId: string | null;
   /** False on a sample cabinet: the screen works, nothing is written. */
   writable: boolean;
   sampleNote: string | null;
@@ -135,12 +148,15 @@ export default function MessagesCenter({
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [activeId, setActiveId] = useState<string | null>(initialThreadId);
+  const [focusRequestId, setFocusRequestId] = useState<string | null>(initialRequestId);
+  const [openRequestId, setOpenRequestId] = useState<string | null>(null);
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
   const [statusOverrides, setStatusOverrides] = useState<Record<string, RequestStatus>>({});
   const [interventionOverrides, setInterventionOverrides] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const requestById = new Map(requests.map((r) => [r.id, r]));
   const statusOf = (r: RequestView): RequestStatus => statusOverrides[r.id] ?? r.status;
@@ -148,16 +164,34 @@ export default function MessagesCenter({
   const unreadOf = (t: ThreadView): number => (readIds.has(t.id) ? 0 : t.unread);
 
   const active = threads.find((t) => t.id === activeId) ?? threads[0] ?? null;
-  const activeRequest = active?.requestId ? (requestById.get(active.requestId) ?? null) : null;
+  const openRequest = openRequestId ? (requestById.get(openRequestId) ?? null) : null;
   const openCount = requests.filter((r) => isRequestOpen(statusOf(r))).length;
+  const messageCount = active?.messages.length ?? 0;
 
-  const rememberInUrl = (thread: ThreadView) => {
+  // The conversation opens on its latest message, or on the request that
+  // was asked for. Runs on the transition only: a keystroke in the
+  // composer never moves the thread.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (focusRequestId) {
+      const card = el.querySelector<HTMLElement>(`[data-request="${focusRequestId}"]`);
+      if (card) {
+        el.scrollTop = Math.max(0, card.offsetTop - 16);
+        return;
+      }
+    }
+    el.scrollTop = el.scrollHeight;
+  }, [active?.id, focusRequestId, messageCount]);
+
+  const rememberInUrl = (thread: ThreadView | null, requestId: string | null, nextTab: Tab) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("fil");
     url.searchParams.delete("demande");
     url.searchParams.delete("onglet");
-    if (thread.requestId) url.searchParams.set("demande", thread.requestId);
-    else url.searchParams.set("fil", thread.id);
+    if (nextTab === "requests") url.searchParams.set("onglet", "demandes");
+    else if (requestId) url.searchParams.set("demande", requestId);
+    else if (thread) url.searchParams.set("fil", thread.id);
     window.history.replaceState(window.history.state, "", url);
   };
 
@@ -171,15 +205,16 @@ export default function MessagesCenter({
     return true;
   };
 
-  /** Opening a thread: it becomes the one on screen, and what the other side wrote is read. */
-  const openThread = (thread: ThreadView) => {
+  /** Opening a conversation: it fills the screen, and what the other side wrote is read. */
+  const openThread = (thread: ThreadView, requestId: string | null = null) => {
     setActiveId(thread.id);
+    setFocusRequestId(requestId);
     setTab("conversations");
     setNotice(null);
-    rememberInUrl(thread);
+    rememberInUrl(thread, requestId, "conversations");
     if (thread.unread === 0 || readIds.has(thread.id)) return;
     setReadIds((ids) => new Set(ids).add(thread.id));
-    if (!writable || isPendingThreadId(thread.id)) return;
+    if (!writable) return;
     fetch(`/api/conversations/${thread.id}/lu`, { method: "POST" })
       .then((res) => {
         if (res.ok) router.refresh();
@@ -187,13 +222,17 @@ export default function MessagesCenter({
       .catch(() => null);
   };
 
+  /** A request from the tracking view: its conversation, at the request. Without one, its details. */
+  const openRequestRow = (request: RequestView) => {
+    const thread = request.threadId ? threads.find((t) => t.id === request.threadId) : undefined;
+    if (thread) openThread(thread, request.id);
+    else setOpenRequestId(request.id);
+  };
+
   const showTab = (next: Tab) => {
     setTab(next);
     setNotice(null);
-    const url = new URL(window.location.href);
-    if (next === "requests") url.searchParams.set("onglet", "demandes");
-    else url.searchParams.delete("onglet");
-    window.history.replaceState(window.history.state, "", url);
+    rememberInUrl(active, next === "conversations" ? focusRequestId : null, next);
   };
 
   const send = async (thread: ThreadView) => {
@@ -203,7 +242,8 @@ export default function MessagesCenter({
     setBusy("send");
     setNotice(null);
     try {
-      const target = thread.requestId ? `/api/demandes/${thread.requestId}/messages` : `/api/conversations/${thread.id}/messages`;
+      // A first word to a tenancy opens its conversation; the screen then follows it.
+      const target = thread.leaseId && thread.id.startsWith("lease:") ? `/api/baux/${thread.leaseId}/messages` : `/api/conversations/${thread.id}/messages`;
       const res = await fetch(target, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) });
       if (res.status === 401) return signInAgain();
       const data = (await res.json().catch(() => ({}))) as { conversationId?: string };
@@ -212,7 +252,7 @@ export default function MessagesCenter({
         return;
       }
       setDrafts((all) => ({ ...all, [thread.id]: "" }));
-      // A first reply on a request opens its thread: follow it to the real one.
+      setFocusRequestId(null);
       if (data.conversationId && data.conversationId !== thread.id) setActiveId(data.conversationId);
       setNotice({ tone: "ok", text: labels.sent });
       router.refresh();
@@ -289,7 +329,7 @@ export default function MessagesCenter({
 
       {tab === "requests" ? (
         <div role="tabpanel" id="messages-panel-requests" aria-labelledby="messages-tab-requests">
-          <RequestsTable requests={requests} statusOf={statusOf} statusMeta={statusMeta} labels={labels} onOpen={(r) => openThread(threads.find((t) => t.id === r.threadId) ?? threads[0])} />
+          <RequestsTable requests={requests} statusOf={statusOf} statusMeta={statusMeta} labels={labels} onOpen={openRequestRow} />
         </div>
       ) : (
         <div role="tabpanel" id="messages-panel-conversations" aria-labelledby="messages-tab-conversations" className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
@@ -299,78 +339,102 @@ export default function MessagesCenter({
             ) : (
               <ul className="divide-y divide-sand-100">
                 {threads.map((thread) => (
-                  <ThreadRow key={thread.id} thread={thread} unread={unreadOf(thread)} selected={active?.id === thread.id} labels={labels} onOpen={openThread} />
+                  <ThreadRow key={thread.id} thread={thread} unread={unreadOf(thread)} selected={active?.id === thread.id} labels={labels} onOpen={() => openThread(thread)} />
                 ))}
               </ul>
             )}
           </Card>
 
           {active && (
-            <Card className={"flex min-h-[28rem] flex-col " + (activeRequest ? "lg:col-span-5" : "lg:col-span-8")}>
-              <div className="border-b border-sand-100 px-5 py-3.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="font-display text-base font-bold text-ink">{active.subject}</h2>
-                  {activeRequest && <Badge className={statusMeta[statusOf(activeRequest)].color}>{statusMeta[statusOf(activeRequest)].label}</Badge>}
+            <Card className="flex flex-col lg:col-span-8">
+              <div className="flex items-center gap-3 border-b border-sand-100 px-5 py-3.5">
+                <span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold " + (active.isTenancy ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
+                  {initials(active.participantName) || "·"}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="truncate font-display text-base font-bold text-ink">{active.participantName}</h2>
+                  <p className="truncate text-xs text-ink-soft">{active.isTenancy ? active.scopeLabel : [active.subject, active.scopeLabel].filter(Boolean).join(" · ")}</p>
                 </div>
-                <p className="text-xs text-ink-soft">
-                  {active.participantName}
-                  {active.scopeLabel && ` · ${active.scopeLabel}`}
-                </p>
               </div>
-              <div className="flex-1 space-y-4 px-5 py-4">
-                {activeRequest && <OpeningBubble request={activeRequest} />}
-                {active.messages.length === 0 && activeRequest && <p className="text-xs text-ink-soft">{labels.noThreadYet}</p>}
-                {active.messages.map((m) => (
-                  <MessageBubble key={m.id} message={m} you={labels.you} />
-                ))}
+
+              <div ref={bodyRef} id="messages-body" className="relative h-[62vh] min-h-[26rem] space-y-3 overflow-y-auto px-5 py-4">
+                {active.messages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.noThreadYet}</p>}
+                {active.messages.map((m, i) => {
+                  const prev = active.messages[i - 1];
+                  const request = m.requestId ? (requestById.get(m.requestId) ?? null) : null;
+                  return (
+                    <div key={m.id} className="space-y-3">
+                      {(!prev || prev.dayLabel !== m.dayLabel) && <DayMark label={m.dayLabel} />}
+                      {request ? (
+                        <RequestCard
+                          request={request}
+                          status={statusOf(request)}
+                          statusMeta={statusMeta}
+                          from={m.from}
+                          timeLabel={m.timeLabel}
+                          focused={focusRequestId === request.id}
+                          badge={labels.requestBadge}
+                          view={labels.viewRequest}
+                          onView={() => setOpenRequestId(request.id)}
+                        />
+                      ) : (
+                        <MessageBubble message={m} you={labels.you} />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+
               <form
-                className="border-t border-sand-100 p-4"
+                className="border-t border-sand-100 p-3"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void send(active);
                 }}
               >
-                <Textarea
-                  id="messages-reply"
-                  aria-label={labels.replyPlaceholder}
-                  placeholder={labels.replyPlaceholder}
-                  rows={2}
-                  maxLength={4000}
-                  className="min-h-0"
-                  value={drafts[active.id] ?? ""}
-                  onChange={(e) => setDrafts((all) => ({ ...all, [active.id]: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      void send(active);
-                    }
-                  }}
-                />
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <NoticeLine notice={notice} />
-                  <Button type="submit" size="sm" loading={busy === "send"} disabled={(drafts[active.id] ?? "").trim() === ""}>
-                    {labels.send}
+                <div className="flex items-end gap-2">
+                  <Textarea
+                    id="messages-reply"
+                    aria-label={labels.replyPlaceholder}
+                    placeholder={labels.replyPlaceholder}
+                    rows={1}
+                    maxLength={4000}
+                    className="min-h-0 resize-none"
+                    value={drafts[active.id] ?? ""}
+                    onChange={(e) => setDrafts((all) => ({ ...all, [active.id]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void send(active);
+                      }
+                    }}
+                  />
+                  <Button type="submit" aria-label={labels.send} title={labels.send} className="h-11 w-11 shrink-0 px-0" loading={busy === "send"} disabled={(drafts[active.id] ?? "").trim() === ""}>
+                    {busy !== "send" && <Icon name="send" size={18} />}
                   </Button>
                 </div>
+                <NoticeLine notice={notice} />
               </form>
             </Card>
           )}
-
-          {active && activeRequest && (
-            <RequestDetails
-              request={activeRequest}
-              status={statusOf(activeRequest)}
-              interventionId={interventionOf(activeRequest)}
-              statusMeta={statusMeta}
-              labels={labels}
-              busy={busy}
-              onStatus={(status) => void setStatus(activeRequest, status)}
-              onIntervention={() => void createIntervention(activeRequest)}
-            />
-          )}
         </div>
       )}
+
+      <Modal open={openRequest !== null} onClose={() => setOpenRequestId(null)} title={labels.detailsTitle} closeLabel={labels.close}>
+        {openRequest && (
+          <RequestDetails
+            request={openRequest}
+            status={statusOf(openRequest)}
+            interventionId={interventionOf(openRequest)}
+            statusMeta={statusMeta}
+            labels={labels}
+            busy={busy}
+            notice={notice}
+            onStatus={(status) => void setStatus(openRequest, status)}
+            onIntervention={() => void createIntervention(openRequest)}
+          />
+        )}
+      </Modal>
     </div>
   );
 }
@@ -380,11 +444,19 @@ function NoticeLine({ notice }: { notice: Notice }) {
     <p
       role="status"
       className={
-        "min-h-4 text-xs font-semibold " +
+        "mt-1.5 min-h-4 text-xs font-semibold " +
         (notice?.tone === "error" ? "text-red-700" : notice?.tone === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-emerald-800")
       }
     >
       {notice?.text ?? ""}
+    </p>
+  );
+}
+
+function DayMark({ label }: { label: string }) {
+  return (
+    <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-ink-soft" aria-hidden>
+      {label}
     </p>
   );
 }
@@ -400,20 +472,20 @@ function ThreadRow({
   unread: number;
   selected: boolean;
   labels: MessagesLabels;
-  onOpen: (thread: ThreadView) => void;
+  onOpen: () => void;
 }) {
   return (
     <li>
       <button
         type="button"
-        onClick={() => onOpen(thread)}
+        onClick={onOpen}
         aria-current={selected ? "true" : undefined}
         className={
           "flex w-full items-start gap-3 border-l-2 px-4 py-3 text-left transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 " +
           (selected ? "border-brand-600 bg-brand-50/60" : "border-transparent")
         }
       >
-        <span className={"mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold " + (thread.requestId ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800")}>
+        <span className={"mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold " + (thread.isTenancy ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
           {initials(thread.participantName) || "·"}
         </span>
         <span className="min-w-0 flex-1">
@@ -421,12 +493,10 @@ function ThreadRow({
             <span className={"min-w-0 truncate text-sm text-ink " + (unread > 0 ? "font-bold" : "font-semibold")}>{thread.participantName}</span>
             <span className="shrink-0 text-[11px] tabular-nums text-ink-soft">{thread.lastLabel}</span>
           </span>
+          <span className="mt-0.5 block truncate text-xs text-ink-soft">{thread.isTenancy ? thread.scopeLabel : thread.subject}</span>
           <span className="mt-0.5 flex items-center gap-1.5">
-            {thread.requestId && <Badge className="bg-amber-100 text-amber-800">{labels.requestBadge}</Badge>}
-            <span className="min-w-0 truncate text-xs font-semibold text-ink">{thread.subject}</span>
-          </span>
-          <span className="mt-0.5 flex items-center gap-2">
-            <span className={"min-w-0 flex-1 truncate text-xs " + (unread > 0 ? "text-ink" : "text-ink-soft")}>{thread.preview}</span>
+            {thread.previewIsRequest && <Badge className="bg-amber-100 text-amber-800">{labels.requestBadge}</Badge>}
+            <span className={"min-w-0 flex-1 truncate text-xs " + (unread > 0 ? "font-semibold text-ink" : "text-ink-soft")}>{thread.preview}</span>
             {unread > 0 && (
               <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-accent-600" role="img" aria-label={labels.unreadAria.replace("{n}", String(unread))} />
             )}
@@ -437,55 +507,98 @@ function ThreadRow({
   );
 }
 
-function OpeningBubble({ request }: { request: RequestView }) {
-  return (
-    <div className="flex gap-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800" title={request.tenantName}>
-        {initials(request.tenantName) || "·"}
-      </span>
-      <div className="max-w-[80%]">
-        <div className="rounded-2xl rounded-tl-md bg-sand-100 px-3.5 py-2.5 text-sm leading-relaxed text-ink">
-          <p className="font-semibold">{request.title}</p>
-          {request.description && <p className="mt-1 whitespace-pre-line">{request.description}</p>}
-          {request.attachments.length > 0 && <AttachmentGrid attachments={request.attachments} compact />}
-        </div>
-        <p className="mt-1 text-[11px] text-ink-soft">
-          {request.tenantName} · {request.openedLabel}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function MessageBubble({ message, you }: { message: MessageView; you: string }) {
   const mine = message.kind === "manager";
+  if (message.kind === "system") {
+    return (
+      <div className="flex justify-center">
+        <div className="max-w-[85%] rounded-xl border border-dashed border-sand-200 bg-sand-50 px-3.5 py-2 text-center text-xs leading-relaxed text-ink-soft">
+          {message.body}
+          <span className="ml-1.5 tabular-nums">{message.timeLabel}</span>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className={"flex gap-3 " + (mine ? "flex-row-reverse" : "")}>
-      <span className={"flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold " + SENDER_COLORS[message.kind]} title={message.from}>
-        {initials(message.from) || "·"}
-      </span>
-      <div className={"max-w-[80%] " + (mine ? "text-right" : "")}>
-        <div
-          className={
-            "inline-block whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-left text-sm leading-relaxed " +
-            (mine ? "rounded-tr-md bg-brand-600 text-white" : message.kind === "system" ? "rounded-tl-md border border-dashed border-sand-200 bg-sand-50 text-ink-soft" : "rounded-tl-md bg-sand-100 text-ink")
-          }
-        >
+    <div className={"flex gap-2.5 " + (mine ? "flex-row-reverse" : "")}>
+      {!mine && (
+        <span className={"mt-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold " + SENDER_COLORS[message.kind]} title={message.from}>
+          {initials(message.from) || "·"}
+        </span>
+      )}
+      <div className={"max-w-[78%] " + (mine ? "text-right" : "")}>
+        <div className={"inline-block whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-left text-sm leading-relaxed " + (mine ? "rounded-br-md bg-brand-600 text-white" : "rounded-bl-md bg-sand-100 text-ink")}>
           {message.body}
         </div>
         <p className="mt-1 text-[11px] text-ink-soft">
-          {mine ? you : message.from} · {message.timeLabel}
+          {mine ? you : message.from} · <span className="tabular-nums">{message.timeLabel}</span>
         </p>
       </div>
     </div>
   );
 }
 
-function AttachmentGrid({ attachments, compact }: { attachments: AttachmentView[]; compact?: boolean }) {
+/** A request, where it happened in the conversation: the tenant's side, with what the desk needs at a glance. */
+function RequestCard({
+  request,
+  status,
+  statusMeta,
+  from,
+  timeLabel,
+  focused,
+  badge,
+  view,
+  onView,
+}: {
+  request: RequestView;
+  status: RequestStatus;
+  statusMeta: Record<RequestStatus, Meta>;
+  from: string;
+  timeLabel: string;
+  focused: boolean;
+  badge: string;
+  view: string;
+  onView: () => void;
+}) {
   return (
-    <ul className={"grid grid-cols-3 gap-2 " + (compact ? "mt-2" : "")}>
+    <div className="flex gap-2.5" data-request={request.id}>
+      <span className="mt-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[10px] font-bold text-sky-800" title={from}>
+        {initials(from) || "·"}
+      </span>
+      <div className="max-w-[85%] min-w-[16rem]">
+        <div className={"rounded-2xl rounded-bl-md border bg-white p-4 transition duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " + (focused ? "border-brand-300 ring-2 ring-brand-100" : "border-amber-200")}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Badge className="bg-amber-100 text-amber-800">{badge}</Badge>
+            <Badge className={statusMeta[status].color}>{statusMeta[status].label}</Badge>
+          </div>
+          <p className="mt-2 font-display text-sm font-bold text-ink">{request.title}</p>
+          {request.description && <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-ink">{request.description}</p>}
+          {request.attachments.length > 0 && (
+            <div className="mt-3">
+              <AttachmentGrid attachments={request.attachments} />
+              {request.attachmentsLabel && <p className="mt-1 text-[11px] text-ink-soft">{request.attachmentsLabel}</p>}
+            </div>
+          )}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-sand-100 pt-3">
+            <span className="text-[11px] tabular-nums text-ink-soft">{request.ref}</span>
+            <Button type="button" variant="secondary" size="sm" onClick={onView}>
+              {view}
+            </Button>
+          </div>
+        </div>
+        <p className="mt-1 text-[11px] text-ink-soft">
+          {from} · <span className="tabular-nums">{timeLabel}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AttachmentGrid({ attachments }: { attachments: AttachmentView[] }) {
+  return (
+    <ul className="grid grid-cols-3 gap-2">
       {attachments.map((a) => (
-        <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-white">
+        <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
           {a.url ? (
             <a href={a.url} target="_blank" rel="noreferrer" className="block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -502,6 +615,7 @@ function AttachmentGrid({ attachments, compact }: { attachments: AttachmentView[
   );
 }
 
+/** "Voir la demande": the request's status, its details, its photos, and the way to an intervention. */
 function RequestDetails({
   request,
   status,
@@ -509,6 +623,7 @@ function RequestDetails({
   statusMeta,
   labels,
   busy,
+  notice,
   onStatus,
   onIntervention,
 }: {
@@ -518,6 +633,7 @@ function RequestDetails({
   statusMeta: Record<RequestStatus, Meta>;
   labels: MessagesLabels;
   busy: Busy;
+  notice: Notice;
   onStatus: (status: RequestStatus) => void;
   onIntervention: () => void;
 }) {
@@ -528,9 +644,10 @@ function RequestDetails({
     [labels.fieldActivity, request.activityLabel],
   ];
   return (
-    <Card className="p-5 lg:col-span-3">
-      <h2 className="font-display text-base font-bold text-ink">{labels.detailsTitle}</h2>
+    <div>
+      <p className="font-display text-base font-bold text-ink">{request.title}</p>
       <p className="text-xs tabular-nums text-ink-soft">{request.ref}</p>
+      {request.description && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink">{request.description}</p>}
 
       <label className="mt-4 block">
         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-soft">{labels.fieldStatus}</span>
@@ -557,12 +674,6 @@ function RequestDetails({
             </dd>
           </div>
         ))}
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="shrink-0 text-xs text-ink-soft">{labels.fieldStatus}</dt>
-          <dd>
-            <Badge className={statusMeta[status].color}>{statusMeta[status].label}</Badge>
-          </dd>
-        </div>
       </dl>
 
       {request.attachments.length > 0 && (
@@ -585,8 +696,9 @@ function RequestDetails({
             {labels.createIntervention}
           </Button>
         )}
+        <NoticeLine notice={notice} />
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -638,7 +750,10 @@ function RequestsTable({
               return (
                 <tr key={r.id} className="cursor-pointer border-b border-sand-50 last:border-0 hover:bg-sand-50/50" onClick={() => onOpen(r)}>
                   <td className="px-4 py-3">
-                    <button type="button" className="text-left font-semibold text-ink hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" onClick={(e) => {
+                    <button
+                      type="button"
+                      className="text-left font-semibold text-ink hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                      onClick={(e) => {
                         e.stopPropagation();
                         onOpen(r);
                       }}

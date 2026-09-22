@@ -1272,8 +1272,8 @@ export const de: Dict = {
 
   messages: {
     title: "Nachrichten",
-    subtitle: "Ein Thread pro Thema (Mietvertrag, Auftrag, Mandat), mit Mietern, Eigentümern und Handwerkern an einem Ort. Automatische Übersetzung zwischen den Sprachen.",
-    replyPlaceholder: "Antworten… (bei Bedarf automatisch übersetzt)",
+    subtitle: "Eine Unterhaltung pro Mieter, mit seinen Anfragen an derselben Stelle verfolgt.",
+    replyPlaceholder: "Nachricht schreiben…",
     replySent: "Nachricht gesendet. Der Mieter sieht sie in seinem Bereich.",
     cardTenants: "Mieter",
     cardTenantsBody: "Ein einziger Einstieg „Neue Anfrage“, die Kategorie wird aus der Nachricht abgeleitet. Bei Gasgeruch erscheinen die Notrufnummern schon beim Tippen.",
@@ -1318,7 +1318,8 @@ export const de: Dict = {
     colActivity: "Letzte Aktivität",
     colStatus: "Status",
     openThread: "Unterhaltung öffnen",
-    noThreadYet: "Noch keine Nachricht: Antworten Sie unten, der Mieter sieht sie in seinem Bereich.",
+    noThreadYet: "Noch keine Nachricht. Schreiben Sie unten, der Mieter sieht sie in seinem Bereich.",
+    viewRequest: "Anfrage ansehen",
   },
 
   finance: {
@@ -1766,6 +1767,7 @@ export const de: Dict = {
     navLease: "Mein Bail",
     navPayments: "Zahlungen",
     navRequests: "Anfragen",
+    navMessages: "Nachrichten",
     signOut: "Abmelden",
     backToOwner: "Mein Verwaltungsbereich",
     becomeOwner: "Ich verwalte auch Objekte: meinen Verwaltungsbereich öffnen",
@@ -1942,14 +1944,20 @@ export const de: Dict = {
     reqRefusedOn: "Abgelehnt am {date}",
     reqBack: "Zurück zu den Anfragen",
     threadTitle: "Verlauf",
-    threadEmpty: "Noch keine Antwort. Ihre Verwaltung hat die Anfrage erhalten.",
+    threadEmpty: "Noch keine Nachricht. Schreiben Sie Ihrem Verwalter unten.",
     threadYou: "Sie",
     threadManager: "Verwaltung",
-    threadWrite: "Nachricht hinzufügen",
+    threadOther: "Beteiligter",
+    threadWrite: "Nachricht schreiben…",
     threadSend: "Senden",
     threadSent: "Nachricht gesendet.",
     threadFailed: "Die Nachricht konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal.",
     attachments: "Angehängte Fotos",
+    msgTitle: "Nachrichten",
+    msgSub: "Ihre Unterhaltung mit Ihrem Verwalter. Ihre Anfragen erscheinen ebenfalls hier.",
+    msgView: "Anfrage ansehen",
+    reqInChat: "Unterhaltung öffnen",
+    msgPick: "Ihre Unterhaltungen",
 
     // Die Einladung: die E-Mail, dann die Seite, die der Link öffnet
     invite: {

@@ -1272,8 +1272,8 @@ export const en: Dict = {
 
   messages: {
     title: "Messaging",
-    subtitle: "One thread per subject (lease, work order, mandate), with tenants, owners and contractors in one place. Automatic translation between languages.",
-    replyPlaceholder: "Reply… (translated automatically if needed)",
+    subtitle: "One conversation per tenant, with their requests tracked in the same place.",
+    replyPlaceholder: "Write a message…",
     replySent: "Message sent. The tenant sees it in their space.",
     cardTenants: "Tenants",
     cardTenantsBody: "A single \"New request\" entry point, the category is inferred from the message. If gas is mentioned, emergency numbers appear while typing.",
@@ -1318,7 +1318,8 @@ export const en: Dict = {
     colActivity: "Last activity",
     colStatus: "Status",
     openThread: "Open the conversation",
-    noThreadYet: "No message yet: reply below, the tenant will see it in their space.",
+    noThreadYet: "No message yet. Write below, the tenant will see it in their space.",
+    viewRequest: "View the request",
   },
 
   finance: {
@@ -1766,6 +1767,7 @@ export const en: Dict = {
     navLease: "My lease",
     navPayments: "Payments",
     navRequests: "Requests",
+    navMessages: "Messages",
     signOut: "Sign out",
     backToOwner: "My management space",
     becomeOwner: "I also manage property: open my management space",
@@ -1942,14 +1944,20 @@ export const en: Dict = {
     reqRefusedOn: "Refused on {date}",
     reqBack: "Back to requests",
     threadTitle: "Follow-up",
-    threadEmpty: "No reply yet. Your manager has received the request.",
+    threadEmpty: "No message yet. Write to your manager below.",
     threadYou: "You",
     threadManager: "Manager",
-    threadWrite: "Add a message",
+    threadOther: "Participant",
+    threadWrite: "Write a message…",
     threadSend: "Send",
     threadSent: "Message sent.",
     threadFailed: "The message could not be sent. Try again in a moment.",
     attachments: "Attached photos",
+    msgTitle: "Messages",
+    msgSub: "Your conversation with your manager. Your requests appear here too.",
+    msgView: "View the request",
+    reqInChat: "Open the conversation",
+    msgPick: "Your conversations",
 
     // The invitation: the e-mail, then the page the link opens
     invite: {

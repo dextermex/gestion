@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/portal/session";
 import { createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
-import { ticketRef } from "@/lib/portal/types";
+import { leaseSubject, ticketRef } from "@/lib/portal/types";
 
 /**
  * A tenant's new request. The lease it lands on is not taken from the
  * request: it is the tenancy in force that `my_home()` returns for this
- * account, so a forged id changes nothing. Photos are not part of this
- * body: the browser sends them afterwards to `/api/locataire/demandes/[id]/pieces`,
+ * account, so a forged id changes nothing. The request then takes its place
+ * in the tenancy's conversation. Photos are not part of this body: the
+ * browser sends them afterwards to `/api/locataire/demandes/[id]/pieces`,
  * which stores each file and only then records it, so no document row ever
  * names a file that does not exist.
  */
@@ -27,7 +28,13 @@ export async function POST(req: NextRequest) {
   const wanted = str(body.leaseId, 64);
   const home = (wanted ? rows.find((h) => h.lease_id === wanted) : rows[0]) ?? null;
   if (!home) return NextResponse.json({ error: "no_live_lease" }, { status: 409 });
-  const lease = { id: String(home.lease_id), orgId: String(home.org_id), unitId: String(home.unit_id), propertyId: String(home.property_id) };
+  const lease = {
+    id: String(home.lease_id),
+    orgId: String(home.org_id),
+    unitId: String(home.unit_id),
+    propertyId: String(home.property_id),
+    subject: leaseSubject(String(home.unit_label ?? ""), String(home.property_name ?? "")),
+  };
   const user = { id: session.userId };
 
   const created = await createTenantRequest(g, user, lease, input);
@@ -35,5 +42,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: created.error }, { status: created.error === "forbidden" ? 403 : created.error === "invalid" ? 400 : 502 });
   }
 
-  return NextResponse.json({ ok: true, id: created.id, ref: ticketRef(created.id) });
+  return NextResponse.json({ ok: true, id: created.id, ref: ticketRef(created.id), conversationId: created.conversationId });
 }

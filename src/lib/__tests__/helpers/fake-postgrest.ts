@@ -82,7 +82,7 @@ const DEFAULTS: Record<string, () => Row> = {
   tickets: () => ({ description: null, closed_at: null, sla_due_at: null }),
   work_orders: () => ({ status: "offered", artisan_contact_id: null }),
   conversations: () => ({ last_message_at: null }),
-  messages: () => ({ sender_contact_id: null, read_at: null }),
+  messages: () => ({ sender_contact_id: null, read_at: null, ticket_id: null }),
 };
 
 /** Columns the database computes. */
@@ -168,8 +168,15 @@ export class FakeDb {
   tenantTicket(ticketId: unknown, userId: string): boolean {
     return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && this.tenantLease(t.lease_id, userId));
   }
+  /** The tenancy's conversation, or a request's own thread from before 0019. */
   private tenantConversation(conversationId: unknown, userId: string): boolean {
-    return this.table("conversations").some((cv) => cv.id === conversationId && cv.scope_type === "ticket" && this.tenantTicket(cv.scope_id, userId));
+    return this.table("conversations").some((cv) => cv.id === conversationId && this.tenantScope(cv, userId));
+  }
+  private tenantScope(cv: Row, userId: string): boolean {
+    return (
+      (cv.scope_type === "lease" && cv.scope_id != null && this.tenantLease(cv.scope_id, userId)) ||
+      (cv.scope_type === "ticket" && cv.scope_id != null && this.tenantTicket(cv.scope_id, userId))
+    );
   }
 
   /** What a tenant account may read of a table: the `*_portal` select policies. */
@@ -193,7 +200,7 @@ export class FakeDb {
       case "tickets":
         return row.lease_id != null && this.tenantLease(row.lease_id, userId);
       case "conversations":
-        return row.scope_type === "ticket" && row.scope_id != null && this.tenantTicket(row.scope_id, userId);
+        return this.tenantScope(row, userId);
       case "messages":
         return this.tenantConversation(row.conversation_id, userId);
       default:
@@ -212,9 +219,13 @@ export class FakeDb {
           this.table("tickets").some((t) => t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId))
         );
       case "conversations":
-        return row.scope_type === "ticket" && row.scope_id != null && this.tenantTicket(row.scope_id, userId);
+        return row.scope_type === "lease" && row.scope_id != null && this.tenantLease(row.scope_id, userId);
       case "messages":
-        return row.sender_kind === "tenant" && row.sender_user_id === userId && this.tenantConversation(row.conversation_id, userId);
+        return (
+          row.sender_kind === "tenant" && row.sender_user_id === userId &&
+          (row.ticket_id == null || this.tenantTicket(row.ticket_id, userId)) &&
+          this.tenantConversation(row.conversation_id, userId)
+        );
       default:
         return false;
     }
@@ -406,6 +417,11 @@ export class FakeDb {
     for (const key of UNIQUE[table] ?? []) {
       const clash = this.table(table).some((r) => r !== row && key.every((k) => r[k] === row[k]));
       if (clash) return { code: "23505", message: `duplicate key value violates unique constraint on ${key.join(",")}` };
+    }
+    // conversations_lease_one (0019): one conversation per lease.
+    if (table === "conversations" && row.scope_type === "lease" && row.scope_id != null) {
+      const clash = this.table(table).some((r) => r !== row && r.scope_type === "lease" && r.scope_id === row.scope_id);
+      if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "conversations_lease_one"' };
     }
     // contacts_email_active_key (0002): one live contact per e-mail and workspace.
     if (table === "contacts" && row.email != null && row.archived_at == null) {

@@ -175,7 +175,7 @@ export async function buildRealDataFrom(
     q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", "read_on"),
     q("workflows", "id,kind,unit_id,lease_id,current_state,blocked_reason,started_at,completed_at"),
     q("conversations", "id,scope_type,scope_id,subject,last_message_at,created_at"),
-    q("messages", "id,conversation_id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,read_at", "sent_at"),
+    q("messages", "id,conversation_id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,read_at,ticket_id", "sent_at"),
     q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at"),
     q("insurance_policies", "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes", "created_at"),
     // The token is never selected: it is returned once, when the invitation is created.
@@ -444,12 +444,15 @@ export async function buildRealDataFrom(
   }));
 
   // ── Tickets, meters, workflows ──
-  // A request's thread is the ticket-scoped conversation; its work order,
-  // if the owner opened one, makes it an intervention; its photos are the
-  // ticket's documents, signed for the screen.
-  const conversationByTicket = new Map(
-    conversationRows.filter((c) => s(c.scope_type) === "ticket" && s(c.scope_id) !== "").map((c) => [s(c.scope_id), s(c.id)]),
+  // A request sits in its tenancy's conversation (the one its anchor
+  // message is on, else the lease's own); its work order, if the owner
+  // opened one, makes it an intervention; its photos are the ticket's
+  // documents, signed for the screen.
+  const conversationByLease = new Map(
+    conversationRows.filter((c) => s(c.scope_type) === "lease" && s(c.scope_id) !== "").map((c) => [s(c.scope_id), s(c.id)]),
   );
+  const conversationByTicket = new Map<string, string>();
+  for (const m of messageRows) if (s(m.ticket_id) !== "" && !conversationByTicket.has(s(m.ticket_id))) conversationByTicket.set(s(m.ticket_id), s(m.conversation_id));
   const workOrderByTicket = new Map<string, string>();
   for (const w of workOrderRows) if (!workOrderByTicket.has(s(w.ticket_id))) workOrderByTicket.set(s(w.ticket_id), s(w.id));
   const ticketPhotoRows = documentRows.filter((doc) => s(doc.related_type) === "ticket" && s(doc.storage_path) !== "");
@@ -472,7 +475,7 @@ export async function buildRealDataFrom(
     updatedAt: t.updated_at ? day(t.updated_at) : day(t.created_at),
     closedAt: t.closed_at ? day(t.closed_at) : null,
     slaDueAt: t.sla_due_at ? day(t.sla_due_at) : null,
-    conversationId: conversationByTicket.get(s(t.id)) ?? null,
+    conversationId: conversationByTicket.get(s(t.id)) ?? (s(t.lease_id) ? conversationByLease.get(s(t.lease_id)) : undefined) ?? null,
     interventionId: workOrderByTicket.get(s(t.id)) ?? null,
     attachments: ticketPhotoRows
       .filter((doc) => s(doc.related_id) === s(t.id))
@@ -571,6 +574,7 @@ export async function buildRealDataFrom(
         body: s(m.body),
         at: s(m.sent_at),
         readAt: m.read_at ? s(m.read_at) : null,
+        ticketId: sOr(m.ticket_id, null),
       })),
     };
   });

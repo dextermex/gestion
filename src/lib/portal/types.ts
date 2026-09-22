@@ -95,16 +95,9 @@ export function isIntervention(t: { source: string; interventionId: string | nul
   return t.source !== "tenant" || t.interventionId !== null;
 }
 
-/**
- * The thread id the desk's Messages uses for a request whose conversation
- * is not open yet: the first message opens the real one, the screen then
- * follows it. Never written to the database.
- */
-export function pendingThreadId(requestId: string): string {
-  return `request:${requestId}`;
-}
-export function isPendingThreadId(threadId: string): boolean {
-  return threadId.startsWith("request:");
+/** The subject a tenancy's conversation is opened with: "Apt 3B · Résidence Beaulieu". */
+export function leaseSubject(unitLabel: string, propertyName: string): string {
+  return [unitLabel, propertyName].map((x) => x.trim()).filter(Boolean).join(" · ");
 }
 
 /** A ticket's reference as the owner's screens print it. */

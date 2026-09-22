@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * The tenant's space: four destinations, one header, no configuration. The
+ * The tenant's space: five destinations, one header, no configuration. The
  * space is read under the visitor's own session; without one there is
  * nothing to show and the visitor is sent to sign in, coming back here. On
  * a sample cabinet the sample tenant stands in, announced by the same amber
@@ -36,6 +36,7 @@ export default async function TenantLayout({ children }: { children: React.React
     { href: "/locataire", label: d.tenant.navHome },
     { href: "/locataire/bail", label: d.tenant.navLease },
     { href: "/locataire/paiements", label: d.tenant.navPayments },
+    { href: "/locataire/messages", label: d.tenant.navMessages },
     { href: "/locataire/demandes", label: d.tenant.navRequests },
   ];
   const managers = space.managers.map((m) => m.name).filter(Boolean).join(" · ");

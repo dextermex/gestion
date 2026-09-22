@@ -152,7 +152,7 @@ describe("the tenant portal, from the invitation to the departure", () => {
 
     // ── She reports a problem: an intervention the owner sees, with a photo and a follow-up ──
     const input = parseRequestInput({ kind: "technical", category: "heating", title: "Plus de chauffage", description: "Depuis hier soir, radiateurs froids.", severity: "urgent" })!;
-    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId };
+    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
     const request = await createTenantRequest(db.tenantClient(anna), anna, lease, input);
     if ("error" in request) throw new Error(request.error);
     const folder = attachmentFolder(ORG, rental.leaseId);
@@ -161,7 +161,7 @@ describe("the tenant portal, from the invitation to the departure", () => {
       { path: `${ORG}/${propertyId}/not-mine.jpg`, name: "hors dossier", mime: "image/jpeg", sizeBytes: 1 },
     ]);
     expect(attached).toEqual({ attached: 1 });
-    const message = await addTenantMessage(db.tenantClient(anna), anna, lease, { id: request.id, title: input.title }, "Le technicien peut passer demain matin.");
+    const message = await addTenantMessage(db.tenantClient(anna), anna, lease, "Le technicien peut passer demain matin.");
     expect("id" in message).toBe(true);
 
     demo = await hydrate(db);
@@ -174,13 +174,22 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(ticket.status).toBe("new");
     expect(ticket.title).toBe("Plus de chauffage");
     expect(demo.DOCUMENTS.filter((doc) => doc.relatedLabel === ticket.ref).map((doc) => doc.name)).toEqual(["radiateur.jpg"]);
-    const thread = demo.CONVERSATIONS.find((c) => c.scopeLabel.includes(ticket.ref) || c.subject === input.title)!;
-    expect(thread.messages.map((m) => [m.from, m.kind, m.body])).toEqual([["Anna Weber", "tenant", "Le technicien peut passer demain matin."]]);
-    expect(thread.unread).toBe(1);
+    const thread = demo.CONVERSATIONS.find((c) => c.scopeType === "lease" && c.scopeId === rental.leaseId)!;
+    expect(thread.subject).toBe("Maison · Maison Weber");
+    expect(thread.messages.map((m) => [m.from, m.kind, m.body, m.ticketId])).toEqual([
+      ["Anna Weber", "tenant", "Plus de chauffage", request.id],
+      ["Anna Weber", "tenant", "Le technicien peut passer demain matin.", null],
+    ]);
+    expect(thread.unread).toBe(2);
+    expect(ticket.conversationId).toBe(thread.id);
 
     mine = await space(db, anna);
-    expect(mine.requests.map((r) => [r.kind, r.state, r.title, r.attachments.length, r.messages.length])).toEqual([["technical", "sent", "Plus de chauffage", 1, 1]]);
-    expect(mine.requests[0].messages[0].mine).toBe(true);
+    expect(mine.requests.map((r) => [r.kind, r.state, r.title, r.attachments.length, r.conversationId])).toEqual([["technical", "sent", "Plus de chauffage", 1, thread.id]]);
+    expect(mine.conversations.map((c) => [c.id, c.leaseId, c.label])).toEqual([[thread.id, rental.leaseId, "Maison · Maison Weber"]]);
+    expect(mine.conversations[0].messages.map((m) => [m.mine, m.ticketId, m.body])).toEqual([
+      [true, request.id, "Plus de chauffage"],
+      [true, null, "Le technicien peut passer demain matin."],
+    ]);
 
     // The owner takes it on: the tenant's state follows the intervention's.
     db.table("tickets").find((t) => t.id === request.id)!.status = "scheduled";
@@ -261,9 +270,12 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(Object.keys(lucSpace.current!.parties[0])).toEqual(["contactId", "name", "role", "movedInOn", "movedOutOn", "isMe"]);
 
     // A request by one is on the shared lease: both follow it.
-    const req = await createTenantRequest(db.tenantClient(luc), luc, { id: rental.leaseId, orgId: ORG, unitId, propertyId }, parseRequestInput({ kind: "question", title: "Charges", description: "Comment sont calculées les avances ?" })!);
+    const req = await createTenantRequest(db.tenantClient(luc), luc, { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" }, parseRequestInput({ kind: "question", title: "Charges", description: "Comment sont calculées les avances ?" })!);
     if ("error" in req) throw new Error(req.error);
     expect((await space(db, anna)).requests.map((r) => [r.kind, r.title, r.description])).toEqual([["question", "Charges", "Comment sont calculées les avances ?"]]);
+    // The shared conversation too: Luc's request reads as his to Anna, in the one thread they both have.
+    expect((await space(db, anna)).conversations.map((c) => c.messages.map((m) => [m.mine, m.ticketId]))).toEqual([[[false, req.id]]]);
+    expect((await space(db, luc)).conversations.map((c) => c.messages.map((m) => [m.mine, m.ticketId]))).toEqual([[[true, req.id]]]);
     expect((await hydrate(db)).TICKETS.find((t) => t.id === req.id)!.category).toBe("administrative");
   });
 
@@ -490,30 +502,31 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect((own as unknown[]).length).toBeGreaterThan(0);
 
     // Luc opens a request with a photo and a message; Anna neither sees nor touches it.
-    const leaseB = { id: rentalB.leaseId, orgId: ORG, unitId: unitB, propertyId: propertyB };
+    const leaseB = { id: rentalB.leaseId, orgId: ORG, unitId: unitB, propertyId: propertyB, subject: "Maison · Résidence Beaulieu" };
     const req = await createTenantRequest(db.tenantClient(luc), luc, leaseB, parseRequestInput({ kind: "technical", category: "plumbing", title: "Fuite", description: "Sous l'évier." })!);
     if ("error" in req) throw new Error(req.error);
     await attachTenantFiles(db.tenantClient(luc), luc, leaseB, req.id, [{ path: `${attachmentFolder(ORG, rentalB.leaseId)}p.jpg`, name: "p", mime: "image/jpeg", sizeBytes: 1 }]);
-    await addTenantMessage(db.tenantClient(luc), luc, leaseB, { id: req.id, title: "Fuite" }, "Bonjour");
+    await addTenantMessage(db.tenantClient(luc), luc, leaseB, "Bonjour");
 
     const annaSpace = await space(db, anna);
     expect(annaSpace.requests).toEqual([]);
     expect(annaSpace.current?.documents).toEqual([]);
     expect((await g.from("tickets").select("*").eq("id", req.id)).data).toEqual([]);
     expect((await g.from("documents").select("*").eq("related_id", req.id)).data).toEqual([]);
-    expect((await g.from("conversations").select("*").eq("scope_id", req.id)).data).toEqual([]);
+    expect((await g.from("conversations").select("*").eq("scope_id", rentalB.leaseId)).data).toEqual([]);
     expect((await g.from("messages").select("*")).data).toEqual([]);
     // Writing on Luc's lease or request, even with the right ids in hand, is refused by policy.
     expect(await createTenantRequest(g, anna, leaseB, parseRequestInput({ kind: "other", title: "x", description: "" })!)).toEqual({ error: "forbidden" });
     expect(await attachTenantFiles(g, anna, leaseB, req.id, [{ path: `${attachmentFolder(ORG, rentalB.leaseId)}q.jpg`, name: "q", mime: "image/jpeg", sizeBytes: 1 }])).toEqual({ error: "forbidden" });
-    expect(await addTenantMessage(g, anna, leaseB, { id: req.id, title: "Fuite" }, "Moi aussi")).toEqual({ error: "forbidden" });
+    expect(await addTenantMessage(g, anna, leaseB, "Moi aussi")).toEqual({ error: "forbidden" });
     // Nor can she claim a request of her own lease was raised by someone else.
     const forged = await g.from("tickets").insert({ org_id: ORG, unit_id: unitId, property_id: propertyId, lease_id: rentalA.leaseId, source: "manager", category: "other", severity: "routine", status: "new", title: "forged" });
     expect(forged.error?.code).toBe("42501");
 
     // Luc's own view of his request is complete.
     const lucSpace = await space(db, luc);
-    expect(lucSpace.requests.map((r) => [r.title, r.attachments.length, r.messages.length])).toEqual([["Fuite", 1, 1]]);
+    expect(lucSpace.requests.map((r) => [r.title, r.attachments.length])).toEqual([["Fuite", 1]]);
+    expect(lucSpace.conversations.map((c) => c.messages.map((m) => m.body))).toEqual([["Fuite", "Bonjour"]]);
     // The owner of the first cabinet sees both of their tenants' leases and nothing of the other cabinet.
     const demo = await hydrate(db);
     expect(demo.LEASES.map((l) => l.id).sort()).toEqual([rentalA.leaseId, rentalB.leaseId].sort());

@@ -93,7 +93,16 @@ export function tenantSpaceFromSample(demo: DemoData): TenantSpace {
         updatedAt: t.updatedAt,
         closedAt: t.closedAt,
         attachments: [],
-        messages: [],
+        conversationId: demo.CONVERSATIONS.find((c) => c.scopeType === "lease" && c.scopeId === current.id)?.id ?? null,
+      }))
+    : [];
+  const conversations = current
+    ? demo.CONVERSATIONS.filter((c) => c.scopeType === "lease" && c.scopeId === current.id).map((c) => ({
+        id: c.id,
+        leaseId: current.id,
+        label: `${current.unit.label} · ${current.property.name}`,
+        lastMessageAt: c.lastMessageAt,
+        messages: c.messages.map((m) => ({ id: m.id, senderKind: m.kind, body: m.body, sentAt: m.at, mine: m.kind === "tenant" && m.from === name, ticketId: m.ticketId })),
       }))
     : [];
   return {
@@ -105,6 +114,7 @@ export function tenantSpaceFromSample(demo: DemoData): TenantSpace {
     past: [],
     managers: [{ orgId: demo.ORG.id, name: demo.ORG.shortName, email: demo.ORG.managerEmail || null, phone: null }],
     requests,
+    conversations,
     payments: current ? paymentsOf(current, demo.TODAY) : null,
   };
 }

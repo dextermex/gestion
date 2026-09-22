@@ -283,27 +283,37 @@ export const WORKFLOWS: DemoWorkflow[] = overlay(fr.WORKFLOWS, {
 // ─── Messaging ──────────────────────────────────────────────────────────────
 
 export const CONVERSATIONS: DemoConversation[] = overlay(fr.CONVERSATIONS, {
-  "conv-1": {
-    subject: "Heizkessel: Interventioun freides",
+  "conv-3": {
+    subject: "Apt 3B · Residenz Uelzecht",
+    scopeLabel: "Apt 3B · Residenz Uelzecht",
     participantName: "Jang Weis",
     messages: [
-      { id: "msg-1-1", from: "Jang Weis", kind: "tenant", body: "Moien, den Drock ass haut de Moien erëm op 0,4 gefall. Foto derbäi.", at: "2026-08-19T08:12:00", readAt: "2026-08-19T08:40:00" },
-      { id: "msg-1-2", from: "Cabinet Majerus", kind: "manager", body: "Merci. Kirsch & Jong komme freides tëscht 8 an 10 Auer, passt Iech de Creneau?", at: "2026-08-19T09:05:00", readAt: null },
-      { id: "msg-1-3", from: "Pol Kirsch", kind: "artisan", body: "Creneau ugeholl. W.e.g. den Zougang zum Keller virgesinn (Expansiounsgefäss).", at: "2026-08-21T16:40:00", readAt: null },
+      { id: "msg-3-1", from: "System", kind: "system", body: "August-Zuelung zum ale Montant erakomm (1 450,00 € amplaz 1 520,00 €). Virausgefëllte Bréif « Daueroptrag aktualiséieren » prett fir ze schécken.", at: "2026-08-18T09:30:00", readAt: "2026-08-18T09:45:00", ticketId: null },
+      { id: "msg-3-2", from: "Jang Weis", kind: "tenant", body: "Heizkessel am Feeler, Drock op 0,4 Bar", at: "2026-08-19T08:12:00", readAt: "2026-08-19T08:40:00", ticketId: "t-1" },
+      { id: "msg-3-3", from: "Jang Weis", kind: "tenant", body: "Moien, den Drock ass haut de Moien erëm op 0,4 gefall. Foto derbäi.", at: "2026-08-19T08:15:00", readAt: "2026-08-19T08:40:00", ticketId: null },
+      { id: "msg-3-4", from: "Cabinet Majerus", kind: "manager", body: "Merci. Kirsch & Jong komme freides tëscht 8 an 10 Auer, passt Iech de Creneau?", at: "2026-08-19T09:05:00", readAt: null, ticketId: null },
+      { id: "msg-3-5", from: "Pol Kirsch", kind: "artisan", body: "Creneau ugeholl. W.e.g. den Zougang zum Keller virgesinn (Expansiounsgefäss).", at: "2026-08-21T16:40:00", readAt: null, ticketId: null },
     ],
   },
   "conv-2": {
-    subject: "Attestation de logement",
+    subject: "Apt 2A · Residenz Uelzecht",
+    scopeLabel: "Apt 2A · Residenz Uelzecht",
+    participantName: "Ana Santos, Luc Wagener",
     messages: [
-      { id: "msg-2-1", from: "Ana Santos", kind: "tenant", body: "Moien, ech brauch eng Attestatioun fir d'Gemeng (Arrivée-Deklaratioun vum Luc).", at: "2026-08-20T10:48:00", readAt: "2026-08-20T10:55:00" },
-      { id: "msg-2-2", from: "System", kind: "system", body: "Attestatioun am Self-Service generéiert (QR-Verifikatioun). Gemengendelai: 8 Deeg nom Anzuch.", at: "2026-08-20T11:02:00", readAt: "2026-08-20T11:10:00" },
+      { id: "msg-2-1", from: "Ana Santos", kind: "tenant", body: "Fiichtegkeetsspuren op der Mauer, Schlofkummer 2", at: "2026-08-12T09:10:00", readAt: "2026-08-12T10:00:00", ticketId: "t-2" },
+      { id: "msg-2-2", from: "Cabinet Majerus", kind: "manager", body: "Merci, de José Da Silva kënnt donneschdes de Moie fir en Diagnostic.", at: "2026-08-12T10:05:00", readAt: null, ticketId: null },
+      { id: "msg-2-3", from: "Ana Santos", kind: "tenant", body: "Moien, ech brauch eng Attestatioun fir d'Gemeng (Arrivée-Deklaratioun vum Luc).", at: "2026-08-20T10:48:00", readAt: "2026-08-20T10:55:00", ticketId: null },
+      { id: "msg-2-4", from: "System", kind: "system", body: "Attestatioun am Self-Service generéiert (QR-Verifikatioun). Gemengendelai: 8 Deeg nom Anzuch.", at: "2026-08-20T11:02:00", readAt: "2026-08-20T11:10:00", ticketId: null },
     ],
   },
-  "conv-3": {
-    subject: "Daueroptrag unzepassen",
-    participantName: "Jang Weis",
+  "conv-5": {
+    subject: "Plateau 1. · Büroen Nordstad",
+    scopeLabel: "Plateau 1. · Büroen Nordstad",
+    participantName: "Bäckerei Kremer Sàrl",
     messages: [
-      { id: "msg-3-1", from: "System", kind: "system", body: "August-Zuelung zum ale Montant erakomm (1 450,00 € amplaz 1 520,00 €). Virausgefëllte Bréif « Daueroptrag aktualiséieren » prett fir ze schécken.", at: "2026-08-18T09:30:00", readAt: "2026-08-18T09:45:00" },
+      { id: "msg-5-1", from: "Bäckerei Kremer Sàrl", kind: "tenant", body: "Netzwierk-Priis defekt am Open Space", at: "2026-08-02T14:30:00", readAt: "2026-08-02T15:00:00", ticketId: "t-3" },
+      { id: "msg-5-2", from: "Cabinet Majerus", kind: "manager", body: "Elektro Wagener kënnt mëttwochs de Moien.", at: "2026-08-04T09:00:00", readAt: null, ticketId: null },
+      { id: "msg-5-3", from: "Bäckerei Kremer Sàrl", kind: "tenant", body: "Et ass reparéiert, merci.", at: "2026-08-08T17:20:00", readAt: "2026-08-08T17:45:00", ticketId: null },
     ],
   },
   "conv-4": {
@@ -311,8 +321,8 @@ export const CONVERSATIONS: DemoConversation[] = overlay(fr.CONVERSATIONS, {
     scopeLabel: "Mandat SCI Uelzecht",
     participantName: "Marie-Josée Kieffer",
     messages: [
-      { id: "msg-4-1", from: "Cabinet Majerus", kind: "manager", body: "Juli-Décompte am Unhang: 5 Loyeren encaisséiert, Honorairen 4 % + TVA 17 %, Virement vum Solde den 5. exekutéiert.", at: "2026-08-05T14:20:00", readAt: null },
-      { id: "msg-4-2", from: "Marie-Josée Kieffer", kind: "owner", body: "Gutt krut, merci. D'Rechnung Kirsch kënnt jo op den August-Décompte?", at: "2026-08-05T15:01:00", readAt: "2026-08-05T15:30:00" },
+      { id: "msg-4-1", from: "Cabinet Majerus", kind: "manager", body: "Juli-Décompte am Unhang: 5 Loyeren encaisséiert, Honorairen 4 % + TVA 17 %, Virement vum Solde den 5. exekutéiert.", at: "2026-08-05T14:20:00", readAt: null, ticketId: null },
+      { id: "msg-4-2", from: "Marie-Josée Kieffer", kind: "owner", body: "Gutt krut, merci. D'Rechnung Kirsch kënnt jo op den August-Décompte?", at: "2026-08-05T15:01:00", readAt: "2026-08-05T15:30:00", ticketId: null },
     ],
   },
 });

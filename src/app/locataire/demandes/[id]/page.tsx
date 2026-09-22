@@ -2,23 +2,23 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card } from "@/components/pro/ui";
 import { MetaBadge, Panel } from "@/components/gestion/bits";
-import TenantThread from "@/components/gestion/TenantThread";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { getTenantView } from "@/lib/portal/space";
 import { formatDate, requestStateMeta, ticketSeverityMeta } from "@/lib/types";
 
 /**
- * One request: what was asked, the photos, and the thread with the
- * manager. The request comes from the tenant's own space, so an id that is
- * not theirs is simply not found: the database never returned it.
+ * One request: what was asked, its status, the photos, and the way back
+ * to the conversation where it sits. The request comes from the tenant's
+ * own space, so an id that is not theirs is simply not found: the database
+ * never returned it.
  */
 export default async function TenantRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
   const view = await getTenantView();
   if (view.kind === "signed_out") return null;
-  const { space, sample } = view;
+  const { space } = view;
   const request = space.requests.find((r) => r.id === id);
   if (!request) notFound();
   const stateMeta = requestStateMeta(d);
@@ -86,27 +86,13 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
       )}
 
       <Panel title={d.tenant.threadTitle}>
-        {request.messages.length === 0 ? (
-          <p className="text-sm text-ink-soft">{d.tenant.threadEmpty}</p>
-        ) : (
-          <ul className="space-y-3">
-            {request.messages.map((m) => (
-              <li key={m.id} className={"max-w-[85%] rounded-2xl px-4 py-3 " + (m.mine ? "ml-auto bg-brand-50" : "bg-sand-50")}>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                  {m.mine ? d.tenant.threadYou : m.senderKind === "tenant" ? "" : d.tenant.threadManager}
-                  {` · ${formatDate(m.sentAt.slice(0, 10), locale)}`}
-                </p>
-                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-ink">{m.body}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-        {!sample && (
-          <TenantThread
-            requestId={request.id}
-            labels={{ write: d.tenant.threadWrite, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed }}
-          />
-        )}
+        <p className="text-sm text-ink-soft">{d.tenant.msgSub}</p>
+        <Link
+          href={`/locataire/messages?demande=${encodeURIComponent(request.id)}`}
+          className="tactile mt-3 inline-block rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+        >
+          {d.tenant.reqInChat}
+        </Link>
       </Panel>
     </div>
   );

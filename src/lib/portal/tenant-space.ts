@@ -106,6 +106,18 @@ export interface TenantMessage {
   body: string;
   sentAt: string;
   mine: boolean;
+  /** Set when the message is a request's place in the conversation: the card is the ticket's. */
+  ticketId: string | null;
+}
+
+/** The tenancy's conversation with the manager: one per lease, both sides on it. */
+export interface TenantConversation {
+  id: string;
+  leaseId: string;
+  /** "Apt 3B · Résidence Beaulieu" */
+  label: string;
+  lastMessageAt: string;
+  messages: TenantMessage[];
 }
 
 export interface TenantRequest {
@@ -123,7 +135,8 @@ export interface TenantRequest {
   updatedAt: string;
   closedAt: string | null;
   attachments: TenantDocument[];
-  messages: TenantMessage[];
+  /** The conversation the request sits in, once anchored there. */
+  conversationId: string | null;
 }
 
 export interface TenantPayments {
@@ -149,6 +162,8 @@ export interface TenantSpace {
   past: TenantLease[];
   managers: Array<{ orgId: string; name: string; email: string | null; phone: string | null }>;
   requests: TenantRequest[];
+  /** One conversation per tenancy, the current one first. */
+  conversations: TenantConversation[];
   payments: TenantPayments | null;
 }
 
@@ -194,6 +209,7 @@ export async function buildTenantSpace(
       past: [],
       managers: [],
       requests: [],
+      conversations: [],
       payments: null,
     };
   }
@@ -208,7 +224,7 @@ export async function buildTenantSpace(
     read("insurance_policies", "id,lease_id,kind,provider,policy_number,expires_on", (q) => q.in("lease_id", leaseIds)),
     read("tickets", "id,lease_id,category,severity,status,title,description,created_at,updated_at,closed_at", (q) => q.in("lease_id", leaseIds).order("created_at", { ascending: false })),
   ]);
-  // The documents and threads the space shows are the leases' and the
+  // The documents and conversations the space shows are the leases' and the
   // requests' own: asked for by those ids, not "everything the policy lets
   // through" and sorted out in memory.
   const ticketIds = ticketRows.map((t) => s(t.id));
@@ -216,11 +232,11 @@ export async function buildTenantSpace(
     read("documents", "id,class,name,storage_path,related_type,related_id,created_at", (q) =>
       q.in("related_id", [...leaseIds, ...ticketIds]).order("created_at", { ascending: false }),
     ),
-    ticketIds.length > 0 ? read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "ticket").in("scope_id", ticketIds)) : Promise.resolve([] as Row[]),
+    read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "lease").in("scope_id", leaseIds)),
   ]);
   const conversationIds = conversationRows.map((c) => s(c.id));
   const messageRows = conversationIds.length > 0
-    ? await read("messages", "id,conversation_id,sender_kind,sender_user_id,body,sent_at", (q) => q.in("conversation_id", conversationIds).order("sent_at"))
+    ? await read("messages", "id,conversation_id,sender_kind,sender_user_id,body,sent_at,ticket_id", (q) => q.in("conversation_id", conversationIds).order("sent_at"))
     : [];
 
   // Signed links for the property photos and the documents the tenant may open.
@@ -319,9 +335,29 @@ export async function buildTenantSpace(
   const others = live.filter((l) => l !== current);
   const past = leases.filter((l) => !isLive(l)).sort(byStart);
 
-  const conversationByTicket = new Map(conversationRows.map((c) => [s(c.scope_id), s(c.id)]));
+  const conversationByLease = new Map(conversationRows.map((c) => [s(c.scope_id), s(c.id)]));
+  const anchorByTicket = new Map<string, string>();
+  for (const m of messageRows) if (s(m.ticket_id) !== "" && !anchorByTicket.has(s(m.ticket_id))) anchorByTicket.set(s(m.ticket_id), s(m.conversation_id));
+  const toMessage = (m: Row): TenantMessage => ({
+    id: s(m.id),
+    senderKind: s(m.sender_kind),
+    body: s(m.body),
+    sentAt: s(m.sent_at),
+    mine: s(m.sender_user_id) === opts.userId,
+    ticketId: s(m.ticket_id) || null,
+  });
+  const labelOfLease = (id: string): string => {
+    const l = leases.find((x) => x.id === id);
+    return l ? [l.unit.label, l.property.name].filter(Boolean).join(" · ") : "";
+  };
+  const conversations: TenantConversation[] = conversationRows
+    .map((c) => {
+      const msgs = messageRows.filter((m) => s(m.conversation_id) === s(c.id)).map(toMessage);
+      return { id: s(c.id), leaseId: s(c.scope_id), label: labelOfLease(s(c.scope_id)), lastMessageAt: msgs[msgs.length - 1]?.sentAt ?? "", messages: msgs };
+    })
+    .sort((a, b) => (a.leaseId === current?.id ? -1 : b.leaseId === current?.id ? 1 : a.lastMessageAt < b.lastMessageAt ? 1 : -1));
   const requests: TenantRequest[] = ticketRows.map((t) => {
-    const conversationId = conversationByTicket.get(s(t.id));
+    const conversationId = anchorByTicket.get(s(t.id)) ?? conversationByLease.get(s(t.lease_id)) ?? null;
     const description = s(t.description).replace(/^\[(document|question|other)\]\s*/, "");
     return {
       id: s(t.id),
@@ -338,11 +374,7 @@ export async function buildTenantSpace(
       updatedAt: day(t.updated_at) ?? "",
       closedAt: day(t.closed_at),
       attachments: documents.filter((d) => d.relatedType === "ticket" && d.relatedId === s(t.id)),
-      messages: conversationId
-        ? messageRows
-            .filter((m) => s(m.conversation_id) === conversationId)
-            .map((m) => ({ id: s(m.id), senderKind: s(m.sender_kind), body: s(m.body), sentAt: s(m.sent_at), mine: s(m.sender_user_id) === opts.userId }))
-        : [],
+      conversationId,
     };
   });
 
@@ -358,6 +390,7 @@ export async function buildTenantSpace(
     past,
     managers: managerRows.map((m) => ({ orgId: s(m.org_id), name: s(m.name), email: s(m.email) || null, phone: s(m.phone) || null })),
     requests,
+    conversations,
     payments: current ? paymentsOf(current, opts.today) : null,
   };
 }

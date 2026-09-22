@@ -1,13 +1,14 @@
 import "server-only";
 import type { OrgContext } from "@/lib/gestion/api";
-import { REQUEST_STATUSES, ticketStatusFor, type RequestStatus } from "@/lib/portal/types";
+import { appendMessage, leaseConversation } from "@/lib/portal/thread";
+import { REQUEST_STATUSES, leaseSubject, ticketStatusFor, type RequestStatus } from "@/lib/portal/types";
 
 /**
  * The desk's side of a tenant request: the same ticket row the tenant
- * raised, the same thread they read. Nothing here is a copy. Every write
- * runs under the manager's own token, scoped to the active workspace by
- * the code and decided by row-level security in the database; an id from
- * another workspace is simply not found.
+ * raised, the same conversation both sides write on. Nothing here is a
+ * copy. Every write runs under the manager's own token, scoped to the
+ * active workspace by the code and decided by row-level security in the
+ * database; an id from another workspace is simply not found.
  */
 
 export type RequestWriteFailure = "invalid" | "not_found" | "forbidden" | "storage_failed";
@@ -58,46 +59,59 @@ export async function setRequestStatus(
   return { status };
 }
 
-/** The request's thread, opened on first use if the tenant's side has not already. */
-async function threadOf(g: Db, orgId: string, ticket: { id: string; title: string }): Promise<{ id: string } | { error: RequestWriteFailure }> {
-  const { data: existing, error: findErr } = await g
-    .from("conversations")
-    .select("id")
-    .eq("org_id", orgId)
-    .eq("scope_type", "ticket")
-    .eq("scope_id", ticket.id)
-    .limit(1);
-  if (findErr) return failure(findErr, "request thread lookup");
-  const found = ((existing as Array<{ id: string }> | null) ?? [])[0];
-  if (found) return { id: String(found.id) };
-  const { data: created, error: createErr } = await g
-    .from("conversations")
-    .insert({ org_id: orgId, scope_type: "ticket", scope_id: ticket.id, subject: ticket.title })
-    .select("id")
-    .single();
-  if (createErr || !created) return failure(createErr, "request thread insert");
-  return { id: String((created as Row).id) };
+/** "Apt 3B · Résidence Beaulieu" for a lease of the workspace, or nothing if it cannot be read. */
+async function subjectOfLease(g: Db, orgId: string, leaseId: string): Promise<string> {
+  const { data: lease } = await g.from("leases").select("unit_id").eq("org_id", orgId).eq("id", leaseId).maybeSingle();
+  const unitId = lease ? String((lease as Row).unit_id ?? "") : "";
+  if (!unitId) return "";
+  const { data: unit } = await g.from("units").select("label,property_id").eq("org_id", orgId).eq("id", unitId).maybeSingle();
+  if (!unit) return "";
+  const { data: property } = await g.from("properties").select("name").eq("org_id", orgId).eq("id", String((unit as Row).property_id ?? "")).maybeSingle();
+  return leaseSubject(String((unit as Row).label ?? ""), property ? String((property as Row).name ?? "") : "");
 }
 
 /**
- * A reply from the desk, on a request's thread or on any conversation of
- * the workspace. Written as the manager, in the manager's name; the tenant
- * reads it in their space on their next load.
+ * The conversation a request lives in: the one its anchor message sits on,
+ * else the tenancy's own, opened here if nobody has written yet. A ticket
+ * without a lease has no conversation to speak of.
+ */
+async function threadOf(g: Db, orgId: string, ticket: Row): Promise<{ id: string } | { error: RequestWriteFailure }> {
+  const { data: anchors, error: anchorErr } = await g.from("messages").select("conversation_id").eq("org_id", orgId).eq("ticket_id", String(ticket.id)).limit(1);
+  if (anchorErr) return failure(anchorErr, "request anchor lookup");
+  const anchor = ((anchors as Array<{ conversation_id: string }> | null) ?? [])[0];
+  if (anchor) return { id: String(anchor.conversation_id) };
+  const leaseId = String(ticket.lease_id ?? "");
+  if (!leaseId) return { error: "not_found" };
+  return leaseConversation(g, { id: leaseId, orgId, subject: await subjectOfLease(g, orgId, leaseId) });
+}
+
+/**
+ * A message from the desk, on a request's conversation or on any
+ * conversation of the workspace. Written as the manager, in the manager's
+ * name; the tenant reads it in their space on their next load.
  */
 export async function addManagerMessage(
   ctx: OrgContext,
-  target: { ticketId: string } | { conversationId: string },
+  target: { ticketId: string } | { conversationId: string } | { leaseId: string },
   body: unknown,
 ): Promise<{ id: string; conversationId: string } | { error: RequestWriteFailure }> {
   const text = str(body, 4000);
   if (!text) return { error: "invalid" };
 
   let conversationId: string;
-  if ("ticketId" in target) {
+  if ("leaseId" in target) {
+    // The tenancy's conversation, opened by the desk if nobody has written yet.
+    const { data: lease, error } = await ctx.g.from("leases").select("id").eq("org_id", ctx.org.id).eq("id", target.leaseId).maybeSingle();
+    if (error) return failure(error, "lease lookup");
+    if (!lease) return { error: "not_found" };
+    const thread = await leaseConversation(ctx.g, { id: target.leaseId, orgId: ctx.org.id, subject: await subjectOfLease(ctx.g, ctx.org.id, target.leaseId) });
+    if ("error" in thread) return thread;
+    conversationId = thread.id;
+  } else if ("ticketId" in target) {
     const found = await ownTicket(ctx.g, ctx.org.id, target.ticketId);
     if ("error" in found) return found;
     if (!found.ticket) return { error: "not_found" };
-    const thread = await threadOf(ctx.g, ctx.org.id, { id: String(found.ticket.id), title: String(found.ticket.title ?? "") });
+    const thread = await threadOf(ctx.g, ctx.org.id, found.ticket);
     if ("error" in thread) return thread;
     conversationId = thread.id;
   } else {
@@ -107,20 +121,14 @@ export async function addManagerMessage(
     conversationId = String((data as Row).id);
   }
 
-  const now = new Date().toISOString();
-  const { data: message, error } = await ctx.g
-    .from("messages")
-    .insert({ org_id: ctx.org.id, conversation_id: conversationId, sender_kind: "manager", sender_user_id: ctx.userId, body: text, sent_at: now })
-    .select("id")
-    .single();
-  if (error || !message) return failure(error, "manager message insert");
-  // The thread's own clock; a request also counts a reply as activity.
-  await ctx.g.from("conversations").update({ last_message_at: now }).eq("org_id", ctx.org.id).eq("id", conversationId);
-  if ("ticketId" in target) await ctx.g.from("tickets").update({ updated_at: now }).eq("org_id", ctx.org.id).eq("id", target.ticketId);
-  return { id: String((message as Row).id), conversationId };
+  const sent = await appendMessage(ctx.g, { orgId: ctx.org.id, conversationId, senderKind: "manager", senderUserId: ctx.userId, body: text, touch: true });
+  if ("error" in sent) return sent;
+  // A reply on a request also counts as activity on it.
+  if ("ticketId" in target) await ctx.g.from("tickets").update({ updated_at: sent.sentAt }).eq("org_id", ctx.org.id).eq("id", target.ticketId);
+  return { id: sent.id, conversationId };
 }
 
-/** Opening a thread at the desk: what the other side wrote is now read. Unrelated to the request's status. */
+/** Opening a conversation at the desk: what the other side wrote is now read. Unrelated to any request's status. */
 export async function markConversationRead(ctx: OrgContext, conversationId: string): Promise<{ marked: number } | { error: RequestWriteFailure }> {
   const { data, error } = await ctx.g
     .from("messages")
@@ -136,9 +144,9 @@ export async function markConversationRead(ctx: OrgContext, conversationId: stri
 
 /**
  * A request becomes an intervention when the owner decides physical work
- * is needed: a work order on the same ticket, so the request, its thread
- * and its photos stay where they are and the Interventions screen lists
- * it. Asked twice, it answers with the same work order.
+ * is needed: a work order on the same ticket, so the request, its place in
+ * the conversation and its photos stay where they are and the Interventions
+ * screen lists it. Asked twice, it answers with the same work order.
  */
 export async function createIntervention(ctx: OrgContext, ticketId: string): Promise<{ id: string; created: boolean } | { error: RequestWriteFailure }> {
   const found = await ownTicket(ctx.g, ctx.org.id, ticketId);
