@@ -1320,6 +1320,8 @@ export const en: Dict = {
     openThread: "Open the conversation",
     noThreadYet: "No message yet. Write below, the tenant will see it in their space.",
     viewRequest: "View the request",
+    backToThreads: "Back to the conversations",
+    backToRequests: "Back to the requests",
   },
 
   finance: {

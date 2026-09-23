@@ -1331,6 +1331,8 @@ export const fr = {
     openThread: "Ouvrir la conversation",
     noThreadYet: "Pas encore de message. Écrivez ci-dessous, le locataire le verra dans son espace.",
     viewRequest: "Voir la demande",
+    backToThreads: "Retour aux conversations",
+    backToRequests: "Retour aux demandes",
   },
 
   finance: {

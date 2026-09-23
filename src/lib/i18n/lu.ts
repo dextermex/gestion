@@ -1325,6 +1325,8 @@ export const lu: Dict = {
     openThread: "Conversatioun opmaachen",
     noThreadYet: "Nach kee Message. Schreift hei ënnen, de Locataire gesäit et a sengem Espace.",
     viewRequest: "Ufro kucken",
+    backToThreads: "Zréck op d'Conversatiounen",
+    backToRequests: "Zréck op d'Ufroen",
   },
 
   finance: {

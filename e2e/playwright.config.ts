@@ -44,9 +44,10 @@ export default defineConfig({
       },
     },
     // A phone-sized WebKit, the closest a Linux runner comes to iPhone
-    // Safari: the auth door and the typing checks, where the phone matters.
+    // Safari: the auth door, the typing checks and Messages as a phone shows
+    // them, where the phone matters.
     ...(process.env.E2E_WEBKIT === "1"
-      ? [{ name: "iphone-webkit", use: { ...devices["iPhone 14"] }, testMatch: /(auth|focus)\.spec\.ts/ }]
+      ? [{ name: "iphone-webkit", use: { ...devices["iPhone 14"] }, testMatch: /(auth|focus|messages-phone)\.spec\.ts/ }]
       : []),
   ],
   webServer: {

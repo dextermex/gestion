@@ -202,6 +202,15 @@ lease in force); the next tenant of the lot gets a conversation of their own and
 of it. 0019 also folded the request-scoped threads of the first version into the tenancy's
 conversation and gave every existing tenant request its anchor.
 
+On a phone (below Tailwind's `lg`, 64rem) `MessagesCenter` shows one pane at a time, the way a
+messaging app does: the list alone, most recent conversation first, and a conversation filling
+the screen once tapped (header and composer fixed, the messages scrolling between them, a way
+back to the list where it was left; Demandes the same way, as a list of rows that open the
+conversation at the request). It is the same component and the same rows on every screen size:
+which pane a phone shows is a class the stylesheet reads (`max-lg:hidden`, `PhoneView`), and a
+laptop keeps the list and the open conversation side by side. Nothing about the data, the
+policies or the API changes with the screen.
+
 Invitations are `portal_invites` rows minted by `portal_invite_lease` (a party of a live
 lease, an e-mail, a token returned once and never listed): sending again revokes the open
 one of that lease (0017; a person on two lots keeps the other lot's link), `portal_revoke`

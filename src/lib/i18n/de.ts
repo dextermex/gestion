@@ -1320,6 +1320,8 @@ export const de: Dict = {
     openThread: "Unterhaltung öffnen",
     noThreadYet: "Noch keine Nachricht. Schreiben Sie unten, der Mieter sieht sie in seinem Bereich.",
     viewRequest: "Anfrage ansehen",
+    backToThreads: "Zurück zu den Unterhaltungen",
+    backToRequests: "Zurück zu den Anfragen",
   },
 
   finance: {

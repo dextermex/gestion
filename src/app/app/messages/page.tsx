@@ -1,6 +1,5 @@
-import { EmptyState, PageHeader } from "@/components/pro/ui";
-import { LegalNote } from "@/components/gestion/bits";
-import MessagesCenter, { type MessageView, type RequestView, type Tab, type ThreadView } from "@/components/gestion/MessagesCenter";
+import { EmptyState } from "@/components/pro/ui";
+import MessagesCenter, { type MessageView, type PhoneView, type RequestView, type Tab, type ThreadView } from "@/components/gestion/MessagesCenter";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { INTL_LOCALE, type Locale, fmt } from "@/lib/i18n/config";
@@ -17,7 +16,9 @@ import { formatDate, requestStatusMeta } from "@/lib/types";
  * the database.
  *
  * `?onglet=demandes` opens the tracking view, `?demande=<id>` a request
- * inside its conversation, `?fil=<id>` any conversation.
+ * inside its conversation, `?fil=<id>` any conversation. A laptop opens the
+ * first conversation by itself; a phone shows the list until one is tapped,
+ * unless the address named one.
  */
 
 function timeOf(iso: string, locale: Locale): string {
@@ -134,18 +135,22 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
 
   const askedRequest = params.demande ? (requestById.get(params.demande) ?? null) : null;
   const wanted = askedRequest ? askedRequest.threadId : params.fil;
-  const initialThreadId = wanted && threads.some((t) => t.id === wanted) ? wanted : (threads[0]?.id ?? null);
+  const asked = Boolean(wanted && threads.some((t) => t.id === wanted));
+  const initialThreadId = asked ? (wanted as string) : (threads[0]?.id ?? null);
   const initialTab: Tab = params.onglet === "demandes" && !askedRequest ? "requests" : "conversations";
+  const initialView: PhoneView = asked && initialTab === "conversations" ? "chat" : "list";
 
   return (
     <div>
-      <PageHeader title={m.title} subtitle={m.subtitle} />
-
       <MessagesCenter
         threads={threads}
         requests={requests}
         statusMeta={requestStatusMeta(d)}
+        title={m.title}
+        subtitle={m.subtitle}
+        legal={m.legal}
         initialTab={initialTab}
+        initialView={initialView}
         initialThreadId={initialThreadId}
         initialRequestId={askedRequest && askedRequest.threadId === initialThreadId ? askedRequest.id : null}
         writable={!sample}
@@ -186,10 +191,10 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
           noThreadYet: m.noThreadYet,
           viewRequest: m.viewRequest,
           close: d.common.close,
+          backToThreads: m.backToThreads,
+          backToRequests: m.backToRequests,
         }}
       />
-
-      <LegalNote>{m.legal}</LegalNote>
     </div>
   );
 }

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Badge, Button, Card, Modal, Select, Textarea } from "@/components/pro/ui";
+import { LegalNote } from "@/components/gestion/bits";
+import { Badge, Button, Card, Modal, PageHeader, Select, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
 import { initials, type Meta } from "@/lib/types";
@@ -15,6 +16,13 @@ import { initials, type Meta } from "@/lib/types";
  * tenant's space reads; nothing on this screen is a copy. Every write goes
  * through the API under the manager's own session and the page then reads
  * the rows back.
+ *
+ * A laptop shows the list and the open conversation side by side. A phone
+ * shows one at a time, the way a messaging app does: the list first, most
+ * recent on top, then a conversation filling the screen once tapped, with
+ * a way back to the list where it was left. Same rows, same component: the
+ * only difference is which pane the stylesheet shows below the `lg`
+ * breakpoint.
  */
 
 export interface MessageView {
@@ -107,9 +115,13 @@ export interface MessagesLabels {
   noThreadYet: string;
   viewRequest: string;
   close: string;
+  backToThreads: string;
+  backToRequests: string;
 }
 
 export type Tab = "conversations" | "requests";
+/** What a phone shows: the list, or one conversation filling the screen. A laptop shows both. */
+export type PhoneView = "list" | "chat";
 
 type Notice = { tone: "ok" | "error" | "sample"; text: string } | null;
 type Busy = "send" | "status" | "intervention" | null;
@@ -122,12 +134,28 @@ const SENDER_COLORS: Record<MessageView["kind"], string> = {
   system: "bg-sand-100 text-ink-soft",
 };
 
+/** Below Tailwind's `lg` (64rem): where the list and the conversation take turns on the screen. */
+const PHONE_QUERY = "(max-width: 1023.98px)";
+const onPhone = (): boolean => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(PHONE_QUERY).matches;
+
+/**
+ * The conversation filling a phone's screen under the shell's bar (3.5rem):
+ * edge to edge over the page's padding, above the floating getting-started
+ * card, the messages scrolling inside it while the header and the composer
+ * stay put.
+ */
+const PHONE_CHAT = "max-lg:relative max-lg:z-[45] max-lg:-mx-4 max-lg:-my-6 max-lg:h-[calc(100dvh-3.5rem)] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6";
+
 export default function MessagesCenter({
   threads,
   requests,
   statusMeta,
   labels,
+  title,
+  subtitle,
+  legal,
   initialTab,
+  initialView,
   initialThreadId,
   initialRequestId,
   writable,
@@ -137,7 +165,12 @@ export default function MessagesCenter({
   requests: RequestView[];
   statusMeta: Record<RequestStatus, Meta>;
   labels: MessagesLabels;
+  title: string;
+  subtitle: string;
+  legal: string;
   initialTab: Tab;
+  /** On a phone: the list, unless the address named a conversation or a request. */
+  initialView: PhoneView;
   initialThreadId: string | null;
   /** A request to land on inside its conversation. */
   initialRequestId: string | null;
@@ -147,6 +180,9 @@ export default function MessagesCenter({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [view, setView] = useState<PhoneView>(initialView);
+  /** The list the open conversation was reached from: where a phone's way back leads. */
+  const [origin, setOrigin] = useState<Tab>(initialTab);
   const [activeId, setActiveId] = useState<string | null>(initialThreadId);
   const [focusRequestId, setFocusRequestId] = useState<string | null>(initialRequestId);
   const [openRequestId, setOpenRequestId] = useState<string | null>(null);
@@ -157,6 +193,9 @@ export default function MessagesCenter({
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  /** Where a phone's list was scrolled to when a conversation took the screen, and whether to go back there. */
+  const listScroll = useRef(0);
+  const restoreScroll = useRef<number | null>(null);
 
   const requestById = new Map(requests.map((r) => [r.id, r]));
   const statusOf = (r: RequestView): RequestStatus => statusOverrides[r.id] ?? r.status;
@@ -167,10 +206,15 @@ export default function MessagesCenter({
   const openRequest = openRequestId ? (requestById.get(openRequestId) ?? null) : null;
   const openCount = requests.filter((r) => isRequestOpen(statusOf(r))).length;
   const messageCount = active?.messages.length ?? 0;
+  // On a phone the conversation has the screen and the rest steps aside; a
+  // laptop pays no attention (the classes it drives are `max-lg:` only).
+  const chatOpen = view === "chat" && tab === "conversations" && active !== null;
+  const backLabel = origin === "requests" ? labels.backToRequests : labels.backToThreads;
 
   // The conversation opens on its latest message, or on the request that
   // was asked for. Runs on the transition only: a keystroke in the
-  // composer never moves the thread.
+  // composer never moves the thread. On a phone the transition includes
+  // the conversation taking the screen, which is when it can be scrolled.
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -182,7 +226,14 @@ export default function MessagesCenter({
       }
     }
     el.scrollTop = el.scrollHeight;
-  }, [active?.id, focusRequestId, messageCount]);
+  }, [active?.id, focusRequestId, messageCount, view]);
+
+  // A phone's list comes back where it was left, once it is on the screen again.
+  useEffect(() => {
+    if (view !== "list" || restoreScroll.current === null) return;
+    window.scrollTo(0, restoreScroll.current);
+    restoreScroll.current = null;
+  }, [view]);
 
   const rememberInUrl = (thread: ThreadView | null, requestId: string | null, nextTab: Tab) => {
     const url = new URL(window.location.href);
@@ -206,10 +257,17 @@ export default function MessagesCenter({
   };
 
   /** Opening a conversation: it fills the screen, and what the other side wrote is read. */
-  const openThread = (thread: ThreadView, requestId: string | null = null) => {
+  const openThread = (thread: ThreadView, requestId: string | null = null, from: Tab = "conversations") => {
+    // A phone leaves the list for the conversation: the list's place is kept for the way back.
+    if (view === "list" && onPhone()) {
+      listScroll.current = window.scrollY;
+      window.scrollTo(0, 0);
+    }
     setActiveId(thread.id);
     setFocusRequestId(requestId);
     setTab("conversations");
+    setOrigin(from);
+    setView("chat");
     setNotice(null);
     rememberInUrl(thread, requestId, "conversations");
     if (thread.unread === 0 || readIds.has(thread.id)) return;
@@ -222,15 +280,25 @@ export default function MessagesCenter({
       .catch(() => null);
   };
 
+  /** A phone's way back: the list the conversation was opened from, where it was left. */
+  const backToList = () => {
+    if (onPhone()) restoreScroll.current = listScroll.current;
+    setView("list");
+    setTab(origin);
+    setNotice(null);
+    rememberInUrl(null, null, origin);
+  };
+
   /** A request from the tracking view: its conversation, at the request. Without one, its details. */
   const openRequestRow = (request: RequestView) => {
     const thread = request.threadId ? threads.find((t) => t.id === request.threadId) : undefined;
-    if (thread) openThread(thread, request.id);
+    if (thread) openThread(thread, request.id, "requests");
     else setOpenRequestId(request.id);
   };
 
   const showTab = (next: Tab) => {
     setTab(next);
+    setOrigin(next);
     setNotice(null);
     rememberInUrl(active, next === "conversations" ? focusRequestId : null, next);
   };
@@ -315,25 +383,28 @@ export default function MessagesCenter({
 
   return (
     <div>
-      <div role="tablist" aria-label={labels.tabConversations} className="mb-4 flex flex-wrap items-center gap-2">
-        <button type="button" role="tab" id="messages-tab-conversations" aria-selected={tab === "conversations"} aria-controls="messages-panel-conversations" onClick={() => showTab("conversations")} className={tabClass(tab === "conversations")}>
-          {labels.tabConversations}
-        </button>
-        <button type="button" role="tab" id="messages-tab-requests" aria-selected={tab === "requests"} aria-controls="messages-panel-requests" onClick={() => showTab("requests")} className={tabClass(tab === "requests")}>
-          {labels.tabRequests}
-          {openCount > 0 && (
-            <span className={"ml-1.5 rounded-full px-1.5 text-[11px] tabular-nums " + (tab === "requests" ? "bg-white/20" : "bg-amber-100 text-amber-800")}>{openCount}</span>
-          )}
-        </button>
+      <div className={chatOpen ? "max-lg:hidden" : undefined}>
+        <PageHeader title={title} subtitle={subtitle} />
+        <div role="tablist" aria-label={labels.tabConversations} className="mb-4 flex flex-wrap items-center gap-2">
+          <button type="button" role="tab" id="messages-tab-conversations" aria-selected={tab === "conversations"} aria-controls="messages-panel-conversations" onClick={() => showTab("conversations")} className={tabClass(tab === "conversations")}>
+            {labels.tabConversations}
+          </button>
+          <button type="button" role="tab" id="messages-tab-requests" aria-selected={tab === "requests"} aria-controls="messages-panel-requests" onClick={() => showTab("requests")} className={tabClass(tab === "requests")}>
+            {labels.tabRequests}
+            {openCount > 0 && (
+              <span className={"ml-1.5 rounded-full px-1.5 text-[11px] tabular-nums " + (tab === "requests" ? "bg-white/20" : "bg-amber-100 text-amber-800")}>{openCount}</span>
+            )}
+          </button>
+        </div>
       </div>
 
       {tab === "requests" ? (
         <div role="tabpanel" id="messages-panel-requests" aria-labelledby="messages-tab-requests">
-          <RequestsTable requests={requests} statusOf={statusOf} statusMeta={statusMeta} labels={labels} onOpen={openRequestRow} />
+          <RequestsPanel requests={requests} statusOf={statusOf} statusMeta={statusMeta} labels={labels} onOpen={openRequestRow} />
         </div>
       ) : (
         <div role="tabpanel" id="messages-panel-conversations" aria-labelledby="messages-tab-conversations" className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
-          <Card className="overflow-hidden lg:col-span-4">
+          <Card className={"overflow-hidden lg:col-span-4" + (chatOpen ? " max-lg:hidden" : "")}>
             {threads.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-ink-soft">{labels.emptyThreads}</p>
             ) : (
@@ -346,18 +417,27 @@ export default function MessagesCenter({
           </Card>
 
           {active && (
-            <Card className="flex flex-col lg:col-span-8">
-              <div className="flex items-center gap-3 border-b border-sand-100 px-5 py-3.5">
+            <Card className={"flex flex-col lg:col-span-8 " + (chatOpen ? PHONE_CHAT : "max-lg:hidden")}>
+              <div className="flex items-center gap-2.5 border-b border-sand-100 px-3 py-2.5 lg:gap-3 lg:px-5 lg:py-3.5">
+                <button
+                  type="button"
+                  onClick={backToList}
+                  aria-label={backLabel}
+                  title={backLabel}
+                  className="tactile -ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-brand-700 transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:hidden"
+                >
+                  <Icon name="chevron-left" size={24} />
+                </button>
                 <span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold " + (active.isTenancy ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
                   {initials(active.participantName) || "·"}
                 </span>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h2 className="truncate font-display text-base font-bold text-ink">{active.participantName}</h2>
                   <p className="truncate text-xs text-ink-soft">{active.isTenancy ? active.scopeLabel : [active.subject, active.scopeLabel].filter(Boolean).join(" · ")}</p>
                 </div>
               </div>
 
-              <div ref={bodyRef} id="messages-body" className="relative h-[62vh] min-h-[26rem] space-y-3 overflow-y-auto px-5 py-4">
+              <div ref={bodyRef} id="messages-body" className="relative space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4 max-lg:min-h-0 max-lg:flex-1 lg:h-[62vh] lg:min-h-[26rem] lg:px-5">
                 {active.messages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.noThreadYet}</p>}
                 {active.messages.map((m, i) => {
                   const prev = active.messages[i - 1];
@@ -386,20 +466,21 @@ export default function MessagesCenter({
               </div>
 
               <form
-                className="border-t border-sand-100 p-3"
+                className="border-t border-sand-100 p-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void send(active);
                 }}
               >
                 <div className="flex items-end gap-2">
+                  {/* One line high on a phone, like a messaging app's, and 16px: a smaller field makes iOS zoom the page in when it gets the caret. */}
                   <Textarea
                     id="messages-reply"
                     aria-label={labels.replyPlaceholder}
                     placeholder={labels.replyPlaceholder}
                     rows={1}
                     maxLength={4000}
-                    className="min-h-0 resize-none"
+                    className="min-h-0 resize-none max-lg:min-h-11 max-lg:text-base"
                     value={drafts[active.id] ?? ""}
                     onChange={(e) => setDrafts((all) => ({ ...all, [active.id]: e.target.value }))}
                     onKeyDown={(e) => {
@@ -419,6 +500,10 @@ export default function MessagesCenter({
           )}
         </div>
       )}
+
+      <div className={chatOpen ? "max-lg:hidden" : undefined}>
+        <LegalNote>{legal}</LegalNote>
+      </div>
 
       <Modal open={openRequest !== null} onClose={() => setOpenRequestId(null)} title={labels.detailsTitle} closeLabel={labels.close}>
         {openRequest && (
@@ -461,6 +546,7 @@ function DayMark({ label }: { label: string }) {
   );
 }
 
+/** A row of the inbox: who, where, the last thing said, when, and what is still unread. Highlighted as the open one on a laptop only. */
 function ThreadRow({
   thread,
   unread,
@@ -481,8 +567,8 @@ function ThreadRow({
         onClick={onOpen}
         aria-current={selected ? "true" : undefined}
         className={
-          "flex w-full items-start gap-3 border-l-2 px-4 py-3 text-left transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 " +
-          (selected ? "border-brand-600 bg-brand-50/60" : "border-transparent")
+          "flex w-full items-start gap-3 border-l-2 border-transparent px-4 py-3 text-left transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-sand-50 active:bg-sand-100 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 " +
+          (selected ? "lg:border-brand-600 lg:bg-brand-50/60" : "")
         }
       >
         <span className={"mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold " + (thread.isTenancy ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
@@ -565,7 +651,7 @@ function RequestCard({
       <span className="mt-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[10px] font-bold text-sky-800" title={from}>
         {initials(from) || "·"}
       </span>
-      <div className="max-w-[85%] min-w-[16rem]">
+      <div className="min-w-0 max-w-[85%] flex-1 sm:min-w-[16rem] sm:flex-none">
         <div className={"rounded-2xl rounded-bl-md border bg-white p-4 transition duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " + (focused ? "border-brand-300 ring-2 ring-brand-100" : "border-amber-200")}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Badge className="bg-amber-100 text-amber-800">{badge}</Badge>
@@ -702,7 +788,21 @@ function RequestDetails({
   );
 }
 
-function RequestsTable({
+/** What needs the desk first: open requests, most recently active on top. */
+function sortForDesk(requests: RequestView[], statusOf: (r: RequestView) => RequestStatus): RequestView[] {
+  return [...requests].sort((a, b) => {
+    const openA = isRequestOpen(statusOf(a)) ? 0 : 1;
+    const openB = isRequestOpen(statusOf(b)) ? 0 : 1;
+    if (openA !== openB) return openA - openB;
+    return a.activityAt < b.activityAt ? 1 : -1;
+  });
+}
+
+/**
+ * The tracking view: a table on a laptop, a list of rows a thumb can hit on
+ * a phone. Both open the request's conversation at its card.
+ */
+function RequestsPanel({
   requests,
   statusOf,
   statusMeta,
@@ -723,59 +823,99 @@ function RequestsTable({
       </Card>
     );
   }
-  // What needs the desk first: open requests, most recently active on top.
-  const rows = [...requests].sort((a, b) => {
-    const openA = isRequestOpen(statusOf(a)) ? 0 : 1;
-    const openB = isRequestOpen(statusOf(b)) ? 0 : 1;
-    if (openA !== openB) return openA - openB;
-    return a.activityAt < b.activityAt ? 1 : -1;
-  });
+  const rows = sortForDesk(requests, statusOf);
   return (
-    <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
-              <th className="px-4 py-2.5 font-semibold">{labels.colSubject}</th>
-              <th className="px-3 py-2.5 font-semibold">{labels.colTenant}</th>
-              <th className="px-3 py-2.5 font-semibold">{labels.colProperty}</th>
-              <th className="px-3 py-2.5 font-semibold">{labels.colDate}</th>
-              <th className="px-3 py-2.5 font-semibold">{labels.colActivity}</th>
-              <th className="px-4 py-2.5 text-right font-semibold">{labels.colStatus}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const status = statusOf(r);
-              return (
-                <tr key={r.id} className="cursor-pointer border-b border-sand-50 last:border-0 hover:bg-sand-50/50" onClick={() => onOpen(r)}>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      className="text-left font-semibold text-ink hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpen(r);
-                      }}
-                      aria-label={`${labels.openThread} : ${r.title}`}
-                    >
-                      {r.title}
-                    </button>
-                    <p className="text-xs tabular-nums text-ink-soft">{r.ref}</p>
-                  </td>
-                  <td className="px-3 py-3 text-ink">{r.tenantName}</td>
-                  <td className="px-3 py-3 text-xs text-ink-soft">{r.placeLabel}</td>
-                  <td className="px-3 py-3 text-xs tabular-nums text-ink-soft">{r.createdLabel}</td>
-                  <td className="px-3 py-3 text-xs tabular-nums text-ink-soft">{r.activityLabel}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Badge className={statusMeta[status].color}>{statusMeta[status].label}</Badge>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <>
+      <Card className="overflow-hidden lg:hidden">
+        <ul className="divide-y divide-sand-100">
+          {rows.map((r) => (
+            <RequestRow key={r.id} request={r} status={statusOf(r)} statusMeta={statusMeta} onOpen={() => onOpen(r)} />
+          ))}
+        </ul>
+      </Card>
+
+      <Card className="hidden overflow-hidden lg:block">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
+                <th className="px-4 py-2.5 font-semibold">{labels.colSubject}</th>
+                <th className="px-3 py-2.5 font-semibold">{labels.colTenant}</th>
+                <th className="px-3 py-2.5 font-semibold">{labels.colProperty}</th>
+                <th className="px-3 py-2.5 font-semibold">{labels.colDate}</th>
+                <th className="px-3 py-2.5 font-semibold">{labels.colActivity}</th>
+                <th className="px-4 py-2.5 text-right font-semibold">{labels.colStatus}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const status = statusOf(r);
+                return (
+                  <tr key={r.id} className="cursor-pointer border-b border-sand-50 last:border-0 hover:bg-sand-50/50" onClick={() => onOpen(r)}>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        className="text-left font-semibold text-ink hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpen(r);
+                        }}
+                        aria-label={`${labels.openThread} : ${r.title}`}
+                      >
+                        {r.title}
+                      </button>
+                      <p className="text-xs tabular-nums text-ink-soft">{r.ref}</p>
+                    </td>
+                    <td className="px-3 py-3 text-ink">{r.tenantName}</td>
+                    <td className="px-3 py-3 text-xs text-ink-soft">{r.placeLabel}</td>
+                    <td className="px-3 py-3 text-xs tabular-nums text-ink-soft">{r.createdLabel}</td>
+                    <td className="px-3 py-3 text-xs tabular-nums text-ink-soft">{r.activityLabel}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Badge className={statusMeta[status].color}>{statusMeta[status].label}</Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
+  );
+}
+
+/** A request as a phone lists it: the subject, who and where, its status and when it last moved. */
+function RequestRow({
+  request,
+  status,
+  statusMeta,
+  onOpen,
+}: {
+  request: RequestView;
+  status: RequestStatus;
+  statusMeta: Record<RequestStatus, Meta>;
+  onOpen: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-sand-50 active:bg-sand-100 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+      >
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">{initials(request.tenantName) || "·"}</span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center justify-between gap-2">
+            <span className={"min-w-0 truncate text-sm text-ink " + (isRequestOpen(status) ? "font-bold" : "font-semibold")}>{request.title}</span>
+            <span className="shrink-0 text-[11px] tabular-nums text-ink-soft">{request.activityLabel}</span>
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-ink-soft">{[request.tenantName, request.placeLabel].filter(Boolean).join(" · ")}</span>
+          <span className="mt-1.5 flex items-center justify-between gap-2">
+            <Badge className={statusMeta[status].color}>{statusMeta[status].label}</Badge>
+            <span className="text-[11px] tabular-nums text-ink-soft">{request.ref}</span>
+          </span>
+        </span>
+      </button>
+    </li>
   );
 }
