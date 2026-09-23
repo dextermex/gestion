@@ -126,10 +126,15 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       // The tabs under the logo are gone: the page has the width to itself, and the sign-out sits behind Plus.
       await expect(page.getByRole("link", { name: "Mon bail" })).toBeHidden();
       await expect(page.getByRole("button", { name: "Se déconnecter" })).toBeHidden();
-      // The page's foot stays clear of the bar.
-      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-      const footer = (await page.locator("footer").boundingBox())!;
-      expect(footer.y + footer.height).toBeLessThanOrEqual(height - box.height + 1);
+      // The page's foot stays clear of the bar: scrolled to the very end (instantly, the
+      // page scrolls smoothly by default), the footer's line still sits above it.
+      await page.evaluate(() => {
+        document.documentElement.style.scrollBehavior = "auto";
+        window.scrollTo(0, document.documentElement.scrollHeight);
+      });
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+      const footerLine = (await page.locator("footer p").first().boundingBox())!;
+      expect(footerLine.y + footerLine.height).toBeLessThanOrEqual(height - box.height + 1);
       // Plus: the requests, the owner's space, signing out, as a sheet within the screen.
       await bar.getByRole("button", { name: "Plus", exact: true }).click();
       const sheet = page.getByRole("dialog");
