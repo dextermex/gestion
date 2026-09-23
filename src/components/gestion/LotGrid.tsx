@@ -104,7 +104,7 @@ export default function LotGrid({
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h2 className="font-display text-xl font-bold tracking-tight text-ink">{labels.title}</h2>
-        <div className="no-scrollbar flex gap-2 overflow-x-auto">
+        <div className="scroll-x flex gap-2">
           {FAMILIES.map((f) => (
             <button
               key={f}
@@ -130,7 +130,7 @@ export default function LotGrid({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={labels.search}
-              className="min-h-9 w-56 rounded-xl border border-sand-200 bg-white pl-9 pr-3 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 max-sm:w-full"
+              className="min-h-9 w-56 rounded-xl border border-sand-200 bg-white pl-9 pr-3 text-sm text-ink max-sm:min-h-11 max-sm:w-full max-sm:text-base placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 max-sm:w-full"
             />
           </label>
           <div role="group" aria-label={labels.viewAria} className="flex rounded-xl border border-sand-200 bg-sand-50 p-1">

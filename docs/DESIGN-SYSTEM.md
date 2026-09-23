@@ -101,4 +101,40 @@ entre les mailles.").
    size and weight, not extra transparency.
 7. Responsive grids declare their `grid-cols-1` base explicitly; stat rows step
    `grid-cols-1 → sm:grid-cols-2/3 → lg:grid-cols-4`; wide tables live inside
-   `overflow-x-auto`.
+   `table-scroll` (see Phones below).
+
+## Phones
+
+One codebase, one set of screens: below `sm` (40rem) the same components take the
+phone's shape, and the desktop keeps its layout untouched. The rules, all in the shared
+layer (`globals.css`, `pro/ui.tsx`, the shell):
+
+- **Safe areas.** The root layout declares `viewport-fit=cover`; `globals.css` exposes the
+  insets as `--safe-top/right/bottom/left` and the bar height as `--bar-h` (3.5rem plus
+  the notch). Chrome and pages pad with `px-safe-4` / `px-safe-6` (the gutter, or the
+  inset when wider); anything fixed at the bottom uses `max(…, var(--safe-bottom))`.
+- **Form controls are 16px on phones** (`fieldClass` adds `max-sm:text-base`): iOS
+  Safari zooms the page into any smaller field the moment it gets the caret. Raw
+  `<input>`/`<select>` elements outside the kit carry the same class.
+- **Targets a thumb can hit.** The kit's `Button` is at least 40px tall on phones (44px
+  at the main size), fields 44px; chips, tabs and nav rows carry `max-sm:min-h-10/11`.
+- **Wide tables: `table-scroll`.** The wrapper of every data table. On a phone the
+  columns keep their natural width, the table scrolls sideways inside its card, the
+  first column (what the row is about) stays put with a 9rem minimum, and a shadow at
+  the right edge says more columns follow. Above `sm` the table is exactly what the
+  page declares. Rules sit in `@layer components`, so a cell's own utilities still win.
+- **Chip rows and tab strips: `scroll-x`.** Scrolls sideways without a scrollbar; on a
+  phone the right edge fades, so what continues past the screen reads as such.
+- **Rows with badges** cap the badge group at 42% of the row on phones and wrap it, so
+  the name keeps the larger share (`max-sm:max-w-[42%] flex-wrap`).
+- **Dialogs** are sheets from the bottom on phones (`Modal`), clear of the home
+  indicator; the command palette and the drawer keep the same width rules.
+- **Messages** is one pane at a time on a phone (list, then a conversation filling the
+  screen, then back), the way a messaging app reads; see `MessagesCenter`.
+- **Long strings** (an IBAN, an e-mail, a reference) break rather than widen their box:
+  `overflow-wrap: break-word` on `body`.
+
+`e2e/tests/responsive.spec.ts` walks every critical screen at 390px and 320px (WebKit
+in CI, Chromium's emulation elsewhere) and fails on anything wider than the screen, a
+field under 16px or 40px, a kit button under 40px, or a bar covering the title; its
+screenshots go to the Playwright report as the regression record.

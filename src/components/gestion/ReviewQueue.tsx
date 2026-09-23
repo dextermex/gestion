@@ -60,13 +60,13 @@ export function ReviewQueue({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setState((v) => ({ ...v, [t.id]: "matched" }))}
-                      className="tactile rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
+                      className="tactile inline-flex items-center rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 max-sm:min-h-10"
                     >
                       {labels.match}
                     </button>
                     <button
                       onClick={() => setState((v) => ({ ...v, [t.id]: "ignored" }))}
-                      className="tactile rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700"
+                      className="tactile inline-flex items-center rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 max-sm:min-h-10"
                     >
                       {labels.ignore}
                     </button>

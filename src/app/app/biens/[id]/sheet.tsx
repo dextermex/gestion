@@ -61,7 +61,7 @@ export function tabLabel(d: Dict, t: Tab): string {
 export function TabBar({ base, visible, tab, d }: { base: string; visible: readonly Tab[]; tab: Tab; d: Dict }) {
   const href = (t: Tab) => (t === "apercu" ? base : `${base}?onglet=${t}`);
   return (
-    <div className="no-scrollbar mb-5 flex gap-1 overflow-x-auto border-b border-sand-200">
+    <div className="scroll-x mb-5 flex gap-1 border-b border-sand-200">
       {visible.map((t) => (
         <Link
           key={t}
@@ -279,7 +279,7 @@ export function Overview({
         <Panel
           title={d.bien.rentStatus}
           action={
-            <Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.bien.seePayments}
             </Link>
           }
@@ -313,7 +313,7 @@ export function Overview({
         <Panel
           title={d.bien.rentStatus}
           action={
-            <Link href={`/app/biens/${p.id}?onglet=lots`} className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href={`/app/biens/${p.id}?onglet=lots`} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.bien.tabLots}
             </Link>
           }
@@ -356,7 +356,7 @@ export function Overview({
             tenants.length === 1 ? (
               <Link
                 href={`/app/contacts/${tenants[0].id}`}
-                className="text-sm font-semibold text-brand-700 hover:underline"
+                className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
               >
                 {d.bien.seeProfile}
               </Link>
@@ -402,7 +402,7 @@ export function Overview({
       <Panel
         title={d.bien.recentDocuments}
         action={
-          <Link href="/app/documents" className="text-sm font-semibold text-brand-700 hover:underline">
+          <Link href="/app/documents" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
             {d.bien.seeAll}
           </Link>
         }
@@ -509,7 +509,7 @@ export function Rental({
             <Panel
               title={fmt(d.bien.rentalOf, { unit: line.unit.label })}
               action={
-                <Link href={`/app/baux/${lease.id}`} className="text-sm font-semibold text-brand-700 hover:underline">
+                <Link href={`/app/baux/${lease.id}`} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                   {d.bien.openRental}
                 </Link>
               }
@@ -837,7 +837,7 @@ export function Interventions({
     <Panel
       title={d.hubs.interventions}
       action={
-        <Link href="/app/interventions" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link href="/app/interventions" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
           {d.bien.seeAll}
         </Link>
       }
@@ -1003,7 +1003,7 @@ export function History({
                 </dl>
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                  <Link href={`/app/baux/${r.lease.id}`} className="text-sm font-semibold text-brand-700 hover:underline">
+                  <Link href={`/app/baux/${r.lease.id}`} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                     {r.live ? d.bien.openRental : d.bien.consult}
                   </Link>
                   {!r.live && (

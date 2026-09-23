@@ -79,7 +79,7 @@ export default async function FinancePage() {
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <Panel title={fmt(d.finance.statementTitle, { sci: sci.name })}>
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

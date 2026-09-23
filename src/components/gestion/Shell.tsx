@@ -361,7 +361,7 @@ export default function GestionShell({
       </a>
       {NAV.map(navSection)}
     </nav>
-    <div className="shrink-0 border-t border-sand-100 px-3 pb-3 pt-2">
+    <div className="shrink-0 border-t border-sand-100 px-3 pb-[max(0.75rem,var(--safe-bottom))] pt-2">
       <DatasetSwitch d={d} datasetId={shell.datasetId} />
       <div className="pt-2.5 text-[11px] text-ink-soft">
         <p className="px-3">{d.nav.ecosystem}</p>
@@ -397,7 +397,7 @@ export default function GestionShell({
 
         <div className="flex min-h-dvh flex-col lg:pl-64">
           <ScrollHeader
-            className="chrome-material sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-transparent bg-white px-4 transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 sm:gap-3 sm:px-6"
+            className="chrome-material sticky top-0 z-30 flex h-(--bar-h) items-center gap-2 border-b border-transparent bg-white px-safe-4 pt-(--safe-top) transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 sm:gap-3 sm:px-safe-6"
             elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
           >
             <button
@@ -479,7 +479,7 @@ export default function GestionShell({
           {shell.sampleCabinet && (
             <div
               role="status"
-              className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-semibold text-amber-900"
+              className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-safe-4 py-2 text-center text-xs font-semibold text-amber-900"
             >
               <span>{fmt(d.shell.sampleBanner, { cabinet: shell.sampleCabinet })}</span>
               <button
@@ -487,14 +487,18 @@ export default function GestionShell({
                   document.cookie = "morada_dataset=real; path=/; max-age=31536000; samesite=lax";
                   router.refresh();
                 }}
-                className="rounded underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                className="inline-flex min-h-8 items-center rounded px-1 underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               >
                 {d.shell.sampleBack}
               </button>
             </div>
           )}
 
-          <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">{children}</main>
+          {/* On a phone the page ends clear of the home indicator, and of the
+              floating getting-started card when the account has one. */}
+          <main id="main" className={"mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24")}>
+            {children}
+          </main>
         </div>
 
         <CommandPalette
@@ -562,7 +566,7 @@ function MobileDrawer({
             role="dialog"
             aria-modal
             aria-label={label}
-            className="absolute inset-y-0 left-0 w-72 bg-white shadow-pop"
+            className="absolute inset-y-0 left-0 w-72 max-w-[calc(100vw-3rem)] bg-white pl-(--safe-left) pt-(--safe-top) shadow-pop"
             initial={reduced ? { opacity: 0 } : { x: -288 }}
             animate={reduced ? { opacity: 1 } : { x: 0 }}
             exit={reduced ? { opacity: 0 } : { x: -288 }}
@@ -570,7 +574,7 @@ function MobileDrawer({
           >
             <button
               onClick={onClose}
-              className="absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="absolute right-2 top-[max(0.5rem,var(--safe-top))] z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               aria-label={label}
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
@@ -823,7 +827,7 @@ function DatasetSwitch({ d, datasetId }: { d: Dict; datasetId: DatasetId }) {
             onClick={() => pick(id)}
             title={describe[id]}
             className={
-              "rounded-lg px-2 py-1.5 text-xs font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 " +
+              "rounded-lg px-2 py-1.5 text-xs font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-10 " +
               (id === datasetId ? "bg-white text-brand-800 shadow-sm" : "text-ink-soft hover:text-ink")
             }
           >
@@ -982,7 +986,7 @@ function CommandPalette({
               }
             }}
             placeholder={d.shell.searchPlaceholder}
-            className="w-full bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-soft"
+            className="w-full bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-soft max-sm:text-base"
           />
         </div>
         <div id="palette-list" role="listbox" ref={listRef} className="max-h-[50dvh] overflow-y-auto p-2">

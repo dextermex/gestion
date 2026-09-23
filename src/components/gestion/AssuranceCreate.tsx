@@ -106,7 +106,7 @@ export default function AssuranceCreate({
               <Input name="policyNumber" maxLength={60} />
             </Field>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label={d.assurances.fieldPremium}>
               <Input name="premium" inputMode="decimal" placeholder="1 260,00" />
             </Field>

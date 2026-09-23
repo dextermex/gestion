@@ -202,7 +202,7 @@ export default function EdlWizard({
         {step === 0 || step === doneStep ? (
           <Link
             href={returnTo ?? `/app/biens/${propertyId}?onglet=location`}
-            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
+            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11"
           >
             <BackIcon />
             {returnTo ? d.edlWizard.continueDossier : d.location.backToProperty}
@@ -210,7 +210,7 @@ export default function EdlWizard({
         ) : (
           <button
             onClick={() => setStep((s) => s - 1)}
-            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
+            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11"
           >
             <BackIcon />
             {d.common.back}

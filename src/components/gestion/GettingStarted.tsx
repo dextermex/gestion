@@ -86,7 +86,7 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
 
   return (
     // Steps aside while a conversation fills a phone's screen (Messages sets the attribute on the document).
-    <div className="fixed bottom-4 left-4 z-40 max-sm:right-4 print:hidden max-lg:[html[data-phone-chat]_&]:hidden">
+    <div className="fixed bottom-[max(1rem,var(--safe-bottom))] left-[max(1rem,var(--safe-left))] z-40 max-sm:right-[max(1rem,var(--safe-right))] print:hidden max-lg:[html[data-phone-chat]_&]:hidden">
       <AnimatePresence initial={false} mode="wait">
         {state.collapsed ? (
           <motion.button
@@ -191,7 +191,7 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
               </a>
               <button
                 onClick={() => update({ ...state, hidden: true })}
-                className="text-xs font-medium text-ink-soft hover:text-ink"
+                className="inline-flex min-h-9 items-center rounded-lg px-2 text-xs font-medium text-ink-soft hover:text-ink"
               >
                 {d.onboarding.ignore}
               </button>

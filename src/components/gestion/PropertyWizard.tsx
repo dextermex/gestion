@@ -286,12 +286,12 @@ export default function PropertyWizard({
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
       <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 1 || step === 9 ? (
-          <Link href="/app/biens" className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
+          <Link href="/app/biens" className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
             <BackIcon />
             {d.biens.wizBack}
           </Link>
         ) : (
-          <button onClick={() => go(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
+          <button onClick={() => go(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
             <BackIcon />
             {d.common.back}
           </button>

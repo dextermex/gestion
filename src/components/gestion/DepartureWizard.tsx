@@ -348,13 +348,13 @@ export default function DepartureWizard({
         {step === 1 || step > TOTAL ? (
           <Link
             href={`/app/biens/${lease.propertyId}?onglet=location&lot=${lease.unitId}`}
-            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
+            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11"
           >
             <BackIcon />
             {d.location.backToProperty}
           </Link>
         ) : (
-          <button onClick={back} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
+          <button onClick={back} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
             <BackIcon />
             {d.common.back}
           </button>

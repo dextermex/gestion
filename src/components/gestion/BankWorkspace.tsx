@@ -148,14 +148,14 @@ export default function BankWorkspace({
             onChange={(e) => setQ(e.target.value)}
             placeholder={d.banque.searchPlaceholder}
             aria-label={d.banque.searchPlaceholder}
-            className="w-full rounded-xl border border-sand-200 bg-white py-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-soft/70 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="w-full rounded-xl border border-sand-200 bg-white py-2 pl-9 pr-3 text-sm text-ink max-sm:min-h-11 max-sm:text-base placeholder:text-ink-soft/70 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
           />
         </div>
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value as Period)}
           aria-label={d.banque.periodLabel}
-          className="rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm font-medium text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm font-medium text-ink-soft max-sm:min-h-11 max-sm:text-base focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         >
           <option value="all">{d.banque.periodAll}</option>
           <option value="1m">{d.banque.period1m}</option>
@@ -163,7 +163,7 @@ export default function BankWorkspace({
           <option value="6m">{d.banque.period6m}</option>
         </select>
         {isFiltering && (
-          <button onClick={reset} className="text-sm font-semibold text-brand-700 hover:underline">
+          <button onClick={reset} className="inline-flex min-h-9 items-center text-sm font-semibold text-brand-700 hover:underline">
             {d.common.resetFilters}
           </button>
         )}
@@ -198,14 +198,14 @@ export default function BankWorkspace({
             title={d.banque.filteredTitle}
             body={d.banque.filteredBody}
             action={
-              <button onClick={reset} className="text-sm font-semibold text-brand-700 hover:underline">
+              <button onClick={reset} className="inline-flex min-h-9 items-center text-sm font-semibold text-brand-700 hover:underline">
                 {d.common.resetFilters}
               </button>
             }
           />
         ) : (
           <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

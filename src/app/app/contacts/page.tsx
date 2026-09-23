@@ -35,7 +35,7 @@ export default async function ContactsPage({
     <div>
       <PageHeader title={d.contacts.title} subtitle={d.contacts.subtitle} />
 
-      <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">
+      <div className="scroll-x mb-4 flex gap-2">
         {facets.map((f) => (
           <Link
             key={f.id}
@@ -81,7 +81,7 @@ export default async function ContactsPage({
                     {c.notes && ` · ${c.notes}`}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 max-sm:max-w-[42%]">
                   {c.roles.map((r) => (
                     <MetaBadge key={r} meta={roleMeta[r]} />
                   ))}

@@ -218,10 +218,10 @@ export default async function GarantiesPage() {
                         {facts.tenant} · {formLabels[dep.form]}
                       </p>
                     </div>
-                    <span className="tabular-nums text-sm font-semibold text-ink">
-                      {euros(dep.amountCents, locale)}
-                    </span>
-                    <MetaBadge meta={statusMeta[dep.status]} />
+                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+                      <span className="tabular-nums text-sm font-semibold text-ink">{euros(dep.amountCents, locale)}</span>
+                      <MetaBadge meta={statusMeta[dep.status]} />
+                    </div>
                   </li>
                 );
               })}

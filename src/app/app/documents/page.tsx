@@ -68,7 +68,7 @@ export default async function DocumentsPage() {
       <PageHeader title={d.documents.title} subtitle={d.documents.subtitle} />
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

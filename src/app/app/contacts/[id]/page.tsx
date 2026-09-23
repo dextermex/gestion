@@ -59,7 +59,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   return (
     <div>
       <div className="mb-2">
-        <Link href="/app/contacts" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link href="/app/contacts" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
           {d.contacts.backToList}
         </Link>
       </div>

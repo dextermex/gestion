@@ -82,7 +82,7 @@ export default async function FiscalitePage() {
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
         <Panel title={fmt(d.fiscalite.lambertTitle, { owner: lambertName })}>
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -225,7 +225,7 @@ export default async function FiscalitePage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="mt-4 w-full text-sm">
                 <tbody>
                   {pack.sections.map((s) => (

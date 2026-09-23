@@ -146,7 +146,7 @@ export default async function TenantHomePage() {
         <Panel
           title={d.tenant.openRequests}
           action={
-            <Link href="/locataire/demandes" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href="/locataire/demandes" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.tenant.seeAll}
             </Link>
           }

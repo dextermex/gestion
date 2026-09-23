@@ -209,7 +209,7 @@ export default async function BailDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/app/baux" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link href="/app/baux" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
           {d.baux.backToList}
         </Link>
       </div>
@@ -278,7 +278,7 @@ export default async function BailDetailPage({
 
       <nav
         aria-label={d.baux.tabsAria}
-        className="no-scrollbar mt-6 mb-5 flex gap-0.5 overflow-x-auto border-b border-sand-200"
+        className="scroll-x mt-6 mb-5 flex gap-0.5 border-b border-sand-200"
       >
         {TABS.map((t) => (
           <Link
@@ -303,7 +303,7 @@ export default async function BailDetailPage({
           <Panel
             title={d.baux.periodsTitle}
             action={
-              <Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline">
+              <Link href="/app/loyers" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                 {d.hubs.collections}
               </Link>
             }
@@ -461,7 +461,7 @@ export default async function BailDetailPage({
             <Panel
               title={d.baux.docsTitle}
               action={
-                <Link href="/app/documents" className="text-sm font-semibold text-brand-700 hover:underline">
+                <Link href="/app/documents" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                   {d.hubs.library}
                 </Link>
               }
@@ -679,7 +679,7 @@ export default async function BailDetailPage({
           <Panel
             title={d.baux.tabMessages}
             action={
-              <Link href="/app/messages" className="text-sm font-semibold text-brand-700 hover:underline">
+              <Link href="/app/messages" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                 {d.baux.msgsOpen}
               </Link>
             }

@@ -424,13 +424,13 @@ export default function TenantWizard({
         {isFirstStep(step) ? (
           <Link
             href={`/app/biens/${propertyId}`}
-            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
+            className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11"
           >
             <BackIcon />
             {d.location.backToProperty}
           </Link>
         ) : (
-          <button onClick={() => back()} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
+          <button onClick={() => back()} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
             <BackIcon />
             {d.common.back}
           </button>
@@ -850,7 +850,7 @@ export default function TenantWizard({
                               setStep(m.step);
                               syncUrl(leaseId, m.step);
                             }}
-                            className="text-sm font-semibold text-brand-700 hover:underline"
+                            className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
                           >
                             {m.label}
                           </button>

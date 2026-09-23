@@ -24,7 +24,8 @@ export function Button({
     <button
       className={clsx(
         "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-50 disabled:pointer-events-none motion-reduce:active:scale-100",
-        size === "sm" ? "px-3 py-1.5 text-sm" : "px-4 py-2.5 text-sm",
+        // On a phone every button is at least 40px tall (44 for the main size): the touch target, not the label, sets the height.
+        size === "sm" ? "px-3 py-1.5 text-sm max-sm:min-h-10" : "px-4 py-2.5 text-sm max-sm:min-h-11",
         variant === "primary" && "bg-brand-600 text-white hover:bg-brand-700",
         variant === "secondary" &&
           "bg-white text-ink border border-sand-200 hover:border-brand-300 hover:text-brand-700 shadow-sm",
@@ -44,8 +45,10 @@ export function Button({
 
 /* ---------------------------------- Inputs --------------------------------- */
 
+// 16px on a phone: iOS Safari zooms the whole page into any smaller field
+// the moment it gets the caret, which is what makes a form look broken there.
 const fieldClass =
-  "w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50";
+  "w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50 max-sm:min-h-11 max-sm:text-base";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
@@ -367,7 +370,8 @@ export function Modal({
             aria-label={title}
             tabIndex={-1}
             className={clsx(
-              "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl outline-none sm:rounded-2xl",
+              // A sheet from the bottom on a phone, clear of the home indicator; a centred dialog above.
+              "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl outline-none max-sm:pb-[max(1.25rem,var(--safe-bottom))] sm:rounded-2xl",
               wide ? "sm:max-w-2xl" : "sm:max-w-md"
             )}
             initial={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}

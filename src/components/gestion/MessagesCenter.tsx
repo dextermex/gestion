@@ -143,7 +143,7 @@ const onPhone = (): boolean => typeof window !== "undefined" && typeof window.ma
  * edge to edge over the page's padding, the messages scrolling inside it
  * while the header and the composer stay put.
  */
-const PHONE_CHAT = "max-lg:-mx-4 max-lg:-my-6 max-lg:h-[calc(100dvh-3.5rem)] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6";
+const PHONE_CHAT = "max-lg:-mx-4 max-lg:-my-6 max-lg:h-[calc(100dvh-var(--bar-h))] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6";
 
 export default function MessagesCenter({
   threads,
@@ -386,7 +386,7 @@ export default function MessagesCenter({
   };
 
   const tabClass = (selected: boolean) =>
-    "tactile rounded-full px-4 py-1.5 text-sm font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 " +
+    "tactile rounded-full px-4 py-1.5 text-sm font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-10 " +
     (selected ? "bg-ink text-white" : "text-ink-soft hover:bg-sand-100 hover:text-ink");
 
   return (
@@ -474,7 +474,7 @@ export default function MessagesCenter({
               </div>
 
               <form
-                className="border-t border-sand-100 p-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                className="border-t border-sand-100 p-3 max-lg:pb-[max(0.75rem,var(--safe-bottom))]"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void send(active);
@@ -781,7 +781,7 @@ function RequestDetails({
         {interventionId ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Badge className="bg-emerald-100 text-emerald-800">{labels.interventionCreated}</Badge>
-            <Link href="/app/interventions" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href="/app/interventions" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {labels.interventionOpen}
             </Link>
           </div>
@@ -843,7 +843,7 @@ function RequestsPanel({
       </Card>
 
       <Card className="hidden overflow-hidden lg:block">
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

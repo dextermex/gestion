@@ -74,7 +74,7 @@ export default async function IndexationPage() {
       <PageHeader title={d.indexation.title} subtitle={d.indexation.subtitle} />
 
       <Panel title={d.indexation.residentialTitle}>
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -140,7 +140,7 @@ export default async function IndexationPage() {
               {sample && <DemoAction label={d.indexation.lagSend} doneMessage={d.indexation.lagSent} />}
               <Link
                 href="/app/banque"
-                className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700"
+                className="inline-flex items-center rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 max-sm:min-h-10"
               >
                 {d.indexation.lagView}
               </Link>

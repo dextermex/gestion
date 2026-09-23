@@ -46,7 +46,7 @@ export default async function BauxPage({
 
       {/* Status filters as compact pills (the banking-page grammar); the
           vacant-lots pill is a cross-link into Biens, set apart by a rule. */}
-      <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto">
+      <div className="scroll-x mb-5 flex gap-2">
         {cards.map((c) => (
           <ChipLink
             key={c.label}
@@ -68,14 +68,14 @@ export default async function BauxPage({
           title={d.baux.emptyTitle}
           body={d.baux.emptyBody}
           action={
-            <Link href="/app/baux" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href="/app/baux" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.common.resetFilters}
             </Link>
           }
         />
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

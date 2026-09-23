@@ -14,7 +14,7 @@ export default function TenantTabs({
   const isActive = (href: string) =>
     href === "/locataire" ? pathname === "/locataire" : pathname.startsWith(href);
   return (
-    <nav className="no-scrollbar -mb-px flex gap-1 overflow-x-auto" aria-label={label}>
+    <nav className="scroll-x -mb-px flex gap-1" aria-label={label}>
       {tabs.map((t) => (
         <Link
           key={t.href}

@@ -38,7 +38,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
   return (
     <div className="space-y-5">
       <div>
-        <Link href="/locataire/demandes" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link href="/locataire/demandes" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
           {d.tenant.reqBack}
         </Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">

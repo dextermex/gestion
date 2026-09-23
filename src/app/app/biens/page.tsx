@@ -271,7 +271,7 @@ export default async function BiensPage({
         ))}
       </div>
 
-      <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto">
+      <div className="scroll-x mb-5 flex gap-2">
         {chips.map((c) => (
           <ChipLink
             key={c.label}
@@ -295,7 +295,7 @@ export default async function BiensPage({
           title={d.biens.emptyTitle}
           body={d.biens.emptyBody}
           action={
-            <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.common.resetFilters}
             </Link>
           }

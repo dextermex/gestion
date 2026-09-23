@@ -88,7 +88,7 @@ export default async function BienDetailPage({
   return (
     <div>
       <div className="mb-3">
-        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline">
+        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
           {d.biens.backToList}
         </Link>
       </div>

@@ -105,7 +105,7 @@ export default async function WorkflowsPage() {
 
       <Panel title={d.workflows.ticketsTitle} className="mt-5">
         <Card className="overflow-hidden border-0 shadow-none">
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

@@ -42,6 +42,28 @@
   --shadow-pop: 0 24px 60px -16px rgb(6 34 41 / 0.35);
 }
 
+:root {
+  /* iPhone safe areas (viewport-fit=cover in the root layout): zero wherever
+     there is no notch, rounded corner or home indicator to keep clear of. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  /* The shell's bar: 3.5rem, plus whatever the notch takes in landscape. */
+  --bar-h: calc(3.5rem + var(--safe-top));
+}
+
+/* Side padding that never lands under a notch: the usual gutter, or the
+   safe-area inset when it is wider. */
+@utility px-safe-4 {
+  padding-left: max(1rem, var(--safe-left));
+  padding-right: max(1rem, var(--safe-right));
+}
+@utility px-safe-6 {
+  padding-left: max(1.5rem, var(--safe-left));
+  padding-right: max(1.5rem, var(--safe-right));
+}
+
 html {
   scroll-behavior: smooth;
   /* Anchor targets clear the 4rem sticky header instead of hiding behind it */
@@ -56,6 +78,10 @@ body {
   text-rendering: optimizeLegibility;
   /* Brand-tinted native form controls (checkboxes, radios, range) app-wide */
   accent-color: var(--color-brand-600);
+  /* An IBAN, an e-mail address or a reference with no space in it breaks
+     rather than pushing its box (and the screen) wider; word wrapping and
+     intrinsic sizes are untouched. */
+  overflow-wrap: break-word;
 }
 
 ::selection {
@@ -261,6 +287,79 @@ button:not(:disabled),
 @media (prefers-reduced-motion: reduce) {
   .tactile:active {
     transform: none;
+  }
+}
+
+/* A wide table on a phone. Columns keep their natural width and the table
+   scrolls sideways inside its card, the first column (what the row is about)
+   staying put; a shadow at the right edge says more columns follow, and
+   disappears once they are all on screen. Above 40rem the table is what the
+   page declares. In the components layer, so a cell's own utilities still win. */
+@layer components {
+  .table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  @media (width < 40rem) {
+    .table-scroll {
+      background-color: #fff;
+      background-image:
+        linear-gradient(to right, #fff 30%, rgb(255 255 255 / 0)),
+        linear-gradient(to left, #fff 30%, rgb(255 255 255 / 0)),
+        radial-gradient(farthest-side at 0 50%, rgb(20 35 42 / 0.16), rgb(20 35 42 / 0)),
+        radial-gradient(farthest-side at 100% 50%, rgb(20 35 42 / 0.16), rgb(20 35 42 / 0));
+      background-position: 0 0, 100% 0, 0 0, 100% 0;
+      background-size: 2.5rem 100%, 2.5rem 100%, 0.9rem 100%, 0.9rem 100%;
+      background-repeat: no-repeat;
+      background-attachment: local, local, scroll, scroll;
+    }
+    .table-scroll th,
+    .table-scroll td {
+      white-space: nowrap;
+    }
+    .table-scroll th:first-child,
+    .table-scroll td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      min-width: 9rem;
+      white-space: normal;
+      background-color: #fff;
+      box-shadow: inset -1px 0 0 var(--color-sand-100);
+    }
+    .table-scroll thead th:first-child {
+      background-color: var(--color-sand-50);
+    }
+    /* Whatever the first cell holds wraps too: a truncated name would make
+       the column as wide as the name and the columns behind it unreachable.
+       Important, because `truncate` is a utility and would otherwise win. */
+    .table-scroll td:first-child *,
+    .table-scroll th:first-child * {
+      white-space: normal !important;
+    }
+  }
+
+  /* A row of chips or tabs that scrolls sideways. On a phone its right edge
+     fades, so what continues past the screen reads as such; the trailing
+     padding keeps the last chip clear of the fade once scrolled to the end. */
+  .scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+  @media (width < 40rem) {
+    .scroll-x {
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.25rem), rgb(0 0 0 / 0));
+      mask-image: linear-gradient(to right, #000 calc(100% - 2.25rem), rgb(0 0 0 / 0));
+      padding-right: 2.25rem;
+      scroll-padding-right: 2.25rem;
+    }
   }
 }
 

@@ -359,7 +359,7 @@ export default async function DashboardPage() {
         <Panel
           title={d.dash.workflowsTitle}
           action={
-            <Link href="/app/workflows" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href="/app/workflows" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.common.seeAll}
             </Link>
           }

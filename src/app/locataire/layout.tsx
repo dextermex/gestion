@@ -47,7 +47,7 @@ export default async function TenantLayout({ children }: { children: React.React
         className="chrome-material sticky top-0 z-30 border-b border-transparent bg-white transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150"
         elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
       >
-        <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-3 px-4 sm:px-6">
+        <div className="mx-auto flex h-(--bar-h) w-full max-w-3xl items-center gap-3 px-safe-4 pt-(--safe-top) sm:px-safe-6">
           <a href={WELCOME_URL} aria-label="Morada">
             <GestionLogo />
           </a>
@@ -73,16 +73,16 @@ export default async function TenantLayout({ children }: { children: React.React
           )}
           {session && <TenantSignOut label={d.tenant.signOut} />}
         </div>
-        <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
+        <div className="mx-auto w-full max-w-3xl px-safe-4 sm:px-safe-6">
           <TenantTabs tabs={tabs} label={d.tenant.space} />
         </div>
       </ScrollHeader>
 
       {sampleCabinet && <TenantSampleBanner text={fmt(d.shell.sampleBanner, { cabinet: sampleCabinet })} back={d.shell.sampleBack} />}
 
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">{children}</main>
+      <main className="mx-auto w-full max-w-3xl px-safe-4 py-6 sm:px-safe-6">{children}</main>
 
-      <footer className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-2 px-4 pb-8 sm:px-6">
+      <footer className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-2 px-safe-4 pb-[max(2rem,var(--safe-bottom))] sm:px-safe-6">
         <p className="text-[11px] text-ink-soft">{managers ? `${managers} · Morada Gestion` : "Morada Gestion"}</p>
         {session && !sample && !canManage && <TenantBecomeOwner label={d.tenant.becomeOwner} failed={d.auth.provisionFailedTitle} />}
       </footer>

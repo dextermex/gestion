@@ -84,8 +84,10 @@ export default async function ContratsPage() {
                       : fmt(d.contrats.signedAes, { date: formatDate(l.startDate, locale) })}
                   </p>
                 </div>
-                <MetaBadge meta={typeMeta[l.type]} />
-                <MetaBadge meta={statusMeta[l.status]} />
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 max-sm:max-w-[42%]">
+                  <MetaBadge meta={typeMeta[l.type]} />
+                  <MetaBadge meta={statusMeta[l.status]} />
+                </div>
               </li>
             ))}
           </ul>

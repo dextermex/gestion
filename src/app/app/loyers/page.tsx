@@ -95,7 +95,7 @@ export default async function LoyersPage({
     <div>
       <PageHeader title={d.loyers.title} subtitle={d.loyers.subtitle} />
 
-      <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">
+      <div className="scroll-x mb-4 flex gap-2">
         {MONTHS.map((m) => (
           <Link
             key={m}
@@ -143,14 +143,14 @@ export default async function LoyersPage({
           title={d.loyers.emptyTitle}
           body={d.loyers.emptyBody}
           action={
-            <Link href={withView(undefined)} className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href={withView(undefined)} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.common.resetFilters}
             </Link>
           }
         />
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

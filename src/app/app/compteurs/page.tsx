@@ -68,7 +68,7 @@ export default async function CompteursPage({
       ) : (
       <>
 
-      <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">
+      <div className="scroll-x mb-4 flex gap-2">
         <ChipLink href="/app/compteurs" active={!kindFilter}>
           {d.compteurs.filterAll}
         </ChipLink>
@@ -105,14 +105,14 @@ export default async function CompteursPage({
           title={d.compteurs.emptyTitle}
           body={d.compteurs.emptyBody}
           action={
-            <Link href="/app/compteurs" className="text-sm font-semibold text-brand-700 hover:underline">
+            <Link href="/app/compteurs" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.common.resetFilters}
             </Link>
           }
         />
       ) : (
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">

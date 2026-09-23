@@ -101,7 +101,7 @@ export default async function TenantPaymentsPage() {
         {pay.history.length === 0 ? (
           <p className="p-5 text-sm text-ink-soft">{d.tenant.payNone}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -131,7 +131,7 @@ export default async function TenantPaymentsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {receipt?.url ? (
-                          <a href={receipt.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-700 hover:underline">
+                          <a href={receipt.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                             {d.tenant.receiptDownload}
                           </a>
                         ) : rp.status === "paid" ? (

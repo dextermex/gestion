@@ -162,7 +162,7 @@ export default async function TenantLeasePage() {
                   <p className="text-xs text-ink-soft">{formatDate(doc.createdAt, locale)}</p>
                 </div>
                 {doc.url && (
-                  <a href={doc.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-700 hover:underline">
+                  <a href={doc.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                     {d.tenant.docOpen}
                   </a>
                 )}

@@ -121,7 +121,7 @@ export default function TenantChat({
       </div>
 
       {/* On a phone the conversation takes what the screen leaves under the space's bar, the title and the composer, so the composer stays in reach. */}
-      <div ref={bodyRef} id="tenant-messages-body" className="relative space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4 max-lg:h-[calc(100dvh-25rem)] max-lg:min-h-[14rem] sm:px-5 lg:h-[58vh] lg:min-h-[22rem]">
+      <div ref={bodyRef} id="tenant-messages-body" className="relative space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4 max-lg:h-[calc(100dvh-25rem-var(--safe-top))] max-lg:min-h-[14rem] sm:px-5 lg:h-[58vh] lg:min-h-[22rem]">
         {messages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.empty}</p>}
         {messages.map((m, i) => {
           const prev = messages[i - 1];
@@ -162,7 +162,7 @@ export default function TenantChat({
                         </ul>
                       )}
                       <div className="mt-3 flex justify-end border-t border-sand-100 pt-3">
-                        <Link href={request.href} className="text-sm font-semibold text-brand-700 hover:underline">
+                        <Link href={request.href} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                           {labels.view}
                         </Link>
                       </div>

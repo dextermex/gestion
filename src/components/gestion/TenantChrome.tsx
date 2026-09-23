@@ -17,7 +17,7 @@ export function TenantSignOut({ label }: { label: string }) {
       type="button"
       onClick={signOut}
       disabled={leaving}
-      className="rounded-lg px-2 py-1 text-xs font-semibold text-ink-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-50"
+      className="inline-flex min-h-9 items-center rounded-lg px-2 py-1 text-xs font-semibold text-ink-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-50"
     >
       {label}
     </button>
@@ -39,7 +39,7 @@ export function TenantSampleBanner({ text, back }: { text: string; back: string 
           document.cookie = "morada_dataset=real; path=/; max-age=31536000; samesite=lax";
           router.refresh();
         }}
-        className="rounded underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className="inline-flex min-h-8 items-center rounded px-1 underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       >
         {back}
       </button>

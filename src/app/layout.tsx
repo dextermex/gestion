@@ -33,7 +33,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return META[locale] ?? META.fr;
 }
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1 };
+// `viewportFit: cover` lets the page reach an iPhone's rounded corners and
+// home indicator; the safe-area insets (globals.css) keep the chrome and the
+// content out of them.
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
