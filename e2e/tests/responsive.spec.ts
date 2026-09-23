@@ -142,10 +142,14 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       await expect(sheet.getByRole("link", { name: "Demandes" })).toBeVisible();
       await expect(sheet.getByRole("link", { name: "Espace propriétaire" })).toBeVisible();
       await expect(sheet.getByRole("button", { name: "Se déconnecter" })).toBeVisible();
+      // It rises on a spring: measured once it has settled within the screen.
+      await expect.poll(async () => {
+        const b = await sheet.boundingBox();
+        return b ? Math.round(b.y + b.height) : Infinity;
+      }).toBeLessThanOrEqual(height);
       const sbox = (await sheet.boundingBox())!;
       expect(sbox.x).toBeGreaterThanOrEqual(0);
       expect(sbox.x + sbox.width).toBeLessThanOrEqual(width);
-      expect(sbox.y + sbox.height).toBeLessThanOrEqual(height);
       if (width === 390) await test.info().attach("tenant-plus-sheet", { body: await page.screenshot(), contentType: "image/png" });
       await sheet.getByRole("link", { name: "Demandes" }).click();
       await expect(page).toHaveURL(/\/locataire\/demandes/);
