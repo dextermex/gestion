@@ -143,7 +143,7 @@ const onPhone = (): boolean => typeof window !== "undefined" && typeof window.ma
  * edge to edge over the page's padding, the messages scrolling inside it
  * while the header and the composer stay put.
  */
-const PHONE_CHAT = "max-lg:-mx-4 max-lg:-my-6 max-lg:h-[calc(100dvh-var(--bar-h))] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6";
+const PHONE_CHAT = "max-lg:-mx-4 max-lg:-mt-6 max-lg:-mb-[max(1.5rem,var(--safe-bottom))] max-lg:h-[calc(100dvh-var(--bar-h))] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6"
 
 export default function MessagesCenter({
   threads,

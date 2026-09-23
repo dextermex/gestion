@@ -496,7 +496,7 @@ export default function GestionShell({
 
           {/* On a phone the page ends clear of the home indicator, and of the
               floating getting-started card when the account has one. */}
-          <main id="main" className={"mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24")}>
+          <main id="main" className={"mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24 max-lg:[html[data-phone-chat]_&]:pb-[max(1.5rem,var(--safe-bottom))]")}>
             {children}
           </main>
         </div>

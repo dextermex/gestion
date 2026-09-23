@@ -49,13 +49,13 @@ export default async function TenantLayout({ children }: { children: React.React
       >
         <div className="mx-auto flex h-(--bar-h) w-full max-w-3xl items-center gap-3 px-safe-4 pt-(--safe-top) sm:px-safe-6">
           <a href={WELCOME_URL} aria-label="Morada">
-            <GestionLogo />
+            <GestionLogo phoneCompact />
           </a>
           <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-700 max-sm:hidden">
             {d.tenant.space}
           </span>
           {canManage && (
-            <nav aria-label={d.shell.roleAria} className="ml-1 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1">
+            <nav aria-label={d.shell.roleAria} className="ml-1 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 max-sm:hidden">
               <a href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
                 {d.shell.roleOwner}
               </a>
@@ -76,6 +76,21 @@ export default async function TenantLayout({ children }: { children: React.React
         <div className="mx-auto w-full max-w-3xl px-safe-4 sm:px-safe-6">
           <TenantTabs tabs={tabs} label={d.tenant.space} />
         </div>
+        {/* On a phone the bar has no room for the role switch next to the
+            logo, the avatar and the sign-out: it takes a row of its own,
+            full width, a thumb's height. */}
+        {canManage && (
+          <div className="mx-auto w-full max-w-3xl px-safe-4 pb-2 pt-1.5 sm:hidden">
+            <nav aria-label={d.shell.roleAria} className="grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1">
+              <a href="/app" className="tactile flex min-h-10 items-center justify-center rounded-lg px-3 text-sm font-semibold text-ink-soft hover:text-ink">
+                {d.shell.roleOwner}
+              </a>
+              <span aria-current="true" className="flex min-h-10 items-center justify-center rounded-lg bg-white px-3 text-sm font-semibold text-brand-800 shadow-sm">
+                {d.shell.roleTenant}
+              </span>
+            </nav>
+          </div>
+        )}
       </ScrollHeader>
 
       {sampleCabinet && <TenantSampleBanner text={fmt(d.shell.sampleBanner, { cabinet: sampleCabinet })} back={d.shell.sampleBack} />}
