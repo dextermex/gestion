@@ -210,6 +210,8 @@ describe("Messages on a phone", () => {
     expect(document.querySelector("#messages-body h2, h2")?.textContent).toBe("Lena Bauer");
     expect(document.getElementById("messages-body")?.textContent).toContain("Merci pour la clé.");
     expect(window.location.search).toBe("?fil=t-bauer");
+    // The document says a conversation has the phone's screen: the shell's floating card steps aside.
+    expect(document.documentElement.hasAttribute("data-phone-chat")).toBe(true);
     // Opened from the top of the page; the list's place is remembered.
     expect(scrolls).toEqual([[0, 0]]);
     // What the tenant wrote is read, in the database too.
@@ -219,6 +221,7 @@ describe("Messages on a phone", () => {
     expect(hiddenOnPhone(listPane())).toBe(false);
     expect(hiddenOnPhone(chatPane())).toBe(true);
     expect(window.location.search).toBe("");
+    expect(document.documentElement.hasAttribute("data-phone-chat")).toBe(false);
     expect(scrolls).toEqual([
       [0, 0],
       [0, 240],

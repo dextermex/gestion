@@ -99,8 +99,11 @@ test("the tenant writes to the owner, then sends a request with a photo", async 
   // A normal message first: the conversation opens with it.
   await page.goto("/locataire/messages");
   await page.locator("#tenant-message-body").fill("Bonjour, j'ai une question sur mon bail.");
+  // Written before the flow moves on: the row in the conversation, not the composer's echo of the draft.
+  const written = page.waitForResponse((r) => r.url().includes("/api/locataire/messages") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Envoyer", exact: true }).click();
-  await expect(page.getByText("Bonjour, j'ai une question sur mon bail.")).toBeVisible();
+  expect((await written).ok(), "the tenant's message is accepted").toBe(true);
+  await expect(page.locator("#tenant-messages-body").getByText("Bonjour, j'ai une question sur mon bail.")).toBeVisible();
   // Then a request, from Demandes, with a photo.
   await page.goto("/locataire/demandes");
   await page.getByRole("button", { name: /nouvelle demande/i }).click();

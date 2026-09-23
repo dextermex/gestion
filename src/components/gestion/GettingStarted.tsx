@@ -85,7 +85,8 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
     });
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 max-sm:right-4 print:hidden">
+    // Steps aside while a conversation fills a phone's screen (Messages sets the attribute on the document).
+    <div className="fixed bottom-4 left-4 z-40 max-sm:right-4 print:hidden max-lg:[html[data-phone-chat]_&]:hidden">
       <AnimatePresence initial={false} mode="wait">
         {state.collapsed ? (
           <motion.button

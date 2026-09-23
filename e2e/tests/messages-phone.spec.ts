@@ -52,7 +52,7 @@ async function expectChatFillsScreen(page: Page, name: string): Promise<void> {
   expect(composer!.y + composer!.height, "the composer ends within the screen").toBeLessThanOrEqual(viewport!.height);
   expect(composer!.y + composer!.height, "the composer sits at the foot of the screen").toBeGreaterThan(viewport!.height - 72);
   const overflow = await page.evaluate(() => ({
-    down: document.documentElement.scrollHeight - window.innerHeight,
+    down: document.documentElement.scrollHeight - document.documentElement.clientHeight,
     across: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }));
   expect(overflow.down, "nothing scrolls but the messages").toBeLessThanOrEqual(2);
@@ -87,8 +87,11 @@ test.describe("set up at a laptop's size", () => {
     await page.waitForURL(/\/locataire/, { timeout: 90_000 });
     await page.goto("/locataire/messages");
     await page.locator("#tenant-message-body").fill(firstWord);
+    // The word is written before the flow moves on: the row, not the composer's echo of it.
+    const written = page.waitForResponse((r) => r.url().includes("/api/locataire/messages") && r.request().method() === "POST");
     await page.getByRole("button", { name: "Envoyer", exact: true }).click();
-    await expect(page.getByText(firstWord)).toBeVisible();
+    expect((await written).ok(), "the tenant's message is accepted").toBe(true);
+    await expect(page.locator("#tenant-messages-body").getByText(firstWord)).toBeVisible();
     await page.goto("/locataire/demandes");
     await page.getByRole("button", { name: /nouvelle demande/i }).click();
     const dialog = page.locator("[role=dialog]");

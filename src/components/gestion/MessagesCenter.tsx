@@ -140,11 +140,10 @@ const onPhone = (): boolean => typeof window !== "undefined" && typeof window.ma
 
 /**
  * The conversation filling a phone's screen under the shell's bar (3.5rem):
- * edge to edge over the page's padding, above the floating getting-started
- * card, the messages scrolling inside it while the header and the composer
- * stay put.
+ * edge to edge over the page's padding, the messages scrolling inside it
+ * while the header and the composer stay put.
  */
-const PHONE_CHAT = "max-lg:relative max-lg:z-[45] max-lg:-mx-4 max-lg:-my-6 max-lg:h-[calc(100dvh-3.5rem)] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6";
+const PHONE_CHAT = "max-lg:-mx-4 max-lg:-my-6 max-lg:h-[calc(100dvh-3.5rem)] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6";
 
 export default function MessagesCenter({
   threads,
@@ -234,6 +233,15 @@ export default function MessagesCenter({
     window.scrollTo(0, restoreScroll.current);
     restoreScroll.current = null;
   }, [view]);
+
+  // A conversation filling a phone's screen leaves no room for the shell's
+  // floating getting-started card: the document says so while it is open,
+  // and the card steps aside (its own stylesheet reads the attribute).
+  useEffect(() => {
+    if (!chatOpen) return;
+    document.documentElement.setAttribute("data-phone-chat", "");
+    return () => document.documentElement.removeAttribute("data-phone-chat");
+  }, [chatOpen]);
 
   const rememberInUrl = (thread: ThreadView | null, requestId: string | null, nextTab: Tab) => {
     const url = new URL(window.location.href);
