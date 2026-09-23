@@ -159,23 +159,43 @@ dans `my_home()`, `is_tenant()` vrai, 1 objet `gestion-media` visible ;
 `public.g_can` toujours sur `60d98f80cccaa74f02b4afb1ebd6b859`. Réversible :
 `grant execute on function ... to public` pour chacune.
 
-## 0019 · écrite le 2026-09-22 · EN ATTENTE D'APPLICATION · une conversation par bail
+## 0019 · 2026-09-23 · une conversation par bail, les demandes y prennent place
 
-`0019_conversation_par_bail.sql` (migration `gestion_conversation_par_bail`) n'est
-pas encore appliquée en production : son application automatique depuis la session
-a été refusée, et elle contient un `drop policy` (les quatre policies du portail
-réécrites) et un `delete` (les fils de demande vidés après fusion), que l'accord
-explicite du propriétaire doit couvrir. Elle est validée par CI sur le schéma
-complet rejoué localement (audit RLS compris) et par la suite de bout en bout.
-Ce qu'elle fait : `messages.ticket_id` (ancre d'une demande dans le fil du bail),
-l'index `messages_ticket_idx`, l'index unique `conversations_lease_one` (un fil
-par bail), les policies du portail admettant le fil du bail (lecture de tout bail
-du locataire, écriture en son nom, ancrage de son seul ticket), la fusion des fils
-de demande existants dans celui du bail et une ancre pour chaque demande de
-locataire sans fil. État de la production au moment de l'écriture : deux demandes
-de locataire, aucun message, une conversation de bail (ouverte par le gestionnaire
-depuis le nouvel écran, dont le premier message a échoué faute de colonne).
-Tant qu'elle n'est pas appliquée : les écrans lisent les messages en lignes
-entières et le gestionnaire peut écrire ; le fil du locataire et l'ancrage des
-demandes attendent. Réversible : drop de la colonne et des index, policies telles
-qu'en 0015.
+`0019_conversation_par_bail.sql` (migration `gestion_conversation_par_bail`),
+appliquée le 2026-09-23 avec l'accord explicite du propriétaire, après validation
+par CI (schéma complet rejoué localement, audit RLS, suite de bout en bout). État
+avant : deux demandes de locataire (« Lavabo » sur un bail, « Heitzung » sur un
+autre), aucun message, une conversation de bail vide ouverte la veille depuis le
+nouvel écran (son premier message avait échoué faute de colonne), aucun fil de
+demande, aucun doublon. Ce qu'elle a fait : colonne `messages.ticket_id` (uuid,
+nullable, référence `tickets`, mise à null à la suppression), index
+`messages_ticket_idx`, index unique `conversations_lease_one` (un fil par bail),
+les quatre policies du portail réécrites (lecture du fil de tout bail du
+locataire, ouverture en son nom, messages en son nom, ancrage de son seul
+ticket), une conversation créée pour le bail de « Lavabo », une ancre par
+demande à la date de sa création, marquée lue, dans le fil de son bail
+(« Heitzung » dans la conversation déjà ouverte). Rien d'autre modifié : tickets,
+ordres de travail et baux intacts.
+
+Vérifié après application : colonne, contrainte et index présents ; les quatre
+policies avec leur nouvelle définition ; RLS active avec au moins une policy sur
+chaque table du schéma ; chaque fonction definer avec `search_path` fixé ; aucune
+fonction exécutable par anon ; `public.g_can` toujours sur
+`60d98f80cccaa74f02b4afb1ebd6b859` ; une conversation par bail, une ancre par
+demande. Puis le parcours complet joué sous les policies de production, dans une
+transaction annulée à la fin, avec le compte gestionnaire de l'espace
+« guillaume » et le compte locataire du bail concerné : message du gestionnaire
+lu par le locataire, réponse, demande ancrée dans la même conversation (toujours
+une seule pour le bail), réponse du gestionnaire lue, statut « en cours » lu par
+le locataire, deuxième demande, ordre de travail, première demande résolue, même
+chronologie des deux côtés (six messages distincts, une ancre par demande) ; le
+gestionnaire d'un autre espace ne lit rien et ses écritures sont refusées
+(42501, zéro ligne mise à jour) ; un autre locataire du même espace ne lit rien
+et ses écritures, y compris l'ancrage d'un ticket étranger, sont refusées ; le
+locataire ne peut ni écrire au nom du gestionnaire, ni ouvrir une deuxième
+conversation sur son bail (23505), ni une conversation sur un autre bail ; après
+la fin du bail (simulée dans la même transaction) il lit encore tout, peut
+encore écrire, et ne peut plus ouvrir de demande. Après annulation : deux
+messages, deux conversations, deux demandes, aucun ordre de travail, bail
+actif, aucune ligne de test. Réversible : drop de la colonne et des index,
+policies telles qu'en 0015.
