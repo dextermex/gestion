@@ -105,7 +105,7 @@ export function Card({
   className,
   children,
   ...rest
-}: { className?: string; children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+}: { className?: string; children: React.ReactNode; ref?: React.Ref<HTMLDivElement> } & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={clsx("rounded-2xl border border-sand-200 bg-white shadow-sm", className)}

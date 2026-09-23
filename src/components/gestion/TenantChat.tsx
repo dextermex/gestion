@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { initials } from "@/lib/types";
@@ -62,7 +62,22 @@ export default function TenantChat({
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed" | "sample">("idle");
   const bodyRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const count = messages.length;
+
+  // On a phone the card takes what the screen leaves under whatever sits
+  // above it (the space's bar, a sample banner, the title) and above the
+  // bottom bar, so the composer is in reach without a scroll. The top is
+  // measured, not guessed: the stylesheet does the rest of the arithmetic
+  // (globals.css, --nav-b) and stays in charge above `lg`.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const fit = () => card.style.setProperty("--chat-top", `${Math.round(card.getBoundingClientRect().top + window.scrollY)}px`);
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
 
   // Opens on the latest message, or on the request the tenant came for.
   useEffect(() => {
@@ -106,7 +121,7 @@ export default function TenantChat({
   };
 
   return (
-    <Card className="flex flex-col">
+    <Card ref={cardRef} className="flex flex-col max-lg:h-[calc(100dvh-var(--chat-top,15rem)-1.5rem-var(--nav-b))] max-lg:min-h-[18rem]">
       <div className="flex items-center gap-3 border-b border-sand-100 px-4 py-3 sm:px-5">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">{initials(title) || "·"}</span>
         <div className="min-w-0 flex-1">
@@ -120,8 +135,7 @@ export default function TenantChat({
         )}
       </div>
 
-      {/* On a phone the conversation takes what the screen leaves under the space's bar, the title and the composer, so the composer stays in reach. */}
-      <div ref={bodyRef} id="tenant-messages-body" className="relative space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4 max-lg:h-[calc(100dvh-25rem-var(--safe-top))] max-lg:min-h-[14rem] sm:px-5 lg:h-[58vh] lg:min-h-[22rem]">
+      <div ref={bodyRef} id="tenant-messages-body" className="relative space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4 max-lg:min-h-0 max-lg:flex-1 sm:px-5 lg:h-[58vh] lg:min-h-[22rem]">
         {messages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.empty}</p>}
         {messages.map((m, i) => {
           const prev = messages[i - 1];

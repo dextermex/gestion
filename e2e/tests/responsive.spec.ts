@@ -105,6 +105,58 @@ test("the tenant's screens fit an iPhone", async ({ page, context }) => {
   for (const width of [390, 320]) for (const route of TENANT) await expectFits(page, route, width);
 });
 
+test("the tenant's navigation is a bar at the foot of the phone, Plus holding the rest", async ({ page, context }) => {
+  await signIn(page, owner.email);
+  await context.addCookies([{ name: "morada_dataset", value: "fr", url: new URL(page.url()).origin }]);
+  for (const [width, height] of [[390, 844], [844, 390]] as const) {
+    await test.step(`${width}x${height}`, async () => {
+      await page.setViewportSize({ width, height });
+      await page.goto("/locataire/bail");
+      // The bar: fixed at the foot, the whole width, every entry a thumb's size, the open one lit.
+      const bar = page.getByRole("navigation", { name: "Espace locataire" });
+      await expect(bar).toBeVisible();
+      const box = (await bar.boundingBox())!;
+      expect(box.x).toBe(0);
+      expect(box.width).toBe(width);
+      expect(box.y + box.height).toBe(height);
+      const entries = bar.locator("a, button");
+      await expect(entries).toHaveText(["Accueil", "Bail", "Paiements", "Messages", "Plus"]);
+      for (const e of await entries.all()) expect((await e.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+      await expect(bar.getByRole("link", { name: "Bail" })).toHaveAttribute("aria-current", "page");
+      // The tabs under the logo are gone: the page has the width to itself, and the sign-out sits behind Plus.
+      await expect(page.getByRole("link", { name: "Mon bail" })).toBeHidden();
+      await expect(page.getByRole("button", { name: "Se déconnecter" })).toBeHidden();
+      // The page's foot stays clear of the bar.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const footer = (await page.locator("footer").boundingBox())!;
+      expect(footer.y + footer.height).toBeLessThanOrEqual(height - box.height + 1);
+      // Plus: the requests, the owner's space, signing out, as a sheet within the screen.
+      await bar.getByRole("button", { name: "Plus", exact: true }).click();
+      const sheet = page.getByRole("dialog");
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByRole("link", { name: "Demandes" })).toBeVisible();
+      await expect(sheet.getByRole("link", { name: "Espace propriétaire" })).toBeVisible();
+      await expect(sheet.getByRole("button", { name: "Se déconnecter" })).toBeVisible();
+      const sbox = (await sheet.boundingBox())!;
+      expect(sbox.x).toBeGreaterThanOrEqual(0);
+      expect(sbox.x + sbox.width).toBeLessThanOrEqual(width);
+      expect(sbox.y + sbox.height).toBeLessThanOrEqual(height);
+      if (width === 390) await test.info().attach("tenant-plus-sheet", { body: await page.screenshot(), contentType: "image/png" });
+      await sheet.getByRole("link", { name: "Demandes" }).click();
+      await expect(page).toHaveURL(/\/locataire\/demandes/);
+      await expect(sheet).toBeHidden();
+      await expect(bar.getByRole("button", { name: "Plus", exact: true })).toHaveClass(/text-brand-700/);
+    });
+  }
+  // The conversation's composer sits above the bar, in reach.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/locataire/messages");
+  const composer = (await page.locator("#tenant-message-body").boundingBox())!;
+  const bar = (await page.getByRole("navigation", { name: "Espace locataire" }).boundingBox())!;
+  expect(composer.y + composer.height).toBeLessThanOrEqual(bar.y);
+  await test.info().attach("tenant-messages-bar", { body: await page.screenshot(), contentType: "image/png" });
+});
+
 test("the drawer, the search and a sheet fit the phone's screen", async ({ page, context }) => {
   await signIn(page, owner.email);
   await context.addCookies([{ name: "morada_dataset", value: "fr", url: new URL(page.url()).origin }]);

@@ -63,8 +63,13 @@ export async function signOutFromShell(page: Page): Promise<void> {
   await page.waitForURL(/\/connexion/, { timeout: 30_000 });
 }
 
-/** Sign out from the tenant space. */
+/** Sign out from the tenant space: from its bar on a laptop, from behind "Plus" in the bottom bar on a phone. */
 export async function signOutFromTenantSpace(page: Page): Promise<void> {
+  const direct = page.getByRole("button", { name: "Se déconnecter" });
+  if (!(await direct.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Plus", exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+  }
   await page.getByRole("button", { name: "Se déconnecter" }).click();
   await page.waitForURL(/\/connexion/, { timeout: 30_000 });
 }

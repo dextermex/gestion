@@ -53,6 +53,27 @@
   --bar-h: calc(3.5rem + var(--safe-top));
 }
 
+/* A phone held sideways: little height, so the tenant bar packs its icon
+   and label side by side and takes less of it. */
+@custom-variant short-landscape (@media (orientation: landscape) and (max-height: 500px));
+
+/* The tenant space keeps the foot of every page clear of its bottom bar
+   (TenantBottomNav): the bar's height plus the home indicator below `lg`,
+   nothing above, where the tabs under the logo take over. */
+.tenant-space {
+  --nav-b: calc(3.5rem + var(--safe-bottom));
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .tenant-space {
+    --nav-b: calc(2.75rem + var(--safe-bottom));
+  }
+}
+@media (width >= 64rem) {
+  .tenant-space {
+    --nav-b: 0px;
+  }
+}
+
 /* Side padding that never lands under a notch: the usual gutter, or the
    safe-area inset when it is wider. */
 @utility px-safe-4 {

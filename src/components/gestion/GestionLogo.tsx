@@ -1,6 +1,6 @@
 // Shared Morada glyph + the space's own wordmark: the user must instantly
 // read "I am in Morada Gestion" while recognising the ecosystem brand.
-export default function GestionLogo({ compact = false, phoneCompact = false }: { compact?: boolean; /** The glyph alone below 400px: a phone's bar has no room for the wordmark beside what else it carries. */ phoneCompact?: boolean }) {
+export default function GestionLogo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2.5">
       <svg viewBox="0 0 32 32" className="h-8 w-auto" aria-hidden>
@@ -16,7 +16,7 @@ export default function GestionLogo({ compact = false, phoneCompact = false }: {
         <circle cx="16" cy="17.4" r="2.1" className="fill-accent-500" />
       </svg>
       {!compact && (
-        <span className={"flex items-baseline gap-1.5" + (phoneCompact ? " max-[399px]:hidden" : "")}>
+        <span className="flex items-baseline gap-1.5">
           <span className="font-display text-xl font-bold tracking-tight text-brand-800">morada</span>
           <span className="font-display text-xl font-bold tracking-tight text-brand-500">gestion</span>
         </span>

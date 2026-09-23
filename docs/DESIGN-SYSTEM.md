@@ -131,6 +131,13 @@ layer (`globals.css`, `pro/ui.tsx`, the shell):
   indicator; the command palette and the drawer keep the same width rules.
 - **Messages** is one pane at a time on a phone (list, then a conversation filling the
   screen, then back), the way a messaging app reads; see `MessagesCenter`.
+- **The tenant space navigates from a bottom bar on phones** (`TenantBottomNav`, below
+  `lg`): Accueil · Bail · Paiements · Messages · Plus, fixed at the foot of the screen,
+  clear of the home indicator, packed flat when the phone is held sideways
+  (`short-landscape` variant); "Plus" is a sheet with the requests, the owner's space when
+  the account has one, and signing out. The tabs under the logo stay above `lg`. Pages
+  keep their foot clear through `--nav-b` (the bar's height below `lg`, zero above). The
+  owner space's navigation (sidebar and drawer) is untouched.
 - **Long strings** (an IBAN, an e-mail, a reference) break rather than widen their box:
   `overflow-wrap: break-word` on `body`.
 
