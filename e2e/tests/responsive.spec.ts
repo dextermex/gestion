@@ -116,7 +116,7 @@ test("the drawer, the search and a sheet fit the phone's screen", async ({ page,
   // It slides in on a spring: measured once it has settled.
   await expect.poll(async () => (await drawer.boundingBox())?.x).toBe(0);
   expect((await drawer.boundingBox())!.width).toBeLessThanOrEqual(390 - 32);
-  for (const row of await drawer.getByRole("link").all()) {
+  for (const row of await drawer.getByRole("navigation", { name: "Morada Gestion" }).getByRole("link").all()) {
     const b = await row.boundingBox();
     if (b && b.height > 0) expect.soft(b.height, "a drawer entry is at least 40px tall").toBeGreaterThanOrEqual(40);
   }

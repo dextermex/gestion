@@ -355,7 +355,7 @@ export default function GestionShell({
       {/* The logo is the way back to the ecosystem gateway, from every space. */}
       <a
         href={WELCOME_URL}
-        className="mb-2 block rounded-lg px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className="mb-2 block rounded-lg px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:flex max-sm:min-h-11 max-sm:items-center"
       >
         <GestionLogo />
       </a>
@@ -366,8 +366,8 @@ export default function GestionShell({
       <div className="pt-2.5 text-[11px] text-ink-soft">
         <p className="px-3">{d.nav.ecosystem}</p>
         <div className="flex gap-3 px-3 pt-0.5">
-          <a href={MORADA_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">Morada</a>
-          <a href={PRO_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">Pro</a>
+          <a href={MORADA_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center max-sm:px-1">Morada</a>
+          <a href={PRO_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center max-sm:px-1">Pro</a>
         </div>
       </div>
     </div>
