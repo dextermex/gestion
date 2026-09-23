@@ -61,19 +61,18 @@ export async function appendMessage(
   input: { orgId: string; conversationId: string; senderKind: "manager" | "tenant"; senderUserId: string; body: string; ticketId?: string | null; touch: boolean },
 ): Promise<{ id: string; sentAt: string } | { error: ThreadFailure }> {
   const now = new Date().toISOString();
-  const { data, error } = await g
-    .from("messages")
-    .insert({
-      org_id: input.orgId,
-      conversation_id: input.conversationId,
-      sender_kind: input.senderKind,
-      sender_user_id: input.senderUserId,
-      body: input.body,
-      sent_at: now,
-      ticket_id: input.ticketId ?? null,
-    })
-    .select("id")
-    .single();
+  // The anchor column (0019) is named only when a ticket is anchored, so a
+  // plain message still goes through on a database that lacks it.
+  const row: Record<string, unknown> = {
+    org_id: input.orgId,
+    conversation_id: input.conversationId,
+    sender_kind: input.senderKind,
+    sender_user_id: input.senderUserId,
+    body: input.body,
+    sent_at: now,
+  };
+  if (input.ticketId) row.ticket_id = input.ticketId;
+  const { data, error } = await g.from("messages").insert(row).select("id").single();
   if (error || !data) return failure(error, `${input.senderKind} message insert`);
   if (input.touch) await g.from("conversations").update({ last_message_at: now }).eq("id", input.conversationId);
   return { id: String((data as Row).id), sentAt: now };

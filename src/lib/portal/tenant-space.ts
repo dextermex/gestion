@@ -236,7 +236,7 @@ export async function buildTenantSpace(
   ]);
   const conversationIds = conversationRows.map((c) => s(c.id));
   const messageRows = conversationIds.length > 0
-    ? await read("messages", "id,conversation_id,sender_kind,sender_user_id,body,sent_at,ticket_id", (q) => q.in("conversation_id", conversationIds).order("sent_at"))
+    ? await read("messages", "*", (q) => q.in("conversation_id", conversationIds).order("sent_at"))
     : [];
 
   // Signed links for the property photos and the documents the tenant may open.

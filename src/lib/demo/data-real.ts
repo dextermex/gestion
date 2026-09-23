@@ -175,7 +175,9 @@ export async function buildRealDataFrom(
     q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", "read_on"),
     q("workflows", "id,kind,unit_id,lease_id,current_state,blocked_reason,started_at,completed_at"),
     q("conversations", "id,scope_type,scope_id,subject,last_message_at,created_at"),
-    q("messages", "id,conversation_id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,read_at,ticket_id", "sent_at"),
+    // Whole rows: `ticket_id` (0019) is read when the column is there, and a
+    // database that has not received 0019 yet still answers every screen.
+    q("messages", "*", "sent_at"),
     q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at"),
     q("insurance_policies", "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes", "created_at"),
     // The token is never selected: it is returned once, when the invitation is created.
