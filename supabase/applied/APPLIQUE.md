@@ -158,3 +158,24 @@ et `can(org, 'properties.read')` vrai ; pour un compte locataire, 1 logement
 dans `my_home()`, `is_tenant()` vrai, 1 objet `gestion-media` visible ;
 `public.g_can` toujours sur `60d98f80cccaa74f02b4afb1ebd6b859`. Réversible :
 `grant execute on function ... to public` pour chacune.
+
+## 0019 · écrite le 2026-09-22 · EN ATTENTE D'APPLICATION · une conversation par bail
+
+`0019_conversation_par_bail.sql` (migration `gestion_conversation_par_bail`) n'est
+pas encore appliquée en production : son application automatique depuis la session
+a été refusée, et elle contient un `drop policy` (les quatre policies du portail
+réécrites) et un `delete` (les fils de demande vidés après fusion), que l'accord
+explicite du propriétaire doit couvrir. Elle est validée par CI sur le schéma
+complet rejoué localement (audit RLS compris) et par la suite de bout en bout.
+Ce qu'elle fait : `messages.ticket_id` (ancre d'une demande dans le fil du bail),
+l'index `messages_ticket_idx`, l'index unique `conversations_lease_one` (un fil
+par bail), les policies du portail admettant le fil du bail (lecture de tout bail
+du locataire, écriture en son nom, ancrage de son seul ticket), la fusion des fils
+de demande existants dans celui du bail et une ancre pour chaque demande de
+locataire sans fil. État de la production au moment de l'écriture : deux demandes
+de locataire, aucun message, une conversation de bail (ouverte par le gestionnaire
+depuis le nouvel écran, dont le premier message a échoué faute de colonne).
+Tant qu'elle n'est pas appliquée : les écrans lisent les messages en lignes
+entières et le gestionnaire peut écrire ; le fil du locataire et l'ancrage des
+demandes attendent. Réversible : drop de la colonne et des index, policies telles
+qu'en 0015.
