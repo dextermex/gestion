@@ -29,6 +29,8 @@ const TENANT = ["/locataire", "/locataire/bail", "/locataire/paiements", "/locat
 
 interface Reading {
   overflow: number;
+  /** Elements whose content runs wider than their box (the way a phone page grows without any box spilling). */
+  wide: string[];
   spills: string[];
   zooming: string[];
   lowFields: string[];
@@ -72,7 +74,13 @@ async function read(page: Page): Promise<Reading> {
     const bar = document.querySelector("header");
     const title = document.querySelector("h1");
     const titleUnderBar = Boolean(bar && title && visible(title) && title.getBoundingClientRect().top < bar.getBoundingClientRect().bottom - 1);
-    return { overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - vw, spills, zooming, lowFields, smallButtons, titleUnderBar };
+    const wide: string[] = [];
+    for (const el of Array.from(document.querySelectorAll("body *"))) {
+      if (!visible(el) || el.closest("svg") || scrolls(el)) continue;
+      if (el.scrollWidth > el.clientWidth + 1 && el.getBoundingClientRect().left + el.scrollWidth > vw + 1) wide.push(`${describe(el)} content ${el.scrollWidth}px in ${el.clientWidth}px`);
+      if (wide.length >= 6) break;
+    }
+    return { overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - vw, wide, spills, zooming, lowFields, smallButtons, titleUnderBar };
   });
 }
 
@@ -83,7 +91,7 @@ async function expectFits(page: Page, route: string, width: number): Promise<voi
     await expect(page.locator("main, form").first()).toBeVisible();
     await page.waitForTimeout(150);
     const r = await read(page);
-    expect.soft(r.overflow, `${route} @${width}: the page is no wider than the screen`).toBeLessThanOrEqual(0);
+    expect.soft(r.overflow, `${route} @${width}: the page is no wider than the screen${r.wide.length ? ` (content running wide: ${r.wide.join(" · ")})` : ""}`).toBeLessThanOrEqual(0);
     expect.soft(r.spills, `${route} @${width}: nothing spills past the screen's edge`).toEqual([]);
     expect.soft(r.zooming, `${route} @${width}: every field is 16px or more (no Safari zoom)`).toEqual([]);
     expect.soft(r.lowFields, `${route} @${width}: every field is at least 40px tall`).toEqual([]);

@@ -117,7 +117,7 @@ export function ReviewQueue({
               exit={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
               data-operation={t.id}
               className={
-                "rounded-xl border p-3.5 " +
+                "overflow-x-clip rounded-xl border p-3.5 " +
                 (s.status === "matched" ? "border-emerald-200 bg-emerald-50/60" : s.status === "ignored" ? "border-sand-200 bg-sand-50/60" : "border-amber-200 bg-amber-50/50")
               }
             >

@@ -67,7 +67,9 @@ export function Select({
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <span className="relative block">
-      <select className={clsx(fieldClass, "appearance-none pr-8", className)} {...rest}>
+      {/* Long options never widen the page: the selected line is clipped inside the
+          field (Safari otherwise lets the widest option's text overflow the box). */}
+      <select className={clsx(fieldClass, "appearance-none overflow-hidden text-ellipsis whitespace-nowrap pr-8", className)} {...rest}>
         {children}
       </select>
       <Icon
