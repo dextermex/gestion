@@ -1,16 +1,23 @@
 import Link from "next/link";
 import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { getDemo } from "@/lib/demo";
-import { depositFormLabels, depositStatusMeta, euros, formatDate } from "@/lib/types";
+import { DepositLineActions, DepositReceive, DepositSettlementActions } from "@/components/gestion/DepositActions";
+import { getDemo, isSampleData } from "@/lib/demo";
+import { depositFormLabels, depositStatusMeta, euros, formatDate, type DepositStatus } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { settlementNotes } from "@/lib/i18n/engine";
 import { computeSettlement } from "@/domain/deposits/settlement";
 
+/** A restitution is in progress from the moment the keys are back until the last cent has left. */
+const inProgress = (status: DepositStatus) => status === "release_pending" || status === "partially_released" || status === "disputed";
+
 export default async function GarantiesPage() {
   const { locale, d } = await getI18n();
-  const { DEPOSITS, ENDED_LEASES, LEASES, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { DEPOSITS, ENDED_LEASES, LEASES, ORG, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const sample = await isSampleData();
+  const writable = !sample;
+  const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
 
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
@@ -33,37 +40,40 @@ export default async function GarantiesPage() {
     return { label: ended?.label ?? "", tenant: ended?.tenant ?? "", rentCents: ended?.rentCents ?? 0, live: false };
   };
 
-  // The restitution in progress, wherever the data says there is one.
-  const showcase = DEPOSITS.find((x) => x.status !== "held" && x.status !== "released") ?? null;
-  const showcaseFacts = showcase ? leaseFacts(showcase.leaseId) : null;
+  // Every restitution in progress, computed by the engine from the rows as they stand.
+  const settlements = DEPOSITS.filter((x) => inProgress(x.status)).map((dep) => {
+    const facts = leaseFacts(dep.leaseId);
+    const input = {
+      depositAmount: dep.amountCents,
+      depositForm: dep.form,
+      monthlyRent: facts.rentCents,
+      keyHandoverDate: dep.keyHandoverOn ?? TODAY,
+      decompteIssuedAt: dep.decompteIssuedOn ?? null,
+      entryEdlExists: dep.entryEdlExists,
+      deductions: dep.deductions.map((x) => ({
+        id: x.id,
+        kind: x.kind,
+        label: x.label,
+        amount: x.amountCents,
+        justificationDocRef: x.justificationDocRef,
+        justifiedAt: x.justifiedAt,
+        edlItemRef: x.edlItemRef,
+      })),
+      miseEnDemeureArDate: dep.miseEnDemeureArOn ?? null,
+      releasedFirstTranche: dep.releasedFirstTrancheCents,
+      releasedBalance: dep.releasedBalanceCents,
+      asOf: TODAY,
+    };
+    const settlement = computeSettlement(input);
+    const warnings = settlementNotes(d, locale, input, settlement);
+    // What each tranche would release now: the engine's amount, once each,
+    // the balance only after the décompte. Zero hides the button.
+    const firstTrancheCents = dep.releasedFirstTrancheCents > 0 ? 0 : Math.min(settlement.firstTrancheAmount, settlement.outstandingToTenant);
+    const balanceCents = !dep.decompteIssuedOn || dep.releasedBalanceCents > 0 ? 0 : settlement.outstandingToTenant;
+    return { dep, facts, settlement, warnings, firstTrancheCents, balanceCents };
+  });
 
-  const settlementInput = showcase
-    ? {
-        depositAmount: showcase.amountCents,
-        depositForm: showcase.form,
-        monthlyRent: showcaseFacts!.rentCents,
-        keyHandoverDate: showcase.keyHandoverOn ?? TODAY,
-        decompteIssuedAt: showcase.decompteIssuedOn ?? null,
-        entryEdlExists: showcase.entryEdlExists,
-        deductions: showcase.deductions.map((x) => ({
-          id: x.id,
-          kind: x.kind,
-          label: x.label,
-          amount: x.amountCents,
-          justificationDocRef: x.justificationDocRef,
-          justifiedAt: x.justifiedAt,
-          edlItemRef: x.edlItemRef,
-        })),
-        miseEnDemeureArDate: showcase.miseEnDemeureArOn ?? null,
-        releasedFirstTranche: showcase.releasedFirstTrancheCents,
-        releasedBalance: showcase.releasedBalanceCents,
-        asOf: TODAY,
-      }
-    : null;
-  const settlement = settlementInput ? computeSettlement(settlementInput) : null;
-  const warnings = settlementInput && settlement ? settlementNotes(d, locale, settlementInput, settlement) : [];
-
-  const held = DEPOSITS.filter((x) => x.id !== showcase?.id);
+  const held = DEPOSITS.filter((x) => !inProgress(x.status));
 
   const LINE_STATUS: Record<string, { label: string; color: string }> = {
     justified: { label: d.garanties.lineJustified, color: "bg-emerald-100 text-emerald-800" },
@@ -82,9 +92,10 @@ export default async function GarantiesPage() {
       <PageHeader title={d.garanties.title} subtitle={d.garanties.subtitle} />
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">
-        {showcase && showcaseFacts && settlement && (
-        <div className="lg:col-span-3">
-          <Panel title={fmt(d.garanties.settlementTitle, { label: showcaseFacts.label })}>
+        {settlements.length > 0 && (
+        <div className="space-y-5 lg:col-span-3">
+          {settlements.map(({ dep: showcase, facts: showcaseFacts, settlement, warnings, firstTrancheCents, balanceCents }) => (
+          <Panel key={showcase.id} title={fmt(d.garanties.settlementTitle, { label: showcaseFacts.label })}>
             <div className="flex flex-wrap items-center gap-2">
               <MetaBadge meta={statusMeta[showcase.status]} />
               <Badge className="bg-sand-100 text-ink-soft">{formLabels[showcase.form]}</Badge>
@@ -127,7 +138,7 @@ export default async function GarantiesPage() {
                   key={line.id}
                   className="flex items-start justify-between gap-3 rounded-xl border border-sand-200 px-4 py-3"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-ink">{line.label}</p>
                     <p className="mt-0.5 text-xs text-ink-soft">
                       {KIND_LABEL[line.kind]} ·{" "}
@@ -140,6 +151,16 @@ export default async function GarantiesPage() {
                         ? ` · ${fmt(d.garanties.lineDoc, { ref: line.justificationDocRef })}`
                         : ""}
                     </p>
+                    {showcase.keyHandoverOn && (
+                      <DepositLineActions
+                        depositId={showcase.id}
+                        lineId={line.id}
+                        lineStatus={line.status}
+                        todayISO={TODAY}
+                        writable={writable}
+                        labels={d.garanties}
+                      />
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <span className="tabular-nums text-sm font-semibold text-ink">{euros(line.retained, locale)}</span>
@@ -184,6 +205,24 @@ export default async function GarantiesPage() {
               </div>
             </div>
 
+            {showcase.keyHandoverOn && (
+              <DepositSettlementActions
+                depositId={showcase.id}
+                status={showcase.status}
+                keyHandoverOn={showcase.keyHandoverOn}
+                decompteIssuedOn={showcase.decompteIssuedOn ?? null}
+                miseEnDemeureArOn={showcase.miseEnDemeureArOn ?? null}
+                firstTrancheCents={firstTrancheCents}
+                balanceCents={balanceCents}
+                releasedFirstTrancheCents={showcase.releasedFirstTrancheCents}
+                todayISO={TODAY}
+                locale={locale}
+                writable={writable}
+                sampleNote={sampleNote}
+                labels={d.garanties}
+              />
+            )}
+
             <p className="mt-3 text-xs text-ink-soft">
               {fmt(d.garanties.releaseLabel, {
                 form: formLabels[showcase.form],
@@ -193,35 +232,41 @@ export default async function GarantiesPage() {
 
             <LegalNote>{d.garanties.legal}</LegalNote>
           </Panel>
+          ))}
         </div>
         )}
 
-        <div className={showcase ? "lg:col-span-2" : "lg:col-span-5"}>
+        <div className={settlements.length > 0 ? "lg:col-span-2" : "lg:col-span-5"}>
           <Panel title={d.garanties.heldTitle}>
             <ul className="divide-y divide-sand-100">
               {held.map((dep) => {
                 const facts = leaseFacts(dep.leaseId);
                 return (
-                  <li key={dep.id} className="flex items-center gap-3 py-3">
-                    <div className="min-w-0 flex-1">
-                      {facts.live ? (
-                        <Link
-                          href={`/app/baux/${dep.leaseId}`}
-                          className="block truncate text-sm font-semibold text-ink hover:text-brand-700 max-sm:leading-10"
-                        >
-                          {facts.label}
-                        </Link>
-                      ) : (
-                        <p className="block truncate text-sm font-semibold text-ink">{facts.label}</p>
-                      )}
-                      <p className="truncate text-xs text-ink-soft">
-                        {facts.tenant} · {formLabels[dep.form]}
-                      </p>
+                  <li key={dep.id} className="py-3" data-deposit={dep.id}>
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        {facts.live ? (
+                          <Link
+                            href={`/app/baux/${dep.leaseId}`}
+                            className="block truncate text-sm font-semibold text-ink hover:text-brand-700 max-sm:leading-10"
+                          >
+                            {facts.label}
+                          </Link>
+                        ) : (
+                          <p className="block truncate text-sm font-semibold text-ink">{facts.label}</p>
+                        )}
+                        <p className="truncate text-xs text-ink-soft">
+                          {facts.tenant} · {formLabels[dep.form]}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+                        <span className="tabular-nums text-sm font-semibold text-ink">{euros(dep.amountCents, locale)}</span>
+                        <MetaBadge meta={statusMeta[dep.status]} />
+                      </div>
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
-                      <span className="tabular-nums text-sm font-semibold text-ink">{euros(dep.amountCents, locale)}</span>
-                      <MetaBadge meta={statusMeta[dep.status]} />
-                    </div>
+                    {dep.status === "pending" && (
+                      <DepositReceive depositId={dep.id} todayISO={TODAY} locale={locale} writable={writable} sampleNote={sampleNote} labels={d.garanties} />
+                    )}
                   </li>
                 );
               })}

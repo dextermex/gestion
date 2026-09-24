@@ -103,6 +103,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.charges_regime = body.chargesRegime === "forfait" ? "forfait" : "advances";
   }
   if (has(body, "furnished")) patch.furnished = body.furnished === true;
+  if (has(body, "capitalComponents")) {
+    // The capital investi declaration: the components the 5 % ceiling is
+    // computed from, year by year. Read once here, kept as the engine's shape.
+    const raw = Array.isArray(body.capitalComponents) ? (body.capitalComponents as unknown[]) : null;
+    if (!raw || raw.length > 20) return NextResponse.json({ error: "invalid" }, { status: 400 });
+    const thisYear = Number(new Date().toISOString().slice(0, 4));
+    const components: Array<{ year: number; amount: number; kind: "land" | "construction" | "improvement" }> = [];
+    for (const item of raw) {
+      const c = (item ?? {}) as Record<string, unknown>;
+      const year = Number(c.year);
+      const amount = parseEuroInput(typeof c.amount === "number" ? String(c.amount) : str(c.amount, 20));
+      const kind = str(c.kind, 20);
+      if (!Number.isInteger(year) || year < 1900 || year > thisYear || amount === null || !["land", "construction", "improvement"].includes(kind)) {
+        return NextResponse.json({ error: "invalid" }, { status: 400 });
+      }
+      components.push({ year, amount, kind: kind as "land" | "construction" | "improvement" });
+    }
+    patch.capital_investi = components;
+  }
 
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
-import { effectiveMonth, repriceOpenPeriods } from "@/lib/gestion/lease";
+import { repriceOpenPeriods } from "@/lib/gestion/lease";
+import { adjustmentLetterState, type AdjustmentLetter } from "@/lib/gestion/indexation";
 import { computeCapitalInvesti, proposeResidentialAdjustment } from "@/domain/indexation/engine";
 import type { CapitalComponent } from "@/domain/indexation/engine";
 
@@ -13,16 +14,21 @@ import type { CapitalComponent } from "@/domain/indexation/engine";
  * is ignored entirely, and a proposal the engine refuses is refused here with
  * the reason it gave.
  *
+ * The adjustment reaches the tenant by registered letter (the courrier
+ * route), and applies from the month after the AR came back: legal effect
+ * runs from the AR date, never from a click, so a request that names a date
+ * is not believed, and one without an AR in hand is refused with what it
+ * still needs.
+ *
  * The lease keeps its previous rent and the date of the adjustment, which is
  * what the 24-month rule and the standing-order lag detector read next time.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await withOrg();
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;
   const today = new Date().toISOString().slice(0, 10);
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
   const { data: lease, error: findErr } = await g
     .from("leases")
@@ -60,7 +66,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "no_increase_available" }, { status: 409 });
   }
 
-  const effective = effectiveMonth(typeof body.effectiveFrom === "string" ? body.effectiveFrom : null);
+  const { data: letterRows, error: lettersErr } = await g
+    .from("registered_letters")
+    .select("id,status,dispatched_on,ar_received_on")
+    .eq("org_id", org.id)
+    .eq("template_key", "rent_adjustment")
+    .eq("related_type", "lease")
+    .eq("related_id", id);
+  if (lettersErr) return dbError("adjustment letters read", lettersErr);
+  const letters: AdjustmentLetter[] = ((letterRows as Array<Record<string, unknown>> | null) ?? []).map((r) => ({
+    id: String(r.id),
+    status: String(r.status) as AdjustmentLetter["status"],
+    dispatchedOn: r.dispatched_on ? String(r.dispatched_on).slice(0, 10) : null,
+    arReceivedOn: r.ar_received_on ? String(r.ar_received_on).slice(0, 10) : null,
+  }));
+  const state = adjustmentLetterState(letters, (lease.last_adjustment_on as string | null) ?? null);
+  if (state.kind === "none") return NextResponse.json({ error: "needs_letter" }, { status: 409 });
+  if (state.kind === "awaiting_ar") return NextResponse.json({ error: "needs_ar", letterId: state.letter.id }, { status: 409 });
+  const effective = state.effectiveFrom;
   const { data, error } = await g
     .from("leases")
     .update({

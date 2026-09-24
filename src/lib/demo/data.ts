@@ -10,6 +10,8 @@ import { leaseRF } from "@/domain/banking/rf";
 import type { CapitalComponent } from "@/domain/indexation/engine";
 import type { AcquisitionFacts } from "@/domain/fiscal/amortisation";
 import type { BankTransaction, IbanBinding, OpenInvoice } from "@/domain/banking/matching";
+import type { WorkOrderStatus } from "@/lib/types";
+import { periodFromSyndic, type DemoChargePeriod } from "./charges-seed";
 import type { InviteRow } from "@/lib/portal/types";
 import type {
   BankTxStatus,
@@ -647,6 +649,16 @@ export interface DemoAttachment {
   url: string | null;
 }
 
+/** The artisan's side of an intervention: who, when, for how much, and where it stands. */
+export interface DemoWorkOrder {
+  id: string;
+  status: WorkOrderStatus;
+  artisanContactId: string | null;
+  scheduledAt: string | null;
+  amountCents: number | null;
+  vatCents: number | null;
+}
+
 export interface DemoTicket {
   id: string;
   ref: string;
@@ -673,9 +685,22 @@ export interface DemoTicket {
   artisanContactId?: string;
   amountCents?: number;
   rechargeDecision?: { decision: "owner" | "tenant" | "split"; note: string };
+  /** The work order behind `interventionId`, with what the artisan side holds. */
+  workOrder: DemoWorkOrder | null;
 }
 
-export const TICKETS: DemoTicket[] = [
+/** The sample tickets are written without their work order; it follows from the ticket's own state. */
+function withWorkOrder(t: Omit<DemoTicket, "workOrder">): DemoTicket {
+  if (!t.interventionId) return { ...t, workOrder: null };
+  const status: WorkOrderStatus =
+    t.status === "done" || t.status === "closed" ? (t.amountCents ? "invoiced" : "done") : t.status === "scheduled" ? "scheduled" : t.status === "in_progress" ? "accepted" : "offered";
+  return {
+    ...t,
+    workOrder: { id: t.interventionId, status, artisanContactId: t.artisanContactId ?? null, scheduledAt: t.status === "scheduled" ? `${t.updatedAt}T09:00:00` : null, amountCents: t.amountCents ?? null, vatCents: t.amountCents ? Math.round(t.amountCents * 0.17) : null },
+  };
+}
+
+const RAW_TICKETS: Array<Omit<DemoTicket, "workOrder">> = [
   {
     id: "t-1", unitId: "u-b-3b", ref: "INT-2026-0141", unitLabel: "Apt 3B · Résidence Beaulieu", leaseId: "l-3b",
     source: "tenant", category: "heating", severity: "urgent", status: "scheduled",
@@ -714,6 +739,8 @@ export const TICKETS: DemoTicket[] = [
     rechargeDecision: { decision: "owner", note: "Vétusté et remise en état entre deux locataires : charge propriétaire." },
   },
 ];
+
+export const TICKETS: DemoTicket[] = RAW_TICKETS.map(withWorkOrder);
 
 // ─── Meters ─────────────────────────────────────────────────────────────────
 
@@ -933,6 +960,13 @@ export const SYNDIC_DECOMPTE_2025 = {
   ],
 };
 
+// ─── Charges: the décomptes as data ─────────────────────────────────────────
+//
+// Types and the syndic-to-period helper live in `charges-seed.ts` (a helper is
+// not data); the sample's issued period is built below from the statement above.
+
+export type { DemoChargeLine, DemoChargePeriod } from "./charges-seed";
+
 export const LEASE_TANTIEMES: Record<string, number> = {
   "l-3b": 118,
   "l-3c": 116,
@@ -940,6 +974,10 @@ export const LEASE_TANTIEMES: Record<string, number> = {
   "l-1a": 158,
   "l-rdc": 64,
 };
+
+export const CHARGE_PERIODS: DemoChargePeriod[] = [
+  periodFromSyndic(SYNDIC_DECOMPTE_2025, leaseById("l-3b"), LEASE_TANTIEMES["l-3b"], { issuedOn: "2026-06-15", dueOn: "2026-07-15" }),
+];
 
 // ─── Documents ──────────────────────────────────────────────────────────────
 

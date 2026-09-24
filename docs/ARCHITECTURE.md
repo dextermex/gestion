@@ -363,6 +363,33 @@ next, and the justice-de-paix file is refused until the AR is in hand (`POST
 /api/baux/[id]/relances`, `PATCH /api/lettres/[id]`). The sample cabinets carry the same
 rows; a sample plays the outcome and writes nothing.
 
+### Operations are rows too: guarantees, interventions, décomptes, adjustments
+
+The same shape holds for the rest of a tenancy's life. A guarantee moves only along
+the transitions `src/lib/gestion/deposits.ts` allows (received, restitution open once
+the keys are back, dispute declared and closed); its retentions are `deposit_deductions`
+rows (damage without a signed entry `edl_sessions` row is written `blocked_no_entry_edl`
+and retains nothing), a justification is a `documents` row of class `invoice` registered
+by reference and dated, and the settlement engine re-run on the rows decides whether it
+landed in time; money leaves through `POST /api/garanties/[id]/liberation` alone, for the
+engine's tranche amounts, the balance refused before `decompte_issued_on`. An
+intervention is a `work_orders` row walking the table in `src/lib/gestion/interventions.ts`
+(`PATCH /api/interventions/[id]`), the ticket's status and `closed_at` following each
+step so the tenant's request and the desk's chantier never disagree. A charges décompte
+is a `charge_periods` row per lease and year with its `charge_lines` computed once
+through the recharge engine (`src/lib/gestion/charges.ts`: lot share by tantièmes or as
+entered, tenant share zero on a residential hard block), the advances read from the
+ledger's `charges_cents`; issuing it dates it and carries a positive balance onto the
+first open `rent_periods` row of the month as `other_cents` / `other_label`. A
+residential adjustment is a `registered_letters` row of template `rent_adjustment`
+(`POST /api/baux/[id]/indexation/courrier`, one in flight per lease), and `POST
+/api/baux/[id]/indexation` applies the engine's proposal only once that letter's AR is
+recorded, from the first day of the month after the AR date
+(`src/lib/gestion/indexation.ts`), never from a date the request names. The four pages
+(Garanties, Interventions, Charges, Indexation) render sample and real accounts through
+one path (`CHARGE_PERIODS`, `TICKETS[].workOrder`, `REGISTERED_LETTERS`); a sample
+plays each outcome and writes nothing.
+
 ### RLS model
 
 One `security definer` predicate — `g_can(org_id, perm)` — behind every policy, resolving

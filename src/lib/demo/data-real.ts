@@ -135,6 +135,8 @@ export async function buildRealDataFrom(
     inviteRows,
     letterRows,
     arrearsRows,
+    chargePeriodRows,
+    chargeLineRows,
   ] = await Promise.all([
     q(
       "properties",
@@ -172,7 +174,7 @@ export async function buildRealDataFrom(
     q("edl_items", "id,session_id"),
     q("edl_media", "id,item_id"),
     q("tickets", "id,unit_id,property_id,lease_id,source,category,severity,status,title,description,created_at,updated_at,closed_at,sla_due_at"),
-    q("work_orders", "id,ticket_id,status,created_at"),
+    q("work_orders", "id,ticket_id,status,artisan_contact_id,scheduled_at,amount_cents,vat_cents,created_at", "created_at"),
     q("meters", "id,property_id,unit_id,kind,serial_number,supplier", "created_at"),
     q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", "read_on"),
     q("workflows", "id,kind,unit_id,lease_id,current_state,blocked_reason,started_at,completed_at"),
@@ -186,6 +188,8 @@ export async function buildRealDataFrom(
     q("portal_invites", "id,contact_id,lease_id,email,expires_at,accepted_at,revoked_at,sent_at,delivery,created_at", "created_at"),
     q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", "created_at"),
     q("arrears_actions", "id,lease_id,rent_period_id,stage,executed_at,registered_letter_id", "executed_at"),
+    q("charge_periods", "id,lease_id,year,regime,status,advances_billed_cents,actual_cents,issued_on,due_on", "year"),
+    q("charge_lines", "id,charge_period_id,source,label,category,building_total_cents,tantiemes,tantiemes_total,lot_share_cents,tenant_share_cents,blocked"),
   ]);
 
   // ── Contacts ──
@@ -481,8 +485,21 @@ export async function buildRealDataFrom(
   );
   const conversationByTicket = new Map<string, string>();
   for (const m of messageRows) if (s(m.ticket_id) !== "" && !conversationByTicket.has(s(m.ticket_id))) conversationByTicket.set(s(m.ticket_id), s(m.conversation_id));
-  const workOrderByTicket = new Map<string, string>();
-  for (const w of workOrderRows) if (!workOrderByTicket.has(s(w.ticket_id))) workOrderByTicket.set(s(w.ticket_id), s(w.id));
+  const workOrderByTicket = new Map<string, Row>();
+  for (const w of workOrderRows) if (!workOrderByTicket.has(s(w.ticket_id))) workOrderByTicket.set(s(w.ticket_id), w);
+  const WORK_ORDER_STATUSES = ["offered", "declined", "accepted", "slots_proposed", "scheduled", "done", "invoiced", "paid"];
+  const workOrderOf = (ticketId: string): DemoTicket["workOrder"] => {
+    const w = workOrderByTicket.get(ticketId);
+    if (!w) return null;
+    return {
+      id: s(w.id),
+      status: (WORK_ORDER_STATUSES.includes(s(w.status)) ? s(w.status) : "offered") as NonNullable<DemoTicket["workOrder"]>["status"],
+      artisanContactId: sOr(w.artisan_contact_id, null),
+      scheduledAt: w.scheduled_at ? s(w.scheduled_at) : null,
+      amountCents: typeof w.amount_cents === "number" ? w.amount_cents : null,
+      vatCents: typeof w.vat_cents === "number" ? w.vat_cents : null,
+    };
+  };
   const ticketPhotoRows = documentRows.filter((doc) => s(doc.related_type) === "ticket" && s(doc.storage_path) !== "");
   const signedPhotos = await sign(ticketPhotoRows.map((doc) => s(doc.storage_path)));
   const TICKETS: DemoTicket[] = ticketRows.map((t) => ({
@@ -504,10 +521,40 @@ export async function buildRealDataFrom(
     closedAt: t.closed_at ? day(t.closed_at) : null,
     slaDueAt: t.sla_due_at ? day(t.sla_due_at) : null,
     conversationId: conversationByTicket.get(s(t.id)) ?? (s(t.lease_id) ? conversationByLease.get(s(t.lease_id)) : undefined) ?? null,
-    interventionId: workOrderByTicket.get(s(t.id)) ?? null,
+    interventionId: workOrderByTicket.has(s(t.id)) ? s(workOrderByTicket.get(s(t.id))!.id) : null,
+    workOrder: workOrderOf(s(t.id)),
     attachments: ticketPhotoRows
       .filter((doc) => s(doc.related_id) === s(t.id))
       .map((doc) => ({ id: s(doc.id), name: s(doc.name), url: signedPhotos.get(s(doc.storage_path)) ?? null })),
+    artisanContactId: workOrderOf(s(t.id))?.artisanContactId ?? undefined,
+    amountCents: workOrderOf(s(t.id))?.amountCents ?? undefined,
+  }));
+
+  // ── Charges: the décomptes and their lines ──
+  const linesByPeriod = new Map<string, Row[]>();
+  for (const l of chargeLineRows) linesByPeriod.set(s(l.charge_period_id), [...(linesByPeriod.get(s(l.charge_period_id)) ?? []), l]);
+  const CHARGE_PERIODS: DemoData["CHARGE_PERIODS"] = chargePeriodRows.map((cp) => ({
+    id: s(cp.id),
+    leaseId: s(cp.lease_id),
+    year: n(cp.year),
+    regime: cp.regime === "forfait" ? "forfait" : "advances",
+    status: (["open", "draft", "issued", "disputed", "settled"].includes(s(cp.status)) ? s(cp.status) : "open") as DemoData["CHARGE_PERIODS"][number]["status"],
+    advancesBilledCents: n(cp.advances_billed_cents),
+    actualCents: n(cp.actual_cents),
+    issuedOn: cp.issued_on ? day(cp.issued_on) : null,
+    dueOn: cp.due_on ? day(cp.due_on) : null,
+    lines: (linesByPeriod.get(s(cp.id)) ?? []).map((l) => ({
+      id: s(l.id),
+      source: (["invoice", "syndic_decompte", "meter", "estimate"].includes(s(l.source)) ? s(l.source) : "invoice") as DemoData["CHARGE_PERIODS"][number]["lines"][number]["source"],
+      label: s(l.label),
+      category: s(l.category) as DemoData["CHARGE_PERIODS"][number]["lines"][number]["category"],
+      buildingTotalCents: typeof l.building_total_cents === "number" ? l.building_total_cents : null,
+      tantiemes: typeof l.tantiemes === "number" ? l.tantiemes : null,
+      tantiemesTotal: typeof l.tantiemes_total === "number" ? l.tantiemes_total : null,
+      lotShareCents: n(l.lot_share_cents),
+      tenantShareCents: n(l.tenant_share_cents),
+      blocked: b(l.blocked),
+    })),
   }));
   const lastReadingByMeter = new Map<string, Row>();
   for (const r of readingRows) lastReadingByMeter.set(s(r.meter_id), r); // ordered by read_on: last wins
@@ -677,6 +724,7 @@ export async function buildRealDataFrom(
     BANK_TXS,
     DEPOSITS,
     ENDED_LEASES,
+    CHARGE_PERIODS,
     EDLS,
     TICKETS,
     METERS,

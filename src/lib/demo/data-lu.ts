@@ -9,6 +9,7 @@
  */
 
 import * as fr from "./data";
+import { periodFromSyndic } from "./charges-seed";
 import type { DemoBankTx, DemoContact, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
 import type { OpenInvoice } from "@/domain/banking/matching";
 
@@ -361,6 +362,11 @@ export const SYNDIC_DECOMPTE_2025 = {
   ...fr.SYNDIC_DECOMPTE_2025,
   lines: fr.SYNDIC_DECOMPTE_2025.lines.map((l) => ({ ...l, label: SYNDIC_LINE_LABELS[l.category] ?? l.label })),
 };
+
+// The same décompte, its line labels in the cabinet's language, identical ids and figures.
+export const CHARGE_PERIODS = [
+  periodFromSyndic(SYNDIC_DECOMPTE_2025, fr.leaseById("l-3b"), LEASE_TANTIEMES["l-3b"], { issuedOn: "2026-06-15", dueOn: "2026-07-15" }),
+];
 
 // ─── Documents ──────────────────────────────────────────────────────────────
 

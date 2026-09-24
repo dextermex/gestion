@@ -82,6 +82,7 @@ export function buildEmptyData(org: Org): DemoData {
       lines: [],
     },
     LEASE_TANTIEMES: {},
+    CHARGE_PERIODS: [],
     DOCUMENTS: [],
     INVITES: [],
 

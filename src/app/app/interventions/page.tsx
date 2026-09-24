@@ -1,7 +1,8 @@
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { MetaBadge } from "@/components/gestion/bits";
-import { getDemo } from "@/lib/demo";
-import { formatDate, ticketSeverityMeta, ticketStatusMeta } from "@/lib/types";
+import InterventionSheet from "@/components/gestion/InterventionSheet";
+import { getDemo, isSampleData } from "@/lib/demo";
+import { formatDate, ticketSeverityMeta, ticketStatusMeta, workOrderStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { isIntervention } from "@/lib/portal/types";
@@ -11,11 +12,13 @@ import { isIntervention } from "@/lib/portal/types";
  * by an owner or by an inventory defect are interventions from the start;
  * a tenant's request joins them once the owner decides it needs one
  * (Messages, "Créer une intervention"). The row data is the same
- * collection the dashboard and workflows read.
+ * collection the dashboard and workflows read. Each row opens its sheet,
+ * where the work order moves along its ladder and the ticket follows.
  */
 export default async function InterventionsPage() {
   const { locale, d } = await getI18n();
   const demo = await getDemo();
+  const sample = await isSampleData();
   const TICKETS = demo.TICKETS.filter(isIntervention);
 
   if (TICKETS.length === 0)
@@ -23,6 +26,10 @@ export default async function InterventionsPage() {
 
   const severityMeta = ticketSeverityMeta(d);
   const statusMeta = ticketStatusMeta(d);
+  const workOrderMeta = workOrderStatusMeta(d);
+  const artisans = demo.CONTACTS.filter((c) => c.roles.includes("artisan")).map((c) => ({ id: c.id, name: c.name }));
+  const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: demo.ORG.shortName }) : null;
+  const sheetLabels = { ...d.interventions, close: d.common.close };
   const open = TICKETS.filter((t) => !["done", "closed", "cancelled"].includes(t.status));
   const urgent = open.filter((t) => t.severity === "urgent" || t.severity === "emergency");
   const pendingTenant = open.filter((t) => t.status === "pending_tenant");
@@ -62,7 +69,11 @@ export default async function InterventionsPage() {
                 <th className="px-3 py-2.5 font-semibold">{d.interventions.colUnit}</th>
                 <th className="px-3 py-2.5 text-right font-semibold">{d.interventions.colSeverity}</th>
                 <th className="px-3 py-2.5 text-right font-semibold">{d.interventions.colStatus}</th>
-                <th className="px-4 py-2.5 text-right font-semibold">{d.interventions.colSla}</th>
+                <th className="px-3 py-2.5 text-right font-semibold">{d.interventions.colSla}</th>
+                {/* Anchored: a visually hidden label is absolutely positioned, and would otherwise escape the scrolling table and widen the page. */}
+                <th className="relative px-4 py-2.5 text-right font-semibold">
+                  <span className="sr-only">{d.interventions.open}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -81,12 +92,25 @@ export default async function InterventionsPage() {
                   <td className="px-3 py-3 text-right">
                     <MetaBadge meta={statusMeta[t.status]} />
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-3 py-3 text-right">
                     {t.slaDueAt ? (
                       <span className="tabular-nums text-xs text-ink">{formatDate(t.slaDueAt, locale)}</span>
                     ) : (
                       <Badge className="bg-sand-100 text-ink-soft">{d.common.none}</Badge>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <InterventionSheet
+                      ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, workOrder: t.workOrder }}
+                      ticketMeta={statusMeta[t.status]}
+                      workOrderMeta={t.workOrder ? workOrderMeta[t.workOrder.status] : null}
+                      artisans={artisans}
+                      todayISO={demo.TODAY}
+                      locale={locale}
+                      writable={!sample}
+                      sampleNote={sampleNote}
+                      labels={sheetLabels}
+                    />
                   </td>
                 </tr>
               ))}

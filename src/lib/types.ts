@@ -24,6 +24,8 @@ export type TicketStatus =
   | "new" | "triaged" | "offered" | "scheduled" | "in_progress"
   | "pending_tenant" | "done" | "closed" | "cancelled";
 export type TicketSeverity = "routine" | "priority" | "urgent" | "emergency";
+export type WorkOrderStatus = "offered" | "declined" | "accepted" | "slots_proposed" | "scheduled" | "done" | "invoiced" | "paid";
+export type ChargePeriodStatus = "open" | "draft" | "issued" | "disputed" | "settled";
 export type DepositStatus =
   | "pending" | "held" | "release_pending" | "partially_released"
   | "released" | "forfeited" | "disputed";
@@ -93,6 +95,25 @@ const SEVERITY_COLORS: Record<TicketSeverity, string> = {
   priority: "bg-sky-100 text-sky-800",
   urgent: "bg-amber-100 text-amber-800",
   emergency: "bg-red-100 text-red-700",
+};
+
+const WORK_ORDER_COLORS: Record<WorkOrderStatus, string> = {
+  offered: "bg-violet-100 text-violet-800",
+  declined: "bg-red-100 text-red-700",
+  accepted: "bg-sky-100 text-sky-800",
+  slots_proposed: "bg-sky-100 text-sky-800",
+  scheduled: "bg-brand-100 text-brand-800",
+  done: "bg-emerald-100 text-emerald-800",
+  invoiced: "bg-amber-100 text-amber-800",
+  paid: "bg-neutral-200 text-neutral-600",
+};
+
+const CHARGE_PERIOD_COLORS: Record<ChargePeriodStatus, string> = {
+  open: "bg-sand-100 text-ink-soft",
+  draft: "bg-amber-100 text-amber-800",
+  issued: "bg-sky-100 text-sky-800",
+  disputed: "bg-red-100 text-red-700",
+  settled: "bg-emerald-100 text-emerald-800",
 };
 
 const DEPOSIT_COLORS: Record<DepositStatus, string> = {
@@ -190,6 +211,8 @@ export const matchTierMeta = (d: Dict) =>
 export const ticketStatusMeta = (d: Dict) => withLabels(TICKET_COLORS, d.status.ticket);
 export const ticketSeverityMeta = (d: Dict) => withLabels(SEVERITY_COLORS, d.status.severity);
 export const depositStatusMeta = (d: Dict) => withLabels(DEPOSIT_COLORS, d.status.deposit);
+export const workOrderStatusMeta = (d: Dict) => withLabels(WORK_ORDER_COLORS, d.status.workOrder);
+export const chargePeriodStatusMeta = (d: Dict) => withLabels(CHARGE_PERIOD_COLORS, d.status.chargePeriod);
 export const edlStatusMeta = (d: Dict) => withLabels(EDL_COLORS, d.status.edl);
 export const deadlineStatusMeta = (d: Dict) => withLabels(DEADLINE_COLORS, d.status.deadline);
 export const amlTierMeta = (d: Dict) => withLabels(AML_TIER_COLORS, d.status.amlTier);
