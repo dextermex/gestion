@@ -151,9 +151,13 @@ export function ReviewQueue({
                     <p className="mt-2 text-xs font-semibold text-ink-soft">{labels.noLeases}</p>
                   ) : (
                     <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-end sm:gap-3">
-                      <label className="block min-w-0 flex-1">
+                      {/* A definite width for the select: Safari sizes a select by its widest
+                          option when its container's width is not settled, and these options
+                          name a lot, a tenant and a score. A grid track of minmax(0, 1fr)
+                          settles it, whatever the options say. */}
+                      <label className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] sm:flex-1">
                         <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{labels.assign}</span>
-                        <Select value={s.leaseId} onChange={(e) => patch(t.id, { leaseId: e.target.value })} disabled={s.status === "busy"} aria-label={labels.assign}>
+                        <Select value={s.leaseId} onChange={(e) => patch(t.id, { leaseId: e.target.value })} disabled={s.status === "busy"} aria-label={labels.assign} className="max-w-full min-w-0">
                           {t.candidates.length > 0 && (
                             <optgroup label={labels.suggested}>
                               {t.candidates.map((c) => (
