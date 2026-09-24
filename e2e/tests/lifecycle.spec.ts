@@ -124,7 +124,7 @@ test("the tenant writes to the owner, then sends a request with a photo", async 
   // The request sits in the same conversation, after the first message.
   await page.getByRole("link", { name: "Ouvrir la conversation" }).click();
   await page.waitForURL(new RegExp(`/locataire/messages\\?demande=${requestId}`));
-  await expect(page.getByText("Bonjour, j'ai une question sur mon bail.")).toBeVisible();
+  await expect(page.locator("#tenant-messages-body").getByText("Bonjour, j'ai une question sur mon bail.")).toBeVisible();
   await expect(page.locator(`[data-request="${requestId}"]`)).toContainText(requestTitle);
   await expect(page.locator(`[data-request="${requestId}"]`).getByRole("link", { name: "Voir la demande" })).toBeVisible();
   await signOutFromTenantSpace(page);
@@ -183,7 +183,8 @@ test("the owner reads the chat, answers, tracks the request and opens an interve
 test("the tenant answers, sends a second request, and holds no key to the desk's side", async ({ page }) => {
   await signIn(page, tenant.email, "/locataire");
   await page.goto("/locataire/messages");
-  await expect(page.getByText("Un plombier passe jeudi matin.")).toBeVisible();
+  // In the conversation itself: on a phone the list of conversations previews the same last word.
+  await expect(page.locator("#tenant-messages-body").getByText("Un plombier passe jeudi matin.")).toBeVisible();
   await expect(page.locator(`[data-request="${requestId}"]`)).toContainText("En cours");
   await page.locator("#tenant-message-body").fill("Jeudi matin me convient.");
   await page.keyboard.press("Enter");
