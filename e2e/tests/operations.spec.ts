@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createHouse, leaseIdOf, letLot, mail, signUp } from "./helpers";
+import { createHouse, leaseIdOf, letLot, mail, signIn, signUp } from "./helpers";
 
 /**
  * The operations of a tenancy, on the real database. A house let two years
@@ -62,6 +62,7 @@ test("the owner lets a house to a tenancy that began two years ago", async ({ pa
 });
 
 test("indexation: capital declared, the letter sent, the AR back, the adjustment applied from the month after it", async ({ page }) => {
+  await signIn(page, owner.email);
   await page.goto("/app/indexation");
   const row = page.locator(`[data-indexation-lease="${leaseId}"]`);
   await expect(row).toContainText("Capital investi non déclaré");
@@ -117,6 +118,7 @@ test("indexation: capital declared, the letter sent, the AR back, the adjustment
 });
 
 test("charges: a décompte entered, its blocked line at zero, issued and carried onto this month's rent", async ({ page }) => {
+  await signIn(page, owner.email);
   await page.goto("/app/charges");
   await expect(page.getByText("Aucun décompte pour l'instant.")).toBeVisible();
   await page.getByRole("button", { name: "Nouveau décompte" }).click();
@@ -165,6 +167,7 @@ test("charges: a décompte entered, its blocked line at zero, issued and carried
 });
 
 test("interventions: a work order walks its ladder from the sheet, the ticket following", async ({ page }) => {
+  await signIn(page, owner.email);
   const artisan = await page.request.post("/api/contacts/create", { data: { name: "Jos Kirsch", kind: "natural", role: "artisan" } });
   expect(artisan.ok()).toBe(true);
   const ticket = await page.request.post("/api/tickets/create", { data: { unitId, title: "Chaudière en panne" } });
@@ -215,6 +218,7 @@ test("interventions: a work order walks its ladder from the sheet, the ticket fo
 });
 
 test("guarantees: received, the tenancy closed, retentions, a justification, the décompte, the two tranches", async ({ page }) => {
+  await signIn(page, owner.email);
   await page.goto("/app/garanties");
   const held = page.locator("li[data-deposit]").filter({ hasText: houseName });
   await expect(held).toContainText("En attente");
