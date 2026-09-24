@@ -72,11 +72,12 @@ function WizardStep() {
 describe("a field keeps the caret while the person types", () => {
   it("inside a dialog whose owner re-renders with a new onClose on every key", async () => {
     await render(<DialogForm />);
-    const field = host.querySelector<HTMLInputElement>('input[aria-label="Titre"]')!;
+    // The dialog is portalled to the end of <body>, above every floating card: look for it in the document.
+    const field = document.querySelector<HTMLInputElement>('input[aria-label="Titre"]')!;
     await typeInto(field, "Fuite");
     expect(document.activeElement).toBe(field);
     expect(field.value).toBe("Fuite");
-    expect(host.querySelector('[data-testid="echo"]')!.textContent).toBe("Fuite");
+    expect(document.querySelector('[data-testid="echo"]')!.textContent).toBe("Fuite");
   });
 
   it("inside a wizard step card, with the footer beside it", async () => {
@@ -98,7 +99,7 @@ describe("a field keeps the caret while the person types", () => {
       );
     }
     await render(<Owner />);
-    const field = host.querySelector<HTMLInputElement>('input[aria-label="f"]')!;
+    const field = document.querySelector<HTMLInputElement>('input[aria-label="f"]')!;
     await typeInto(field, "7");
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
     expect(closed).toBe(7);

@@ -2,7 +2,8 @@
 
 import { clsx } from "clsx";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
 /* ---------------------------------- Button --------------------------------- */
@@ -312,6 +313,12 @@ export function Modal({
   const reduced = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
   const close = useLatest(onClose);
+  // The dialog lives at the end of <body>, not where it is declared: a page
+  // container that animates (a transform, a fade) traps a fixed descendant
+  // in its own stacking context, under the shell's floating cards. A portal
+  // needs the document, so it opens after mount; nothing renders on the server.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Keyboard contract: Escape closes; focus moves into the dialog on open,
   // Tab wraps inside it, and focus returns to the trigger on close. The page
@@ -321,9 +328,10 @@ export function Modal({
   // read through a ref: were it a dependency, the inline handler a parent
   // passes on every render would re-run this effect on every keystroke in
   // the dialog, and the focus call would pull the caret out of the field
-  // after one character.
+  // after one character. (`mounted` flips once: a dialog open from its
+  // first render gets its focus once the portal exists.)
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mounted) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     panelRef.current?.focus();
     document.documentElement.style.overflow = "hidden";
@@ -352,9 +360,10 @@ export function Modal({
       document.documentElement.style.overflow = "";
       previouslyFocused?.focus();
     };
-  }, [open, close]);
+  }, [open, mounted, close]);
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -395,7 +404,8 @@ export function Modal({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
