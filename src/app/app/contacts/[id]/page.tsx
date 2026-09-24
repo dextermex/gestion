@@ -97,7 +97,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                     <div className="min-w-0 flex-1">
                       <Link
                         href={`/app/baux/${l.id}`}
-                        className="block truncate text-sm font-semibold text-ink hover:text-brand-700"
+                        className="block truncate text-sm font-semibold text-ink hover:text-brand-700 max-sm:leading-10"
                       >
                         {leaseUnitLabel(l)}
                       </Link>
@@ -200,7 +200,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   </li>
                 )}
               </ul>
-              <Link href="/app/aml" className="mt-3 block text-sm font-semibold text-brand-700 hover:underline">
+              <Link href="/app/aml" className="mt-3 block text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                 {d.contacts.amlLink}
               </Link>
             </Panel>

@@ -15,7 +15,8 @@ import { signOutEverywhere } from "@/lib/supabase/browser";
  * clear of the home indicator; packed flat when the phone is held sideways.
  * Above `lg` the space keeps its tabs under the logo and this bar is not
  * on the screen at all. The pages keep their foot clear of it through the
- * `--nav-b` variable the space declares (globals.css).
+ * `--nav-b` variable the space declares (globals.css). A conversation open
+ * over the phone's screen (`html[data-phone-chat]`) has the foot too.
  */
 
 export interface TenantNavItem {
@@ -61,7 +62,7 @@ export default function TenantBottomNav({
     <>
       <nav
         aria-label={label}
-        className="chrome-material fixed inset-x-0 bottom-0 z-30 border-t border-sand-100 bg-white pb-(--safe-bottom) supports-[backdrop-filter]:bg-white/90 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 lg:hidden"
+        className="chrome-material fixed inset-x-0 bottom-0 z-30 border-t border-sand-100 bg-white pb-(--safe-bottom) supports-[backdrop-filter]:bg-white/90 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden lg:hidden"
       >
         <ul className="mx-auto flex h-14 max-w-3xl items-stretch gap-0.5 px-safe-4 short-landscape:h-11">
           {items.map((it) => {

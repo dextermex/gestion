@@ -243,7 +243,7 @@ export default function EdlWizard({
                       <button
                         aria-label={d.common.delete}
                         onClick={() => setRooms((prev) => prev.filter((x) => x.key !== r.key))}
-                        className="shrink-0 text-ink-soft transition hover:text-red-600"
+                        className="shrink-0 text-ink-soft transition hover:text-red-600 max-sm:-mr-2 max-sm:flex max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:justify-center max-sm:rounded-lg"
                       >
                         <Icon name="trash" size={16} />
                       </button>

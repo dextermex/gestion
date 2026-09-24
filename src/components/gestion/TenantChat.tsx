@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { initials } from "@/lib/types";
@@ -12,7 +12,19 @@ import { initials } from "@/lib/types";
  * tenancy, the requests they sent sitting in it as cards. The messages are
  * the rows the desk reads; a message written here goes through the API
  * under the tenant's own session and the page then reads it back.
+ *
+ * On a phone the card is a screen of its own (TenantMessages decides when):
+ * the space's bar and bottom bar step aside, the way back and the
+ * manager's name take the top, the composer the foot.
  */
+
+/**
+ * The conversation filling a phone's whole screen (the page's gutter is
+ * gone meanwhile): edge to edge, clear of the notch and the rounded corners
+ * by itself, the messages scrolling inside it while the header and the
+ * composer stay put. Nothing of this reaches `lg`.
+ */
+const PHONE_CHAT = "max-lg:h-dvh max-lg:rounded-none max-lg:border-0 max-lg:pt-(--safe-top) max-lg:pl-(--safe-left) max-lg:pr-(--safe-right) max-lg:shadow-none";
 
 export interface TenantChatMessage {
   id: string;
@@ -45,6 +57,9 @@ export default function TenantChat({
   newRequestHref,
   sampleNote,
   focusRequestId,
+  phoneOpen,
+  onBack,
+  backLabel,
 }: {
   leaseId: string;
   title: string;
@@ -57,29 +72,21 @@ export default function TenantChat({
   /** On a sample cabinet, the composer works but nothing is written. */
   sampleNote: string | null;
   focusRequestId: string | null;
+  /** On a phone: whether the conversation has the screen (else it is not shown there at all). A laptop pays no attention. */
+  phoneOpen: boolean;
+  /** A phone's way back to the list of conversations. */
+  onBack: () => void;
+  backLabel: string;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed" | "sample">("idle");
   const bodyRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
   const count = messages.length;
 
-  // On a phone the card takes what the screen leaves under whatever sits
-  // above it (the space's bar, a sample banner, the title) and above the
-  // bottom bar, so the composer is in reach without a scroll. The top is
-  // measured, not guessed: the stylesheet does the rest of the arithmetic
-  // (globals.css, --nav-b) and stays in charge above `lg`.
-  useLayoutEffect(() => {
-    const card = cardRef.current;
-    if (!card) return;
-    const fit = () => card.style.setProperty("--chat-top", `${Math.round(card.getBoundingClientRect().top + window.scrollY)}px`);
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, []);
-
-  // Opens on the latest message, or on the request the tenant came for.
+  // Opens on the latest message, or on the request the tenant came for. On
+  // a phone the transition includes the conversation taking the screen,
+  // which is when it can be scrolled.
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -91,7 +98,7 @@ export default function TenantChat({
       }
     }
     el.scrollTop = el.scrollHeight;
-  }, [count, focusRequestId]);
+  }, [count, focusRequestId, phoneOpen]);
 
   const send = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -121,17 +128,37 @@ export default function TenantChat({
   };
 
   return (
-    <Card ref={cardRef} className="flex flex-col max-lg:h-[calc(100dvh-var(--chat-top,15rem)-1.5rem-var(--nav-b))] max-lg:min-h-[18rem]">
-      <div className="flex items-center gap-3 border-b border-sand-100 px-4 py-3 sm:px-5">
+    <Card className={"flex flex-col " + (phoneOpen ? PHONE_CHAT : "max-lg:hidden")}>
+      <div className="flex items-center gap-2.5 border-b border-sand-100 px-3 py-2.5 lg:gap-3 lg:px-5 lg:py-3">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label={backLabel}
+          title={backLabel}
+          className="tactile -ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-brand-700 transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:hidden"
+        >
+          <Icon name="chevron-left" size={24} />
+        </button>
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">{initials(title) || "·"}</span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-display text-base font-bold text-ink">{title}</h2>
           <p className="truncate text-xs text-ink-soft">{subtitle}</p>
         </div>
         {newRequestHref && (
-          <Link href={newRequestHref} className="tactile shrink-0 rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:border-brand-300">
-            {labels.newRequest}
-          </Link>
+          <>
+            <Link href={newRequestHref} className="tactile shrink-0 rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:border-brand-300 max-lg:hidden">
+              {labels.newRequest}
+            </Link>
+            {/* The same way to a new request, as a button a thumb can hit, where the header has no room for its words. */}
+            <Link
+              href={newRequestHref}
+              aria-label={labels.newRequest}
+              title={labels.newRequest}
+              className="tactile flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-brand-700 transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:hidden"
+            >
+              <Icon name="plus" size={22} />
+            </Link>
+          </>
         )}
       </div>
 
@@ -215,7 +242,7 @@ export default function TenantChat({
         })}
       </div>
 
-      <form onSubmit={send} className="border-t border-sand-100 p-3">
+      <form onSubmit={send} className="border-t border-sand-100 p-3 max-lg:pb-[max(0.75rem,var(--safe-bottom))]">
         <div className="flex items-end gap-2">
           <Textarea
             id="tenant-message-body"

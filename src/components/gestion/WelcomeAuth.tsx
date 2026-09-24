@@ -188,7 +188,7 @@ export default function WelcomeAuth({
           </div>
 
           <p className="mt-4 text-center text-xs font-semibold">
-            <a href={MORADA_URL} className="text-ink-soft hover:text-brand-700">
+            <a href={MORADA_URL} className="text-ink-soft hover:text-brand-700 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center max-sm:px-2">
               {d.auth.backToMorada}
             </a>
           </p>
@@ -304,7 +304,7 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
               ) : resend === "failed" ? (
                 <span className="font-semibold text-amber-800">{d.auth.resendFailed}</span>
               ) : (
-                <button type="button" onClick={resendConfirmation} disabled={resend === "sending"} className="font-semibold text-brand-700 hover:underline disabled:opacity-60">
+                <button type="button" onClick={resendConfirmation} disabled={resend === "sending"} className="font-semibold text-brand-700 hover:underline disabled:opacity-60 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                   {resend === "sending" ? d.auth.resendSending : d.auth.resend}
                 </button>
               )}
@@ -320,7 +320,7 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
           type="button"
           onClick={sendReset}
           disabled={forgot === "sending"}
-          className="text-xs font-semibold text-ink-soft hover:text-brand-700 disabled:opacity-60"
+          className="text-xs font-semibold text-ink-soft hover:text-brand-700 disabled:opacity-60 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center max-sm:px-2"
         >
           {forgot === "sending" ? d.auth.forgotSending : d.auth.forgot}
         </button>
@@ -445,7 +445,7 @@ function SignUpForm({
         <div role="alert" className="space-y-2" data-testid="signup-message">
           <p className={"text-xs font-semibold " + (state === "exists" ? "text-amber-800" : "text-red-700")}>{message[state]}</p>
           {state === "exists" && (
-            <button type="button" onClick={() => onExists(existingEmail)} className="text-xs font-semibold text-brand-700 hover:underline" data-testid="signup-exists-signin">
+            <button type="button" onClick={() => onExists(existingEmail)} className="text-xs font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center" data-testid="signup-exists-signin">
               {d.auth.existsSignIn}
             </button>
           )}

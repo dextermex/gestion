@@ -1966,6 +1966,7 @@ export const de: Dict = {
     msgView: "Anfrage ansehen",
     reqInChat: "Unterhaltung öffnen",
     msgPick: "Ihre Unterhaltungen",
+    msgNoneYet: "Noch keine Nachricht",
 
     // Die Einladung: die E-Mail, dann die Seite, die der Link öffnet
     invite: {

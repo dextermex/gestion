@@ -70,7 +70,7 @@ export function RingCard({
       </div>
       <Link
         href={actionHref}
-        className="group mt-4 flex items-center justify-between border-t border-sand-100 pt-3 text-sm font-semibold text-brand-700 hover:text-brand-800"
+        className="group mt-4 flex items-center justify-between border-t border-sand-100 pt-3 text-sm font-semibold text-brand-700 hover:text-brand-800 max-sm:min-h-11"
       >
         {actionLabel}
         <svg

@@ -139,11 +139,14 @@ const PHONE_QUERY = "(max-width: 1023.98px)";
 const onPhone = (): boolean => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(PHONE_QUERY).matches;
 
 /**
- * The conversation filling a phone's screen under the shell's bar (3.5rem):
- * edge to edge over the page's padding, the messages scrolling inside it
- * while the header and the composer stay put.
+ * The conversation filling a phone's whole screen, the way a messaging app
+ * opens a chat: the shell's bar, sample line and page gutter step aside
+ * (they read `html[data-phone-chat]`), the card runs edge to edge and keeps
+ * clear of the notch and the rounded corners itself, its own header (the
+ * way back, the name) takes the top, the composer the foot above the home
+ * indicator, and the messages scroll inside it while both stay put.
  */
-const PHONE_CHAT = "max-lg:-mx-4 max-lg:-mt-6 max-lg:-mb-[max(1.5rem,var(--safe-bottom))] max-lg:h-[calc(100dvh-var(--bar-h))] max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 max-lg:shadow-none sm:max-lg:-mx-6"
+const PHONE_CHAT = "max-lg:h-dvh max-lg:rounded-none max-lg:border-0 max-lg:pt-(--safe-top) max-lg:pl-(--safe-left) max-lg:pr-(--safe-right) max-lg:shadow-none"
 
 export default function MessagesCenter({
   threads,
@@ -234,9 +237,10 @@ export default function MessagesCenter({
     restoreScroll.current = null;
   }, [view]);
 
-  // A conversation filling a phone's screen leaves no room for the shell's
-  // floating getting-started card: the document says so while it is open,
-  // and the card steps aside (its own stylesheet reads the attribute).
+  // A conversation filling a phone's screen is the whole screen: the
+  // document says so while it is open, and the shell's bar, sample line
+  // and floating getting-started card step aside (their own classes read
+  // the attribute, below `lg` only).
   useEffect(() => {
     if (!chatOpen) return;
     document.documentElement.setAttribute("data-phone-chat", "");

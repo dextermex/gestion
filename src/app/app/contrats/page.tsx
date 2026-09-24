@@ -72,7 +72,7 @@ export default async function ContratsPage() {
                 <div className="min-w-0 flex-1">
                   <Link
                     href={`/app/baux/${l.id}`}
-                    className="block truncate text-sm font-semibold text-ink hover:text-brand-700"
+                    className="block truncate text-sm font-semibold text-ink hover:text-brand-700 max-sm:leading-10"
                   >
                     {leaseUnitLabel(l)}
                   </Link>

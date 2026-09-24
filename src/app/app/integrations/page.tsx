@@ -78,7 +78,7 @@ export default async function IntegrationsPage() {
               </div>
               <a
                 href={MORADA_URL}
-                className="shrink-0 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                className="shrink-0 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
               >
                 {d.integrations.open}
               </a>
@@ -90,7 +90,7 @@ export default async function IntegrationsPage() {
               </div>
               <a
                 href={PRO_URL}
-                className="shrink-0 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                className="shrink-0 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
               >
                 {d.integrations.open}
               </a>

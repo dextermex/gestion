@@ -157,13 +157,53 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       await expect(bar.getByRole("button", { name: "Plus", exact: true })).toHaveClass(/text-brand-700/);
     });
   }
-  // The conversation's composer sits above the bar, in reach.
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/locataire/messages");
-  const composer = (await page.locator("#tenant-message-body").boundingBox())!;
-  const bar = (await page.getByRole("navigation", { name: "Espace locataire" }).boundingBox())!;
-  expect(composer.y + composer.height).toBeLessThanOrEqual(bar.y);
-  await test.info().attach("tenant-messages-bar", { body: await page.screenshot(), contentType: "image/png" });
+});
+
+test("the tenant's Messages on the phone: the list first, a conversation over the whole screen, the way back", async ({ page, context }) => {
+  await signIn(page, owner.email);
+  await context.addCookies([{ name: "morada_dataset", value: "fr", url: new URL(page.url()).origin }]);
+  for (const [width, height] of [[390, 844], [844, 390]] as const) {
+    await test.step(`${width}x${height}`, async () => {
+      await page.setViewportSize({ width, height });
+      await page.goto("/locataire/messages");
+      const bar = page.getByRole("navigation", { name: "Espace locataire" });
+      const rows = page.locator("#tenant-conversations li > button");
+      // The list alone, under the space's bar, above the bottom bar: no conversation until one is tapped.
+      await expect(rows.first()).toBeVisible();
+      await expect(page.locator("#tenant-message-body")).toBeHidden();
+      await expect(bar).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: "Messages" })).toBeVisible();
+      for (const r of await rows.all()) expect((await r.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      // A tap: the conversation is the whole screen. Both bars are gone, the way back
+      // and the manager's name at the top, the composer at the foot, nothing scrolling but the messages.
+      await rows.first().click();
+      await expect(page.locator("#tenant-message-body")).toBeVisible();
+      await expect(bar).toBeHidden();
+      await expect(page.getByRole("link", { name: "Morada" })).toBeHidden();
+      await expect(page).toHaveURL(/bail=/);
+      const back = page.getByRole("button", { name: "Retour aux conversations" });
+      const backBox = (await back.boundingBox())!;
+      expect(backBox.y).toBeGreaterThanOrEqual(0);
+      expect(backBox.y).toBeLessThan(60);
+      expect(backBox.height).toBeGreaterThanOrEqual(44);
+      const composer = (await page.locator("#tenant-message-body").boundingBox())!;
+      expect(composer.y + composer.height).toBeLessThanOrEqual(height);
+      expect(composer.y + composer.height).toBeGreaterThan(height - 72);
+      const overflow = await page.evaluate(() => ({
+        down: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+        across: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      }));
+      expect(overflow.down, "nothing scrolls but the messages").toBeLessThanOrEqual(2);
+      expect(overflow.across, "nothing spills out sideways").toBeLessThanOrEqual(0);
+      await test.info().attach(`tenant-messages-chat-${width}x${height}`, { body: await page.screenshot(), contentType: "image/png" });
+      // Back: the list, the bars, the address clean.
+      await back.click();
+      await expect(rows.first()).toBeVisible();
+      await expect(bar).toBeVisible();
+      await expect(page.locator("#tenant-message-body")).toBeHidden();
+      await expect(page).not.toHaveURL(/bail=/);
+    });
+  }
 });
 
 test("the drawer, the search and a sheet fit the phone's screen", async ({ page, context }) => {
@@ -181,6 +221,10 @@ test("the drawer, the search and a sheet fit the phone's screen", async ({ page,
     const b = await row.boundingBox();
     if (b && b.height > 0) expect.soft(b.height, "a drawer entry is at least 40px tall").toBeGreaterThanOrEqual(40);
   }
+  // The role switch the bar carries on a laptop is in the drawer here: the tenant space is a thumb away.
+  const toTenant = drawer.getByRole("navigation", { name: "Changer de rôle" }).getByRole("link", { name: "Locataire" });
+  await expect(toTenant).toBeVisible();
+  expect((await toTenant.boundingBox())!.height).toBeGreaterThanOrEqual(40);
   await test.info().attach("drawer", { body: await page.screenshot(), contentType: "image/png" });
   await drawer.getByRole("button").first().click();
   await expect(drawer).toBeHidden();

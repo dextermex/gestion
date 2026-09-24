@@ -112,7 +112,7 @@ export default function LotGrid({
               onClick={() => setFamily(f)}
               aria-pressed={family === f}
               className={
-                "tactile flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-semibold transition " +
+                "tactile flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm font-semibold transition max-sm:min-h-10 " +
                 (family === f ? "border-brand-400 bg-brand-50 text-brand-800 ring-1 ring-brand-200" : "border-sand-200 bg-white text-ink-soft hover:border-brand-200 hover:text-ink")
               }
             >
@@ -141,7 +141,7 @@ export default function LotGrid({
                 onClick={() => pick(v)}
                 aria-pressed={view === v}
                 className={
-                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition " +
+                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition max-sm:min-h-9 max-sm:px-3 " +
                   (view === v ? "bg-white text-brand-800 shadow-sm" : "text-ink-soft hover:text-ink")
                 }
               >

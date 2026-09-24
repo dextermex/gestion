@@ -362,6 +362,22 @@ export default function GestionShell({
       {NAV.map(navSection)}
     </nav>
     <div className="shrink-0 border-t border-sand-100 px-3 pb-[max(0.75rem,var(--safe-bottom))] pt-2">
+      {/* The role switch the bar carries from `md` up, here for a phone: the
+          same two segments, one thumb's size each, so the tenant space is
+          as reachable from a phone as from a laptop. */}
+      {shell.tenant && (
+        <nav aria-label={d.shell.roleAria} className="mb-2 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 md:hidden">
+          <span aria-current="true" className="flex min-h-10 flex-1 items-center justify-center rounded-lg bg-white px-3 text-xs font-semibold text-brand-800 shadow-sm">
+            {d.shell.roleOwner}
+          </span>
+          <Link
+            href="/locataire"
+            className="tactile flex min-h-10 flex-1 items-center justify-center rounded-lg px-3 text-xs font-semibold text-ink-soft hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+          >
+            {d.shell.roleTenant}
+          </Link>
+        </nav>
+      )}
       <DatasetSwitch d={d} datasetId={shell.datasetId} />
       <div className="pt-2.5 text-[11px] text-ink-soft">
         <p className="px-3">{d.nav.ecosystem}</p>
@@ -396,8 +412,11 @@ export default function GestionShell({
         </MobileDrawer>
 
         <div className="flex min-h-dvh flex-col lg:pl-64">
+          {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
+              is the whole screen: the bar and the sample line step aside with the
+              rest of the chrome, and the conversation's own header takes the top. */}
           <ScrollHeader
-            className="chrome-material sticky top-0 z-30 flex h-(--bar-h) items-center gap-2 border-b border-transparent bg-white px-safe-4 pt-(--safe-top) transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 sm:gap-3 sm:px-safe-6"
+            className="chrome-material sticky top-0 z-30 flex h-(--bar-h) items-center gap-2 border-b border-transparent bg-white px-safe-4 pt-(--safe-top) transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden sm:gap-3 sm:px-safe-6"
             elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
           >
             <button
@@ -479,7 +498,7 @@ export default function GestionShell({
           {shell.sampleCabinet && (
             <div
               role="status"
-              className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-safe-4 py-2 text-center text-xs font-semibold text-amber-900"
+              className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-safe-4 py-2 text-center text-xs font-semibold text-amber-900 max-lg:[html[data-phone-chat]_&]:hidden"
             >
               <span>{fmt(d.shell.sampleBanner, { cabinet: shell.sampleCabinet })}</span>
               <button
@@ -495,8 +514,10 @@ export default function GestionShell({
           )}
 
           {/* On a phone the page ends clear of the home indicator, and of the
-              floating getting-started card when the account has one. */}
-          <main id="main" className={"mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24 max-lg:[html[data-phone-chat]_&]:pb-[max(1.5rem,var(--safe-bottom))]")}>
+              floating getting-started card when the account has one. A
+              conversation open over the phone's screen gets the screen whole:
+              no gutter, no width limit (the card keeps the safe areas itself). */}
+          <main id="main" className={"mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24")}>
             {children}
           </main>
         </div>

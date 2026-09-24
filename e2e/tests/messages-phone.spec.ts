@@ -4,8 +4,9 @@ import { createHouse, inviteTenant, letLot, mail, PASSWORD, signIn, signOutFromS
 /**
  * Messages on a phone. The desk's inbox behaves like a messaging app
  * there: the list alone, most recent conversation on top, one conversation
- * filling the screen once tapped, a way back to the list; Demandes the
- * same way. The rows are real: an owner with two tenancies, one tenant who
+ * filling the whole screen once tapped (the shell's bar gone, the way back
+ * and the name at the top, the composer at the foot), a way back to the
+ * list; Demandes the same way. The rows are real: an owner with two tenancies, one tenant who
  * wrote and asked, on the database the laptop flows use. The tenancies are
  * set up at a laptop's size (the wizards are the lifecycle's business); the
  * phone tests then run in an iPhone 14 viewport on the project's browser,
@@ -38,17 +39,20 @@ const laptop = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, i
 const rows = (page: Page) => page.locator("#messages-panel-conversations li > button");
 const chatHeading = (page: Page, name: string) => page.getByRole("heading", { level: 2, name });
 const backToThreads = (page: Page) => page.getByRole("button", { name: "Retour aux conversations" });
+/** The shell's bar: the menu, the search, the account. On the list; gone while a conversation has the screen. */
+const shellBar = (page: Page) => page.getByRole("button", { name: "Ouvrir le menu" });
 
-/** The conversation's header under the shell's bar, its composer at the foot of the screen, and the page itself not scrolling. */
+/** The conversation alone on the screen: the shell's bar gone, its own header at the top, its composer at the foot, and the page itself not scrolling. */
 async function expectChatFillsScreen(page: Page, name: string): Promise<void> {
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
+  await expect(shellBar(page), "the shell's bar has stepped aside").toBeHidden();
   const header = await chatHeading(page, name).boundingBox();
   const composer = await page.locator("#messages-reply").boundingBox();
   expect(header, "the conversation's header is on the screen").not.toBeNull();
   expect(composer, "the composer is on the screen").not.toBeNull();
   expect(header!.y).toBeGreaterThanOrEqual(0);
-  expect(header!.y, "the header sits right under the shell's bar").toBeLessThan(120);
+  expect(header!.y, "the header sits at the top of the screen").toBeLessThan(60);
   expect(composer!.y + composer!.height, "the composer ends within the screen").toBeLessThanOrEqual(viewport!.height);
   expect(composer!.y + composer!.height, "the composer sits at the foot of the screen").toBeGreaterThan(viewport!.height - 72);
   const overflow = await page.evaluate(() => ({
@@ -122,10 +126,11 @@ test.describe("on the phone", () => {
     await expect(first.getByRole("img", { name: /non lus/ })).toBeVisible();
     // The tenancy nobody has written to yet is listed after, ready for a first word.
     await expect(rows(page).nth(1)).toContainText(`${second.first} ${second.last}`);
-    // No conversation is open: neither its body nor its composer is on the screen, the title is.
+    // No conversation is open: neither its body nor its composer is on the screen, the title and the shell's bar are.
     await expect(page.locator("#messages-body")).toBeHidden();
     await expect(page.locator("#messages-reply")).toBeHidden();
     await expect(page.getByRole("heading", { level: 1, name: "Messages" })).toBeVisible();
+    await expect(shellBar(page)).toBeVisible();
     const across = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(across, "the list fits the phone").toBeLessThanOrEqual(0);
   });
@@ -149,9 +154,10 @@ test.describe("on the phone", () => {
     expect(threadId, "the conversation's id in the address").not.toBe("");
     await expectChatFillsScreen(page, name);
     expect(await atBottom(page), "opens on the newest message").toBe(true);
-    // Back: the list again, the conversation read, the address clean.
+    // Back: the list again under the shell's bar, the conversation read, the address clean.
     await backToThreads(page).click();
     await expect(rows(page).first()).toBeVisible();
+    await expect(shellBar(page)).toBeVisible();
     await expect(page.locator("#messages-body")).toBeHidden();
     await expect(page).not.toHaveURL(/fil=/);
     await expect(rows(page).filter({ hasText: tenant.last }).getByRole("img", { name: /non lus/ })).toHaveCount(0);

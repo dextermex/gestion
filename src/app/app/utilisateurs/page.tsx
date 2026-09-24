@@ -97,7 +97,7 @@ export default async function UtilisateursPage() {
             {d.utilisateurs.manageInPro}{" "}
             <a
               href={PRO_URL}
-              className="font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
             >
               {d.utilisateurs.openPro}
             </a>

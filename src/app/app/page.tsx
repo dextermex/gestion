@@ -430,7 +430,7 @@ export default async function DashboardPage() {
               ))}
             </ul>
           )}
-          <Link href="/app/conformite" className="mt-4 block text-sm font-semibold text-brand-700 hover:underline">
+          <Link href="/app/conformite" className="mt-4 block text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
             {d.dash.openCompliance}
           </Link>
         </Panel>

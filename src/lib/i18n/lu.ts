@@ -1971,6 +1971,7 @@ export const lu: Dict = {
     msgView: "Ufro kucken",
     reqInChat: "Conversatioun opmaachen",
     msgPick: "Är Conversatiounen",
+    msgNoneYet: "Nach keng Noriicht",
 
     // D'Invitatioun: d'E-Mail, dann d'Säit, déi de Link opmécht
     invite: {

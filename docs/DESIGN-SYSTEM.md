@@ -129,19 +129,31 @@ layer (`globals.css`, `pro/ui.tsx`, the shell):
   the name keeps the larger share (`max-sm:max-w-[42%] flex-wrap`).
 - **Dialogs** are sheets from the bottom on phones (`Modal`), clear of the home
   indicator; the command palette and the drawer keep the same width rules.
-- **Messages** is one pane at a time on a phone (list, then a conversation filling the
-  screen, then back), the way a messaging app reads; see `MessagesCenter`.
+- **Messages** is one pane at a time on a phone, the way a messaging app reads: the
+  list alone (most recent first), then the tapped conversation as the whole screen, then
+  back. While a conversation is open the component sets `html[data-phone-chat]`, and
+  every piece of chrome reads it below `lg` and steps aside (the bar, the sample line,
+  the tenant bottom bar and foot, the getting-started card, the page's gutter and width
+  limit): the card is `100dvh`, keeps the safe areas itself, and carries only the way
+  back, the name and the composer. `MessagesCenter` on the desk, `TenantMessages` (over
+  `TenantChat`) in the tenant space; a laptop keeps both panes side by side, or the
+  title, the chips and the card, exactly as before.
 - **The tenant space navigates from a bottom bar on phones** (`TenantBottomNav`, below
   `lg`): Accueil · Bail · Paiements · Messages · Plus, fixed at the foot of the screen,
   clear of the home indicator, packed flat when the phone is held sideways
   (`short-landscape` variant); "Plus" is a sheet with the requests, the owner's space when
   the account has one, and signing out. The tabs under the logo stay above `lg`. Pages
   keep their foot clear through `--nav-b` (the bar's height below `lg`, zero above). The
-  owner space's navigation (sidebar and drawer) is untouched.
+  owner space's navigation (sidebar and drawer) is untouched, except that the drawer
+  carries the Propriétaire / Locataire switch below `md`, where the bar has no room for
+  it: a phone offers the same in portrait and landscape.
 - **Long strings** (an IBAN, an e-mail, a reference) break rather than widen their box:
   `overflow-wrap: break-word` on `body`.
 
 `e2e/tests/responsive.spec.ts` walks every critical screen at 390px and 320px (WebKit
 in CI, Chromium's emulation elsewhere) and fails on anything wider than the screen, a
-field under 16px or 40px, a kit button under 40px, or a bar covering the title; its
-screenshots go to the Playwright report as the regression record.
+field under 16px or 40px, a kit button under 40px, or a bar covering the title; it also
+opens the tenant's Messages from the list in portrait and landscape and checks the
+conversation has the screen whole (no bars, the way back at the top, the composer at the
+foot, nothing scrolling but the messages). `messages-phone.spec.ts` does the same for the
+desk. Their screenshots go to the Playwright report as the regression record.

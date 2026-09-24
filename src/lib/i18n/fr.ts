@@ -1977,6 +1977,7 @@ export const fr = {
     msgView: "Voir la demande",
     reqInChat: "Ouvrir la conversation",
     msgPick: "Vos conversations",
+    msgNoneYet: "Pas encore de message",
 
     // L'invitation : l'e-mail, puis la page que le lien ouvre
     invite: {

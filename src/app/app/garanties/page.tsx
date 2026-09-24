@@ -207,7 +207,7 @@ export default async function GarantiesPage() {
                       {facts.live ? (
                         <Link
                           href={`/app/baux/${dep.leaseId}`}
-                          className="block truncate text-sm font-semibold text-ink hover:text-brand-700"
+                          className="block truncate text-sm font-semibold text-ink hover:text-brand-700 max-sm:leading-10"
                         >
                           {facts.label}
                         </Link>

@@ -26,7 +26,8 @@ export const metadata: Metadata = {
  * line as the management space. Above `lg` the destinations are tabs under
  * the logo; on a phone they are a bar fixed at the foot of the screen
  * (TenantBottomNav), "Plus" holding the rest, and the page has the whole
- * width to itself.
+ * width to itself. A conversation open on a phone has the whole screen:
+ * every piece of chrome here reads `html[data-phone-chat]` and steps aside.
  */
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const { d } = await getI18n();
@@ -47,8 +48,11 @@ export default async function TenantLayout({ children }: { children: React.React
 
   return (
     <div className="tenant-space min-h-dvh bg-sand-50">
+      {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
+          is the whole screen: the bar, the sample line, the foot and the bottom bar
+          step aside, and the conversation's own header takes the top. */}
       <ScrollHeader
-        className="chrome-material sticky top-0 z-30 border-b border-transparent bg-white transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150"
+        className="chrome-material sticky top-0 z-30 border-b border-transparent bg-white transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden"
         elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
       >
         <div className="mx-auto flex h-(--bar-h) w-full max-w-3xl items-center gap-3 px-safe-4 pt-(--safe-top) sm:px-safe-6">
@@ -87,12 +91,17 @@ export default async function TenantLayout({ children }: { children: React.React
         </div>
       </ScrollHeader>
 
-      {sampleCabinet && <TenantSampleBanner text={fmt(d.shell.sampleBanner, { cabinet: sampleCabinet })} back={d.shell.sampleBack} />}
+      {sampleCabinet && (
+        <div className="max-lg:[html[data-phone-chat]_&]:hidden">
+          <TenantSampleBanner text={fmt(d.shell.sampleBanner, { cabinet: sampleCabinet })} back={d.shell.sampleBack} />
+        </div>
+      )}
 
-      <main className="mx-auto w-full max-w-3xl px-safe-4 py-6 sm:px-safe-6">{children}</main>
+      {/* A conversation open over the phone's screen gets the screen whole: no gutter, no width limit. */}
+      <main className="mx-auto w-full max-w-3xl px-safe-4 py-6 max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6">{children}</main>
 
       {/* The foot of every page stays clear of the bottom bar (--nav-b, zero above lg). */}
-      <footer className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-2 px-safe-4 pb-[calc(2rem+var(--nav-b))] sm:px-safe-6">
+      <footer className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-2 px-safe-4 pb-[calc(2rem+var(--nav-b))] max-lg:[html[data-phone-chat]_&]:hidden sm:px-safe-6">
         <p className="text-[11px] text-ink-soft">{managers ? `${managers} · Morada Gestion` : "Morada Gestion"}</p>
         {session && !sample && !canManage && <TenantBecomeOwner label={d.tenant.becomeOwner} failed={d.auth.provisionFailedTitle} />}
       </footer>

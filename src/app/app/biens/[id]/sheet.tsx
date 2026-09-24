@@ -366,7 +366,7 @@ export function Overview({
           <ul className="space-y-3">
             {tenants.map((tenant) => (
               <li key={tenant.id}>
-                <Link href={`/app/contacts/${tenant.id}`} className="font-display text-base font-bold text-ink hover:underline">
+                <Link href={`/app/contacts/${tenant.id}`} className="font-display text-base font-bold text-ink hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                   {tenant.name}
                 </Link>
                 <ul className="mt-1.5 space-y-1 text-sm text-ink-soft">
