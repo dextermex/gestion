@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
-import { DemoAction } from "@/components/gestion/DemoAction";
+import ArrearsActions, { type ArrearsLabels } from "@/components/gestion/ArrearsActions";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { CountCard } from "@/components/gestion/filters";
 import { getDemo, isSampleData } from "@/lib/demo";
@@ -17,7 +17,7 @@ export default async function LoyersPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { LEASES, RENT_PERIODS, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { ARREARS_ACTIONS, LEASES, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const rentMeta = rentStatusMeta(d);
   // The live month and its four neighbours, derived from today — the demo
@@ -58,24 +58,29 @@ export default async function LoyersPage({
     justice_dossier: d.legal.arrears.justice_dossier,
   };
 
-  // Arrears ladder — the engine drives every relance, aligned with law.
+  // Arrears ladder — the engine drives every relance, aligned with law. What
+  // has been done is read from the rows (the steps recorded, the registered
+  // letter and its AR date), never from a click.
+  const letterById = new Map(REGISTERED_LETTERS.map((l) => [l.id, l]));
   const arrearsCases = RENT_PERIODS.filter(
     (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth,
   ).map((rp) => {
-    const executedByPeriod: Record<string, Partial<Record<Exclude<ArrearsStage, "none">, string>>> = {
-      "rp-l-2a-2026-07": { friendly: "2026-07-07", formal: "2026-07-14" },
-      "rp-l-2a-2026-08": {},
-      "rp-l-3b-2026-08": {},
-      "rp-l-1a-2026-08": {},
-    };
-    const arDate = rp.id === "rp-l-2a-2026-07" ? "2026-08-12" : null;
+    const steps = ARREARS_ACTIONS.filter((a) => a.rentPeriodId === rp.id).sort((a, b) => a.executedOn.localeCompare(b.executedOn));
+    const executed: Partial<Record<Exclude<ArrearsStage, "none">, string>> = {};
+    for (const a of steps) executed[a.stage] = a.executedOn;
+    const medStep = steps.find((a) => a.stage === "mise_en_demeure");
+    const letter =
+      (medStep?.registeredLetterId ? letterById.get(medStep.registeredLetterId) : undefined) ??
+      REGISTERED_LETTERS.find((l) => l.templateKey === "mise_en_demeure" && l.relatedType === "rent_period" && l.relatedId === rp.id);
+    const arDate = letter?.arReceivedOn ?? null;
+    const awaitingLetter = letter && letter.status === "dispatched" && letter.dispatchedOn ? { id: letter.id, dispatchedOn: letter.dispatchedOn } : null;
     const assessment = assessArrears(
       {
         invoiceId: rp.id,
         dueDate: rp.dueDate,
         openAmount: rp.totalCents - rp.allocatedCents,
         paymentPlanActive: false,
-        executed: executedByPeriod[rp.id] ?? {},
+        executed,
         miseEnDemeureArDate: arDate,
       },
       TODAY,
@@ -88,8 +93,27 @@ export default async function LoyersPage({
     if (assessment.nextStep === null && !assessment.paused && assessment.daysOverdue >= 45 && !arDate) {
       notes.push(d.legal.arrears.noteNeedAr);
     }
-    return { rp, assessment, notes };
+    return { rp, assessment, notes, steps, letter, awaitingLetter };
   });
+  const arrearsLabels: ArrearsLabels = {
+    record: d.loyers.arrearsRecord,
+    doneOn: d.loyers.arrearsDoneOn,
+    dispatchedOn: d.loyers.arrearsDispatchedOn,
+    confirmMed: d.loyers.arrearsConfirmMed,
+    arOn: d.loyers.arrearsArOn,
+    saveAr: d.loyers.arrearsSaveAr,
+    awaitingAr: d.loyers.arrearsAwaitingAr,
+    arReceived: d.loyers.arrearsArReceived,
+    medRecorded: d.loyers.arrearsMedRecorded,
+    justiceRecord: d.loyers.arrearsJusticeRecord,
+    justiceDone: d.loyers.arrearsJusticeDone,
+    stepDone: d.loyers.arrearsStepDone,
+    failed: d.loyers.arrearsFailed,
+    already: d.loyers.arrearsAlready,
+    needsAr: d.loyers.arrearsNeedsAr,
+    sampleConfirmed: d.loyers.arrearsConfirmed,
+  };
+  const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
 
   return (
     <div>
@@ -200,7 +224,7 @@ export default async function LoyersPage({
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Panel title={d.loyers.arrearsTitle}>
           <ul className="space-y-4">
-            {arrearsCases.map(({ rp, assessment, notes }) => {
+            {arrearsCases.map(({ rp, assessment, notes, steps, letter, awaitingLetter }) => {
               const l = leaseById(rp.leaseId);
               return (
                 <li key={rp.id} className="rounded-xl border border-sand-200 p-3.5">
@@ -236,11 +260,34 @@ export default async function LoyersPage({
                       {n}
                     </p>
                   ))}
-                  {assessment.nextStep?.stage === "mise_en_demeure" && sample && (
-                    <div className="mt-2.5">
-                      <DemoAction label={d.loyers.arrearsConfirmMed} doneMessage={d.loyers.arrearsConfirmed} />
-                    </div>
+                  {(steps.length > 0 || letter?.arReceivedOn) && (
+                    <dl className="mt-2.5 space-y-0.5 text-[11px] text-ink-soft" aria-label={d.loyers.arrearsHistory}>
+                      {steps.map((a) => (
+                        <div key={a.id} className="flex items-baseline justify-between gap-3">
+                          <dt>{stageLabel[a.stage]}</dt>
+                          <dd className="tabular-nums">{formatDate(a.executedOn, locale)}</dd>
+                        </div>
+                      ))}
+                      {letter?.arReceivedOn && (
+                        <div className="flex items-baseline justify-between gap-3 font-semibold text-ink">
+                          <dt>{d.loyers.arrearsArOn}</dt>
+                          <dd className="tabular-nums">{formatDate(letter.arReceivedOn, locale)}</dd>
+                        </div>
+                      )}
+                    </dl>
                   )}
+                  <ArrearsActions
+                    leaseId={rp.leaseId}
+                    rentPeriodId={rp.id}
+                    next={assessment.nextStep && assessment.nextStep.dueFrom <= TODAY && !assessment.paused ? assessment.nextStep.stage : null}
+                    awaitingLetter={awaitingLetter}
+                    todayISO={TODAY}
+                    stageLabel={assessment.nextStep ? stageLabel[assessment.nextStep.stage] : ""}
+                    locale={locale}
+                    writable={!sample}
+                    sampleNote={sampleNote}
+                    labels={arrearsLabels}
+                  />
                 </li>
               );
             })}

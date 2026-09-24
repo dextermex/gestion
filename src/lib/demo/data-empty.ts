@@ -62,6 +62,8 @@ export function buildEmptyData(org: Org): DemoData {
     BANK_ACCOUNTS: [],
     IBAN_BINDINGS: [],
     BANK_TXS: [],
+    REGISTERED_LETTERS: [],
+    ARREARS_ACTIONS: [],
     DEPOSITS: [],
     ENDED_LEASES: [],
     EDLS: [],

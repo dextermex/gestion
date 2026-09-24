@@ -50,6 +50,20 @@ describe("Tier 1 — RF deterministic", () => {
     if (d.kind === "auto") {
       expect(d.tier).toBe("rf");
       expect(d.invoiceIds).toEqual(["inv-1"]);
+    }
+  });
+
+  it("sends an RF transfer FIFO to the tenancy's oldest open periods", () => {
+    const d = matchTransaction(
+      tx({ remittanceInfo: `Loyer ${RF_A}`, amount: cents(1450) }),
+      [invoice({ id: "jun", dueDate: "2026-06-01", openAmount: cents(1450), totalAmount: cents(1450) }), invoice({ id: "may", dueDate: "2026-05-01", openAmount: cents(700), totalAmount: cents(1450) })],
+      [],
+      new Map(),
+    );
+    expect(d.kind).toBe("auto");
+    if (d.kind === "auto") {
+      expect(d.tier).toBe("rf");
+      expect(d.invoiceIds).toEqual(["may", "jun"]);
       expect(d.confidence).toBe(1);
     }
   });

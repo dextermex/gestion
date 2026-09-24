@@ -149,12 +149,14 @@ export async function createHouse(page: Page, name: string): Promise<{ propertyI
  * end: the tenant's identity, the rent, and "Suivant" on everything the
  * owner may fill in later. Ends on "<tenant> est locataire."
  */
-export async function letLot(page: Page, unitId: string, tenant: Person, rent = "1250"): Promise<void> {
+export async function letLot(page: Page, unitId: string, tenant: Person, rent = "1250", startDate?: string): Promise<void> {
   await page.goto(`/app/biens/locataire?lot=${encodeURIComponent(unitId)}`);
   await page.getByLabel("Prénom").first().fill(tenant.first);
   await page.getByLabel("Nom", { exact: true }).first().fill(tenant.last);
   await page.getByLabel("E-mail").first().fill(tenant.email);
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // tenant → lease
+  // A tenancy that began earlier opens its past months in the ledger: the arrears flows start from one.
+  if (startDate) await page.getByLabel("Début du bail").fill(startDate);
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // lease → rent
   await page.getByLabel("Loyer hors charges").fill(rent);
   await page.getByLabel("Charges mensuelles").fill("150");

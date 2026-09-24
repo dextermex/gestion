@@ -343,8 +343,25 @@ Pre-classifiers (INDEXATION_LAG, subset-sum ≤6, non-rent) → Tier 1 determini
 structured-reference field) → Tier 2 learned payer-IBAN bindings (the only tier that
 captures third-party payers) → Tier 3 weighted fuzzy with the **margin rule** (auto-post
 at ≥0.85 only with ≥0.15 margin over the runner-up — what keeps two identical €1,450
-studios out of the wrong ledger). Review-queue actions suggest an IBAN binding so each
-manual match becomes permanent automation.
+studios out of the wrong ledger). Review-queue actions are written: a match becomes a
+payment with FIFO allocations through `recordPaymentFifo` (`src/lib/banking/allocate.ts`,
+the one writer manual payments and the matcher's auto-posts share), and, when asked, an
+`iban_bindings` row, so each manual match becomes permanent automation; ignore and
+reopen move the operation out of and back into the queue. Operations arrive through Salt
+Edge when configured, or through the CSV statement import (`src/lib/banking/csv.ts`:
+delimiter detection, headers in four languages, credit/debit or signed columns, every
+European amount notation, a stable id per line so a file imported twice lands once), into
+an existing account or a manual one named with its IBAN and registered holder.
+
+### The arrears ladder is rows, not clicks
+
+`arrears_actions` holds each step the desk recorded for a period (friendly, formal, mise
+en demeure, justice file), and a mise en demeure carries its `registered_letters` row:
+dispatched on a date, then `ar_received_on` when the AR comes back, from which
+`legal_effect_on` derives. The Loyers page reads both, the ladder engine assesses what is
+next, and the justice-de-paix file is refused until the AR is in hand (`POST
+/api/baux/[id]/relances`, `PATCH /api/lettres/[id]`). The sample cabinets carry the same
+rows; a sample plays the outcome and writes nothing.
 
 ### RLS model
 

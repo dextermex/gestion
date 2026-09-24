@@ -219,16 +219,18 @@ export function matchTransaction(
     return { kind: "ignore", reason: "Outgoing or zero amount — not a rent receipt." };
   }
 
-  // Tier 1 — deterministic RF.
+  // Tier 1 — deterministic RF. The reference names the tenancy, not a
+  // month: the amount goes FIFO to its oldest open periods, like any other
+  // receipt, so a late payer's transfer clears the oldest debt first.
   const rf = extractRF(tx.remittanceInfo) ?? extractRF(tx.endToEndId ?? "");
   if (rf) {
-    const hit = openInvoices.find((i) => i.rfReference === rf);
-    if (hit) {
-      const lag = detectIndexationLag(tx.amount, hit.totalAmount, hit.previousRentAmount);
+    const hits = openInvoices.filter((i) => i.rfReference === rf).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+    if (hits.length > 0) {
+      const lag = detectIndexationLag(tx.amount, hits[0].totalAmount, hits[0].previousRentAmount);
       return {
         kind: "auto",
         tier: "rf",
-        invoiceIds: [hit.id],
+        invoiceIds: allocateFifo(tx.amount, hits).map((a) => a.invoiceId),
         confidence: 1,
         margin: null,
         indexationLag: lag ? { shortfall: lag.shortfall } : null,

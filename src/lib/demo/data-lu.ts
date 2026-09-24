@@ -403,3 +403,7 @@ export function openInvoicesForMatching(): OpenInvoice[] {
     };
   });
 }
+
+// ─── Arrears ladder: identical rows, nothing in them is a word ───────────────
+export const REGISTERED_LETTERS = fr.REGISTERED_LETTERS;
+export const ARREARS_ACTIONS = fr.ARREARS_ACTIONS;

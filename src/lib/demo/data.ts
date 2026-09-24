@@ -999,3 +999,43 @@ export function openInvoicesForMatching(): OpenInvoice[] {
     };
   });
 }
+
+// ─── Arrears ladder ─────────────────────────────────────────────────────────
+//
+// What the desk has already done about an unpaid period, and the registered
+// letters that carry legal effect. The ladder engine reads these rows; the
+// Loyers page derives every stage from them, never from a click.
+
+export type ArrearsStageKey = "friendly" | "formal" | "mise_en_demeure" | "justice_dossier";
+
+export interface DemoRegisteredLetter {
+  id: string;
+  templateKey: string;
+  relatedType: string;
+  relatedId: string;
+  recipientContactId: string | null;
+  status: "draft" | "dispatched" | "ar_received" | "returned_undelivered";
+  dispatchedOn: string | null;
+  /** The AR date: the only date legal effect ever runs from. */
+  arReceivedOn: string | null;
+}
+
+export interface DemoArrearsAction {
+  id: string;
+  leaseId: string;
+  rentPeriodId: string | null;
+  stage: ArrearsStageKey;
+  executedOn: string;
+  registeredLetterId: string | null;
+}
+
+export const REGISTERED_LETTERS: DemoRegisteredLetter[] = [
+  // Apt 2A, July unpaid: the mise en demeure went out by LRAR and came back signed.
+  { id: "rl-med-2a-07", templateKey: "mise_en_demeure", relatedType: "rent_period", relatedId: "rp-l-2a-2026-07", recipientContactId: "c-santos", status: "ar_received", dispatchedOn: "2026-08-05", arReceivedOn: "2026-08-12" },
+];
+
+export const ARREARS_ACTIONS: DemoArrearsAction[] = [
+  { id: "aa-2a-07-friendly", leaseId: "l-2a", rentPeriodId: "rp-l-2a-2026-07", stage: "friendly", executedOn: "2026-07-07", registeredLetterId: null },
+  { id: "aa-2a-07-formal", leaseId: "l-2a", rentPeriodId: "rp-l-2a-2026-07", stage: "formal", executedOn: "2026-07-14", registeredLetterId: null },
+  { id: "aa-2a-07-med", leaseId: "l-2a", rentPeriodId: "rp-l-2a-2026-07", stage: "mise_en_demeure", executedOn: "2026-08-05", registeredLetterId: "rl-med-2a-07" },
+];

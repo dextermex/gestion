@@ -133,6 +133,8 @@ export async function buildRealDataFrom(
     documentRows,
     insuranceRows,
     inviteRows,
+    letterRows,
+    arrearsRows,
   ] = await Promise.all([
     q(
       "properties",
@@ -182,6 +184,8 @@ export async function buildRealDataFrom(
     q("insurance_policies", "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes", "created_at"),
     // The token is never selected: it is returned once, when the invitation is created.
     q("portal_invites", "id,contact_id,lease_id,email,expires_at,accepted_at,revoked_at,sent_at,delivery,created_at", "created_at"),
+    q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", "created_at"),
+    q("arrears_actions", "id,lease_id,rent_period_id,stage,executed_at,registered_letter_id", "executed_at"),
   ]);
 
   // ── Contacts ──
@@ -420,6 +424,28 @@ export async function buildRealDataFrom(
     leaseId: s(r.lease_id),
   }));
 
+  // ── Arrears ladder ──
+  const REGISTERED_LETTERS: DemoData["REGISTERED_LETTERS"] = letterRows.map((r) => ({
+    id: s(r.id),
+    templateKey: s(r.template_key),
+    relatedType: s(r.related_type),
+    relatedId: s(r.related_id),
+    recipientContactId: sOr(r.recipient_contact_id, null),
+    status: (["draft", "dispatched", "ar_received", "returned_undelivered"].includes(s(r.status)) ? s(r.status) : "draft") as DemoData["REGISTERED_LETTERS"][number]["status"],
+    dispatchedOn: r.dispatched_on ? day(r.dispatched_on) : null,
+    arReceivedOn: r.ar_received_on ? day(r.ar_received_on) : null,
+  }));
+  const ARREARS_ACTIONS: DemoData["ARREARS_ACTIONS"] = arrearsRows
+    .filter((r) => ["friendly", "formal", "mise_en_demeure", "justice_dossier"].includes(s(r.stage)))
+    .map((r) => ({
+      id: s(r.id),
+      leaseId: s(r.lease_id),
+      rentPeriodId: sOr(r.rent_period_id, null),
+      stage: s(r.stage) as DemoData["ARREARS_ACTIONS"][number]["stage"],
+      executedOn: day(r.executed_at),
+      registeredLetterId: sOr(r.registered_letter_id, null),
+    }));
+
   // ── EDLs ──
   const itemSession = new Map(edlItemRows.map((i) => [s(i.id), s(i.session_id)]));
   const itemsBySession = new Map<string, number>();
@@ -646,6 +672,8 @@ export async function buildRealDataFrom(
     RENT_PERIODS,
     BANK_ACCOUNTS,
     IBAN_BINDINGS,
+    REGISTERED_LETTERS,
+    ARREARS_ACTIONS,
     BANK_TXS,
     DEPOSITS,
     ENDED_LEASES,

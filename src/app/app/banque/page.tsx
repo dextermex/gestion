@@ -1,7 +1,8 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { CollapsiblePanel, LegalNote } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
-import BankWorkspace, { type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
+import BankImport from "@/components/gestion/BankImport";
+import BankWorkspace, { type LeaseOption, type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
 import SaltEdgeConnect from "@/components/gestion/SaltEdgeConnect";
 import SyncBank from "@/components/gestion/SyncBank";
 import { getDatasetId, getDemo } from "@/lib/demo";
@@ -11,6 +12,7 @@ import { fmt } from "@/lib/i18n/config";
 import type { BankTxStatus } from "@/lib/types";
 import type { DemoBankTx } from "@/lib/demo/data";
 import { diffDays } from "@/domain/dates";
+import { scoreFuzzy } from "@/domain/banking/matching";
 import { vopNameCheck } from "@/domain/banking/rf";
 
 /**
@@ -25,7 +27,7 @@ export default async function BanquePage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const [{ BANK_ACCOUNTS, BANK_TXS, TODAY }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  const [{ BANK_ACCOUNTS, BANK_TXS, IBAN_BINDINGS, LEASES, ORG, TODAY, leaseTenantNames, leaseUnitLabel, openInvoicesForMatching }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
 
   // Real accounts get the real consent journey; sample cabinets keep the
   // demo action, and nothing sample-side ever calls the provider.
@@ -41,6 +43,51 @@ export default async function BanquePage({
   );
   const txMeta = bankTxStatusMeta(d);
   const tierMeta = matchTierMeta(d);
+  const importLabels = {
+    button: d.banque.importStatement,
+    title: d.banque.importTitle,
+    intro: d.banque.importIntro,
+    account: d.banque.importAccount,
+    newAccount: d.banque.importNewAccount,
+    accountLabel: d.banque.importAccountLabel,
+    iban: d.banque.importIban,
+    holder: d.banque.importHolder,
+    file: d.banque.importFile,
+    submit: d.banque.importSubmit,
+    done: d.banque.importDone,
+    empty: d.banque.importEmpty,
+    failed: d.banque.importFailed,
+    tooLarge: d.banque.importTooLarge,
+    invalid: d.banque.importInvalid,
+    close: d.common.close,
+  };
+  // The statement import: the way in for every cabinet without an API feed.
+  const importCta = real ? <BankImport accounts={BANK_ACCOUNTS.map((b) => ({ id: b.id, label: b.label }))} labels={importLabels} /> : null;
+  const sampleNote = real ? null : fmt(d.shell.sampleBanner, { cabinet: ORG.shortName });
+
+  // What a reviewed operation can be assigned to: the live leases, named by
+  // their lot and tenants; the engine's closest ones first, per operation.
+  const liveLeases = LEASES.filter((l) => l.status === "active" || l.status === "notice");
+  const leaseLabel = (leaseId: string): string => {
+    const l = liveLeases.find((x) => x.id === leaseId);
+    return l ? `${leaseUnitLabel(l)} · ${leaseTenantNames(l).join(", ")}` : leaseId;
+  };
+  const leaseOptions: LeaseOption[] = liveLeases.map((l) => ({ id: l.id, label: leaseLabel(l.id) }));
+  const openInvoices = openInvoicesForMatching();
+  const knownIbans = new Map<string, Set<string>>();
+  for (const b of IBAN_BINDINGS) knownIbans.set(b.leaseId, (knownIbans.get(b.leaseId) ?? new Set()).add(b.payerIban));
+  const candidatesFor = (t: DemoBankTx): ReviewRow["candidates"] => {
+    const best = new Map<string, number>();
+    for (const inv of openInvoices) {
+      const { score } = scoreFuzzy(t, inv, knownIbans.get(inv.leaseId) ?? new Set());
+      if (score > (best.get(inv.leaseId) ?? 0)) best.set(inv.leaseId, score);
+    }
+    return [...best.entries()]
+      .filter(([leaseId, score]) => score >= 0.25 && liveLeases.some((l) => l.id === leaseId))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([leaseId, score]) => ({ leaseId, label: fmt(d.banque.reviewCandidate, { lease: leaseLabel(leaseId), score: formatPct(Math.round(score * 100), locale) }) }));
+  };
 
   // A real account and a sample cabinet read the same seam: the rows
   // gestion.* holds under the caller's own JWT, or the dataset. The bank
@@ -72,16 +119,22 @@ export default async function BanquePage({
     };
   });
 
+  const txById = new Map(BANK_TXS.map((t) => [t.id, t]));
   const review: ReviewRow[] = rows
     .filter((r) => r.status === "review")
-    .map((r) => ({
-      id: r.id,
-      counterparty: r.counterparty,
-      amountLabel: r.amountLabel,
-      remittance: r.remittance,
-      dateLabel: r.dateLabel,
-      explain: r.explain,
-    }));
+    .map((r) => {
+      const t = txById.get(r.id)!;
+      return {
+        id: r.id,
+        counterparty: r.counterparty,
+        amountLabel: r.amountLabel,
+        remittance: r.remittance,
+        dateLabel: r.dateLabel,
+        explain: r.explain,
+        payerIban: t.counterpartyIban,
+        candidates: t.amount > 0 ? candidatesFor(t) : [],
+      };
+    });
 
   const cascade: Array<[string, string]> = [
     [d.banque.cascade0, d.banque.cascade0Body],
@@ -110,6 +163,7 @@ export default async function BanquePage({
               ) : (
                 <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
               ))}
+            {importCta}
             {connectCta}
           </>
         }
@@ -151,7 +205,10 @@ export default async function BanquePage({
                 <p className="mx-auto mt-1.5 max-w-[220px] text-xs leading-relaxed text-ink-soft">
                   {d.banque.connectBody}
                 </p>
-                <div className="mt-4 flex justify-center">{connectCta}</div>
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  {connectCta}
+                  {importCta}
+                </div>
               </div>
             ) : (
               <>
@@ -206,7 +263,7 @@ export default async function BanquePage({
         </div>
 
         {/* ---------------------------- transactions workspace ---------------------------- */}
-        <BankWorkspace d={d} rows={rows} review={review} todayISO={TODAY} sample={!real} />
+        <BankWorkspace d={d} rows={rows} review={review} leases={leaseOptions} todayISO={TODAY} sample={!real} sampleNote={sampleNote} />
       </div>
 
       {/* How the engine decides — reference material, folded by default so the

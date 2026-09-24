@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Card, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
-import { ReviewQueue } from "@/components/gestion/ReviewQueue";
+import { ReviewQueue, type LeaseOption, type ReviewLabels, type ReviewRow } from "@/components/gestion/ReviewQueue";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import type { BankTxStatus, Meta } from "@/lib/types";
 import { fmt } from "@/lib/i18n/config";
@@ -30,14 +30,7 @@ export interface TxRow {
   statusMeta: Meta;
 }
 
-export interface ReviewRow {
-  id: string;
-  counterparty: string;
-  amountLabel: string;
-  remittance: string;
-  dateLabel: string;
-  explain: string;
-}
+export type { LeaseOption, ReviewRow } from "@/components/gestion/ReviewQueue";
 
 type View = "all" | "review" | "auto" | "ignored";
 type Period = "all" | "1m" | "3m" | "6m";
@@ -54,16 +47,37 @@ export default function BankWorkspace({
   d,
   rows,
   review,
+  leases,
   todayISO,
   sample,
+  sampleNote,
 }: {
   d: Dict;
   rows: TxRow[];
   review: ReviewRow[];
+  /** The live leases a reviewed operation can be assigned to. */
+  leases: LeaseOption[];
   todayISO: string;
-  /** Demo-only affordances (the one-click auto-assign) render on sample data only. */
+  /** Demo-only affordances (the one-click auto-assign) render on sample data only; decisions are played, not written. */
   sample?: boolean;
+  sampleNote?: string | null;
 }) {
+  const reviewLabels: ReviewLabels = {
+    assign: d.banque.reviewAssign,
+    suggested: d.banque.reviewSuggested,
+    others: d.banque.reviewOthers,
+    bind: d.banque.reviewBind,
+    match: d.banque.reviewMatch,
+    ignore: d.banque.reviewIgnore,
+    matched: d.banque.reviewMatched,
+    matchedWith: d.banque.reviewMatchedWith,
+    boundNote: d.banque.reviewBoundNote,
+    ignored: d.banque.reviewIgnored,
+    reopen: d.banque.reviewReopen,
+    failed: d.banque.reviewFailed,
+    already: d.banque.reviewAlready,
+    noLeases: d.banque.reviewNoLeases,
+  };
   const [view, setView] = useState<View>("all");
   const [q, setQ] = useState("");
   const [period, setPeriod] = useState<Period>("all");
@@ -177,15 +191,7 @@ export default function BankWorkspace({
       {/* The actionable suggestions live at the top of "all" and "review" */}
       {review.length > 0 && (view === "all" || view === "review") && (
         <Panel title={d.banque.reviewTitle} className="mt-4">
-          <ReviewQueue
-            rows={review}
-            labels={{
-              match: d.banque.reviewMatch,
-              ignore: d.banque.reviewIgnore,
-              matched: d.banque.reviewMatched,
-              ignored: d.banque.reviewIgnored,
-            }}
-          />
+          <ReviewQueue rows={review} leases={leases} labels={reviewLabels} writable={!sample} sampleNote={sampleNote ?? null} />
           <LegalNote>{d.banque.reviewLegal}</LegalNote>
         </Panel>
       )}
