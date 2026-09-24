@@ -55,7 +55,7 @@ function account(): DemoData {
     ],
     LEASES: [lease],
     RENT_PERIODS: [
-      { id: "rp-1", leaseId: "lease-1", period: today.slice(0, 7), dueDate: today, rentCents: 125000, chargesCents: 15000, vatCents: 0, totalCents: 140000, allocatedCents: 0, status: "due" },
+      { id: "rp-1", leaseId: "lease-1", period: today.slice(0, 7), dueDate: today, rentCents: 125000, chargesCents: 15000, vatCents: 0, totalCents: 140000, allocatedCents: 0, status: "pending" },
     ],
     DEPOSITS: [{ id: "dep-1", leaseId: "lease-1", form: "cash", amountCents: 250000, status: "pending", entryEdlExists: false, deductions: [], releasedFirstTrancheCents: 0, releasedBalanceCents: 0 }],
     TICKETS: [
