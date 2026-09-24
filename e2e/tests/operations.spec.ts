@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createHouse, leaseIdOf, letLot, mail, signIn, signUp } from "./helpers";
+import { createHouse, foldGettingStarted, leaseIdOf, letLot, mail, signIn, signUp } from "./helpers";
 
 /**
  * The operations of a tenancy, on the real database. A house let two years
@@ -220,6 +220,8 @@ test("interventions: a work order walks its ladder from the sheet, the ticket fo
 test("guarantees: received, the tenancy closed, retentions, a justification, the décompte, the two tranches", async ({ page }) => {
   await signIn(page, owner.email);
   await page.goto("/app/garanties");
+  // The floating "Bien démarrer" card sits over the bottom-left of a laptop viewport, where the settlement's actions land.
+  await foldGettingStarted(page);
   const held = page.locator("li[data-deposit]").filter({ hasText: houseName });
   await expect(held).toContainText("En attente");
   await expect(held).toContainText(printed(DEPOSIT));
