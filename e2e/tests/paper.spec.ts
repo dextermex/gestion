@@ -442,7 +442,9 @@ test("the guarantee: its settlement once the keys are back; another workspace fi
   // (The owner signs out first: the door offers the sign-up form to nobody in particular, not to a signed-in account.)
   await signOutFromShell(page);
   await signUp(page, intruder);
-  expect((await page.request.post("/api/documents/modeles/lease_contract", { data: { lang: "fr" } })).ok()).toBe(true);
+  for (const kind of ["lease_contract", "deposit_settlement"]) {
+    expect((await page.request.post(`/api/documents/modeles/${kind}`, { data: { lang: "fr" } })).ok(), `${kind} validated by the other workspace`).toBe(true);
+  }
   const foreign = await page.request.post("/api/documents/generer", { data: { kind: "lease_contract", sourceId: leaseId } });
   expect(foreign.status(), "another workspace's lease is not found").toBe(404);
   expect((await page.request.get(`/api/documents/${contractId}/fichier`, { maxRedirects: 0 })).status()).toBe(404);
