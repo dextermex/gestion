@@ -1,6 +1,8 @@
 -- 0020 · Factures, pièces téléversées, et lecture bornée
--- Proposé, non appliqué en production (voir APPLIQUE.md). Appliqué
--- automatiquement à la base jetable des tests de bout en bout.
+-- Appliqué le 2026-09-25 (migration `gestion_factures_documents_lecture`),
+-- voir APPLIQUE.md ; 0021 retire dans la foulée les droits d'écriture que
+-- les privilèges par défaut du schéma avaient posés sur les deux vues.
+-- Rejoué automatiquement sur la base jetable des tests de bout en bout.
 --
 -- Trois choses, toutes additives :
 --

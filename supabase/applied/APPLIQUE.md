@@ -200,21 +200,69 @@ messages, deux conversations, deux demandes, aucun ordre de travail, bail
 actif, aucune ligne de test. Réversible : drop de la colonne et des index,
 policies telles qu'en 0015.
 
-## 0020 · proposée, non appliquée · factures, pièces, lecture
+## 0020 · 2026-09-25 · factures, pièces téléversées, lecture bornée
 
-`0020_factures_documents_lecture.sql` n'est **pas** appliquée en production : elle
-attend l'accord explicite du propriétaire. CI la rejoue sur la base jetable
-(`e2e/db/prepare.mjs` applique tout `supabase/applied` dans l'ordre), l'audit RLS
-et la suite de bout en bout passent avec elle. Ce qu'elle fait : élargit les types
-acceptés par le bucket `gestion-media` (PDF, CSV et tableurs en plus des images) et
-sa taille maximale à 25 Mo ; crée `gestion.bills` (factures et recettes : sens,
-fournisseur, bien et lot, catégorie fiscale, montant TTC, TVA, dates, pièce) avec
-ses index et quatre policies sur `gestion.finance.view` / `gestion.finance.edit` ;
-crée les vues `gestion.conversation_heads` (dernier message et non-lus par
-conversation) et `gestion.edl_session_counts` (postes et photos par état des
-lieux), toutes deux `security_invoker`, lecture accordée à `authenticated`
-seulement. Additive : aucune table existante modifiée, rien dans `public`. Sans
-elle, l'application fonctionne : aperçus de conversation vides, aucune facture,
-les routes factures répondent 503 `schema_outdated`. Réversible : drop des deux
-vues et de la table, bucket ramené aux types et à la taille d'avant (notés en
-tête du fichier).
+`0020_factures_documents_lecture.sql` (migration `gestion_factures_documents_lecture`,
+version 20260925161357), appliquée le 2026-09-25 avec l'accord explicite du
+propriétaire, après validation par CI (schéma complet rejoué localement, audit RLS,
+suite de bout en bout, exécution 38 verte sur le commit f3729c1).
+
+Audit avant application : projet ACTIVE_HEALTHY, PostgreSQL 17.6 ; journal des
+migrations arrêté à `gestion_conversation_par_bail` ; `gestion.bills`,
+`gestion.conversation_heads` et `gestion.edl_session_counts` absentes ; bucket
+`gestion-media` privé, 10 Mo, quatre types d'image (exactement l'état que note le
+repli en tête du fichier) ; toutes les colonnes lues par les vues présentes
+(`messages` : conversation_id, sender_kind, sender_contact_id, sender_user_id, body,
+sent_at, read_at, ticket_id ; `edl_items.session_id` ; `edl_media.item_id`) ;
+`gestion.can(uuid,text)` présente ; 63 tables gestion, toutes sous RLS avec policy,
+245 policies, 23 fonctions ; `public` : 59 tables, 141 policies, 20 tables g_*,
+`public.g_can` sur `60d98f80cccaa74f02b4afb1ebd6b859` ; contrainte de classe de
+`gestion.documents` acceptant les quinze classes que l'application écrit ; aucune
+dérive entre production et les fichiers du dépôt.
+
+Ce qu'elle a fait : bucket porté à 25 Mo et huit types (les quatre images, PDF,
+CSV, xls, xlsx), policies de stockage intactes (six sur gestion-media, vingt au
+total, deux objets présents) ; table `gestion.bills` (cinq index dont la clé, cinq
+contraintes check, quatre clés étrangères vers contacts, properties, units et
+documents), RLS active, quatre policies `bills_select/insert/update/delete` sur
+`gestion.can(org_id, 'gestion.finance.view')` et `'gestion.finance.edit'`, droits
+select/insert/update/delete à `authenticated` ; vues `conversation_heads` et
+`edl_session_counts` en `security_invoker = true`, select à `authenticated`.
+Aucune ligne écrite, aucune table existante modifiée, rien dans `public`.
+
+Vérifié après application : `g_can` inchangée ; 64 tables gestion, toutes sous RLS
+avec au moins une policy, 249 policies, 23 fonctions ; `public` strictement
+identique (59 tables, 141 policies, 20 tables g_*) ; `anon` sans usage du schéma,
+sans droit de table, sans fonction exécutable ; chaque definer avec `search_path`
+fixé ; conseillers de sécurité Supabase sans remarque sur les nouveaux objets ni
+sur le schéma gestion (les avertissements existants portent sur `public`). Un
+point corrigé dans la foulée : les privilèges par défaut du schéma
+(`authenticated=arwd` sur toute relation nouvelle) avaient posé insert/update/delete
+sur les deux vues à leur création, et `edl_session_counts`, vue simple, était
+modifiable ; `0021_vues_lecture_seule.sql` (migration `gestion_vues_lecture_seule`,
+version 20260925161948) les retire, même hygiène que 0009 pour
+`rent_period_status`. Après 0021 : select seul pour `authenticated` sur les trois
+vues, droits de `bills` inchangés.
+
+Parcours joué sous les policies de production, dans une transaction annulée à la
+fin (aucune ligne conservée, `gestion.bills` à zéro ligne après) : le gestionnaire
+de l'espace « guillaume » lit ses deux têtes de conversation (les deux avec leur
+dernier message, zéro non-lu), ses deux états des lieux et 11 lignes de
+`rent_period_status`, rien d'un autre espace ; il écrit une facture sur son lot, la
+relit, la marque payée ; une facture pour un autre espace est refusée (42501), un
+montant nul aussi (23514) ; le gestionnaire de l'autre espace ne voit pas cette
+facture, ne lit aucune tête ni aucun décompte d'inventaire de « guillaume », ses
+update et delete touchent zéro ligne ; le compte locataire de l'espace ne voit
+aucune facture, lit la seule tête de son propre fil et aucun inventaire, son insert
+est refusé (42501) ; `anon` est refusé sur la table comme sur les vues (42501) ;
+après 0021, une écriture à travers `edl_session_counts` est refusée (42501).
+
+Côté application : le déploiement de production Vercel (`app.morada.lu`, projet
+morada-gestion) est READY sur le commit f3729c1 de la branche, celui que CI a
+validé, et lit désormais les deux vues et la table. Le domaine et les journaux
+d'exécution Vercel ne sont pas joignables depuis l'environnement de la session
+(proxy sortant, jeton sans droit de lecture des logs) : le parcours applicatif est
+couvert par la suite de bout en bout de CI sur le même schéma et par le parcours
+SQL ci-dessus. Réversible : les deux `grant` notés en tête de 0021, puis le repli
+noté en tête de 0020 (drop des deux vues et de la table, bucket ramené à 10 Mo et
+aux quatre images).
