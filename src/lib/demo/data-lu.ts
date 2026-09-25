@@ -10,7 +10,7 @@
 
 import * as fr from "./data";
 import { periodFromSyndic } from "./charges-seed";
-import type { DemoAuditEntry, DemoBankTx, DemoBill, DemoContact, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DemoAuditEntry, DemoBankTx, DemoDelivery, DemoBill, DemoContact, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
 import type { DocumentKind } from "@/lib/documents/kinds";
 import type { OpenInvoice } from "@/domain/banking/matching";
 
@@ -447,3 +447,9 @@ export function generatedFor(kind: DocumentKind, sourceId: string): DemoGenerate
   return GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null;
 }
 export const AUDIT: DemoAuditEntry[] = fr.AUDIT;
+
+const DELIVERY_SUBJECTS: Record<string, string> = {
+  "dv-1": "Loyerquittung · Apt 3B · Résidence Beaulieu",
+  "dv-2": "Nei Ufro vum Jean Muller: Waasser ënner der Spull",
+};
+export const DELIVERIES: DemoDelivery[] = fr.DELIVERIES.map((x) => ({ ...x, recipientEmail: x.recipientKind === "manager" ? "anne@cabinet-majerus.lu" : x.recipientEmail, subject: DELIVERY_SUBJECTS[x.id] ?? x.subject }));

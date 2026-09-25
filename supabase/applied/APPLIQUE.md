@@ -289,3 +289,22 @@ fichier. Avant application : ré-auditer la production (dérive de schéma, 64 t
 policies, `g_can` à 60d98f80cccaa74f02b4afb1ebd6b859), appliquer, vérifier RLS et
 grants des nouveaux objets, puis rejouer les parcours sous les policies de production
 dans une transaction annulée, comme pour 0020.
+
+## 0023 · proposée, NON appliquée · les envois
+
+`0023_envois.sql` n'est pas appliquée en production : elle attend une approbation
+explicite, après 0022 dont elle dépend (`workspace_settings`). Elle est rejouée sur la
+base jetable de CI, où `envois.spec.ts` et l'audit RLS la vérifient. Tout est additif :
+deux colonnes sur `gestion.workspace_settings` (`notify_tenant_messages`,
+`notify_manager_messages`, vraies par défaut), une table `gestion.deliveries` (journal
+des e-mails composés, sous RLS sur le motif gestion.can : lecture `documents.view`,
+insertion `documents.edit`, ni mise à jour ni suppression), et deux fonctions portail
+definer à `search_path` fixé, exécution réservée à `authenticated` :
+`gestion.portal_notification_target(uuid)` (l'adresse du bureau et ses deux préférences,
+pour un bail dont l'appelant est locataire) et `gestion.portal_record_delivery(...)` (la
+ligne du journal qu'un locataire laisse sur son propre bail, genre et statut contrôlés).
+Aucune table existante supprimée, renommée ni réécrite ; rien dans `public` ; `g_can`
+non touchée. Le repli est noté en tête du fichier. Côté serveur, l'envoi réel demande
+`RESEND_API_KEY` et `MORADA_MAIL_FROM` dans les variables d'environnement Vercel
+(aucune des deux n'est posée en production à ce jour) ; sans elles, chaque e-mail est
+composé et consigné avec le statut « non configuré », et Réglages le dit.

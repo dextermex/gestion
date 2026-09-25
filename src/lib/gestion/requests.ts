@@ -1,5 +1,6 @@
 import "server-only";
 import type { OrgContext } from "@/lib/gestion/api";
+import { leaseOfConversation, notifyTenantsOfMessage } from "@/lib/delivery/outbox";
 import { appendMessage, leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_STATUSES, leaseSubject, ticketStatusFor, type RequestStatus } from "@/lib/portal/types";
 
@@ -99,6 +100,8 @@ export async function addManagerMessage(
   if (!text) return { error: "invalid" };
 
   let conversationId: string;
+  // The tenancy the word is for: its tenants are told once it is written.
+  let leaseId: string | null = null;
   if ("leaseId" in target) {
     // The tenancy's conversation, opened by the desk if nobody has written yet.
     const { data: lease, error } = await ctx.g.from("leases").select("id").eq("org_id", ctx.org.id).eq("id", target.leaseId).maybeSingle();
@@ -107,6 +110,7 @@ export async function addManagerMessage(
     const thread = await leaseConversation(ctx.g, { id: target.leaseId, orgId: ctx.org.id, subject: await subjectOfLease(ctx.g, ctx.org.id, target.leaseId) });
     if ("error" in thread) return thread;
     conversationId = thread.id;
+    leaseId = target.leaseId;
   } else if ("ticketId" in target) {
     const found = await ownTicket(ctx.g, ctx.org.id, target.ticketId);
     if ("error" in found) return found;
@@ -114,17 +118,21 @@ export async function addManagerMessage(
     const thread = await threadOf(ctx.g, ctx.org.id, found.ticket);
     if ("error" in thread) return thread;
     conversationId = thread.id;
+    leaseId = found.ticket.lease_id ? String(found.ticket.lease_id) : null;
   } else {
     const { data, error } = await ctx.g.from("conversations").select("id").eq("org_id", ctx.org.id).eq("id", target.conversationId).maybeSingle();
     if (error) return failure(error, "conversation lookup");
     if (!data) return { error: "not_found" };
     conversationId = String((data as Row).id);
+    leaseId = await leaseOfConversation(ctx, conversationId);
   }
 
   const sent = await appendMessage(ctx.g, { orgId: ctx.org.id, conversationId, senderKind: "manager", senderUserId: ctx.userId, body: text, touch: true });
   if ("error" in sent) return sent;
   // A reply on a request also counts as activity on it.
   if ("ticketId" in target) await ctx.g.from("tickets").update({ updated_at: sent.sentAt }).eq("org_id", ctx.org.id).eq("id", target.ticketId);
+  // The tenants are told by e-mail when the workspace wants it; the word stands whatever becomes of the mail.
+  if (leaseId) await notifyTenantsOfMessage(ctx, { leaseId, text });
   return { id: sent.id, conversationId };
 }
 

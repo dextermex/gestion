@@ -84,7 +84,8 @@ const DEFAULTS: Record<string, () => Row> = {
   work_orders: () => ({ status: "offered", artisan_contact_id: null }),
   conversations: () => ({ last_message_at: null }),
   messages: () => ({ sender_contact_id: null, read_at: null, ticket_id: null }),
-  workspace_settings: () => ({ legal_name: "", signatory_name: "", address_street: "", address_number: "", postal_code: "", city: "", country: "LU", email: "", phone: "", iban: "", bic: "", holder_name: "", document_lang: "fr", updated_by: null }),
+  workspace_settings: () => ({ legal_name: "", signatory_name: "", address_street: "", address_number: "", postal_code: "", city: "", country: "LU", email: "", phone: "", iban: "", bic: "", holder_name: "", document_lang: "fr", notify_tenant_messages: true, notify_manager_messages: true, updated_by: null }),
+  deliveries: () => ({ channel: "email", lease_id: null, document_id: null, recipient_contact_id: null, lang: "fr", provider: null, provider_message_id: null, created_by: null, created_at: new Date().toISOString(), sent_at: null }),
   template_validations: () => ({ validated_by: null, validated_at: new Date().toISOString() }),
   generated_documents: () => ({ generated_by: null, generated_at: new Date().toISOString() }),
   edl_media: () => ({ geotag: null, prev_sha256: null }),
@@ -288,6 +289,31 @@ export class FakeDb {
           .filter((w) => orgIds.includes(w.org_id))
           .map((w) => ({ org_id: w.org_id, legal_name: w.legal_name, iban: w.iban, bic: w.bic, holder_name: w.holder_name }));
         return { data: rows, error: null };
+      }
+      case "portal_notification_target": {
+        if (!uid) return { data: [], error: null };
+        const leaseId = String(args.p_lease ?? "");
+        const lease = this.table("leases").find((l) => l.id === leaseId);
+        if (!lease || !this.tenantLease(leaseId, uid)) return { data: [], error: null };
+        const w = this.table("workspace_settings").find((x) => x.org_id === lease.org_id);
+        const a = this.table("agencies").find((x) => x.id === lease.org_id);
+        const m = this.table("crm_members").find((x) => x.agency_id === lease.org_id && x.role === "owner" && x.status === "active");
+        const email = (w?.email as string | undefined) || (a?.email as string | undefined) || (m?.email as string | undefined) || null;
+        return { data: [{ org_id: lease.org_id, email, enabled: w ? w.notify_manager_messages !== false : true, lang: (w?.document_lang as string | undefined) || "fr" }], error: null };
+      }
+      case "portal_record_delivery": {
+        if (!uid) return raise("gestion: not a tenant of this lease");
+        const leaseId = String(args.p_lease ?? "");
+        const lease = this.table("leases").find((l) => l.id === leaseId);
+        if (!lease || !this.tenantLease(leaseId, uid)) return raise("gestion: not a tenant of this lease");
+        if (!["message", "request"].includes(String(args.p_kind))) return raise("gestion: invalid kind");
+        if (!["sent", "not_configured", "rejected", "unreachable"].includes(String(args.p_status))) return raise("gestion: invalid status");
+        const row = this.insertRow("deliveries", {
+          org_id: lease.org_id, kind: args.p_kind, lease_id: leaseId, recipient_kind: "manager", recipient_email: args.p_recipient_email,
+          lang: ["fr", "en", "de", "lu"].includes(String(args.p_lang)) ? args.p_lang : "fr", subject: args.p_subject, body_text: args.p_body, status: args.p_status,
+          provider: args.p_provider || null, provider_message_id: args.p_provider_message_id || null, created_by: uid, sent_at: args.p_status === "sent" ? new Date().toISOString() : null,
+        });
+        return { data: row.id, error: null };
       }
       case "my_managers": {
         if (!uid) return { data: [], error: null };

@@ -30,6 +30,11 @@ export interface GenerateLabels {
   reasonUnsealed: string;
   reasonNoContent: string;
   errFailed: string;
+  send: string;
+  sentTo: string;
+  sendRecorded: string;
+  sendNoRecipient: string;
+  sendFailed: string;
 }
 
 export interface ExistingDocument {
@@ -65,7 +70,37 @@ export default function GenerateDocument({
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<ExistingDocument | null>(null);
+  const [sending, setSending] = useState(false);
   const doc = fresh ?? existing;
+
+  // The piece, mailed to the tenants of its lease with the file attached:
+  // one line of the outbox per address, and what became of it said here.
+  const send = async () => {
+    if (!doc) return;
+    setError(null);
+    setNote(null);
+    if (!writable) {
+      setNote(sampleNote ?? "");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await callJson(`/api/documents/${encodeURIComponent(doc.documentId)}/envoyer`, "POST", {}, backTo);
+      if (!res) return;
+      if (res.ok) {
+        const deliveries = Array.isArray(res.payload.deliveries) ? (res.payload.deliveries as Array<{ email: string; status: string }>) : [];
+        const sent = deliveries.filter((x) => x.status === "sent").map((x) => x.email);
+        const recorded = deliveries.filter((x) => x.status === "not_configured").map((x) => x.email);
+        const failed = deliveries.filter((x) => x.status === "rejected" || x.status === "unreachable");
+        if (failed.length > 0 && sent.length === 0 && recorded.length === 0) setError(labels.sendFailed);
+        else setNote([sent.length > 0 ? labels.sentTo.replace("{email}", sent.join(", ")) : "", recorded.length > 0 ? labels.sendRecorded.replace("{email}", recorded.join(", ")) : ""].filter(Boolean).join(" "));
+        router.refresh();
+      } else setError(res.payload.error === "no_recipient" ? labels.sendNoRecipient : labels.sendFailed);
+    } catch {
+      setError(labels.sendFailed);
+    }
+    setSending(false);
+  };
 
   const explain = (payload: Record<string, unknown>): string => {
     const code = String(payload.error ?? "");
@@ -117,6 +152,9 @@ export default function GenerateDocument({
             {label} · {labels.open}
           </a>
           {doc.producedLabel && <span className="text-[11px] text-ink-soft">{doc.producedLabel}</span>}
+          <Button size="sm" variant="ghost" loading={sending} onClick={send} data-doc-send={doc.documentId}>
+            {labels.send}
+          </Button>
           <Button size="sm" variant="ghost" loading={busy} onClick={() => produce(true)}>
             {labels.produceAgain}
           </Button>

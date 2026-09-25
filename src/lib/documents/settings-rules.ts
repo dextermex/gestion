@@ -20,6 +20,10 @@ export interface LessorSettings {
   bic: string;
   holderName: string;
   documentLang: Locale;
+  /** The desk's words to a tenant warn them by e-mail. */
+  notifyTenantMessages: boolean;
+  /** A tenant's word or request warns the desk by e-mail. */
+  notifyManagerMessages: boolean;
 }
 
 export type SettingsProblem = "legalName" | "iban" | "bic" | "documentLang" | "email";
@@ -65,6 +69,9 @@ export function parseSettingsInput(body: Record<string, unknown>): LessorSetting
     bic,
     holderName: str(body.holderName, 140),
     documentLang: documentLang as Locale,
+    // Absent from the form, a preference stays on: silence never turns a notification off.
+    notifyTenantMessages: body.notifyTenantMessages !== false,
+    notifyManagerMessages: body.notifyManagerMessages !== false,
   };
 }
 

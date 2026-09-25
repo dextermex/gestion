@@ -87,11 +87,12 @@ export function buildEmptyData(org: Org): DemoData {
     CHARGE_PERIODS: [],
     DOCUMENTS: [],
     BILLS: [],
-    LESSOR: { legalName: "", signatoryName: "", addressStreet: "", addressNumber: "", postalCode: "", city: "", country: "LU", email: "", phone: "", iban: "", bic: "", holderName: "", documentLang: "fr", complete: false, hasPayment: false },
+    LESSOR: { legalName: "", signatoryName: "", addressStreet: "", addressNumber: "", postalCode: "", city: "", country: "LU", email: "", phone: "", iban: "", bic: "", holderName: "", documentLang: "fr", notifyTenantMessages: true, notifyManagerMessages: true, complete: false, hasPayment: false },
     TEMPLATES: DOCUMENT_KINDS.flatMap((kind) => availableLanguages(kind).map((lang) => ({ kind, lang, version: templateVersion(kind, lang) ?? "", validatedOn: null, current: false }))),
     GENERATED: [],
     generatedFor: () => null,
     AUDIT: [],
+    DELIVERIES: [],
     INVITES: [],
     PAGING: { documents: { page: 1, size: 50, total: 0, pages: 1 } },
 

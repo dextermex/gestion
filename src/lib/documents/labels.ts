@@ -28,6 +28,11 @@ export function generateLabels(d: Dict): GenerateLabels {
     reasonUnsealed: d.documents.reasonUnsealed,
     reasonNoContent: d.documents.reasonNoContent,
     errFailed: d.documents.errFailed,
+    send: d.documents.send,
+    sentTo: d.documents.sentTo,
+    sendRecorded: d.documents.sendRecorded,
+    sendNoRecipient: d.documents.sendNoRecipient,
+    sendFailed: d.documents.sendFailed,
   };
 }
 

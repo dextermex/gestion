@@ -25,6 +25,8 @@ export interface SettingsLabels {
   fieldBic: string;
   fieldHolder: string;
   fieldDocLang: string;
+  notifyTenant: string;
+  notifyManager: string;
   save: string;
   saved: string;
   invalidName: string;
@@ -65,6 +67,8 @@ export default function SettingsForm({
     bic: initial.bic,
     holderName: initial.holderName,
     documentLang: initial.documentLang,
+    notifyTenantMessages: initial.notifyTenantMessages,
+    notifyManagerMessages: initial.notifyManagerMessages,
   });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -154,6 +158,30 @@ export default function SettingsForm({
             ))}
           </Select>
         </Field>
+      </div>
+      <div className="space-y-2 pt-1">
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={form.notifyTenantMessages}
+            onChange={(e) => setForm((f) => ({ ...f, notifyTenantMessages: e.target.checked }))}
+            disabled={busy}
+            className="mt-0.5 h-4 w-4 rounded border-sand-300 text-brand-600 focus:ring-brand-400"
+            data-settings-notify-tenant
+          />
+          <span className="text-sm text-ink">{labels.notifyTenant}</span>
+        </label>
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={form.notifyManagerMessages}
+            onChange={(e) => setForm((f) => ({ ...f, notifyManagerMessages: e.target.checked }))}
+            disabled={busy}
+            className="mt-0.5 h-4 w-4 rounded border-sand-300 text-brand-600 focus:ring-brand-400"
+            data-settings-notify-manager
+          />
+          <span className="text-sm text-ink">{labels.notifyManager}</span>
+        </label>
       </div>
       <div className="flex flex-wrap items-center gap-3 pt-1">
         <Button type="submit" loading={busy}>

@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyManagerFromTenant } from "@/lib/delivery/outbox";
 import type { GestionReader } from "@/lib/demo/data-real";
 import { appendMessage, leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_KINDS, attachmentFolder, ticketCategoryFor, type RequestKind } from "@/lib/portal/types";
@@ -84,6 +85,8 @@ export async function createTenantRequest(
   }
   const anchor = await appendMessage(g, { orgId: lease.orgId, conversationId: thread.id, senderKind: "tenant", senderUserId: user.id, body: input.title, ticketId: id, touch: false });
   if ("error" in anchor) console.error("tenant request anchor failed:", anchor.error);
+  // The desk is told by e-mail when the workspace wants it; the request stands whatever becomes of the mail.
+  await notifyManagerFromTenant(g, { id: lease.id, subject: lease.subject }, { kind: "request", text: description, title: input.title, ticketId: id });
   return { id, conversationId: thread.id };
 }
 
@@ -137,5 +140,6 @@ export async function addTenantMessage(
   if ("error" in thread) return thread;
   const sent = await appendMessage(g, { orgId: lease.orgId, conversationId: thread.id, senderKind: "tenant", senderUserId: user.id, body: text, touch: false });
   if ("error" in sent) return sent;
+  await notifyManagerFromTenant(g, { id: lease.id, subject: lease.subject }, { kind: "message", text });
   return { id: sent.id, conversationId: thread.id };
 }

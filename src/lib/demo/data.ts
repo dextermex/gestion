@@ -1038,6 +1038,10 @@ export interface DemoLessor {
   bic: string;
   holderName: string;
   documentLang: "fr" | "en" | "de" | "lu";
+  /** The desk's words to a tenant warn them by e-mail. */
+  notifyTenantMessages: boolean;
+  /** A tenant's word or request warns the desk by e-mail. */
+  notifyManagerMessages: boolean;
   /** Name and address are there: a document can carry a sender. */
   complete: boolean;
   /** IBAN and holder are there: rent documents can print where to pay. */
@@ -1058,6 +1062,8 @@ export const LESSOR: DemoLessor = {
   bic: "BCEELULL",
   holderName: "Cabinet Reuter s.à r.l.",
   documentLang: "fr",
+  notifyTenantMessages: true,
+  notifyManagerMessages: true,
   complete: true,
   hasPayment: true,
 };
@@ -1113,6 +1119,22 @@ export interface DemoAuditEntry {
 
 /** The sample plays nothing that would write: its journal stays empty. */
 export const AUDIT: DemoAuditEntry[] = [];
+
+/** One e-mail the workspace composed: to whom, about what, and what became of it. */
+export interface DemoDelivery {
+  id: string;
+  at: string;
+  kind: "document" | "message" | "request";
+  recipientKind: "tenant" | "manager";
+  recipientEmail: string;
+  subject: string;
+  status: "sent" | "not_configured" | "rejected" | "unreachable";
+}
+
+export const DELIVERIES: DemoDelivery[] = [
+  { id: "dv-1", at: "2026-08-03T09:12:00Z", kind: "document", recipientKind: "tenant", recipientEmail: "j.muller@example.lu", subject: "Quittance de loyer · Apt 3B · Résidence Beaulieu", status: "sent" },
+  { id: "dv-2", at: "2026-08-19T16:40:00Z", kind: "request", recipientKind: "manager", recipientEmail: "alex@cabinet-reuter.lu", subject: "Nouvelle demande de Jean Muller : Fuite sous l'évier", status: "sent" },
+];
 
 // ─── Bills: what the desk entered, in the fiscal bucket the pack reads ──────
 

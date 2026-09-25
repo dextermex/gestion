@@ -10,6 +10,7 @@ import { getI18n } from "@/lib/i18n";
 import { LOCALE_LABELS, fmt } from "@/lib/i18n/config";
 import { paramsInForce } from "@/domain/legal/params";
 import { availableLanguages, templateFor } from "@/lib/documents/wording";
+import { mailConfigured, mailFrom } from "@/lib/mail";
 
 /**
  * Réglages: the workspace itself, and the registries every calculation
@@ -21,7 +22,7 @@ import { availableLanguages, templateFor } from "@/lib/documents/wording";
  */
 export default async function ReglagesPage() {
   const { locale, d } = await getI18n();
-  const { AUDIT, LESSOR, ORG, TEMPLATES, TODAY } = await getDemo({ audit: true });
+  const { AUDIT, DELIVERIES, LESSOR, ORG, TEMPLATES, TODAY } = await getDemo({ audit: true });
   const identity = await getIdentity();
   const sample = await isSampleData();
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
@@ -90,6 +91,10 @@ export default async function ReglagesPage() {
   });
   const verbs: Record<string, string> = { insert: d.reglages.journalVerbInsert, update: d.reglages.journalVerbUpdate, delete: d.reglages.journalVerbDelete };
   const objects = d.reglages.journalObjects as Record<string, string>;
+  // What the deployment can send, said plainly: a sample cabinet plays a configured one.
+  const mailOn = sample || mailConfigured();
+  const deliveryKinds = d.reglages.deliveryKinds as Record<string, string>;
+  const deliveryStatus = d.reglages.deliveryStatus as Record<string, string>;
   const actorLabel = (actor: string | null): string => {
     if (!actor) return d.common.none;
     if (identity && actor === identity.userId) return identity.displayName;
@@ -128,6 +133,8 @@ export default async function ReglagesPage() {
                 fieldBic: d.reglages.fieldBic,
                 fieldHolder: d.reglages.fieldHolder,
                 fieldDocLang: d.reglages.fieldDocLang,
+                notifyTenant: d.reglages.notifyTenant,
+                notifyManager: d.reglages.notifyManager,
                 save: d.reglages.lessorSave,
                 saved: d.reglages.lessorSaved,
                 invalidName: d.reglages.lessorInvalidName,
@@ -199,6 +206,35 @@ export default async function ReglagesPage() {
                 </Link>
               ))}
             </div>
+          </Panel>
+
+          <Panel title={d.reglages.mailTitle}>
+            <p className="mb-3 text-sm leading-relaxed text-ink-soft">{d.reglages.mailBody}</p>
+            <p className={"rounded-lg px-3 py-2 text-xs font-semibold " + (mailOn ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800")} data-mail-configured={mailOn ? "yes" : "no"}>
+              {mailOn ? fmt(d.reglages.mailConfigured, { from: sample ? LESSOR.email : mailFrom() }) : d.reglages.mailNotConfigured}
+            </p>
+            <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.reglages.deliveriesTitle}</h3>
+            {DELIVERIES.length === 0 ? (
+              <p className="mt-2 text-sm text-ink-soft" data-deliveries-empty>
+                {d.reglages.deliveriesNone}
+              </p>
+            ) : (
+              <ul className="mt-1 divide-y divide-sand-100 text-sm" data-deliveries>
+                {DELIVERIES.map((x) => (
+                  <li key={x.id} className="py-2" data-delivery={x.kind} data-delivery-status={x.status}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="min-w-0 truncate font-semibold text-ink" title={x.subject}>
+                        {x.subject}
+                      </p>
+                      <p className="shrink-0 text-xs tabular-nums text-ink-soft">{formatDateTime(x.at, locale)}</p>
+                    </div>
+                    <p className="truncate text-xs text-ink-soft">
+                      {deliveryKinds[x.kind] ?? x.kind} · {fmt(d.reglages.deliveryTo, { email: x.recipientEmail })} · {deliveryStatus[x.status] ?? x.status}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Panel>
 
           <Panel title={d.reglages.journalTitle}>

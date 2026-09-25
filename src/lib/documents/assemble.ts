@@ -65,6 +65,8 @@ export function lessorOf(row: Row | null, fallbackName: string): { lessor: Lesso
     bic: s(row?.bic),
     holderName: s(row?.holder_name),
     documentLang: (["fr", "en", "de", "lu"].includes(s(row?.document_lang)) ? s(row?.document_lang) : "fr") as LessorSettings["documentLang"],
+    notifyTenantMessages: row?.notify_tenant_messages !== false,
+    notifyManagerMessages: row?.notify_manager_messages !== false,
   };
   return {
     settings,

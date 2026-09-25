@@ -26,7 +26,7 @@ import { buildEmptyData, type Org } from "./data-empty";
 import { pageBounds, pageInfo, windowStart, DEFAULT_MONTHS_BACK, DEFAULT_PAGE_SIZE, type PageRequest, type ReadScope } from "./scope";
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
-import type { DemoAuditEntry, DemoGenerated, DemoLessor, DemoTemplate } from "./data";
+import type { DemoAuditEntry, DemoDelivery, DemoGenerated, DemoLessor, DemoTemplate } from "./data";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -270,7 +270,7 @@ export async function buildRealDataFrom(
       : leaseScoped
         ? ((conversationRows.find((c) => s(c.scope_type) === "lease" && s(c.scope_id) === leaseScoped)?.id as string | undefined) ?? null)
         : null);
-  const [workOrderRows, chargeLineRows, deductionRows, countRows, lateRows, messageRows, periodLetterRows, relatedDocRows, generatedRows, auditRows] = await Promise.all([
+  const [workOrderRows, chargeLineRows, deductionRows, countRows, lateRows, messageRows, periodLetterRows, relatedDocRows, generatedRows, auditRows, deliveryRows] = await Promise.all([
     inChunks(ticketIds, (ids) => q("work_orders", "id,ticket_id,status,artisan_contact_id,scheduled_at,amount_cents,vat_cents,created_at", (b) => b.in("ticket_id", ids).order("created_at"))),
     inChunks(chargePeriodRows.map((cp) => s(cp.id)), (ids) => q("charge_lines", "id,charge_period_id,source,label,category,building_total_cents,tantiemes,tantiemes_total,lot_share_cents,tenant_share_cents,blocked", (b) => b.in("charge_period_id", ids))),
     inChunks(depositRows.map((d) => s(d.id)), (ids) => q("deposit_deductions", "id,deposit_id,kind,label,amount_cents,justified_at,justification_document_id,edl_item_id", (b) => b.in("deposit_id", ids))),
@@ -288,6 +288,7 @@ export async function buildRealDataFrom(
           (ids) => q("generated_documents", "document_id,kind,lang,template_version,source_type,source_id,generated_at", (b) => b.in("source_id", ids).order("generated_at", { ascending: false })),
         ),
     scope.audit ? q("audit_log", "id,actor,verb,object_type,object_id,at", (b) => b.order("at", { ascending: false }), 50) : none(),
+    scope.audit ? q("deliveries", "id,kind,recipient_kind,recipient_email,subject,status,created_at", (b) => b.order("created_at", { ascending: false }), 50) : none(),
   ]);
   // ── D. The pieces the retention lines point at, by id. ──
   const justificationDocRows = await inChunks(
@@ -874,6 +875,8 @@ export async function buildRealDataFrom(
     bic: s(settingsRow?.bic),
     holderName: s(settingsRow?.holder_name),
     documentLang: (["fr", "en", "de", "lu"].includes(s(settingsRow?.document_lang)) ? s(settingsRow?.document_lang) : "fr") as DemoLessor["documentLang"],
+    notifyTenantMessages: settingsRow?.notify_tenant_messages !== false,
+    notifyManagerMessages: settingsRow?.notify_manager_messages !== false,
     complete: s(settingsRow?.legal_name) !== "" && s(settingsRow?.address_street) !== "" && s(settingsRow?.postal_code) !== "" && s(settingsRow?.city) !== "",
     hasPayment: s(settingsRow?.iban) !== "" && s(settingsRow?.holder_name) !== "",
   };
@@ -897,6 +900,15 @@ export async function buildRealDataFrom(
       name: s(generatedDocIndex.get(s(g.document_id))?.name),
       sha256: s(generatedDocIndex.get(s(g.document_id))?.sha256),
     }));
+  const DELIVERIES: DemoDelivery[] = deliveryRows.map((r) => ({
+    id: s(r.id),
+    at: s(r.created_at),
+    kind: (["document", "message", "request"].includes(s(r.kind)) ? s(r.kind) : "message") as DemoDelivery["kind"],
+    recipientKind: s(r.recipient_kind) === "manager" ? "manager" : "tenant",
+    recipientEmail: s(r.recipient_email),
+    subject: s(r.subject),
+    status: (["sent", "not_configured", "rejected", "unreachable"].includes(s(r.status)) ? s(r.status) : "not_configured") as DemoDelivery["status"],
+  }));
   const AUDIT: DemoAuditEntry[] = auditRows.map((a) => ({
     id: s(a.id),
     at: s(a.at),
@@ -939,6 +951,7 @@ export async function buildRealDataFrom(
     GENERATED,
     generatedFor: (kind: DocumentKind, sourceId: string) => GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null,
     AUDIT,
+    DELIVERIES,
     contactById: (id: string) => contactIndex.get(id)!,
     propertyById: (id: string) => propertyIndex.get(id)!,
     unitById: (id: string) => unitIndex.get(id)!,

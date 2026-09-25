@@ -474,6 +474,32 @@ through `gestion.my_payment_instructions()` and nothing else of the settings. Th
 journal (`gestion.audit_log`, fed by `gestion.audit_row()` triggers on the tables with
 legal effect) records every write with its actor; Réglages shows it.
 
+### Delivery: an outbox, one sender, notifications both ways
+
+Every e-mail the application composes is a row of `gestion.deliveries` (0023): its kind
+(a document, a word from the desk, a word or a request from the tenant), the lease and
+piece it is about, the address and language it went to, its subject and text, and what
+became of it: `sent` through Resend when the deployment carries `RESEND_API_KEY`
+(`src/lib/mail.ts`, one HTTP call, attachments as base64, the workspace's own address as
+reply-to), `not_configured` when it does not (the row is still written, and Réglages says
+so plainly), `rejected` or `unreachable` otherwise. The wording is the dictionaries' own,
+in the reader's language (`src/lib/delivery/compose.ts`): a contact's recorded language
+for a tenant, the workspace's document language for the desk. Nothing legally significant
+is ever said in an e-mail: the document attached carries it, from its validated template.
+
+A produced piece is mailed from its control (`POST /api/documents/[id]/envoyer`,
+`sendDocumentByMail`): the PDF is read from the bucket under the manager's token and goes
+to every tenant of the lease with an address, one outbox row each; a piece that is not a
+lease's, or has no file, is not found. A word from the desk (`addManagerMessage`, from
+the lease, the request or the conversation) tells the tenants when
+`workspace_settings.notify_tenant_messages` allows it; a word or a request from the tenant
+(`addTenantMessage`, `createTenantRequest`) tells the desk when `notify_manager_messages`
+does, through two portal functions the tenant's token may call and nothing else:
+`gestion.portal_notification_target(lease)` hands out the desk's address and the two
+flags for the tenant's own lease, `gestion.portal_record_delivery(...)` leaves the outbox
+row on that lease. Neither notification ever fails the write it follows. Réglages carries
+the two toggles, the sender's state and the last fifty rows of the outbox.
+
 ### RLS model
 
 One `security definer` predicate — `g_can(org_id, perm)` — behind every policy, resolving
@@ -513,7 +539,7 @@ over this data — swapping in Supabase changes the data source, not a single co
 
 Continuous integration, the end-to-end suite against a throwaway local Supabase, the
 database security audit and error monitoring are described in docs/QUALITY.md. In
-one line: every push runs typecheck, lint, 322 tests and the build, then the real
+one line: every push runs typecheck, lint, 330 tests and the build, then the real
 flows (sign-up, sign-in, two accounts on one browser, property, rental dossier to
 activation, invitation accepted by a new account, isolation, departure, typing) in a
 real browser through the same policies as production.

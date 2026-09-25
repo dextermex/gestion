@@ -28,6 +28,8 @@ export async function PATCH(req: NextRequest) {
     bic: parsed.bic,
     holder_name: parsed.holderName,
     document_lang: parsed.documentLang,
+    notify_tenant_messages: parsed.notifyTenantMessages,
+    notify_manager_messages: parsed.notifyManagerMessages,
     updated_at: new Date().toISOString(),
     updated_by: userId,
   };
