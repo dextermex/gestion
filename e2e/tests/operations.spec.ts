@@ -53,6 +53,9 @@ let unitId = "";
 let leaseId = "";
 
 const dialogOf = (page: Page) => page.getByRole("dialog");
+/** A piece the bucket takes: a minimal PDF. */
+const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n");
+const pdf = (name: string) => ({ name, mimeType: "application/pdf", buffer: PDF });
 
 test("the owner lets a house to a tenancy that began two years ago", async ({ page }) => {
   await signUp(page, owner);
@@ -207,7 +210,12 @@ test("interventions: a work order walks its ladder from the sheet, the ticket fo
   await step("Travaux terminés");
   await dialog.getByLabel("Montant HT").fill("480");
   await dialog.getByLabel("TVA").fill("81,60");
+  // The artisan's invoice is the piece: uploaded with the step, registered against the work order.
+  await dialog.locator("#invoice-file").setInputFiles(pdf("facture-kirsch.pdf"));
+  await expect(dialog).toContainText("Facture jointe : facture-kirsch.pdf");
+  const invoiceStored = page.waitForResponse((r) => r.url().endsWith("/api/documents") && r.request().method() === "POST");
   await step("Enregistrer la facture");
+  expect((await invoiceStored).status(), "the invoice is stored").toBe(201);
   await expect(dialog.getByRole("button", { name: "Facture payée", exact: true })).toBeVisible();
   await step("Facture payée");
   await expect(dialog).toContainText("Payée");
@@ -215,6 +223,9 @@ test("interventions: a work order walks its ladder from the sheet, the ticket fo
   await expect(dialog).toBeHidden();
   await page.reload();
   await expect(row, "the ticket followed the work order to its close").toContainText("Clôturé");
+  // The invoice sits in the register, with its file.
+  await page.goto("/app/documents");
+  await expect(page.locator("[data-document-file]").filter({ hasText: "facture-kirsch.pdf" })).toBeVisible();
 });
 
 test("guarantees: received, the tenancy closed, retentions, a justification, the décompte, the two tranches", async ({ page }) => {
@@ -271,13 +282,20 @@ test("guarantees: received, the tenancy closed, retentions, a justification, the
   const arrearsLine = page.locator("li").filter({ hasText: "Loyer impayé" }).first();
   await expect(arrearsLine).toContainText("Justificatif attendu");
   await arrearsLine.getByRole("button", { name: "Justifier" }).click();
+  // The justification is a piece: the file goes to the register against this very line, then the line is dated.
+  await arrearsLine.getByLabel("Pièce (PDF ou image)").setInputFiles(pdf("decompte-loyers.pdf"));
   await arrearsLine.getByLabel("Pièce (facture ou devis)").fill("Décompte de loyers");
+  const pieceStored = page.waitForResponse((r) => r.url().endsWith("/api/documents") && r.request().method() === "POST");
   const justified = page.waitForResponse((r) => r.url().includes(`/retenues/${arrears.id}`) && r.request().method() === "PATCH");
   await arrearsLine.getByRole("button", { name: "Justifier" }).click();
+  const piece = (await (await pieceStored).json()) as { id: string };
   expect((await justified).ok(), "the justification is written").toBe(true);
   await page.reload();
   await expect(arrearsLine).toContainText("Justifiée");
-  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today, justificationRef: "Encore" } })).status(), "justified once").toBe(409);
+  // Once, and never without its piece.
+  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today, documentId: piece.id } })).status(), "justified once").toBe(409);
+  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today } })).status(), "a justification needs its piece").toBe(400);
+  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today, documentId: "00000000-0000-4000-8000-000000000000" } })).status(), "a piece that is not this line's is refused").toBe(400);
 
   // First tranche: half the guarantee, the retention permitting.
   const first = page.waitForResponse((r) => r.url().includes("/liberation") && r.request().method() === "POST");

@@ -19,6 +19,10 @@ import { formatDate, requestStatusMeta } from "@/lib/types";
  * inside its conversation, `?fil=<id>` any conversation. A laptop opens the
  * first conversation by itself; a phone shows the list until one is tapped,
  * unless the address named one.
+ *
+ * The page reads one conversation in full: the one the address names, else
+ * the most recent. The others come with their last word and their unread
+ * count; opening one names it in the address and reads the page again.
  */
 
 function timeOf(iso: string, locale: Locale): string {
@@ -40,7 +44,9 @@ function plainDescription(description: string | null): string | null {
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ onglet?: string; demande?: string; fil?: string }> }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const demo = await getDemo();
+  // A tenancy nobody has written to yet is addressed as `lease:<id>`: no conversation to read.
+  const fil = params.fil && !params.fil.startsWith("lease:") ? params.fil : undefined;
+  const demo = await getDemo({ conversationId: fil ?? "latest" });
   const sample = await isSampleData();
   const { CONVERSATIONS, LEASES, TICKETS, TODAY, leaseTenantNames, leaseUnitLabel } = demo;
   const m = d.messages;
@@ -109,6 +115,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
       preview: lastRequest ? lastRequest.title : (last?.body ?? ""),
       previewIsRequest: Boolean(lastRequest),
       messages,
+      loaded: c.loaded,
     };
   }).sort((a, b) => (a.lastMessageAt < b.lastMessageAt ? 1 : -1));
   // A tenancy nobody has written to yet is still a conversation to open:
@@ -130,6 +137,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
       preview: "",
       previewIsRequest: false,
       messages: [],
+      loaded: true,
     }));
   threads.push(...unopened);
 
@@ -193,6 +201,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
           close: d.common.close,
           backToThreads: m.backToThreads,
           backToRequests: m.backToRequests,
+          loading: d.common.loading,
         }}
       />
     </div>

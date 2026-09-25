@@ -12,6 +12,8 @@ import type { AcquisitionFacts } from "@/domain/fiscal/amortisation";
 import type { BankTransaction, IbanBinding, OpenInvoice } from "@/domain/banking/matching";
 import type { WorkOrderStatus } from "@/lib/types";
 import { periodFromSyndic, type DemoChargePeriod } from "./charges-seed";
+import type { BillCategory } from "@/lib/gestion/bills";
+import type { PageInfo } from "./scope";
 import type { InviteRow } from "@/lib/portal/types";
 import type {
   BankTxStatus,
@@ -829,11 +831,14 @@ export interface DemoConversation {
   participantName: string;
   lastMessageAt: string;
   unread: number;
+  /** True when the thread's messages are all here; a real account loads one thread at a time. */
+  loaded: boolean;
   messages: DemoMessage[];
 }
 
 export const CONVERSATIONS: DemoConversation[] = [
   {
+    loaded: true,
     id: "conv-3", subject: "Apt 3B · Résidence Beaulieu", scopeLabel: "Apt 3B · Résidence Beaulieu", scopeType: "lease", scopeId: "l-3b",
     participantName: "Jean Muller", lastMessageAt: "2026-08-21T16:40:00", unread: 1,
     messages: [
@@ -845,6 +850,7 @@ export const CONVERSATIONS: DemoConversation[] = [
     ],
   },
   {
+    loaded: true,
     id: "conv-2", subject: "Apt 2A · Résidence Beaulieu", scopeLabel: "Apt 2A · Résidence Beaulieu", scopeType: "lease", scopeId: "l-2a",
     participantName: "Ana Santos, Lucas Weber", lastMessageAt: "2026-08-20T11:02:00", unread: 0,
     messages: [
@@ -855,6 +861,7 @@ export const CONVERSATIONS: DemoConversation[] = [
     ],
   },
   {
+    loaded: true,
     id: "conv-5", subject: "Plateau 1er · Bureaux Kirchberg", scopeLabel: "Plateau 1er · Bureaux Kirchberg", scopeType: "lease", scopeId: "l-k01",
     participantName: "Boulangerie Bock Sàrl", lastMessageAt: "2026-08-08T17:20:00", unread: 0,
     messages: [
@@ -864,6 +871,7 @@ export const CONVERSATIONS: DemoConversation[] = [
     ],
   },
   {
+    loaded: true,
     id: "conv-4", subject: "Décompte de gérance juillet", scopeLabel: "Mandat SCI Beaulieu", scopeType: "mandate", scopeId: null,
     participantName: "Marie Faber", lastMessageAt: "2026-08-05T15:01:00", unread: 0,
     messages: [
@@ -991,18 +999,53 @@ export interface DemoDocument {
   relatedLabel: string;
   sizeKb: number;
   createdAt: string;
+  /** A file sits behind the row; a reference registered without one has nothing to hand over. */
+  hasFile: boolean;
 }
 
 export const DOCUMENTS: DemoDocument[] = [
-  { id: "d-1", name: "Bail Apt 3B · Muller (signé AES).pdf", klass: "lease", retentionClass: "accounting_10y", retentionUntil: "2036-04-01", sealed: true, relatedLabel: "Apt 3B", sizeKb: 842, createdAt: "2023-03-20" },
-  { id: "d-2", name: "EDL entrée Studio RDC (scellé, manifeste SHA-256).pdf", klass: "edl", retentionClass: "accounting_10y", retentionUntil: "2036-02-01", sealed: true, relatedLabel: "Studio RDC", sizeKb: 12_400, createdAt: "2026-01-30" },
-  { id: "d-3", name: "Facture Krier 2026-0812 · chaudière.pdf", klass: "invoice", retentionClass: "accounting_10y", retentionUntil: "2036-08-08", sealed: false, relatedLabel: "INT-2026-0141", sizeKb: 210, createdAt: "2026-08-08" },
-  { id: "d-4", name: "Acte notarié Studio Gare (VEFA 2024).pdf", klass: "deed", retentionClass: "permanent", retentionUntil: null, sealed: true, relatedLabel: "Studio Quartier Gare", sizeKb: 4_820, createdAt: "2024-06-01" },
-  { id: "d-5", name: "Certificat d'intérêts BCEE 2025 · SCI Beaulieu.pdf", klass: "tax", retentionClass: "accounting_10y", retentionUntil: "2036-01-15", sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 96, createdAt: "2026-01-15" },
-  { id: "d-6", name: "Mise en demeure Apt 2A · AR du 12/08 (scan).pdf", klass: "registered_letter", retentionClass: "accounting_10y", retentionUntil: "2036-08-12", sealed: true, relatedLabel: "Apt 2A", sizeKb: 380, createdAt: "2026-08-12" },
-  { id: "d-7", name: "CDD · SCI Beaulieu (RBE, registre associés, UBO).pdf", klass: "id_document", retentionClass: "aml_5y_from_end", retentionUntil: null, sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 1_240, createdAt: "2026-02-10" },
-  { id: "d-8", name: "Décompte syndic 2025 · Résidence Beaulieu (AG approuvé).pdf", klass: "decompte", retentionClass: "accounting_10y", retentionUntil: "2036-05-30", sealed: false, relatedLabel: "Résidence Beaulieu", sizeKb: 1_860, createdAt: "2026-05-30" },
-  { id: "d-9", name: "Dossier candidature T. Schmit (non retenu).zip", klass: "other", retentionClass: "applicant_3m", retentionUntil: "2026-10-30", sealed: false, relatedLabel: "Local RDC Kirchberg", sizeKb: 3_100, createdAt: "2026-07-30" },
+  { id: "d-1", name: "Bail Apt 3B · Muller (signé AES).pdf", klass: "lease", retentionClass: "accounting_10y", retentionUntil: "2036-04-01", sealed: true, relatedLabel: "Apt 3B", sizeKb: 842, createdAt: "2023-03-20", hasFile: false },
+  { id: "d-2", name: "EDL entrée Studio RDC (scellé, manifeste SHA-256).pdf", klass: "edl", retentionClass: "accounting_10y", retentionUntil: "2036-02-01", sealed: true, relatedLabel: "Studio RDC", sizeKb: 12_400, createdAt: "2026-01-30", hasFile: false },
+  { id: "d-3", name: "Facture Krier 2026-0812 · chaudière.pdf", klass: "invoice", retentionClass: "accounting_10y", retentionUntil: "2036-08-08", sealed: false, relatedLabel: "INT-2026-0141", sizeKb: 210, createdAt: "2026-08-08", hasFile: false },
+  { id: "d-4", name: "Acte notarié Studio Gare (VEFA 2024).pdf", klass: "deed", retentionClass: "permanent", retentionUntil: null, sealed: true, relatedLabel: "Studio Quartier Gare", sizeKb: 4_820, createdAt: "2024-06-01", hasFile: false },
+  { id: "d-5", name: "Certificat d'intérêts BCEE 2025 · SCI Beaulieu.pdf", klass: "tax", retentionClass: "accounting_10y", retentionUntil: "2036-01-15", sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 96, createdAt: "2026-01-15", hasFile: false },
+  { id: "d-6", name: "Mise en demeure Apt 2A · AR du 12/08 (scan).pdf", klass: "registered_letter", retentionClass: "accounting_10y", retentionUntil: "2036-08-12", sealed: true, relatedLabel: "Apt 2A", sizeKb: 380, createdAt: "2026-08-12", hasFile: false },
+  { id: "d-7", name: "CDD · SCI Beaulieu (RBE, registre associés, UBO).pdf", klass: "id_document", retentionClass: "aml_5y_from_end", retentionUntil: null, sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 1_240, createdAt: "2026-02-10", hasFile: false },
+  { id: "d-8", name: "Décompte syndic 2025 · Résidence Beaulieu (AG approuvé).pdf", klass: "decompte", retentionClass: "accounting_10y", retentionUntil: "2036-05-30", sealed: false, relatedLabel: "Résidence Beaulieu", sizeKb: 1_860, createdAt: "2026-05-30", hasFile: false },
+  { id: "d-9", name: "Dossier candidature T. Schmit (non retenu).zip", klass: "other", retentionClass: "applicant_3m", retentionUntil: "2026-10-30", sealed: false, relatedLabel: "Local RDC Kirchberg", sizeKb: 3_100, createdAt: "2026-07-30", hasFile: false },
+];
+
+// ─── Bills: what the desk entered, in the fiscal bucket the pack reads ──────
+
+export interface DemoBill {
+  id: string;
+  direction: "expense" | "income";
+  supplierContactId: string | null;
+  supplierName: string;
+  propertyId: string | null;
+  unitId: string | null;
+  unitLabel: string;
+  category: BillCategory;
+  subject: string;
+  docNo: string;
+  docDate: string | null;
+  dueOn: string | null;
+  paidOn: string | null;
+  cashflow: boolean;
+  vatRatePct: number;
+  /** The invoice's total, VAT included. */
+  amountCents: number;
+  vatCents: number;
+  documentId: string | null;
+  /** A file sits behind the piece. */
+  hasDocument: boolean;
+  createdAt: string;
+}
+
+export const BILLS: DemoBill[] = [
+  { id: "bill-1", direction: "expense", supplierContactId: "c-krier", supplierName: "Paul Krier", propertyId: "p-beaulieu", unitId: "u-b-3b", unitLabel: "Apt 3B · Résidence Beaulieu", category: "maintenance_repairs", subject: "Chaudière en défaut, pression à 0,4 bar", docNo: "2026-0812", docDate: "2026-08-08", dueOn: "2026-09-07", paidOn: null, cashflow: true, vatRatePct: 17, amountCents: cents(1240), vatCents: 18017, documentId: "d-3", hasDocument: false, createdAt: "2026-08-08" },
+  { id: "bill-2", direction: "expense", supplierContactId: "c-da-silva", supplierName: "José Da Silva", propertyId: "p-gare", unitId: "u-gare", unitLabel: "Studio 4A · Studio Quartier Gare", category: "maintenance_repairs", subject: "Remise en peinture Studio 4A", docNo: "DS-118", docDate: "2026-06-25", dueOn: "2026-07-25", paidOn: "2026-07-10", cashflow: true, vatRatePct: 17, amountCents: cents(480), vatCents: 6974, documentId: null, hasDocument: false, createdAt: "2026-06-25" },
+  { id: "bill-3", direction: "expense", supplierContactId: null, supplierName: "Foyer Assurances", propertyId: "p-beaulieu", unitId: null, unitLabel: "Résidence Beaulieu", category: "insurance", subject: "Prime PNO 2026 · Résidence Beaulieu", docNo: "PNO-2026-4471", docDate: "2026-01-15", dueOn: "2026-02-15", paidOn: "2026-01-20", cashflow: true, vatRatePct: 0, amountCents: cents(1860), vatCents: 0, documentId: null, hasDocument: false, createdAt: "2026-01-15" },
 ];
 
 // ─── Tenant portal invitations ──────────────────────────────────────────────
@@ -1077,3 +1120,9 @@ export const ARREARS_ACTIONS: DemoArrearsAction[] = [
   { id: "aa-2a-07-formal", leaseId: "l-2a", rentPeriodId: "rp-l-2a-2026-07", stage: "formal", executedOn: "2026-07-14", registeredLetterId: null },
   { id: "aa-2a-07-med", leaseId: "l-2a", rentPeriodId: "rp-l-2a-2026-07", stage: "mise_en_demeure", executedOn: "2026-08-05", registeredLetterId: "rl-med-2a-07" },
 ];
+
+// ─── Paging: what a list page says about itself. The sample is one page. ────
+
+export const PAGING: { documents: PageInfo } = {
+  documents: { page: 1, size: 50, total: DOCUMENTS.length, pages: 1 },
+};

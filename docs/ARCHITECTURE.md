@@ -369,13 +369,14 @@ The same shape holds for the rest of a tenancy's life. A guarantee moves only al
 the transitions `src/lib/gestion/deposits.ts` allows (received, restitution open once
 the keys are back, dispute declared and closed); its retentions are `deposit_deductions`
 rows (damage without a signed entry `edl_sessions` row is written `blocked_no_entry_edl`
-and retains nothing), a justification is a `documents` row of class `invoice` registered
-by reference and dated, and the settlement engine re-run on the rows decides whether it
-landed in time; money leaves through `POST /api/garanties/[id]/liberation` alone, for the
+and retains nothing), a justification is a piece uploaded to the register for that very
+line (a `documents` row of class `invoice` with its file in the bucket) and dated, and the
+settlement engine re-run on the rows decides whether it landed in time; money leaves through `POST /api/garanties/[id]/liberation` alone, for the
 engine's tranche amounts, the balance refused before `decompte_issued_on`. An
 intervention is a `work_orders` row walking the table in `src/lib/gestion/interventions.ts`
 (`PATCH /api/interventions/[id]`), the ticket's status and `closed_at` following each
-step so the tenant's request and the desk's chantier never disagree. A charges décompte
+step so the tenant's request and the desk's chantier never disagree, the artisan's invoice
+uploaded with its step and pointed at by `invoice_document_id`. A charges décompte
 is a `charge_periods` row per lease and year with its `charge_lines` computed once
 through the recharge engine (`src/lib/gestion/charges.ts`: lot share by tantièmes or as
 entered, tenant share zero on a residential hard block), the advances read from the
@@ -389,6 +390,47 @@ recorded, from the first day of the month after the AR date
 (Garanties, Interventions, Charges, Indexation) render sample and real accounts through
 one path (`CHARGE_PERIODS`, `TICKETS[].workOrder`, `REGISTERED_LETTERS`); a sample
 plays each outcome and writes nothing.
+
+### Pieces are files, bills are rows, and a screen reads only what it shows
+
+A piece in the register is a file in the private `gestion-media` bucket under
+`<org>/documents/<uuid>.<ext>` and a `documents` row carrying its name, class, SHA-256,
+size and the record it hangs off (`related_type` / `related_id`: a property, a lot, a
+tenancy, a contact, a request, a retention line, a work order, a bill). `POST
+/api/documents` (`src/lib/gestion/documents.ts`, `storeDocument`) writes both under the
+caller's own token: the bucket's policy decides the folder (its first segment is the
+workspace), the table's the row; a record that is not the workspace's answers not found,
+a kind the bucket does not take 415, a file over 25 MB 413. The file is served by `GET
+/api/documents/[id]/fichier`, a redirect to a 60-second signed address made only after
+the row was read under the caller's token, so an id typed into an address opens nothing
+of another workspace. The retention's justification and the artisan's invoice are such
+pieces (`ownedDocument` checks that the piece was uploaded for the very line or work
+order before the row points at it); a sample cabinet's documents are references and say
+so on a real account.
+
+A bill is a `gestion.bills` row (0020): direction, supplier contact, lot and property,
+fiscal bucket as category, subject, number, dates, `amount_cents` the total and
+`vat_cents` derived once from the rate (`src/lib/gestion/bills.ts`, `splitVat`),
+`paid_on` set by `PATCH /api/finance/factures/[id]` and never in the future, its invoice
+or receipt a piece related to the bill; `POST /api/finance/factures` stores the piece
+first and discards it if the row is refused. The owner statements, fees and transfers
+stay a sample play until mandates exist on real accounts.
+
+The real loader (`src/lib/demo/data-real.ts`) reads what the screen asks through a
+`ReadScope` (`src/lib/demo/scope.ts`), never a workspace whole. The shell
+(`{ shell: true }`) reads the portfolio, the people, the tenancies and their parties, the
+unread and review badges, and one paid period. A page with no scope reads the portfolio
+and the last 24 months of history (rent periods, bank operations, requests, readings,
+letters, bills), plus every arrear still owing whatever its age and every bank operation
+still in the queue. A tenancy's sheet (`{ leaseId }`) reads its whole past; a property's
+(`{ propertyId }`) its lots, their tenancies, requests, pieces and books; Messages
+(`{ conversationId }`) one conversation in full (the one named, else the most recent), the
+others through the `conversation_heads` view (last message, unread count) and read in
+full when opened; Documents (`{ documents: { page, size } }`) one page of the register with
+its count. Inventories count their items and photos through `edl_session_counts`. Both
+views run as the caller (`security_invoker`). On a production project where 0020 is not
+applied yet the previews are empty and there are no bills, the bill routes answer 503
+`schema_outdated`, and nothing else changes.
 
 ### RLS model
 
@@ -429,7 +471,7 @@ over this data — swapping in Supabase changes the data source, not a single co
 
 Continuous integration, the end-to-end suite against a throwaway local Supabase, the
 database security audit and error monitoring are described in docs/QUALITY.md. In
-one line: every push runs typecheck, lint, 249 tests and the build, then the real
+one line: every push runs typecheck, lint, 303 tests and the build, then the real
 flows (sign-up, sign-in, two accounts on one browser, property, rental dossier to
 activation, invitation accepted by a new account, isolation, departure, typing) in a
 real browser through the same policies as production.

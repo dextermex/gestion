@@ -164,3 +164,38 @@ export function LegalNote({ children }: { children: React.ReactNode }) {
     </p>
   );
 }
+
+/** The way through a long list: the page it is on, and the two next to it. Hidden while one page holds everything. */
+export function Pagination({
+  page,
+  pages,
+  hrefFor,
+  labels,
+}: {
+  page: number;
+  pages: number;
+  hrefFor: (page: number) => string;
+  labels: { prev: string; next: string; pageOf: string };
+}) {
+  if (pages <= 1) return null;
+  const link = "inline-flex min-h-10 items-center rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700";
+  return (
+    <nav className="mt-4 flex items-center justify-between gap-3" aria-label={labels.pageOf} data-pagination>
+      {page > 1 ? (
+        <Link href={hrefFor(page - 1)} className={link}>
+          {labels.prev}
+        </Link>
+      ) : (
+        <span />
+      )}
+      <span className="text-xs font-semibold text-ink-soft">{labels.pageOf}</span>
+      {page < pages ? (
+        <Link href={hrefFor(page + 1)} className={link}>
+          {labels.next}
+        </Link>
+      ) : (
+        <span />
+      )}
+    </nav>
+  );
+}

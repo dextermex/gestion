@@ -58,6 +58,15 @@ function account(): DemoData {
       { id: "rp-1", leaseId: "lease-1", period: today.slice(0, 7), dueDate: today, rentCents: 125000, chargesCents: 15000, vatCents: 0, totalCents: 140000, allocatedCents: 0, status: "pending" },
     ],
     DEPOSITS: [{ id: "dep-1", leaseId: "lease-1", form: "cash", amountCents: 250000, status: "pending", entryEdlExists: false, deductions: [], releasedFirstTrancheCents: 0, releasedBalanceCents: 0 }],
+    DOCUMENTS: [
+      { id: "doc-1", name: "Acte Maison Schmit.pdf", klass: "deed", retentionClass: "permanent", retentionUntil: null, sealed: false, relatedLabel: "Maison Schmit", sizeKb: 120, createdAt: today, hasFile: true },
+      { id: "doc-2", name: "Décompte de loyers", klass: "invoice", retentionClass: "accounting_10y", retentionUntil: null, sealed: false, relatedLabel: "", sizeKb: 1, createdAt: today, hasFile: false },
+    ],
+    BILLS: [
+      { id: "bill-1", direction: "expense", supplierContactId: "c-artisan", supplierName: "Jos Kirsch", propertyId: "prop-1", unitId: "unit-1", unitLabel: "Maison · Maison Schmit", category: "maintenance_repairs", subject: "Chaudière", docNo: "K-1", docDate: today, dueOn: null, paidOn: null, cashflow: true, vatRatePct: 17, amountCents: 124000, vatCents: 18017, documentId: "doc-3", hasDocument: true, createdAt: today },
+    ],
+    PROPERTIES: [{ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", commune: "Luxembourg", cadastralRef: "", type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }],
+    UNITS: [{ id: "unit-1", propertyId: "prop-1", label: "Maison", kind: "dwelling", floor: "", areaSqm: 120, rooms: 4, furnished: false, photoUrl: null }],
     TICKETS: [
       {
         id: "t-1", ref: "INT-T1", unitId: "unit-1", unitLabel: "Maison · Maison Schmit", leaseId: "lease-1", source: "manager", category: "heating", severity: "routine", status: "new",
@@ -65,6 +74,7 @@ function account(): DemoData {
       },
     ],
     leaseById: (id: string) => [lease].find((l) => l.id === id)!,
+    propertyById: () => ({ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", commune: "Luxembourg", cadastralRef: "", type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }),
     leaseTenantNames: () => ["Lena Schmit"],
     leaseUnitLabel: () => "Maison · Maison Schmit",
   };
@@ -93,6 +103,26 @@ describe("operations screens on a real account", () => {
     const html = text(renderToString(await Page()));
     expect(html).toContain('data-deposit="dep-1"');
     expect(html).toContain(fr.garanties.actReceive);
+  });
+  it("Finance lists the bill with its piece and the way to mark it paid, and offers the intake", async () => {
+    const { default: Page } = await import("@/app/app/finance/page");
+    const html = text(renderToString(await Page()));
+    expect(html).toContain('data-bill="bill-1"');
+    expect(html).toContain("Jos Kirsch · Chaudière");
+    expect(html).toContain("/api/documents/doc-3/fichier");
+    expect(html).toContain('data-bill-paid="bill-1"');
+    expect(html).toContain("data-bill-add");
+    // The sample's SCI statement is the sample's: a real account never borrows it.
+    expect(html).not.toContain("Mandat");
+  });
+  it("Documents links the piece that has a file, names the one that has none, and offers the upload", async () => {
+    const { default: Page } = await import("@/app/app/documents/page");
+    const html = text(renderToString(await Page({ searchParams: Promise.resolve({}) })));
+    expect(html).toContain("/api/documents/doc-1/fichier");
+    expect(html).not.toContain("/api/documents/doc-2/fichier");
+    expect(html).toContain(fr.documents.noFile);
+    expect(html).toContain(fr.documents.add);
+    expect(html).not.toContain("data-pagination");
   });
   it("Interventions opens the ticket's sheet", async () => {
     const { default: Page } = await import("@/app/app/interventions/page");

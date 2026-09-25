@@ -164,7 +164,8 @@ describe("the tenant portal, from the invitation to the departure", () => {
     const message = await addTenantMessage(db.tenantClient(anna), anna, lease, "Le technicien peut passer demain matin.");
     expect("id" in message).toBe(true);
 
-    demo = await hydrate(db);
+    // Messages opens the newest conversation in full, as the screen asks for it.
+    demo = await hydrate(db, ORG, { conversationId: "latest" });
     const ticket = demo.TICKETS.find((t) => t.id === request.id)!;
     expect(ticket.source).toBe("tenant");
     expect(ticket.leaseId).toBe(rental.leaseId);

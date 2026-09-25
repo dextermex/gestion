@@ -3,6 +3,7 @@ import type { OrgContext } from "@/lib/gestion/api";
 import { parseDossierInput, saveRentalDraft, type DossierInput } from "@/lib/gestion/rental";
 import { activateLease } from "@/lib/gestion/lease";
 import { buildRealDataFrom } from "@/lib/demo/data-real";
+import type { ReadScope } from "@/lib/demo/scope";
 import { orgFromWorkspace } from "@/lib/demo/data-empty";
 import { createInvitation } from "@/lib/portal/invitations";
 import { acceptInvitation } from "@/lib/portal/accept";
@@ -27,9 +28,13 @@ export function ctxFor(db: FakeDb, org = ORG): OrgContext {
   return { g: db.client(), org: { id: org, name: "Cabinet Test", kind: "owner", role: "owner" }, userId: "user-owner" };
 }
 
-/** What the owner's screens read: the workspace's rows, hydrated through the same seam as production. */
-export async function hydrate(db: FakeDb, org = ORG) {
-  return buildRealDataFrom(db.client(), orgFromWorkspace({ id: org, name: "Cabinet Test", kind: "owner" }), async () => new Map());
+/**
+ * What the owner's screens read: the workspace's rows, hydrated through the
+ * same seam as production, with the scope a screen asks for (a tenancy's
+ * sheet, a property's, one conversation in full, a page of the register).
+ */
+export async function hydrate(db: FakeDb, org = ORG, scope: ReadScope = {}) {
+  return buildRealDataFrom(db.client(), orgFromWorkspace({ id: org, name: "Cabinet Test", kind: "owner" }), async () => new Map(), scope);
 }
 
 export function seedProperty(db: FakeDb, org = ORG, name = "Maison Weber"): { propertyId: string; unitId: string } {

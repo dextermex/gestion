@@ -23,11 +23,12 @@ import type { GestionReader } from "@/lib/demo/data-real";
 
 export type Row = Record<string, unknown>;
 type DbError = { code: string; message: string };
-type Result = { data: unknown; error: DbError | null };
+type Result = { data: unknown; error: DbError | null; count?: number | null };
 
 const n = (v: unknown): number => (typeof v === "number" ? v : 0);
 
 const DEFAULTS: Record<string, () => Row> = {
+  bills: () => ({ direction: "expense", supplier_contact_id: null, property_id: null, unit_id: null, doc_no: "", doc_date: null, due_on: null, paid_on: null, cashflow: true, vat_rate_pct: 17, vat_cents: 0, document_id: null, created_by: null }),
   properties: () => ({ archived_at: null, is_copropriete: false, smoke_detectors_confirmed: false, photo_url: null }),
   units: () => ({ archived_at: null, furnished: false, kind: "dwelling", floor: null, area_sqm: 0, rooms: 0, bedrooms: null, photo_url: null }),
   contacts: () => ({
@@ -469,8 +470,43 @@ export class FakeDb {
     });
   }
 
+  /** The conversation_heads view (0020): the last message and the unread count of every conversation. */
+  conversationHeads(): Row[] {
+    const messages = this.table("messages");
+    return this.table("conversations").map((c) => {
+      const own = messages.filter((m) => m.conversation_id === c.id).slice().sort((a, b) => (String(a.sent_at) < String(b.sent_at) ? 1 : -1));
+      const last = own[0] ?? null;
+      return {
+        conversation_id: c.id,
+        org_id: c.org_id,
+        unread: own.filter((m) => m.read_at == null && m.sender_kind !== "manager").length,
+        last_message_id: last?.id ?? null,
+        last_sender_kind: last?.sender_kind ?? null,
+        last_sender_contact_id: last?.sender_contact_id ?? null,
+        last_sender_user_id: last?.sender_user_id ?? null,
+        last_body: last?.body ?? null,
+        last_sent_at: last?.sent_at ?? null,
+        last_read_at: last?.read_at ?? null,
+        last_ticket_id: last?.ticket_id ?? null,
+      };
+    });
+  }
+
+  /** The edl_session_counts view (0020): items and photos per inventory session. */
+  edlSessionCounts(): Row[] {
+    const items = this.table("edl_items");
+    const media = this.table("edl_media");
+    return this.table("edl_sessions").map((sess) => {
+      const own = items.filter((i) => i.session_id === sess.id).map((i) => i.id);
+      return { session_id: sess.id, org_id: sess.org_id, items: own.length, photos: media.filter((m) => own.includes(m.item_id)).length };
+    });
+  }
+
   rowsOf(table: string): Row[] {
-    return table === "rent_period_status" ? this.periodStatus() : this.table(table);
+    if (table === "rent_period_status") return this.periodStatus();
+    if (table === "conversation_heads") return this.conversationHeads();
+    if (table === "edl_session_counts") return this.edlSessionCounts();
+    return this.table(table);
   }
 
   removeLease(id: unknown): void {
@@ -545,10 +581,15 @@ class FakeQuery implements PromiseLike<Result> {
     private principal: Principal,
   ) {}
 
+  private wantCount = false;
+  private rangeFrom: number | null = null;
+  private rangeTo: number | null = null;
+
   // The columns are accepted for the caller's sake and ignored: rows come back whole.
-  select(columns?: string): this {
+  select(columns?: string, opts?: { count?: "exact" | "planned" | "estimated"; head?: boolean }): this {
     void columns;
     this.wantRows = true;
+    if (opts?.count) this.wantCount = true;
     return this;
   }
   insert(rows: Row | Row[]): this {
@@ -599,6 +640,51 @@ class FakeQuery implements PromiseLike<Result> {
   }
   gte(key: string, value: unknown): this {
     this.filters.push((r) => String(r[key]) >= String(value));
+    return this;
+  }
+  lte(key: string, value: unknown): this {
+    this.filters.push((r) => String(r[key]) <= String(value));
+    return this;
+  }
+  neq(key: string, value: unknown): this {
+    this.filters.push((r) => r[key] !== value);
+    return this;
+  }
+  /** PostgREST `or=(a.op.v,b.in.(x,y))`: the comma-separated conditions, any one of which passes the row. */
+  or(expression: string): this {
+    const parts: string[] = [];
+    let depth = 0;
+    let current = "";
+    for (const ch of expression) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (ch === "," && depth === 0) {
+        parts.push(current);
+        current = "";
+      } else current += ch;
+    }
+    if (current) parts.push(current);
+    const tests = parts.map((part) => {
+      const m = /^([a-z_]+)\.(eq|neq|gte|gt|lte|lt|is|in)\.(.*)$/.exec(part.trim());
+      if (!m) throw new Error(`fake or(): unsupported condition ${part}`);
+      const [, key, op, raw] = m;
+      if (op === "in") {
+        const values = raw.replace(/^\(/, "").replace(/\)$/, "").split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
+        return (r: Row) => values.includes(String(r[key]));
+      }
+      if (op === "is") return (r: Row) => (raw === "null" ? r[key] === null || r[key] === undefined : String(r[key]) === raw);
+      return (r: Row) => {
+        const a = String(r[key]);
+        return op === "eq" ? a === raw : op === "neq" ? a !== raw : op === "gte" ? a >= raw : op === "gt" ? a > raw : op === "lte" ? a <= raw : a < raw;
+      };
+    });
+    this.filters.push((r) => tests.some((t) => t(r)));
+    return this;
+  }
+  /** PostgREST's window: zero-based, inclusive on both ends. */
+  range(from: number, to: number): this {
+    this.rangeFrom = from;
+    this.rangeTo = to;
     return this;
   }
   order(key: string, opts?: { ascending?: boolean }): this {
@@ -657,13 +743,16 @@ class FakeQuery implements PromiseLike<Result> {
       switch (this.op) {
         case "select": {
           let rows = this.matching();
+          const total = rows.length;
           if (this.orderKey) {
             const k = this.orderKey;
             rows = rows.slice().sort((a, b) => (String(a[k]) < String(b[k]) ? -1 : String(a[k]) > String(b[k]) ? 1 : 0));
             if (!this.orderAsc) rows.reverse();
           }
+          if (this.rangeFrom !== null && this.rangeTo !== null) rows = rows.slice(this.rangeFrom, this.rangeTo + 1);
           if (this.limitN !== null) rows = rows.slice(0, this.limitN);
-          return this.shaped(rows.map((r) => ({ ...r })));
+          const shaped = this.shaped(rows.map((r) => ({ ...r })));
+          return this.wantCount ? { ...shaped, count: total } : shaped;
         }
         case "insert":
         case "upsert": {

@@ -56,6 +56,7 @@ const labels: MessagesLabels = {
   close: fr.common.close,
   backToThreads: m.backToThreads,
   backToRequests: m.backToRequests,
+  loading: fr.common.loading,
 };
 
 const request: RequestView = {
@@ -89,6 +90,7 @@ const threads: ThreadView[] = [
     unread: 0,
     preview: request.title,
     previewIsRequest: true,
+    loaded: true,
     messages: [
       { id: "m-1", from: "Marc Thill", kind: "tenant", body: "Bonjour, une question sur le bail.", dayLabel: "22/09/2026", timeLabel: "08:40", requestId: null },
       { id: "m-2", from: "Marc Thill", kind: "tenant", body: request.title, dayLabel: "22/09/2026", timeLabel: "09:00", requestId: "r-1" },
@@ -106,6 +108,7 @@ const threads: ThreadView[] = [
     unread: 2,
     preview: "Merci pour la clé.",
     previewIsRequest: false,
+    loaded: true,
     messages: [{ id: "m-3", from: "Lena Bauer", kind: "tenant", body: "Merci pour la clé.", dayLabel: "21/09/2026", timeLabel: "17:10", requestId: null }],
   },
 ];

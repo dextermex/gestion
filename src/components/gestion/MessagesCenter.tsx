@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { LegalNote } from "@/components/gestion/bits";
-import { Badge, Button, Card, Modal, PageHeader, Select, Textarea } from "@/components/pro/ui";
+import { Badge, Button, Card, Modal, PageHeader, Select, Spinner, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
 import { initials, type Meta } from "@/lib/types";
@@ -77,6 +77,12 @@ export interface ThreadView {
   preview: string;
   previewIsRequest: boolean;
   messages: MessageView[];
+  /**
+   * Whether every message is here. The page reads one conversation in full
+   * (the one the address names, else the most recent); the others carry
+   * their last word only and are read when opened.
+   */
+  loaded: boolean;
 }
 
 export interface MessagesLabels {
@@ -117,6 +123,7 @@ export interface MessagesLabels {
   close: string;
   backToThreads: string;
   backToRequests: string;
+  loading: string;
 }
 
 export type Tab = "conversations" | "requests";
@@ -247,6 +254,19 @@ export default function MessagesCenter({
     return () => document.documentElement.removeAttribute("data-phone-chat");
   }, [chatOpen]);
 
+  // A conversation the page has not read in full yet: the address names
+  // it and the page is read again for it, this component keeping its
+  // state (the list, the drafts, the way back); the body waits meanwhile.
+  const activeLoaded = active?.loaded ?? true;
+  const activeToLoad = active && !active.loaded ? active.id : null;
+  useEffect(() => {
+    if (activeLoaded || !activeToLoad) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("fil", activeToLoad);
+    window.history.replaceState(null, "", url);
+    router.refresh();
+  }, [activeLoaded, activeToLoad, router]);
+
   const rememberInUrl = (thread: ThreadView | null, requestId: string | null, nextTab: Tab) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("fil");
@@ -255,7 +275,9 @@ export default function MessagesCenter({
     if (nextTab === "requests") url.searchParams.set("onglet", "demandes");
     else if (requestId) url.searchParams.set("demande", requestId);
     else if (thread) url.searchParams.set("fil", thread.id);
-    window.history.replaceState(window.history.state, "", url);
+    // A plain state, so the router takes the address as its own: a refresh
+    // then re-reads the page for this conversation.
+    window.history.replaceState(null, "", url);
   };
 
   const signInAgain = () => {
@@ -450,8 +472,13 @@ export default function MessagesCenter({
               </div>
 
               <div ref={bodyRef} id="messages-body" className="relative space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4 max-lg:min-h-0 max-lg:flex-1 lg:h-[62vh] lg:min-h-[26rem] lg:px-5">
-                {active.messages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.noThreadYet}</p>}
-                {active.messages.map((m, i) => {
+                {!active.loaded && (
+                  <div className="flex justify-center py-10" data-thread-loading>
+                    <Spinner label={labels.loading} />
+                  </div>
+                )}
+                {active.loaded && active.messages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.noThreadYet}</p>}
+                {active.loaded && active.messages.map((m, i) => {
                   const prev = active.messages[i - 1];
                   const request = m.requestId ? (requestById.get(m.requestId) ?? null) : null;
                   return (

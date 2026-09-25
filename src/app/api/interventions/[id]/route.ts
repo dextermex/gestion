@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
+import { ownedDocument } from "@/lib/gestion/documents";
 import { nextWorkOrderStep, WORK_ORDER_ACTIONS, type WorkOrderAction } from "@/lib/gestion/interventions";
 import type { WorkOrderStatus } from "@/lib/types";
 
@@ -60,6 +61,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (vat === null) return NextResponse.json({ error: "invalid" }, { status: 400 });
     patch.amount_cents = amount;
     patch.vat_cents = vat;
+    // The invoice itself, when it was uploaded for this work order.
+    const invoiceDocumentId = str(body.invoiceDocumentId, 64);
+    if (invoiceDocumentId) {
+      const piece = await ownedDocument(ctx, invoiceDocumentId, { type: "work_order", id });
+      if (!piece) return NextResponse.json({ error: "invalid" }, { status: 400 });
+      patch.invoice_document_id = piece.id;
+    }
   }
 
   const { data, error } = await g.from("work_orders").update(patch).eq("org_id", org.id).eq("id", id).eq("status", current).select("id");

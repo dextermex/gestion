@@ -6,7 +6,7 @@ import { Badge, Button, Field, Input, Modal, Select } from "@/components/pro/ui"
 import { allowedWorkOrderActions, type WorkOrderAction } from "@/lib/gestion/interventions";
 import type { Locale } from "@/lib/i18n/config";
 import { euros, formatDate, type Meta, type WorkOrderStatus } from "@/lib/types";
-import { callJson } from "./call";
+import { callForm, callJson } from "./call";
 
 /**
  * One intervention, opened from its row: the ticket and the work order
@@ -39,6 +39,9 @@ export interface InterventionLabels {
   refused: string;
   close: string;
   colStatus: string;
+  invoiceFile: string;
+  invoiceAttached: string;
+  invoiceBadFile: string;
 }
 
 export interface SheetTicket {
@@ -51,6 +54,7 @@ export interface SheetTicket {
 
 const BACK = "/app/interventions";
 const ORDER: WorkOrderAction[] = ["assign", "schedule", "done", "invoice", "paid", "decline", "cancel"];
+const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/avif";
 
 export default function InterventionSheet({
   ticket,
@@ -83,6 +87,7 @@ export default function InterventionSheet({
   const [scheduledAt, setScheduledAt] = useState(wo?.scheduledAt ? wo.scheduledAt.slice(0, 10) : todayISO);
   const [amount, setAmount] = useState(wo?.amountCents != null ? (wo.amountCents / 100).toFixed(2).replace(".", ",") : "");
   const [vat, setVat] = useState(wo?.vatCents != null ? (wo.vatCents / 100).toFixed(2).replace(".", ",") : "");
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   const run = async (url: string, method: string, body: Record<string, unknown> | undefined) => {
     setNote(null);
@@ -93,6 +98,23 @@ export default function InterventionSheet({
     setBusy(true);
     setError(null);
     try {
+      // The invoice's piece, stored for this work order before the step that records it.
+      if (body?.action === "invoice" && invoiceFile && wo) {
+        const form = new FormData();
+        form.set("file", invoiceFile);
+        form.set("class", "invoice");
+        form.set("name", invoiceFile.name);
+        form.set("relatedType", "work_order");
+        form.set("relatedId", wo.id);
+        const stored = await callForm("/api/documents", form, BACK);
+        if (!stored) return;
+        if (!stored.ok) {
+          setError(stored.status === 415 ? labels.invoiceBadFile : labels.failed);
+          setBusy(false);
+          return;
+        }
+        body = { ...body, invoiceDocumentId: stored.payload.id };
+      }
       const res = await callJson(url, method, body, BACK);
       if (!res) return;
       if (res.ok) {
@@ -157,6 +179,21 @@ export default function InterventionSheet({
             <Field label={labels.vat}>
               <Input value={vat} inputMode="decimal" placeholder="0,00" onChange={(e) => setVat(e.target.value)} disabled={busy} />
             </Field>
+            {allowed.includes("invoice") && (
+              <div className="sm:col-span-2">
+                <Field label={labels.invoiceFile}>
+                  <input
+                    id="invoice-file"
+                    type="file"
+                    accept={ACCEPT}
+                    className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border file:border-sand-200 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-ink-soft"
+                    onChange={(e) => setInvoiceFile(e.target.files?.[0] ?? null)}
+                    disabled={busy}
+                  />
+                </Field>
+                {invoiceFile && <p className="mt-1 text-xs text-ink-soft">{labels.invoiceAttached.replace("{name}", invoiceFile.name)}</p>}
+              </div>
+            )}
             {artisans.length === 0 && <p className="text-xs text-ink-soft sm:col-span-2">{labels.artisanNoneYet}</p>}
             {(wo.scheduledAt || wo.amountCents != null) && (
               <p className="text-xs text-ink-soft sm:col-span-2">

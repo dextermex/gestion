@@ -53,7 +53,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (!identity?.active) return <ProvisionError d={d} email={email} />;
   }
 
-  const [demo, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  // The shell's own read: the portfolio, the people and the badges, no
+  // history. The screen inside reads what it shows.
+  const [demo, datasetId] = await Promise.all([getDemo({ shell: true }), getDatasetId()]);
 
   // Everything the client shell needs, serialized. Identity comes from the
   // session; the dataset only ever supplies figures.

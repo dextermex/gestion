@@ -1,6 +1,8 @@
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
-import { LegalNote, Panel } from "@/components/gestion/bits";
-import { getDemo } from "@/lib/demo";
+import { LegalNote, Pagination, Panel } from "@/components/gestion/bits";
+import DocumentUpload from "@/components/gestion/DocumentUpload";
+import { getDemo, isSampleData } from "@/lib/demo";
+import { pageRequest } from "@/lib/demo/scope";
 import { formatDate } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { INTL_LOCALE, fmt, type Locale } from "@/lib/i18n/config";
@@ -15,6 +17,12 @@ const CLASS_COLORS: Record<string, string> = {
   registered_letter: "bg-accent-50 text-accent-700",
   id_document: "bg-violet-100 text-violet-800",
   decompte: "bg-sky-100 text-sky-800",
+  receipt: "bg-amber-100 text-amber-800",
+  insurance: "bg-sky-100 text-sky-800",
+  loan: "bg-violet-100 text-violet-800",
+  subsidy: "bg-emerald-100 text-emerald-800",
+  bank_statement: "bg-sand-100 text-ink-soft",
+  photo: "bg-sand-100 text-ink-soft",
   other: "bg-sand-100 text-ink-soft",
 };
 
@@ -36,6 +44,12 @@ function classLabels(d: Dict): Record<string, string> {
     registered_letter: d.documents.clsLetter,
     id_document: d.documents.clsKyc,
     decompte: d.documents.clsDecompte,
+    receipt: d.documents.clsReceipt,
+    insurance: d.documents.clsInsurance,
+    loan: d.documents.clsLoan,
+    subsidy: d.documents.clsSubsidy,
+    bank_statement: d.documents.clsBank,
+    photo: d.documents.clsPhoto,
     other: d.documents.clsOther,
   };
 }
@@ -57,15 +71,32 @@ function sizeLabel(kb: number, locale: Locale): string {
     : `${kb.toLocaleString(INTL_LOCALE[locale])} ${units[0]}`;
 }
 
-export default async function DocumentsPage() {
+export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ page?: string; taille?: string }> }) {
+  const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { DOCUMENTS } = await getDemo();
+  // The register is read a page at a time: the address names the page.
+  const { DOCUMENTS, ORG, PAGING, PROPERTIES } = await getDemo({ documents: pageRequest(params) });
+  const sample = await isSampleData();
   const cls = classLabels(d);
   const ret = retentionLabels(d);
+  const paging = PAGING.documents;
+  const hrefFor = (page: number) => `/app/documents?page=${page}${params.taille ? `&taille=${encodeURIComponent(params.taille)}` : ""}`;
 
   return (
     <div>
-      <PageHeader title={d.documents.title} subtitle={d.documents.subtitle} />
+      <PageHeader
+        title={d.documents.title}
+        subtitle={d.documents.subtitle}
+        actions={
+          <DocumentUpload
+            classes={Object.keys(cls).map((value) => ({ value, label: cls[value] }))}
+            properties={PROPERTIES.map((p) => ({ id: p.id, label: p.name }))}
+            writable={!sample}
+            sampleNote={sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null}
+            labels={{ ...d.documents, close: d.common.close }}
+          />
+        }
+      />
 
       <Card className="overflow-hidden">
         <div className="table-scroll">
@@ -98,9 +129,18 @@ export default async function DocumentsPage() {
                           <path d="M8 10V7a4 4 0 0 1 8 0v3" />
                         </svg>
                       )}
-                      <span className="truncate">{doc.name}</span>
+                      {doc.hasFile ? (
+                        <a href={`/api/documents/${encodeURIComponent(doc.id)}/fichier`} className="truncate hover:text-brand-700 hover:underline" data-document-file={doc.id}>
+                          {doc.name}
+                        </a>
+                      ) : (
+                        <span className="truncate">{doc.name}</span>
+                      )}
                     </p>
-                    <p className="truncate text-xs text-ink-soft">{doc.relatedLabel}</p>
+                    <p className="truncate text-xs text-ink-soft">
+                      {doc.relatedLabel}
+                      {!sample && !doc.hasFile ? (doc.relatedLabel ? " · " : "") + d.documents.noFile : ""}
+                    </p>
                   </td>
                   <td className="px-3 py-3">
                     <Badge className={CLASS_COLORS[doc.klass] ?? CLASS_COLORS.other}>
@@ -121,6 +161,15 @@ export default async function DocumentsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+        {DOCUMENTS.length === 0 && <p className="px-4 py-6 text-sm text-ink-soft">{d.common.none}</p>}
+        <div className="px-4 pb-4">
+          <Pagination
+            page={paging.page}
+            pages={paging.pages}
+            hrefFor={hrefFor}
+            labels={{ prev: d.common.pagePrev, next: d.common.pageNext, pageOf: fmt(d.common.pageOf, { page: paging.page, pages: paging.pages }) }}
+          />
         </div>
       </Card>
 

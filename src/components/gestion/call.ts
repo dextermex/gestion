@@ -22,3 +22,14 @@ export async function callJson(url: string, method: string, body: unknown, backT
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, payload };
 }
+
+/** The same call carrying a form (a file among the fields): the browser sets the boundary. */
+export async function callForm(url: string, form: FormData, backTo: string): Promise<CallResult | null> {
+  const res = await fetch(url, { method: "POST", body: form });
+  if (res.status === 401) {
+    window.location.assign(`/connexion?next=${encodeURIComponent(backTo)}`);
+    return null;
+  }
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return { ok: res.ok, status: res.status, payload };
+}

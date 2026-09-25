@@ -20,8 +20,10 @@ import type {
   DemoWorkflow,
   DemoConversation,
   DemoBankTx,
+  DemoBill,
 } from "./data";
 import { buildEmptyData, type Org } from "./data-empty";
+import { pageBounds, pageInfo, windowStart, DEFAULT_MONTHS_BACK, DEFAULT_PAGE_SIZE, type PageRequest, type ReadScope } from "./scope";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -33,6 +35,21 @@ import { buildEmptyData, type Org } from "./data-empty";
  */
 
 type Row = Record<string, unknown>;
+
+const BILL_COLS = "id,direction,supplier_contact_id,property_id,unit_id,category,subject,doc_no,doc_date,due_on,paid_on,cashflow,vat_rate_pct,amount_cents,vat_cents,document_id,created_at";
+
+/** The part of a PostgREST query these reads use, named once so the fake and the client agree. */
+interface Narrow {
+  eq(column: string, value: unknown): Narrow;
+  is(column: string, value: unknown): Narrow;
+  in(column: string, values: unknown[]): Narrow;
+  gte(column: string, value: unknown): Narrow;
+  or(filters: string): Narrow;
+  order(column: string, opts?: { ascending?: boolean }): Narrow;
+  range(from: number, to: number): Narrow;
+  limit(count: number): PromiseLike<{ data: unknown; error: { code?: string; message?: string } | null }>;
+  then<T>(onfulfilled: (value: { data: unknown; error: { code?: string; message?: string } | null; count?: number | null }) => T): PromiseLike<T>;
+}
 
 const s = (v: unknown): string => (typeof v === "string" ? v : "");
 const sOr = <T>(v: unknown, fallback: T): string | T => (typeof v === "string" && v !== "" ? v : fallback);
@@ -71,9 +88,9 @@ function departureOf(details: Row): DemoLease["departure"] | undefined {
   };
 }
 
-export async function buildRealData(org: Org, accessToken: string): Promise<DemoData> {
+export async function buildRealData(org: Org, accessToken: string, scope: ReadScope = {}): Promise<DemoData> {
   const client = authedClient(accessToken);
-  return buildRealDataFrom(client.schema("gestion"), org, (paths) => signMedia(client, paths));
+  return buildRealDataFrom(client.schema("gestion"), org, (paths) => signMedia(client, paths), scope);
 }
 
 /**
@@ -86,113 +103,188 @@ export async function buildRealDataFrom(
   g: GestionReader,
   org: Org,
   sign: (paths: string[]) => Promise<Map<string, string>>,
+  scope: ReadScope = {},
 ): Promise<DemoData> {
   const oid = org.id;
+  const today = new Date().toISOString().slice(0, 10);
+  // The history window: the ledger, the bank, the requests and the readings
+  // are read from here on. Arrears older than that still owe and come
+  // along by id; a sheet that looks at one tenancy reads its whole past.
+  const from = windowStart(today, scope.monthsBack ?? DEFAULT_MONTHS_BACK);
+  const fromStamp = `${from}T00:00:00Z`;
+  const leaseScoped = scope.leaseId ?? null;
+  const propertyScoped = scope.propertyId ?? null;
+  const scoped = Boolean(leaseScoped || propertyScoped);
+  // The shell reads no history at all: the layout asks for it on every
+  // screen, the screen itself reads what it shows.
+  const shell = Boolean(scope.shell);
+  const none = (): Promise<Row[]> => Promise.resolve([]);
+  const docPage = scope.documents ?? { page: 1, size: DEFAULT_PAGE_SIZE };
 
-  // One org-scoped read per table, in parallel. A failed read degrades to an
-  // empty collection (logged), never to sample data.
-  // Tables carrying `archived_at`: an archived row is gone from every screen,
-  // not only from the one that happens to filter it.
+  // One filtered read per table. A failed read degrades to an empty
+  // collection (logged), never to sample data. Tables carrying
+  // `archived_at`: an archived row is gone from every screen, not only from
+  // the one that happens to filter it. The cap is a safety net, no longer
+  // the way a workspace is read.
   const ARCHIVABLE = new Set(["properties", "units", "contacts"]);
-  const q = async (table: string, select: string, order?: string): Promise<Row[]> => {
-    let query = g.from(table).select(select).eq("org_id", oid);
-    if (ARCHIVABLE.has(table)) query = query.is("archived_at", null);
-    if (order) query = query.order(order);
-    const { data, error } = await query.limit(2000);
+  const CAP = 2000;
+  const q = async (table: string, select: string, apply?: (b: Narrow) => Narrow, cap = CAP): Promise<Row[]> => {
+    let base = g.from(table).select(select).eq("org_id", oid) as unknown as Narrow;
+    if (ARCHIVABLE.has(table)) base = base.is("archived_at", null);
+    const query = apply ? apply(base) : base;
+    const { data, error } = await query.limit(cap);
     if (error) {
       console.error(`gestion read failed (${table}):`, error.code, error.message);
       return [];
     }
     return (data as unknown as Row[]) ?? [];
   };
+  /** One page of a register, newest first, with the count its footer shows. */
+  const page = async (table: string, select: string, order: string, req: PageRequest): Promise<{ rows: Row[]; total: number }> => {
+    const { from: lo, to: hi } = pageBounds(req);
+    const base = g.from(table).select(select, { count: "exact" }).eq("org_id", oid) as unknown as Narrow;
+    const { data, error, count } = await base.order(order, { ascending: false }).range(lo, hi);
+    if (error) {
+      console.error(`gestion page read failed (${table}):`, error.code, error.message);
+      return { rows: [], total: 0 };
+    }
+    return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
+  };
+  /** A filter over many ids, in chunks an address can carry. */
+  const inChunks = async (ids: string[], read: (chunk: string[]) => Promise<Row[]>): Promise<Row[]> => {
+    const unique = [...new Set(ids.filter(Boolean))];
+    const out: Row[] = [];
+    for (let i = 0; i < unique.length; i += 100) out.push(...(await read(unique.slice(i, i + 100))));
+    return out;
+  };
 
-  const [
-    propertyRows,
-    unitRows,
-    contactRows,
-    roleRows,
-    leaseRows,
-    partyRows,
-    periodRows,
-    statusRows,
-    depositRows,
-    deductionRows,
-    accountRows,
-    txRows,
-    bindingRows,
-    edlRows,
-    edlItemRows,
-    edlMediaRows,
-    ticketRows,
-    workOrderRows,
-    meterRows,
-    readingRows,
-    workflowRows,
-    conversationRows,
-    messageRows,
-    documentRows,
-    insuranceRows,
-    inviteRows,
-    letterRows,
-    arrearsRows,
-    chargePeriodRows,
-    chargeLineRows,
-  ] = await Promise.all([
-    q(
-      "properties",
-      "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url",
-      "created_at",
-    ),
-    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url", "created_at"),
-    q(
-      "contacts",
-      "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes,user_id",
-      "created_at",
-    ),
+  // ── A. The portfolio: read whole, it is what a cabinet manages. On a sheet, the one property. ──
+  const [propertyRows, unitRows, contactRows, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, documentPage] = await Promise.all([
+    q("properties", "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url", (b) => (propertyScoped ? b.eq("id", propertyScoped) : b).order("created_at")),
+    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url", (b) => (propertyScoped ? b.eq("property_id", propertyScoped) : b).order("created_at")),
+    q("contacts", "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes,user_id"),
     q("contact_roles", "contact_id,role,ended_on"),
-    q(
-      "leases",
-      "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details",
-      "created_at",
-    ),
-    q("lease_parties", "lease_id,contact_id,role,moved_out_on"),
-    q("rent_periods", "id,lease_id,period,due_date,rent_cents,charges_cents,vat_cents,total_cents", "period"),
-    q("rent_period_status", "id,allocated_cents,status"),
-    q(
-      "deposits",
-      "id,lease_id,form,amount_cents,status,key_handover_on,decompte_issued_on,mise_en_demeure_ar_on,released_first_tranche_cents,released_balance_cents",
-    ),
-    q("deposit_deductions", "id,deposit_id,kind,label,amount_cents,justified_at,justification_document_id,edl_item_id"),
     q("bank_accounts", "id,label,iban,bic,holder_name_verbatim,kind,provider,consent_expires_at,balance_cents"),
-    q(
-      "bank_transactions",
-      "id,booked_on,amount_cents,counterparty_name,counterparty_iban,remittance_info,end_to_end_id,match_status,match_tier,match_explain",
-      "booked_on",
-    ),
-    q("iban_bindings", "payer_iban,lease_id"),
-    q("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256"),
-    q("edl_items", "id,session_id"),
-    q("edl_media", "id,item_id"),
-    q("tickets", "id,unit_id,property_id,lease_id,source,category,severity,status,title,description,created_at,updated_at,closed_at,sla_due_at"),
-    q("work_orders", "id,ticket_id,status,artisan_contact_id,scheduled_at,amount_cents,vat_cents,created_at", "created_at"),
-    q("meters", "id,property_id,unit_id,kind,serial_number,supplier", "created_at"),
-    q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", "read_on"),
-    q("workflows", "id,kind,unit_id,lease_id,current_state,blocked_reason,started_at,completed_at"),
+    shell ? none() : q("iban_bindings", "payer_iban,lease_id"),
+    shell ? none() : q("workflows", "id,kind,unit_id,lease_id,current_state,blocked_reason,started_at,completed_at"),
+    shell ? none() : q("meters", "id,property_id,unit_id,kind,serial_number,supplier", (b) => (propertyScoped ? b.eq("property_id", propertyScoped) : b).order("created_at")),
+    // One thread per tenancy: the threads are read whole, their messages one thread at a time (below).
     q("conversations", "id,scope_type,scope_id,subject,last_message_at,created_at"),
-    // Whole rows: `ticket_id` (0019) is read when the column is there, and a
-    // database that has not received 0019 yet still answers every screen.
-    q("messages", "*", "sent_at"),
-    q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at"),
-    q("insurance_policies", "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes", "created_at"),
-    // The token is never selected: it is returned once, when the invitation is created.
-    q("portal_invites", "id,contact_id,lease_id,email,expires_at,accepted_at,revoked_at,sent_at,delivery,created_at", "created_at"),
-    q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", "created_at"),
-    q("arrears_actions", "id,lease_id,rent_period_id,stage,executed_at,registered_letter_id", "executed_at"),
-    q("charge_periods", "id,lease_id,year,regime,status,advances_billed_cents,actual_cents,issued_on,due_on", "year"),
-    q("charge_lines", "id,charge_period_id,source,label,category,building_total_cents,tantiemes,tantiemes_total,lot_share_cents,tenant_share_cents,blocked"),
+    q("conversation_heads", "conversation_id,unread,last_message_id,last_sender_kind,last_sender_contact_id,last_sender_user_id,last_body,last_sent_at,last_read_at,last_ticket_id"),
+    scoped || shell ? Promise.resolve({ rows: [] as Row[], total: 0 }) : page("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at", "created_at", docPage),
+  ]);
+  const unitIds = unitRows.map((u) => s(u.id));
+
+  // ── B. The tenancies in scope, and what hangs off them. ──
+  const leaseRows = leaseScoped
+    ? await q("leases", "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details", (b) => b.eq("id", leaseScoped))
+    : propertyScoped
+      ? await inChunks(unitIds, (ids) => q("leases", "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details", (b) => b.in("unit_id", ids)))
+      : await q("leases", "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details");
+  const leaseIds = leaseRows.map((l) => s(l.id));
+  // On a tenancy's sheet, its lot and that lot's property; on a property's, the property and its lots.
+  const sheetUnitIds = leaseScoped ? leaseRows.map((l) => s(l.unit_id)) : unitIds;
+  const sheetPropertyIds = leaseScoped ? unitRows.filter((u) => sheetUnitIds.includes(s(u.id))).map((u) => s(u.property_id)) : propertyRows.map((p) => s(p.id));
+  /** A table keyed by tenancy: those in scope on a sheet, the workspace's (as `whole` narrows it) otherwise; nothing for the shell. */
+  const byLease = (table: string, select: string, whole: (b: Narrow) => Narrow, order?: string): Promise<Row[]> =>
+    shell
+      ? none()
+      : scoped
+        ? inChunks(leaseIds, (ids) => q(table, select, (b) => (order ? b.in("lease_id", ids).order(order) : b.in("lease_id", ids))))
+        : q(table, select, (b) => (order ? whole(b).order(order) : whole(b)));
+  const INSURANCE_COLS = "id,property_id,lease_id,kind,provider,policy_number,premium_cents,starts_on,expires_on,notes";
+  /** The policies in scope: the property's own and its tenancies', or the workspace's. */
+  const readInsurance = async (): Promise<Row[]> => {
+    if (shell) return [];
+    if (!scoped) return q("insurance_policies", INSURANCE_COLS, (b) => b.order("created_at"));
+    const ofProperty = propertyScoped ? await q("insurance_policies", INSURANCE_COLS, (b) => b.eq("property_id", propertyScoped)) : [];
+    const ofLeases = await inChunks(leaseIds, (ids) => q("insurance_policies", INSURANCE_COLS, (b) => b.in("lease_id", ids)));
+    const seen = new Set<string>();
+    return [...ofProperty, ...ofLeases].filter((r) => !seen.has(s(r.id)) && Boolean(seen.add(s(r.id))));
+  };
+  const [partyRows, periodRows, statusRows, depositRows, edlRows, ticketRows, insuranceRows, inviteRows, arrearsRows, chargePeriodRows, readingRows, txRows, billRows, leaseLetterRows] = await Promise.all([
+    // The shell keeps the parties: the pickers and the palette name a tenancy by its tenants.
+    shell ? q("lease_parties", "lease_id,contact_id,role,moved_out_on") : byLease("lease_parties", "lease_id,contact_id,role,moved_out_on", (b) => b),
+    byLease("rent_periods", "id,lease_id,period,due_date,rent_cents,charges_cents,vat_cents,total_cents", (b) => b.gte("period", from), "period"),
+    // Paid-ness from the view; an arrear older than the window is still an
+    // arrear. The shell asks one thing of the ledger: whether a rent was
+    // ever received (one period with money on it, read by id below).
+    shell
+      ? q("rent_period_status", "id,allocated_cents,status", (b) => b.in("status", ["paid", "partial", "partial_late"]), 1)
+      : byLease("rent_period_status", "id,allocated_cents,status", (b) => b.or(`period.gte.${from},status.in.(late,partial_late)`)),
+    byLease("deposits", "id,lease_id,form,amount_cents,status,key_handover_on,decompte_issued_on,mise_en_demeure_ar_on,released_first_tranche_cents,released_balance_cents", (b) => b),
+    byLease("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256", (b) => b),
+    shell
+      ? none()
+      : leaseScoped
+      ? q("tickets", "id,unit_id,property_id,lease_id,source,category,severity,status,title,description,created_at,updated_at,closed_at,sla_due_at", (b) => b.eq("lease_id", leaseScoped))
+      : propertyScoped
+        ? q("tickets", "id,unit_id,property_id,lease_id,source,category,severity,status,title,description,created_at,updated_at,closed_at,sla_due_at", (b) => b.eq("property_id", propertyScoped))
+        : q("tickets", "id,unit_id,property_id,lease_id,source,category,severity,status,title,description,created_at,updated_at,closed_at,sla_due_at", (b) => b.or(`created_at.gte.${fromStamp},status.in.(new,triaged,offered,scheduled,in_progress,pending_tenant)`)),
+    readInsurance(),
+    byLease("portal_invites", "id,contact_id,lease_id,email,expires_at,accepted_at,revoked_at,sent_at,delivery,created_at", (b) => b, "created_at"),
+    byLease("arrears_actions", "id,lease_id,rent_period_id,stage,executed_at,registered_letter_id", (b) => b.gte("executed_at", fromStamp), "executed_at"),
+    byLease("charge_periods", "id,lease_id,year,regime,status,advances_billed_cents,actual_cents,issued_on,due_on", (b) => b, "year"),
+    shell || leaseScoped
+      ? none()
+      : propertyScoped
+        ? inChunks(meterRows.map((m) => s(m.id)), (ids) => q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", (b) => b.in("meter_id", ids).order("read_on")))
+        : q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", (b) => b.gte("read_on", from).order("read_on")),
+    // The bank: the window, plus whatever still waits in the review queue, whenever it landed. The shell counts the queue.
+    shell
+      ? q("bank_transactions", "id,booked_on,amount_cents,counterparty_name,counterparty_iban,remittance_info,end_to_end_id,match_status,match_tier,match_explain", (b) => b.eq("match_status", "review"), 5000)
+      : scoped
+        ? none()
+        : q("bank_transactions", "id,booked_on,amount_cents,counterparty_name,counterparty_iban,remittance_info,end_to_end_id,match_status,match_tier,match_explain", (b) => b.or(`booked_on.gte.${from},match_status.in.(review,unmatched)`).order("booked_on"), 5000),
+    shell || leaseScoped
+      ? none()
+      : propertyScoped
+        ? q("bills", BILL_COLS, (b) => b.eq("property_id", propertyScoped).order("created_at"))
+        : q("bills", BILL_COLS, (b) => b.or(`doc_date.gte.${from},doc_date.is.null,paid_on.is.null`).order("created_at")),
+    shell
+      ? none()
+      : scoped
+      ? inChunks(leaseIds, (ids) => q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.eq("related_type", "lease").in("related_id", ids)))
+      : q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.gte("created_at", fromStamp).order("created_at")),
   ]);
 
-  // ── Contacts ──
+  // ── C. What hangs off those rows: by id, in chunks. ──
+  const ticketIds = ticketRows.map((t) => s(t.id));
+  const periodIds = new Set(periodRows.map((rp) => s(rp.id)));
+  const lateOutsideWindow = statusRows.map((st) => s(st.id)).filter((id) => !periodIds.has(id));
+  const newest = [...conversationRows].sort((a, b) => (s(a.last_message_at) || s(a.created_at)) < (s(b.last_message_at) || s(b.created_at)) ? 1 : -1)[0];
+  // The thread read in full: the one asked for when it is the workspace's
+  // (an unknown or foreign id falls back to the most recent, the policies
+  // having answered nothing for it), the tenancy's own on its sheet, else
+  // the most recent when Messages asks for one.
+  const asked = scope.conversationId && scope.conversationId !== "latest" && conversationRows.some((c) => s(c.id) === scope.conversationId) ? scope.conversationId : null;
+  const scopedConversationId =
+    asked ??
+    (scope.conversationId
+      ? (newest ? s(newest.id) : null)
+      : leaseScoped
+        ? ((conversationRows.find((c) => s(c.scope_type) === "lease" && s(c.scope_id) === leaseScoped)?.id as string | undefined) ?? null)
+        : null);
+  const [workOrderRows, chargeLineRows, deductionRows, countRows, lateRows, messageRows, periodLetterRows, relatedDocRows] = await Promise.all([
+    inChunks(ticketIds, (ids) => q("work_orders", "id,ticket_id,status,artisan_contact_id,scheduled_at,amount_cents,vat_cents,created_at", (b) => b.in("ticket_id", ids).order("created_at"))),
+    inChunks(chargePeriodRows.map((cp) => s(cp.id)), (ids) => q("charge_lines", "id,charge_period_id,source,label,category,building_total_cents,tantiemes,tantiemes_total,lot_share_cents,tenant_share_cents,blocked", (b) => b.in("charge_period_id", ids))),
+    inChunks(depositRows.map((d) => s(d.id)), (ids) => q("deposit_deductions", "id,deposit_id,kind,label,amount_cents,justified_at,justification_document_id,edl_item_id", (b) => b.in("deposit_id", ids))),
+    inChunks(edlRows.map((e) => s(e.id)), (ids) => q("edl_session_counts", "session_id,items,photos", (b) => b.in("session_id", ids))),
+    inChunks(lateOutsideWindow, (ids) => q("rent_periods", "id,lease_id,period,due_date,rent_cents,charges_cents,vat_cents,total_cents", (b) => b.in("id", ids))),
+    scopedConversationId ? q("messages", "*", (b) => b.eq("conversation_id", scopedConversationId).order("sent_at"), 5000) : Promise.resolve([] as Row[]),
+    scoped ? inChunks([...periodIds], (ids) => q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.eq("related_type", "rent_period").in("related_id", ids))) : Promise.resolve([] as Row[]),
+    // The pieces the screens name: a request's photos, and on a sheet the property's, its lots' and its tenancies' own.
+    inChunks([...ticketIds, ...(scoped ? [...leaseIds, ...sheetUnitIds, ...sheetPropertyIds] : [])], (ids) => q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at", (b) => b.in("related_id", ids))),
+  ]);
+  // ── D. The pieces the retention lines point at, by id. ──
+  const justificationDocRows = await inChunks(
+    deductionRows.map((x) => s(x.justification_document_id)),
+    (ids) => q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at", (b) => b.in("id", ids)),
+  );
+  const letterRows = [...leaseLetterRows, ...periodLetterRows];
+  const documentRows = scoped ? relatedDocRows : documentPage.rows;
+  const allPeriodRows = [...periodRows, ...lateRows];
+
   const rolesByContact = new Map<string, DemoContact["roles"]>();
   for (const r of roleRows) {
     if (r.ended_on) continue;
@@ -345,7 +437,7 @@ export async function buildRealDataFrom(
   // ── Rent periods: figures from the table, paid-ness from the view, which
   //    derives it from non-reversed allocations. Never a stored boolean. ──
   const statusById = new Map(statusRows.map((r) => [s(r.id), r]));
-  const RENT_PERIODS: DemoRentPeriod[] = periodRows.map((rp) => {
+  const RENT_PERIODS: DemoRentPeriod[] = allPeriodRows.map((rp) => {
     const st = statusById.get(s(rp.id));
     const raw = st ? s(st.status) : "pending";
     return {
@@ -369,7 +461,7 @@ export async function buildRealDataFrom(
     list.push(dd);
     deductionsByDeposit.set(s(dd.deposit_id), list);
   }
-  const documentNameById = new Map(documentRows.map((doc) => [s(doc.id), s(doc.name)]));
+  const documentNameById = new Map([...documentRows, ...relatedDocRows, ...justificationDocRows].map((doc) => [s(doc.id), s(doc.name)]));
   const DEPOSITS: DemoDeposit[] = depositRows.map((d) => ({
     id: s(d.id),
     leaseId: s(d.lease_id),
@@ -451,16 +543,8 @@ export async function buildRealDataFrom(
     }));
 
   // ── EDLs ──
-  const itemSession = new Map(edlItemRows.map((i) => [s(i.id), s(i.session_id)]));
-  const itemsBySession = new Map<string, number>();
-  for (const i of edlItemRows) {
-    itemsBySession.set(s(i.session_id), (itemsBySession.get(s(i.session_id)) ?? 0) + 1);
-  }
-  const photosBySession = new Map<string, number>();
-  for (const m of edlMediaRows) {
-    const sess = itemSession.get(s(m.item_id));
-    if (sess) photosBySession.set(sess, (photosBySession.get(sess) ?? 0) + 1);
-  }
+  // Items and photos counted by the database (0020), never by reading them.
+  const countBySession = new Map(countRows.map((c) => [s(c.session_id), c]));
   const EDLS: DemoEdl[] = edlRows.map((e) => ({
     id: s(e.id),
     leaseId: s(e.lease_id),
@@ -469,8 +553,8 @@ export async function buildRealDataFrom(
     status: s(e.status) as DemoEdl["status"],
     scheduledAt: e.scheduled_at ? day(e.scheduled_at) : null,
     completedAt: e.completed_at ? day(e.completed_at) : null,
-    itemsCount: itemsBySession.get(s(e.id)) ?? 0,
-    photosCount: photosBySession.get(s(e.id)) ?? 0,
+    itemsCount: Number(countBySession.get(s(e.id))?.items) || 0,
+    photosCount: Number(countBySession.get(s(e.id))?.photos) || 0,
     keyHandoverAt: e.key_handover_at ? day(e.key_handover_at) : null,
     hashSealed: s(e.hash_manifest_sha256) !== "",
   }));
@@ -500,7 +584,7 @@ export async function buildRealDataFrom(
       vatCents: typeof w.vat_cents === "number" ? w.vat_cents : null,
     };
   };
-  const ticketPhotoRows = documentRows.filter((doc) => s(doc.related_type) === "ticket" && s(doc.storage_path) !== "");
+  const ticketPhotoRows = relatedDocRows.filter((doc) => s(doc.related_type) === "ticket" && s(doc.storage_path) !== "");
   const signedPhotos = await sign(ticketPhotoRows.map((doc) => s(doc.storage_path)));
   const TICKETS: DemoTicket[] = ticketRows.map((t) => ({
     id: s(t.id),
@@ -611,8 +695,23 @@ export async function buildRealDataFrom(
     return "";
   };
   const SCOPE_TYPES = ["lease", "ticket", "mandate", "contact", "general"] as const;
+  const headByConv = new Map(headRows.map((h) => [s(h.conversation_id), h]));
+  /** The head's last message, in the row shape, for a thread not read in full. */
+  const headMessage = (h: Row): Row => ({
+    id: h.last_message_id,
+    conversation_id: h.conversation_id,
+    sender_kind: h.last_sender_kind,
+    sender_contact_id: h.last_sender_contact_id,
+    sender_user_id: h.last_sender_user_id,
+    body: h.last_body,
+    sent_at: h.last_sent_at,
+    read_at: h.last_read_at,
+    ticket_id: h.last_ticket_id,
+  });
   const CONVERSATIONS: DemoConversation[] = conversationRows.map((c) => {
-    const msgs = messagesByConv.get(s(c.id)) ?? [];
+    const loaded = s(c.id) === scopedConversationId;
+    const head = headByConv.get(s(c.id));
+    const msgs = loaded ? (messagesByConv.get(s(c.id)) ?? []) : head && head.last_message_id ? [headMessage(head)] : [];
     const scopeType = (SCOPE_TYPES as readonly string[]).includes(s(c.scope_type)) ? (s(c.scope_type) as DemoConversation["scopeType"]) : "general";
     const scopeId = sOr(c.scope_id, null);
     const senderName = (m: Row): string =>
@@ -639,7 +738,8 @@ export async function buildRealDataFrom(
       scopeId,
       participantName: partyNames.join(", ") || (outsider ? senderName(outsider) : org.name),
       lastMessageAt: lastAt,
-      unread: msgs.filter((m) => !m.read_at && s(m.sender_kind) !== "manager").length,
+      unread: head ? Number(head.unread) || 0 : msgs.filter((m) => !m.read_at && s(m.sender_kind) !== "manager").length,
+      loaded,
       messages: msgs.map((m) => ({
         id: s(m.id),
         from: senderName(m),
@@ -673,6 +773,7 @@ export async function buildRealDataFrom(
     relatedLabel: relatedLabel(s(doc.related_type), s(doc.related_id)),
     sizeKb: Math.max(1, Math.round(n(doc.size_bytes) / 1024)),
     createdAt: day(doc.created_at),
+    hasFile: s(doc.storage_path) !== "",
   }));
 
   const INSURANCES: DemoInsurance[] = insuranceRows.map((i) => ({
@@ -701,6 +802,30 @@ export async function buildRealDataFrom(
     createdAt: s(i.created_at),
   }));
 
+  // ── Bills ──
+  const BILLS: DemoBill[] = billRows.map((bill) => ({
+    id: s(bill.id),
+    direction: bill.direction === "income" ? "income" : "expense",
+    supplierContactId: sOr(bill.supplier_contact_id, null),
+    supplierName: contactIndex.get(s(bill.supplier_contact_id))?.name ?? "",
+    propertyId: sOr(bill.property_id, null),
+    unitId: sOr(bill.unit_id, null),
+    unitLabel: bill.unit_id ? labelOfUnit(s(bill.unit_id)) : (propertyIndex.get(s(bill.property_id))?.name ?? ""),
+    category: s(bill.category) as DemoBill["category"],
+    subject: s(bill.subject),
+    docNo: s(bill.doc_no),
+    docDate: bill.doc_date ? day(bill.doc_date) : null,
+    dueOn: bill.due_on ? day(bill.due_on) : null,
+    paidOn: bill.paid_on ? day(bill.paid_on) : null,
+    cashflow: bill.cashflow !== false,
+    vatRatePct: Number(bill.vat_rate_pct) || 0,
+    amountCents: n(bill.amount_cents),
+    vatCents: n(bill.vat_cents),
+    documentId: sOr(bill.document_id, null),
+    hasDocument: Boolean(bill.document_id),
+    createdAt: day(bill.created_at),
+  }));
+
   const ENDED_LEASES: DemoData["ENDED_LEASES"] = LEASES.filter((l) => l.status === "ended").map((l) => ({
     id: l.id,
     label: labelOfUnit(l.unitId),
@@ -712,6 +837,7 @@ export async function buildRealDataFrom(
   const base = buildEmptyData(org);
   const data: DemoData = {
     ...base,
+    TODAY: today,
     CONTACTS,
     PROPERTIES,
     UNITS,
@@ -731,8 +857,10 @@ export async function buildRealDataFrom(
     WORKFLOWS,
     CONVERSATIONS,
     DOCUMENTS,
+    BILLS,
     INSURANCES,
     INVITES,
+    PAGING: { documents: pageInfo(docPage, scoped ? DOCUMENTS.length : documentPage.total) },
     contactById: (id: string) => contactIndex.get(id)!,
     propertyById: (id: string) => propertyIndex.get(id)!,
     unitById: (id: string) => unitIndex.get(id)!,

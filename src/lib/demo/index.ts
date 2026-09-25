@@ -14,6 +14,7 @@ import * as frData from "./data";
 import * as luData from "./data-lu";
 import { buildEmptyData, orgFromWorkspace } from "./data-empty";
 import { buildRealData } from "./data-real";
+import type { ReadScope } from "./scope";
 import { getIdentity } from "@/lib/workspace";
 import { getSession } from "@/lib/supabase/server";
 
@@ -56,8 +57,12 @@ export async function getDatasetId(): Promise<DatasetId> {
  * Picking a sample cabinet from the sidebar swaps that for one of the two
  * demonstration datasets. It takes a deliberate click, every screen then wears
  * a banner saying so, and nothing about it ever reaches the database.
+ *
+ * A screen may say what it is looking at (`ReadScope`): one tenancy, one
+ * property, one thread, a page of a list. The real loader then filters and
+ * pages on the server; a sample cabinet is small enough to be read whole.
  */
-export const getDemo = cache(async (): Promise<DemoData> => {
+export const getDemo = cache(async (scope?: ReadScope): Promise<DemoData> => {
   // Development harness. A brand-new account sees empty collections, and that
   // state is impossible to render locally without a live Supabase session, so
   // ten screens shipped crashing on it. `npm run check:empty` sets this to
@@ -81,7 +86,7 @@ export const getDemo = cache(async (): Promise<DemoData> => {
         try {
           // The account's own rows, read under its own JWT: every page and
           // engine now computes on real data through the same seam.
-          return await buildRealData(org, session.accessToken);
+          return await buildRealData(org, session.accessToken, scope ?? {});
         } catch (e) {
           console.error("real dataset hydration failed, serving empty:", e);
         }

@@ -52,7 +52,7 @@ export default async function BienDetailPage({
 }) {
   const [{ id }, { onglet, lot }] = await Promise.all([params, searchParams]);
   const { locale, d } = await getI18n();
-  const [demo, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  const [demo, datasetId] = await Promise.all([getDemo({ propertyId: id }), getDatasetId()]);
   const real = datasetId === "real";
   const card = findCard(buildPortfolio(demo), id);
   if (!card) notFound();

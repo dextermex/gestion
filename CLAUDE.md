@@ -4,7 +4,7 @@ Luxembourg property-management SaaS, sibling of Morada.lu. App UI in four langua
 FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
 
 ## Commands
-- `npm run dev` / `npm run build` / `npm test` (vitest, 288 tests) / `npm run lint` /
+- `npm run dev` / `npm run build` / `npm test` (vitest, 303 tests) / `npm run lint` /
   `npm run typecheck`
 - `npm run e2e` (Playwright, real browser against a throwaway local Supabase; needs
   Docker: see docs/QUALITY.md for the four commands that bring the stack up)

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Input, Select } from "@/components/pro/ui";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { euros, formatDate as formatIso, type DepositStatus } from "@/lib/types";
-import { callJson } from "./call";
+import { callForm, callJson } from "./call";
 
 /**
  * What the desk does with a guarantee, as writes: received on a date; a
@@ -28,6 +28,9 @@ export interface DepositLabels {
   actRetentionBlocked: string;
   actJustify: string;
   actJustifyRef: string;
+  actJustifyFile: string;
+  actJustifyNeedsFile: string;
+  actJustifyBadFile: string;
   actJustifyOn: string;
   actJustified: string;
   actJustifyLate: string;
@@ -55,6 +58,7 @@ export interface DepositLabels {
 }
 
 const BACK = "/app/garanties";
+const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/avif";
 const dateInput = (label: string, value: string, set: (v: string) => void, max: string, min?: string, disabled?: boolean) => (
   <label className="block">
     <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{label}</span>
@@ -141,6 +145,7 @@ export function DepositLineActions({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [ref, setRef] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [date, setDate] = useState(todayISO);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -156,6 +161,28 @@ export function DepositLineActions({
     setBusy(true);
     setError(null);
     try {
+      // The piece first, into the register, hanging off this line; then the line, justified by it.
+      if (method === "PATCH") {
+        if (!file) {
+          setError(labels.actJustifyNeedsFile);
+          setBusy(false);
+          return;
+        }
+        const form = new FormData();
+        form.set("file", file);
+        form.set("class", "invoice");
+        form.set("name", ref.trim() || file.name);
+        form.set("relatedType", "deposit_deduction");
+        form.set("relatedId", lineId);
+        const stored = await callForm("/api/documents", form, BACK);
+        if (!stored) return;
+        if (!stored.ok) {
+          setError(stored.status === 415 ? labels.actJustifyBadFile : labels.actFailed);
+          setBusy(false);
+          return;
+        }
+        body = { ...body, documentId: stored.payload.id };
+      }
       const res = await callJson(base, method, body, BACK);
       if (!res) return;
       if (res.ok) {
@@ -177,11 +204,21 @@ export function DepositLineActions({
       {open ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
           <label className="block min-w-0 flex-1">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{labels.actJustifyFile}</span>
+            <input
+              type="file"
+              accept={ACCEPT}
+              className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border file:border-sand-200 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-ink-soft"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              disabled={busy}
+            />
+          </label>
+          <label className="block min-w-0 flex-1">
             <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{labels.actJustifyRef}</span>
             <Input value={ref} maxLength={160} onChange={(e) => setRef(e.target.value)} disabled={busy} />
           </label>
           {dateInput(labels.actJustifyOn, date, setDate, todayISO, undefined, busy)}
-          <Button size="sm" loading={busy} disabled={!ref.trim() || !date} onClick={() => run("PATCH", { justifiedOn: date, justificationRef: ref.trim() }, labels.actJustified)}>
+          <Button size="sm" loading={busy} disabled={!date || (writable && !file)} onClick={() => run("PATCH", { justifiedOn: date }, labels.actJustified)}>
             {labels.actJustify}
           </Button>
         </div>

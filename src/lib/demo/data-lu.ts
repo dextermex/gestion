@@ -10,7 +10,7 @@
 
 import * as fr from "./data";
 import { periodFromSyndic } from "./charges-seed";
-import type { DemoBankTx, DemoContact, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DemoBankTx, DemoBill, DemoContact, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
 import type { OpenInvoice } from "@/domain/banking/matching";
 
 /** Merge per-id string overrides into a copy of the FR rows. Throws at module
@@ -413,3 +413,13 @@ export function openInvoicesForMatching(): OpenInvoice[] {
 // ─── Arrears ladder: identical rows, nothing in them is a word ───────────────
 export const REGISTERED_LETTERS = fr.REGISTERED_LETTERS;
 export const ARREARS_ACTIONS = fr.ARREARS_ACTIONS;
+
+// ─── Bills: the same three, their subjects in the cabinet's language ─────────
+
+export const BILLS: DemoBill[] = overlay(fr.BILLS, {
+  "bill-1": { subject: "Heizkessel am Defaut, Drock op 0,4 bar" },
+  "bill-2": { subject: "Studio 4A nei gestrach" },
+  "bill-3": { subject: "PNO-Prime 2026 · Résidence Beaulieu" },
+});
+
+export const PAGING = fr.PAGING;

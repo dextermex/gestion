@@ -54,7 +54,8 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
     const tenant = db.tenantClient(anna);
     const conversations = () => db.table("conversations").filter((c) => c.scope_type === "lease" && c.scope_id === rental.leaseId);
-    const ownerThread = async () => (await hydrate(db)).CONVERSATIONS.find((c) => c.scopeType === "lease" && c.scopeId === rental.leaseId)!;
+    // The tenancy's sheet reads its own thread in full.
+    const ownerThread = async () => (await hydrate(db, ORG, { leaseId: rental.leaseId })).CONVERSATIONS.find((c) => c.scopeType === "lease" && c.scopeId === rental.leaseId)!;
 
     // ── A normal message opens the conversation ──
     const hello = await addTenantMessage(tenant, anna, lease, "Bonjour, j'ai une question sur mon bail.");
@@ -91,7 +92,8 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
         { path: `${folder}b.jpg`, name: "evier-2.jpg", mime: "image/jpeg", sizeBytes: 120000 },
       ]),
     ).toEqual({ attached: 2 });
-    let demo = await hydrate(db);
+    // Messages opens the conversation: its messages come in full, as the screen asks.
+    let demo = await hydrate(db, ORG, { conversationId });
     let ticket = demo.TICKETS.find((t) => t.id === first.id)!;
     expect([ticket.source, ticket.leaseId, ticket.conversationId, ticket.interventionId]).toEqual(["tenant", rental.leaseId, conversationId, null]);
     expect(ticket.attachments.map((a) => a.name)).toEqual(["evier-1.jpg", "evier-2.jpg"]);
@@ -129,7 +131,7 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
 
     // ── The first request is resolved; the second waits; the conversation reads the same on both sides ──
     expect(await setRequestStatus(ctx, first.id, "resolved")).toEqual({ status: "resolved" });
-    demo = await hydrate(db);
+    demo = await hydrate(db, ORG, { conversationId });
     expect(demo.TICKETS.map((t) => requestStatusOf(t.status))).toEqual(["resolved", "todo"]);
     mine = await space(db, anna);
     expect(mine.requests.map((r) => [r.title, r.state, r.conversationId])).toEqual([
@@ -154,7 +156,7 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     if ("error" in work) throw new Error(work.error);
     expect(work.created).toBe(true);
     expect(await createIntervention(ctx, first.id)).toEqual({ id: work.id, created: false });
-    demo = await hydrate(db);
+    demo = await hydrate(db, ORG, { conversationId });
     ticket = demo.TICKETS.find((t) => t.id === first.id)!;
     expect([ticket.interventionId, isIntervention(ticket)]).toEqual([work.id, true]);
     expect(demo.TICKETS.filter(isIntervention).map((t) => t.id)).toEqual([first.id]);
@@ -235,11 +237,12 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     const convB = reqB.conversationId!;
     expect(convA).not.toBe(convB);
 
-    // Each desk lists its own tenants' conversations and requests.
-    const demo = await hydrate(db);
-    expect(demo.CONVERSATIONS.map((c) => [c.participantName, c.messages.length]).sort()).toEqual([
-      ["Anna Weber", 2],
-      ["Luc Weber", 1],
+    // Each desk lists its own tenants' conversations and requests: the
+    // conversation opened in full, the other carrying its last word only.
+    const demo = await hydrate(db, ORG, { conversationId: convA });
+    expect(demo.CONVERSATIONS.map((c) => [c.participantName, c.messages.length, c.loaded]).sort()).toEqual([
+      ["Anna Weber", 2, true],
+      ["Luc Weber", 1, false],
     ]);
     expect(demo.TICKETS.map((t) => t.title).sort()).toEqual(["Question d'Anna", "Question de Luc"]);
     expect(demo.TICKETS.find((t) => t.id === reqA.id)!.description).toBe("[question] Une question.");

@@ -199,3 +199,22 @@ encore écrire, et ne peut plus ouvrir de demande. Après annulation : deux
 messages, deux conversations, deux demandes, aucun ordre de travail, bail
 actif, aucune ligne de test. Réversible : drop de la colonne et des index,
 policies telles qu'en 0015.
+
+## 0020 · proposée, non appliquée · factures, pièces, lecture
+
+`0020_factures_documents_lecture.sql` n'est **pas** appliquée en production : elle
+attend l'accord explicite du propriétaire. CI la rejoue sur la base jetable
+(`e2e/db/prepare.mjs` applique tout `supabase/applied` dans l'ordre), l'audit RLS
+et la suite de bout en bout passent avec elle. Ce qu'elle fait : élargit les types
+acceptés par le bucket `gestion-media` (PDF, CSV et tableurs en plus des images) et
+sa taille maximale à 25 Mo ; crée `gestion.bills` (factures et recettes : sens,
+fournisseur, bien et lot, catégorie fiscale, montant TTC, TVA, dates, pièce) avec
+ses index et quatre policies sur `gestion.finance.view` / `gestion.finance.edit` ;
+crée les vues `gestion.conversation_heads` (dernier message et non-lus par
+conversation) et `gestion.edl_session_counts` (postes et photos par état des
+lieux), toutes deux `security_invoker`, lecture accordée à `authenticated`
+seulement. Additive : aucune table existante modifiée, rien dans `public`. Sans
+elle, l'application fonctionne : aperçus de conversation vides, aucune facture,
+les routes factures répondent 503 `schema_outdated`. Réversible : drop des deux
+vues et de la table, bucket ramené aux types et à la taille d'avant (notés en
+tête du fichier).

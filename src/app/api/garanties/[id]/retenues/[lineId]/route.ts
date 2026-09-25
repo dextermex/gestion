@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { loadSettlement } from "@/lib/gestion/deposit-settlement";
+import { ownedDocument } from "@/lib/gestion/documents";
 import { settlementOpen } from "@/lib/gestion/deposits";
 import { computeSettlement } from "@/domain/deposits/settlement";
 
 /**
- * One retention line: justified by a piece (an invoice or an estimate,
- * registered as a document of the workspace) on a date, or withdrawn.
+ * One retention line: justified on a date by a piece (an invoice or an
+ * estimate) uploaded to the register and hanging off this very line, or
+ * withdrawn.
  *
  * Whether the justification lands in time is the settlement engine's
  * verdict, re-run here with the line as it would stand: a date past the
@@ -21,15 +23,16 @@ type Params = { params: Promise<{ id: string; lineId: string }> };
 export async function PATCH(req: NextRequest, { params }: Params) {
   const ctx = await withOrg();
   if (ctx instanceof NextResponse) return ctx;
-  const { g, org, userId } = ctx;
+  const { g, org } = ctx;
   const { id, lineId } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const today = new Date().toISOString().slice(0, 10);
   const justifiedOn = str(body.justifiedOn, 10);
-  const ref = str(body.justificationRef, 160);
-  if (!ISO.test(justifiedOn) || Number.isNaN(Date.parse(justifiedOn)) || justifiedOn > today || !ref) {
+  const documentId = str(body.documentId, 64);
+  if (!ISO.test(justifiedOn) || Number.isNaN(Date.parse(justifiedOn)) || justifiedOn > today) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
+  if (!documentId) return NextResponse.json({ error: "needs_document" }, { status: 400 });
 
   const loaded = await loadSettlement(ctx, id, today);
   if ("error" in loaded) return loaded.error === "not_found" ? NextResponse.json({ error: "not_found" }, { status: 404 }) : dbError(loaded.context, loaded.detail);
@@ -37,11 +40,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!line) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (!loaded.input || !settlementOpen(loaded.deposit.status, loaded.deposit.keyHandoverOn)) return NextResponse.json({ error: "not_open" }, { status: 409 });
   if (line.justifiedAt && line.justificationDocumentId) return NextResponse.json({ error: "already" }, { status: 409 });
+  // The piece is one of this workspace's, uploaded for this line.
+  const piece = await ownedDocument(ctx, documentId, { type: "deposit_deduction", id: lineId });
+  if (!piece) return NextResponse.json({ error: "needs_document" }, { status: 400 });
 
   // The engine's verdict on the line as it would stand once justified.
   const verdict = computeSettlement({
     ...loaded.input,
-    deductions: loaded.input.deductions.map((d) => (d.id === lineId ? { ...d, justifiedAt: justifiedOn, justificationDocRef: ref } : d)),
+    deductions: loaded.input.deductions.map((d) => (d.id === lineId ? { ...d, justifiedAt: justifiedOn, justificationDocRef: piece.name } : d)),
   }).lines.find((l) => l.id === lineId);
   if (!verdict) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (verdict.status === "blocked_no_entry_edl") return NextResponse.json({ error: "blocked" }, { status: 409 });
@@ -53,27 +59,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "expired", deadline: verdict.justificationDeadline }, { status: 409 });
   }
 
-  // The piece is a document of the workspace: a reference registered by
-  // the desk, no file behind it (the same shape a scan takes later).
-  const { data: doc, error: docErr } = await g
-    .from("documents")
-    .insert({
-      org_id: org.id,
-      class: "invoice",
-      retention_class: "accounting_10y",
-      name: ref,
-      storage_path: "",
-      related_type: "deposit_deduction",
-      related_id: lineId,
-      uploaded_by: userId,
-    })
-    .select("id")
-    .single();
-  if (docErr || !doc) return dbError("justification document insert", docErr);
-
   const { data, error } = await g
     .from("deposit_deductions")
-    .update({ justified_at: justifiedOn, justification_document_id: doc.id, status: "justified" })
+    .update({ justified_at: justifiedOn, justification_document_id: piece.id, status: "justified" })
     .eq("org_id", org.id)
     .eq("id", lineId)
     .select("id");

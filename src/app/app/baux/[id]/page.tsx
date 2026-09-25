@@ -68,7 +68,7 @@ export default async function BailDetailPage({
     leaseUnitLabel,
     propertyById,
     unitById,
-  } = await getDemo();
+  } = await getDemo({ leaseId: id });
   const lease = LEASES.find((l) => l.id === id);
   if (!lease) notFound();
   const l = leaseById(id);
@@ -702,9 +702,11 @@ export default async function BailDetailPage({
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-ink-soft">
-                        {last.from} : {last.body}
-                      </p>
+                      {last && (
+                        <p className="mt-0.5 truncate text-xs text-ink-soft">
+                          {last.from} : {last.body}
+                        </p>
+                      )}
                     </li>
                   );
                 })}

@@ -51,7 +51,7 @@ export default async function LotPage({
 }) {
   const [{ id, unitId }, { onglet }] = await Promise.all([params, searchParams]);
   const { locale, d } = await getI18n();
-  const [demo, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  const [demo, datasetId] = await Promise.all([getDemo({ propertyId: id }), getDatasetId()]);
   const real = datasetId === "real";
   const building = findCard(buildPortfolio(demo), id);
   if (!building) notFound();
