@@ -145,7 +145,7 @@ test("settings: nothing is produced before the templates are validated and the l
   await form.getByLabel("N°", { exact: true }).fill("24");
   await form.getByLabel("Code postal").fill("1260");
   await form.getByLabel("Localité").fill("Luxembourg");
-  await form.getByLabel("E-mail").fill(owner.email);
+  await form.getByLabel("E-mail", { exact: true }).fill(owner.email);
   await form.getByLabel("IBAN du compte à payer").fill("LU28 0019 4006 4475 0001");
   await form.getByLabel("BIC", { exact: true }).fill("BCEELULL");
   await form.getByLabel("Titulaire du compte (tel qu'à la banque)").fill("Nora Kremer");
