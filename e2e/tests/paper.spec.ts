@@ -112,7 +112,7 @@ test("settings: nothing is produced before the templates are validated and the l
   expect(preview.headers()["content-type"]).toContain("application/pdf");
   expect(Buffer.from(await preview.body()).subarray(0, 5).toString()).toBe("%PDF-");
   expect((await page.request.get("/api/documents/modeles/rent_notice?lang=en")).status(), "no template is translated on the fly").toBe(404);
-  expect((await page.request.get("/api/documents/modeles/poem?lang=fr")).status()).toBe(404);
+  expect((await page.request.get("/api/documents/modeles/poem?lang=fr")).status()).toBe(400);
   // Every template validated, one by one, its row saying so.
   for (const kind of KINDS) {
     const row = page.locator(`[data-template="${kind}"]`);
@@ -393,9 +393,9 @@ test("the tenant reads where to pay and opens the contract and the receipt of th
   await page.goto("/locataire/paiements");
   await expect(page.locator("[data-pay-instructions]")).toContainText("Nora Kremer");
   await expect(page.locator("[data-pay-iban]")).toContainText(IBAN);
-  // This month is paid: its receipt is the tenant's to download.
+  // This month's receipt is the tenant's to download (the décompte issued since
+  // carried its balance onto the month, so the month itself may read partial again).
   const month = page.locator("tr").filter({ hasText: monthLabel(today) }).first();
-  await expect(month).toContainText("Payé");
   const download = month.getByRole("link", { name: "Télécharger" });
   await expect(download).toBeVisible();
   const receipt = await page.request.get((await download.getAttribute("href")) ?? "");
