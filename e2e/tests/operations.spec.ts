@@ -281,6 +281,9 @@ test("guarantees: received, the tenancy closed, retentions, a justification, the
   await page.reload();
   const arrearsLine = page.locator("li").filter({ hasText: "Loyer impayé" }).first();
   await expect(arrearsLine).toContainText("Justificatif attendu");
+  // A piece that is not this line's, or no piece at all, justifies nothing.
+  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today, documentId: "00000000-0000-4000-8000-000000000000" } })).status(), "a piece that is not this line's is refused").toBe(400);
+  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today } })).status(), "a justification needs its piece").toBe(400);
   await arrearsLine.getByRole("button", { name: "Justifier" }).click();
   // The justification is a piece: the file goes to the register against this very line, then the line is dated.
   await arrearsLine.getByLabel("Pièce (PDF ou image)").setInputFiles(pdf("decompte-loyers.pdf"));
@@ -292,10 +295,8 @@ test("guarantees: received, the tenancy closed, retentions, a justification, the
   expect((await justified).ok(), "the justification is written").toBe(true);
   await page.reload();
   await expect(arrearsLine).toContainText("Justifiée");
-  // Once, and never without its piece.
+  // Once: a justified line takes no second piece.
   expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today, documentId: piece.id } })).status(), "justified once").toBe(409);
-  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today } })).status(), "a justification needs its piece").toBe(400);
-  expect((await page.request.patch(`/api/garanties/${depositId}/retenues/${arrears.id}`, { data: { justifiedOn: today, documentId: "00000000-0000-4000-8000-000000000000" } })).status(), "a piece that is not this line's is refused").toBe(400);
 
   // First tranche: half the guarantee, the retention permitting.
   const first = page.waitForResponse((r) => r.url().includes("/liberation") && r.request().method() === "POST");
