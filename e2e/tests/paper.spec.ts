@@ -439,6 +439,8 @@ test("the guarantee: its settlement once the keys are back; another workspace fi
   await fileOf(page, settlement.body.documentId!);
 
   // Another workspace, its own templates validated: the first one's records are not found, its files not served.
+  // (The owner signs out first: the door offers the sign-up form to nobody in particular, not to a signed-in account.)
+  await signOutFromShell(page);
   await signUp(page, intruder);
   expect((await page.request.post("/api/documents/modeles/lease_contract", { data: { lang: "fr" } })).ok()).toBe(true);
   const foreign = await page.request.post("/api/documents/generer", { data: { kind: "lease_contract", sourceId: leaseId } });
