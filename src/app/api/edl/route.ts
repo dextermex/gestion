@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
     .single();
   if (sErr || !session) return dbError("edl session insert", sErr);
 
+  // The items come back with their ids: the photos taken during the walk
+  // are attached to them next, one upload each.
+  let written: Array<{ id: string; room: string; category: string }> = [];
   if (items.length > 0) {
     const rows = items.map((i) => ({
       org_id: org.id,
@@ -87,10 +90,11 @@ export async function POST(req: NextRequest) {
       condition: (CONDITIONS as readonly string[]).includes(String(i.condition)) ? String(i.condition) : "good",
       notes: str(i.notes, 1000) || null,
     }));
-    const { error: iErr } = await g.from("edl_items").insert(rows);
+    const { data: inserted, error: iErr } = await g.from("edl_items").insert(rows).select("id,room,category");
     // The session is real even if an item failed; losing the whole walk-through
     // over one row would be worse than an incomplete one the owner can fix.
     if (iErr) console.error("edl items insert failed:", iErr.code, iErr.message);
+    written = ((inserted ?? []) as Array<{ id: string; room: string; category: string }>).map((r) => ({ id: String(r.id), room: String(r.room), category: String(r.category) }));
   }
 
   // Readings taken during the walk-through, sourced as `edl` so the meter
@@ -121,5 +125,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ id: session.id, status, items: items.length, readings: readingsWritten });
+  return NextResponse.json({ id: session.id, status, items: written.length, itemRows: written, readings: readingsWritten });
 }

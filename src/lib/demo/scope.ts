@@ -31,6 +31,8 @@ export interface ReadScope {
   /** How far back the history tables reach (rent periods, bank operations, tickets, readings). */
   monthsBack?: number;
   documents?: PageRequest;
+  /** The journal's last entries (the settings screen only). */
+  audit?: boolean;
 }
 
 export const DEFAULT_MONTHS_BACK = 24;

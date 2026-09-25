@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
   },
+  // The PDF renderer reads its own font data at runtime: left to Node, not bundled.
+  serverExternalPackages: ["@react-pdf/renderer"],
 };
 
 // Error monitoring (see src/lib/monitoring.ts and docs/QUALITY.md). The build

@@ -282,6 +282,14 @@ export function formatDate(iso: string | null | undefined, locale: Locale = "fr"
   return d.toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** A moment of the journal: the day and the minute, in the reader's language. */
+export function formatDateTime(iso: string | null | undefined, locale: Locale = "fr"): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(INTL_LOCALE[locale], { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 export function formatMonth(isoMonth: string, locale: Locale = "fr"): string {
   const d = new Date(isoMonth.length === 7 ? `${isoMonth}-01T00:00:00` : isoMonth + "T00:00:00");
   const s = d.toLocaleDateString(INTL_LOCALE[locale], { month: "long", year: "numeric" });

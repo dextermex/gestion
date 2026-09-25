@@ -24,6 +24,9 @@ import type {
 } from "./data";
 import { buildEmptyData, type Org } from "./data-empty";
 import { pageBounds, pageInfo, windowStart, DEFAULT_MONTHS_BACK, DEFAULT_PAGE_SIZE, type PageRequest, type ReadScope } from "./scope";
+import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
+import { templateVersion } from "@/lib/documents/wording";
+import type { DemoAuditEntry, DemoGenerated, DemoLessor, DemoTemplate } from "./data";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -159,7 +162,7 @@ export async function buildRealDataFrom(
   };
 
   // ── A. The portfolio: read whole, it is what a cabinet manages. On a sheet, the one property. ──
-  const [propertyRows, unitRows, contactRows, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, documentPage] = await Promise.all([
+  const [propertyRows, unitRows, contactRows, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, settingsRows, validationRows, documentPage] = await Promise.all([
     q("properties", "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url", (b) => (propertyScoped ? b.eq("id", propertyScoped) : b).order("created_at")),
     q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url", (b) => (propertyScoped ? b.eq("property_id", propertyScoped) : b).order("created_at")),
     q("contacts", "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes,user_id"),
@@ -171,7 +174,9 @@ export async function buildRealDataFrom(
     // One thread per tenancy: the threads are read whole, their messages one thread at a time (below).
     q("conversations", "id,scope_type,scope_id,subject,last_message_at,created_at"),
     q("conversation_heads", "conversation_id,unread,last_message_id,last_sender_kind,last_sender_contact_id,last_sender_user_id,last_body,last_sent_at,last_read_at,last_ticket_id"),
-    scoped || shell ? Promise.resolve({ rows: [] as Row[], total: 0 }) : page("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at", "created_at", docPage),
+    q("workspace_settings", "*"),
+    q("template_validations", "kind,lang,version,validated_at"),
+    scoped || shell ? Promise.resolve({ rows: [] as Row[], total: 0 }) : page("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,sha256,created_at", "created_at", docPage),
   ]);
   const unitIds = unitRows.map((u) => s(u.id));
 
@@ -265,7 +270,7 @@ export async function buildRealDataFrom(
       : leaseScoped
         ? ((conversationRows.find((c) => s(c.scope_type) === "lease" && s(c.scope_id) === leaseScoped)?.id as string | undefined) ?? null)
         : null);
-  const [workOrderRows, chargeLineRows, deductionRows, countRows, lateRows, messageRows, periodLetterRows, relatedDocRows] = await Promise.all([
+  const [workOrderRows, chargeLineRows, deductionRows, countRows, lateRows, messageRows, periodLetterRows, relatedDocRows, generatedRows, auditRows] = await Promise.all([
     inChunks(ticketIds, (ids) => q("work_orders", "id,ticket_id,status,artisan_contact_id,scheduled_at,amount_cents,vat_cents,created_at", (b) => b.in("ticket_id", ids).order("created_at"))),
     inChunks(chargePeriodRows.map((cp) => s(cp.id)), (ids) => q("charge_lines", "id,charge_period_id,source,label,category,building_total_cents,tantiemes,tantiemes_total,lot_share_cents,tenant_share_cents,blocked", (b) => b.in("charge_period_id", ids))),
     inChunks(depositRows.map((d) => s(d.id)), (ids) => q("deposit_deductions", "id,deposit_id,kind,label,amount_cents,justified_at,justification_document_id,edl_item_id", (b) => b.in("deposit_id", ids))),
@@ -274,12 +279,29 @@ export async function buildRealDataFrom(
     scopedConversationId ? q("messages", "*", (b) => b.eq("conversation_id", scopedConversationId).order("sent_at"), 5000) : Promise.resolve([] as Row[]),
     scoped ? inChunks([...periodIds], (ids) => q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.eq("related_type", "rent_period").in("related_id", ids))) : Promise.resolve([] as Row[]),
     // The pieces the screens name: a request's photos, and on a sheet the property's, its lots' and its tenancies' own.
-    inChunks([...ticketIds, ...(scoped ? [...leaseIds, ...sheetUnitIds, ...sheetPropertyIds] : [])], (ids) => q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at", (b) => b.in("related_id", ids))),
+    inChunks([...ticketIds, ...(scoped ? [...leaseIds, ...sheetUnitIds, ...sheetPropertyIds] : [])], (ids) => q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,sha256,created_at", (b) => b.in("related_id", ids))),
+    // The pieces the application produced for what is on screen: by their sources.
+    shell
+      ? none()
+      : inChunks(
+          [...periodIds, ...lateOutsideWindow, ...leaseIds, ...depositRows.map((d) => s(d.id)), ...chargePeriodRows.map((cp) => s(cp.id)), ...edlRows.map((e) => s(e.id)), ...leaseLetterRows.map((l) => s(l.id)), ...arrearsRows.map((a) => s(a.id))],
+          (ids) => q("generated_documents", "document_id,kind,lang,template_version,source_type,source_id,generated_at", (b) => b.in("source_id", ids).order("generated_at", { ascending: false })),
+        ),
+    scope.audit ? q("audit_log", "id,actor,verb,object_type,object_id,at", (b) => b.order("at", { ascending: false }), 50) : none(),
   ]);
   // ── D. The pieces the retention lines point at, by id. ──
   const justificationDocRows = await inChunks(
     deductionRows.map((x) => s(x.justification_document_id)),
     (ids) => q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,created_at", (b) => b.in("id", ids)),
+  );
+  // The letters a period carries name more sources: read their pieces too.
+  const periodLetterGenerated = periodLetterRows.length > 0
+    ? await inChunks(periodLetterRows.map((l) => s(l.id)), (ids) => q("generated_documents", "document_id,kind,lang,template_version,source_type,source_id,generated_at", (b) => b.in("source_id", ids).order("generated_at", { ascending: false })))
+    : [];
+  const allGeneratedRows = [...generatedRows, ...periodLetterGenerated];
+  const generatedDocRows = await inChunks(
+    allGeneratedRows.map((g) => s(g.document_id)),
+    (ids) => q("documents", "id,name,sha256,created_at", (b) => b.in("id", ids)),
   );
   const letterRows = [...leaseLetterRows, ...periodLetterRows];
   const documentRows = scoped ? relatedDocRows : documentPage.rows;
@@ -763,6 +785,7 @@ export async function buildRealDataFrom(
     if (type === "ticket") return `INT-${id.slice(0, 8).toUpperCase()}`;
     return "";
   };
+  const kindByDocument = new Map(allGeneratedRows.map((g) => [s(g.document_id), s(g.kind) as DocumentKind]));
   const DOCUMENTS: DemoDocument[] = documentRows.map((doc) => ({
     id: s(doc.id),
     name: s(doc.name),
@@ -774,6 +797,8 @@ export async function buildRealDataFrom(
     sizeKb: Math.max(1, Math.round(n(doc.size_bytes) / 1024)),
     createdAt: day(doc.created_at),
     hasFile: s(doc.storage_path) !== "",
+    kind: kindByDocument.get(s(doc.id)) ?? null,
+    sha256: s(doc.sha256) || null,
   }));
 
   const INSURANCES: DemoInsurance[] = insuranceRows.map((i) => ({
@@ -833,6 +858,54 @@ export async function buildRealDataFrom(
     rentCents: l.rentCents,
   }));
 
+  // ── The paper trail: the lessor, the validated templates, the produced pieces, the journal. ──
+  const settingsRow = settingsRows[0] ?? null;
+  const LESSOR: DemoLessor = {
+    legalName: s(settingsRow?.legal_name),
+    signatoryName: s(settingsRow?.signatory_name),
+    addressStreet: s(settingsRow?.address_street),
+    addressNumber: s(settingsRow?.address_number),
+    postalCode: s(settingsRow?.postal_code),
+    city: s(settingsRow?.city),
+    country: s(settingsRow?.country) || "LU",
+    email: s(settingsRow?.email),
+    phone: s(settingsRow?.phone),
+    iban: s(settingsRow?.iban),
+    bic: s(settingsRow?.bic),
+    holderName: s(settingsRow?.holder_name),
+    documentLang: (["fr", "en", "de", "lu"].includes(s(settingsRow?.document_lang)) ? s(settingsRow?.document_lang) : "fr") as DemoLessor["documentLang"],
+    complete: s(settingsRow?.legal_name) !== "" && s(settingsRow?.address_street) !== "" && s(settingsRow?.postal_code) !== "" && s(settingsRow?.city) !== "",
+    hasPayment: s(settingsRow?.iban) !== "" && s(settingsRow?.holder_name) !== "",
+  };
+  const validationByKey = new Map(validationRows.map((v) => [`${s(v.kind)}:${s(v.lang)}`, v]));
+  const TEMPLATES: DemoTemplate[] = DOCUMENT_KINDS.flatMap((kind) => {
+    const version = templateVersion(kind, "fr");
+    if (!version) return [];
+    const v = validationByKey.get(`${kind}:fr`);
+    return [{ kind, lang: "fr" as const, version, validatedOn: v ? day(v.validated_at) : null, current: Boolean(v) && s(v?.version) === version }];
+  });
+  const generatedDocIndex = new Map(generatedDocRows.map((d) => [s(d.id), d]));
+  const GENERATED: DemoGenerated[] = allGeneratedRows
+    .filter((g) => generatedDocIndex.has(s(g.document_id)))
+    .map((g) => ({
+      documentId: s(g.document_id),
+      kind: s(g.kind) as DocumentKind,
+      sourceId: s(g.source_id),
+      lang: s(g.lang),
+      version: s(g.template_version),
+      generatedAt: s(g.generated_at),
+      name: s(generatedDocIndex.get(s(g.document_id))?.name),
+      sha256: s(generatedDocIndex.get(s(g.document_id))?.sha256),
+    }));
+  const AUDIT: DemoAuditEntry[] = auditRows.map((a) => ({
+    id: s(a.id),
+    at: s(a.at),
+    actor: sOr(a.actor, null),
+    verb: s(a.verb),
+    objectType: s(a.object_type),
+    objectId: sOr(a.object_id, null),
+  }));
+
   // Start from the honest empty assembly, then fill what the account owns.
   const base = buildEmptyData(org);
   const data: DemoData = {
@@ -861,6 +934,11 @@ export async function buildRealDataFrom(
     INSURANCES,
     INVITES,
     PAGING: { documents: pageInfo(docPage, scoped ? DOCUMENTS.length : documentPage.total) },
+    LESSOR,
+    TEMPLATES,
+    GENERATED,
+    generatedFor: (kind: DocumentKind, sourceId: string) => GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null,
+    AUDIT,
     contactById: (id: string) => contactIndex.get(id)!,
     propertyById: (id: string) => propertyIndex.get(id)!,
     unitById: (id: string) => unitIndex.get(id)!,

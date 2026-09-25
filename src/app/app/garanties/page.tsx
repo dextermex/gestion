@@ -2,11 +2,13 @@ import Link from "next/link";
 import { Badge, Card, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { DepositLineActions, DepositReceive, DepositSettlementActions } from "@/components/gestion/DepositActions";
+import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { depositFormLabels, depositStatusMeta, euros, formatDate, type DepositStatus } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { settlementNotes } from "@/lib/i18n/engine";
+import { existingOf, generateLabels } from "@/lib/documents/labels";
 import { computeSettlement } from "@/domain/deposits/settlement";
 
 /** A restitution is in progress from the moment the keys are back until the last cent has left. */
@@ -14,7 +16,7 @@ const inProgress = (status: DepositStatus) => status === "release_pending" || st
 
 export default async function GarantiesPage() {
   const { locale, d } = await getI18n();
-  const { DEPOSITS, ENDED_LEASES, LEASES, ORG, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { DEPOSITS, ENDED_LEASES, LEASES, ORG, TODAY, generatedFor, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const writable = !sample;
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
@@ -28,6 +30,7 @@ export default async function GarantiesPage() {
       </div>
     );
   const formLabels = depositFormLabels(d);
+  const docLabels = generateLabels(d);
   const statusMeta = depositStatusMeta(d);
 
   // Lease facts for a deposit, whether its lease is still live or ended.
@@ -221,6 +224,21 @@ export default async function GarantiesPage() {
                 sampleNote={sampleNote}
                 labels={d.garanties}
               />
+            )}
+
+            {showcase.keyHandoverOn && (
+              <div className="mt-3">
+                <GenerateDocument
+                  kind="deposit_settlement"
+                  sourceId={showcase.id}
+                  label={d.garanties.docSettlement}
+                  existing={existingOf(generatedFor("deposit_settlement", showcase.id), d, locale)}
+                  writable={writable}
+                  sampleNote={sampleNote}
+                  labels={docLabels}
+                  backTo="/app/garanties"
+                />
+              </div>
             )}
 
             <p className="mt-3 text-xs text-ink-soft">

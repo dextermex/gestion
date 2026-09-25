@@ -84,6 +84,11 @@ const DEFAULTS: Record<string, () => Row> = {
   work_orders: () => ({ status: "offered", artisan_contact_id: null }),
   conversations: () => ({ last_message_at: null }),
   messages: () => ({ sender_contact_id: null, read_at: null, ticket_id: null }),
+  workspace_settings: () => ({ legal_name: "", signatory_name: "", address_street: "", address_number: "", postal_code: "", city: "", country: "LU", email: "", phone: "", iban: "", bic: "", holder_name: "", document_lang: "fr", updated_by: null }),
+  template_validations: () => ({ validated_by: null, validated_at: new Date().toISOString() }),
+  generated_documents: () => ({ generated_by: null, generated_at: new Date().toISOString() }),
+  edl_media: () => ({ geotag: null, prev_sha256: null }),
+  registered_letters: () => ({ content: null, dispatch_proof_document_id: null, ar_scan_document_id: null }),
 };
 
 /** Columns the database computes. */
@@ -102,6 +107,9 @@ const GENERATED: Record<string, (row: Row) => void> = {
 const UNIQUE: Record<string, string[][]> = {
   rent_periods: [["lease_id", "period"]],
   iban_bindings: [["org_id", "payer_iban", "lease_id"]],
+  workspace_settings: [["org_id"]],
+  template_validations: [["org_id", "kind", "lang"]],
+  generated_documents: [["document_id"]],
 };
 
 const CHECKS: Record<string, (row: Row) => string | null> = {
@@ -271,6 +279,14 @@ export class FakeDb {
             const c = this.table("contacts").find((x) => x.id === lp.contact_id) ?? {};
             return { lease_id: lp.lease_id, contact_id: c.id, display_name: c.display_name, role: lp.role, moved_in_on: lp.moved_in_on, moved_out_on: lp.moved_out_on, is_me: c.user_id === uid };
           });
+        return { data: rows, error: null };
+      }
+      case "my_payment_instructions": {
+        if (!uid) return { data: [], error: null };
+        const orgIds = [...new Set(this.table("leases").filter((l) => this.tenantLease(l.id, uid)).map((l) => l.org_id))];
+        const rows = this.table("workspace_settings")
+          .filter((w) => orgIds.includes(w.org_id))
+          .map((w) => ({ org_id: w.org_id, legal_name: w.legal_name, iban: w.iban, bic: w.bic, holder_name: w.holder_name }));
         return { data: rows, error: null };
       }
       case "my_managers": {

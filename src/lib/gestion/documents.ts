@@ -74,6 +74,59 @@ export async function storeDocument(ctx: OrgContext, client: SupabaseClient, inp
   return { id: String(data.id), name, path, sha256, sizeBytes: bytes.length };
 }
 
+/**
+ * A piece the application produced itself: the bytes go into the same
+ * folder, the row is sealed from the start (its fingerprint is the seal),
+ * and both halves run under the caller's token like an upload.
+ */
+export interface StoreBytesInput {
+  bytes: Buffer;
+  mime: string;
+  klass: DocumentClass;
+  name: string;
+  relatedType: string | null;
+  relatedId: string | null;
+  sealed: boolean;
+}
+
+export async function storeBytes(ctx: OrgContext, client: SupabaseClient, input: StoreBytesInput): Promise<StoredDocument | { error: StoreFailure }> {
+  const ext = DOCUMENT_TYPES[input.mime];
+  if (!ext) return { error: "unsupported_type" };
+  if (input.bytes.length > MAX_DOCUMENT_BYTES) return { error: "too_large" };
+  const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+  const path = `${documentFolder(ctx.org.id)}/${randomUUID()}.${ext}`;
+  const { error: upErr } = await client.storage.from(MEDIA_BUCKET).upload(path, input.bytes, { contentType: input.mime, upsert: false });
+  if (upErr) {
+    console.error("document upload failed:", upErr.message);
+    return { error: "upload_failed" };
+  }
+  const name = documentName(input.name, `document.${ext}`);
+  const { data, error } = await ctx.g
+    .from("documents")
+    .insert({
+      org_id: ctx.org.id,
+      class: input.klass,
+      retention_class: retentionFor(input.klass),
+      name,
+      storage_path: path,
+      mime: input.mime,
+      size_bytes: input.bytes.length,
+      sha256,
+      sealed: input.sealed,
+      related_type: input.relatedType,
+      related_id: input.relatedId,
+      uploaded_by: ctx.userId,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("document insert failed:", error?.code, error?.message);
+    await client.storage.from(MEDIA_BUCKET).remove([path]).catch(() => null);
+    return { error: "storage_failed" };
+  }
+  return { id: String(data.id), name, path, sha256, sizeBytes: input.bytes.length };
+}
+
 /** Best effort: a piece stored for a record that was refused goes with it. */
 export async function discardDocument(ctx: OrgContext, client: SupabaseClient, doc: { id: string; path: string }): Promise<void> {
   await ctx.g.from("documents").delete().eq("org_id", ctx.org.id).eq("id", doc.id);

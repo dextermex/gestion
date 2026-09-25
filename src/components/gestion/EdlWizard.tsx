@@ -88,6 +88,21 @@ export default function EdlWizard({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The photos taken in each room, by item, until the walk is saved: they
+  // are uploaded one by one to the items the base gives back, then the
+  // signed inventory is sealed (its manifest hashed, its report produced).
+  const [photos, setPhotos] = useState<Record<string, File[]>>({});
+  const [phase, setPhase] = useState<"idle" | "photos" | "sealing">("idle");
+  const [photoErrors, setPhotoErrors] = useState<string[]>([]);
+  const [sealResult, setSealResult] = useState<{ sha256: string; report: { documentId: string; name: string } | null } | null>(null);
+  const [sealFailed, setSealFailed] = useState(false);
+  const photoKey = (roomKey: string, cat: Category) => `${roomKey}:${cat}`;
+  const addPhotos = (roomKey: string, cat: Category, list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    const files = Array.from(list);
+    setPhotos((prev) => ({ ...prev, [photoKey(roomKey, cat)]: [...(prev[photoKey(roomKey, cat)] ?? []), ...files] }));
+  };
+  const photoCount = Object.values(photos).reduce((a, files) => a + files.length, 0);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -150,10 +165,49 @@ export default function EdlWizard({
         setSaving(false);
         return;
       }
+      const payload = (await res.json().catch(() => ({}))) as { id?: string; itemRows?: Array<{ id: string; room: string; category: string }> };
+      const sessionId = String(payload.id ?? "");
+      const itemRows = payload.itemRows ?? [];
+      // Each photo goes to the item it was taken for: the base's row for
+      // that room and category. A failed upload is named, never dropped
+      // silently, and the inventory stands without it.
+      const failed: string[] = [];
+      if (sessionId && photoCount > 0) {
+        setPhase("photos");
+        for (const r of rooms) {
+          for (const cat of CATEGORIES) {
+            const files = photos[photoKey(r.key, cat)] ?? [];
+            if (files.length === 0) continue;
+            const target = itemRows.find((x) => x.room === r.name.trim().slice(0, 80) && x.category === cat);
+            for (const file of files) {
+              if (!target) {
+                failed.push(file.name);
+                continue;
+              }
+              const fd = new FormData();
+              fd.set("file", file);
+              fd.set("itemId", target.id);
+              const up = await fetch(`/api/edl/${encodeURIComponent(sessionId)}/photos`, { method: "POST", body: fd }).catch(() => null);
+              if (!up || !up.ok) failed.push(file.name);
+            }
+          }
+        }
+      }
+      setPhotoErrors(failed);
+      if (sessionId && signed && recordedItems.length > 0) {
+        setPhase("sealing");
+        const sealRes = await fetch(`/api/edl/${encodeURIComponent(sessionId)}/sceller`, { method: "POST" }).catch(() => null);
+        if (sealRes && sealRes.ok) {
+          const sealed = (await sealRes.json().catch(() => ({}))) as { sha256?: string; report?: { documentId: string; name: string } | null };
+          setSealResult({ sha256: String(sealed.sha256 ?? ""), report: sealed.report ?? null });
+        } else setSealFailed(true);
+      }
+      setPhase("idle");
       setStep(doneStep);
     } catch {
       setError(d.edlWizard.saveFailed);
     }
+    setPhase("idle");
     setSaving(false);
   };
 
@@ -309,13 +363,36 @@ export default function EdlWizard({
                           </div>
                         </div>
                         {item && (
-                          <Input
-                            className="mt-2"
-                            value={item.notes}
-                            maxLength={300}
-                            placeholder={d.edlWizard.notePlaceholder}
-                            onChange={(e) => setItem(rooms[step - 1].key, cat, { notes: e.target.value })}
-                          />
+                          <>
+                            <Input
+                              className="mt-2"
+                              value={item.notes}
+                              maxLength={300}
+                              placeholder={d.edlWizard.notePlaceholder}
+                              onChange={(e) => setItem(rooms[step - 1].key, cat, { notes: e.target.value })}
+                            />
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <label className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-sand-200 bg-white px-3 text-xs font-semibold text-brand-700 hover:border-brand-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-600">
+                                {d.edlWizard.addPhoto}
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp,image/avif"
+                                  multiple
+                                  className="sr-only"
+                                  data-photo-input={cat}
+                                  onChange={(e) => {
+                                    addPhotos(rooms[step - 1].key, cat, e.target.files);
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                              {(photos[photoKey(rooms[step - 1].key, cat)]?.length ?? 0) > 0 && (
+                                <span className="text-[11px] text-ink-soft" data-photo-count={cat}>
+                                  {d.edlWizard.photoCount.replace("{n}", String(photos[photoKey(rooms[step - 1].key, cat)].length))}
+                                </span>
+                              )}
+                            </div>
+                          </>
                         )}
                       </li>
                     );
@@ -398,12 +475,14 @@ export default function EdlWizard({
                   />
                   <span className="text-sm text-ink">{d.edlWizard.signedByBoth}</span>
                 </label>
+                {signed && real && <p className="mt-2 pl-6 text-xs leading-relaxed text-brand-800">{d.edlWizard.seal}</p>}
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.edlWizard.keysLegal}</p>
 
                 <p className="mt-4 rounded-xl bg-sand-50 px-3.5 py-3 text-sm text-ink-soft">
                   {d.edlWizard.summary
                     .replace("{items}", String(recordedItems.length))
                     .replace("{rooms}", String(rooms.length))}
+                  {photoCount > 0 ? ` ${d.edlWizard.photoCount.replace("{n}", String(photoCount))}` : ""}
                 </p>
                 {error && (
                   <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
@@ -418,7 +497,7 @@ export default function EdlWizard({
                       else setStep(doneStep);
                     }}
                   >
-                    {d.edlWizard.finish}
+                    {phase === "sealing" ? d.edlWizard.sealing : d.edlWizard.finish}
                   </Button>
                 </div>
               </StepCard>
@@ -438,7 +517,38 @@ export default function EdlWizard({
                 {d.edlWizard.doneTitle}
               </h1>
               {real ? (
-                <p className="mt-2 text-sm text-ink-soft">{d.edlWizard.doneBody}</p>
+                <>
+                  <p className="mt-2 text-sm text-ink-soft">{d.edlWizard.doneBody}</p>
+                  {sealResult && (
+                    <p role="status" className="mt-3 break-all rounded-xl bg-brand-50 px-4 py-3 text-xs font-semibold text-brand-800" data-edl-sealed={sealResult.sha256}>
+                      {d.edlWizard.sealed.replace("{sha}", sealResult.sha256)}
+                    </p>
+                  )}
+                  {sealResult &&
+                    (sealResult.report ? (
+                      <a
+                        href={`/api/documents/${encodeURIComponent(sealResult.report.documentId)}/fichier`}
+                        className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline"
+                        data-edl-report-link={sealResult.report.documentId}
+                      >
+                        {d.baux.edlReport} · {sealResult.report.name}
+                      </a>
+                    ) : (
+                      <p className="mt-2 text-xs text-amber-800" data-edl-report-missing>
+                        {d.edlWizard.reportMissing}
+                      </p>
+                    ))}
+                  {sealFailed && (
+                    <p role="alert" className="mt-2 text-xs font-semibold text-red-700">
+                      {d.edlWizard.sealFailed}
+                    </p>
+                  )}
+                  {photoErrors.map((name) => (
+                    <p key={name} role="alert" className="mt-2 text-xs font-semibold text-red-700">
+                      {d.edlWizard.photoFailed.replace("{name}", name)}
+                    </p>
+                  ))}
+                </>
               ) : (
                 <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
                   {notice}

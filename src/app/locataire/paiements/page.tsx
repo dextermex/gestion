@@ -89,6 +89,38 @@ export default async function TenantPaymentsPage() {
         </Card>
       )}
 
+      {!ended && (
+        <Card className="mb-5 p-5" data-pay-instructions>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payInstructions}</p>
+          {space.paymentInstructions ? (
+            <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+              <dt className="text-ink-soft">{d.tenant.payHolder}</dt>
+              <dd className="font-semibold text-ink">{space.paymentInstructions.holderName}</dd>
+              <dt className="text-ink-soft">{d.tenant.payIban}</dt>
+              <dd>
+                <code className="rounded-md bg-sand-50 px-2 py-1 text-xs font-semibold tabular-nums text-brand-800" data-pay-iban>
+                  {space.paymentInstructions.iban.replace(/(.{4})/g, "$1 ").trim()}
+                </code>
+              </dd>
+              {space.paymentInstructions.bic && (
+                <>
+                  <dt className="text-ink-soft">{d.tenant.payBic}</dt>
+                  <dd className="tabular-nums text-ink">{space.paymentInstructions.bic}</dd>
+                </>
+              )}
+              {lease.rfReference && (
+                <>
+                  <dt className="text-ink-soft">{d.tenant.payRef}</dt>
+                  <dd className="tabular-nums text-ink">{lease.rfReference}</dd>
+                </>
+              )}
+            </dl>
+          ) : (
+            <p className="mt-2 text-sm text-ink-soft">{d.tenant.payNoInstructions}</p>
+          )}
+        </Card>
+      )}
+
       {pay.outstandingCents > 0 && (
         <div role="alert" className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5">
           <p className="font-display text-base font-bold text-red-800">{d.tenant.payOutstandingTitle}</p>

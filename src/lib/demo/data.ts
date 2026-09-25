@@ -13,6 +13,8 @@ import type { BankTransaction, IbanBinding, OpenInvoice } from "@/domain/banking
 import type { WorkOrderStatus } from "@/lib/types";
 import { periodFromSyndic, type DemoChargePeriod } from "./charges-seed";
 import type { BillCategory } from "@/lib/gestion/bills";
+import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
+import { templateVersion } from "@/lib/documents/wording";
 import type { PageInfo } from "./scope";
 import type { InviteRow } from "@/lib/portal/types";
 import type {
@@ -993,6 +995,10 @@ export interface DemoDocument {
   id: string;
   name: string;
   klass: string;
+  /** Produced by the application: which document it is; null for an uploaded piece. */
+  kind?: DocumentKind | null;
+  /** The register's fingerprint of the file, shown for a sealed piece. */
+  sha256?: string | null;
   retentionClass: string;
   retentionUntil: string | null;
   sealed: boolean;
@@ -1004,8 +1010,8 @@ export interface DemoDocument {
 }
 
 export const DOCUMENTS: DemoDocument[] = [
-  { id: "d-1", name: "Bail Apt 3B · Muller (signé AES).pdf", klass: "lease", retentionClass: "accounting_10y", retentionUntil: "2036-04-01", sealed: true, relatedLabel: "Apt 3B", sizeKb: 842, createdAt: "2023-03-20", hasFile: false },
-  { id: "d-2", name: "EDL entrée Studio RDC (scellé, manifeste SHA-256).pdf", klass: "edl", retentionClass: "accounting_10y", retentionUntil: "2036-02-01", sealed: true, relatedLabel: "Studio RDC", sizeKb: 12_400, createdAt: "2026-01-30", hasFile: false },
+  { id: "d-1", name: "Bail Apt 3B · Muller (signé AES).pdf", klass: "lease", kind: "lease_contract", sha256: "3b1f0c7e9a2d4e6f8b0a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f", retentionClass: "accounting_10y", retentionUntil: "2036-04-01", sealed: true, relatedLabel: "Apt 3B", sizeKb: 842, createdAt: "2023-03-20", hasFile: false },
+  { id: "d-2", name: "EDL entrée Studio RDC (scellé, manifeste SHA-256).pdf", klass: "edl", kind: "edl_report", sha256: "9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b", retentionClass: "accounting_10y", retentionUntil: "2036-02-01", sealed: true, relatedLabel: "Studio RDC", sizeKb: 12_400, createdAt: "2026-01-30", hasFile: false },
   { id: "d-3", name: "Facture Krier 2026-0812 · chaudière.pdf", klass: "invoice", retentionClass: "accounting_10y", retentionUntil: "2036-08-08", sealed: false, relatedLabel: "INT-2026-0141", sizeKb: 210, createdAt: "2026-08-08", hasFile: false },
   { id: "d-4", name: "Acte notarié Studio Gare (VEFA 2024).pdf", klass: "deed", retentionClass: "permanent", retentionUntil: null, sealed: true, relatedLabel: "Studio Quartier Gare", sizeKb: 4_820, createdAt: "2024-06-01", hasFile: false },
   { id: "d-5", name: "Certificat d'intérêts BCEE 2025 · SCI Beaulieu.pdf", klass: "tax", retentionClass: "accounting_10y", retentionUntil: "2036-01-15", sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 96, createdAt: "2026-01-15", hasFile: false },
@@ -1014,6 +1020,99 @@ export const DOCUMENTS: DemoDocument[] = [
   { id: "d-8", name: "Décompte syndic 2025 · Résidence Beaulieu (AG approuvé).pdf", klass: "decompte", retentionClass: "accounting_10y", retentionUntil: "2036-05-30", sealed: false, relatedLabel: "Résidence Beaulieu", sizeKb: 1_860, createdAt: "2026-05-30", hasFile: false },
   { id: "d-9", name: "Dossier candidature T. Schmit (non retenu).zip", klass: "other", retentionClass: "applicant_3m", retentionUntil: "2026-10-30", sealed: false, relatedLabel: "Local RDC Kirchberg", sizeKb: 3_100, createdAt: "2026-07-30", hasFile: false },
 ];
+
+// ─── The paper trail: the lessor as the documents print it, the templates the
+// cabinet validated, the documents it produced, its journal ───────────────────
+
+export interface DemoLessor {
+  legalName: string;
+  signatoryName: string;
+  addressStreet: string;
+  addressNumber: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  email: string;
+  phone: string;
+  iban: string;
+  bic: string;
+  holderName: string;
+  documentLang: "fr" | "en" | "de" | "lu";
+  /** Name and address are there: a document can carry a sender. */
+  complete: boolean;
+  /** IBAN and holder are there: rent documents can print where to pay. */
+  hasPayment: boolean;
+}
+
+export const LESSOR: DemoLessor = {
+  legalName: "Cabinet Reuter s.à r.l.",
+  signatoryName: "Alex Reuter",
+  addressStreet: "Rue de Bonnevoie",
+  addressNumber: "24",
+  postalCode: "1260",
+  city: "Luxembourg",
+  country: "LU",
+  email: "alex@cabinet-reuter.lu",
+  phone: "+352 26 12 34 56",
+  iban: "LU280019400644750000",
+  bic: "BCEELULL",
+  holderName: "Cabinet Reuter s.à r.l.",
+  documentLang: "fr",
+  complete: true,
+  hasPayment: true,
+};
+
+export interface DemoTemplate {
+  kind: DocumentKind;
+  lang: "fr" | "en" | "de" | "lu";
+  /** The template's current version, as the registry carries it. */
+  version: string;
+  /** When the workspace validated it, null when never. */
+  validatedOn: string | null;
+  /** The validation is for the current version: documents can be produced. */
+  current: boolean;
+}
+
+export const TEMPLATES: DemoTemplate[] = DOCUMENT_KINDS.map((kind) => ({
+  kind,
+  lang: "fr",
+  version: templateVersion(kind, "fr") ?? "",
+  validatedOn: "2026-08-01",
+  current: true,
+}));
+
+export interface DemoGenerated {
+  documentId: string;
+  kind: DocumentKind;
+  sourceId: string;
+  lang: string;
+  version: string;
+  generatedAt: string;
+  name: string;
+  sha256: string;
+}
+
+export const GENERATED: DemoGenerated[] = [
+  { documentId: "d-1", kind: "lease_contract", sourceId: "l-3b", lang: "fr", version: "2026-09-26.1", generatedAt: "2023-03-20", name: "Bail Apt 3B · Muller (signé AES).pdf", sha256: "3b1f0c7e9a2d4e6f8b0a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f" },
+  { documentId: "d-2", kind: "edl_report", sourceId: "edl-1", lang: "fr", version: "2026-09-26.1", generatedAt: "2026-01-30", name: "EDL entrée Studio RDC (scellé, manifeste SHA-256).pdf", sha256: "9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b" },
+];
+
+/** The latest document of a kind produced for a record, or null. */
+export function generatedFor(kind: DocumentKind, sourceId: string): DemoGenerated | null {
+  return GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null;
+}
+
+export interface DemoAuditEntry {
+  id: string;
+  at: string;
+  actor: string | null;
+  verb: string;
+  objectType: string;
+  objectId: string | null;
+}
+
+/** The sample plays nothing that would write: its journal stays empty. */
+export const AUDIT: DemoAuditEntry[] = [];
 
 // ─── Bills: what the desk entered, in the fiscal bucket the pack reads ──────
 

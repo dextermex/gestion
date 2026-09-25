@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import InvitePanel from "@/components/gestion/InvitePanel";
+import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
 import {
@@ -21,6 +22,7 @@ import {
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { leaseIssueText, settlementNotes } from "@/lib/i18n/engine";
+import { existingOf, generateLabels, shortSha } from "@/lib/documents/labels";
 import { commercialRenewalCalendar, validateLeaseDraft } from "@/domain/lease/rules";
 import { computeCapitalInvesti, checkRentCeiling } from "@/domain/indexation/engine";
 import { computeSettlement } from "@/domain/deposits/settlement";
@@ -59,10 +61,12 @@ export default async function BailDetailPage({
     EDLS,
     INVITES,
     LEASES,
+    ORG,
     RENT_PERIODS,
     TICKETS,
     TODAY,
     contactById,
+    generatedFor,
     leaseById,
     leaseTenantNames,
     leaseUnitLabel,
@@ -94,6 +98,10 @@ export default async function BailDetailPage({
 
   const rentMeta = rentStatusMeta(d);
   const depositForms = depositFormLabels(d);
+  const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
+  const docLabels = generateLabels(d);
+  const docBack = `/app/baux/${l.id}?onglet=contrat`;
+  const kindLabels = d.documents.kindLabels as Record<string, string>;
 
   // ── Rule pack, computed live ──
   const issues = validateLeaseDraft(
@@ -466,15 +474,54 @@ export default async function BailDetailPage({
                 </Link>
               }
             >
+              {/* The lease's own paper, produced from its rows: the contract
+                  and the housing certificate the tenant asks for. */}
+              <div className="mb-3 flex flex-col gap-2" data-lease-documents>
+                <GenerateDocument
+                  kind="lease_contract"
+                  sourceId={l.id}
+                  label={d.baux.docContract}
+                  existing={existingOf(generatedFor("lease_contract", l.id), d, locale)}
+                  writable={!sample}
+                  sampleNote={sampleNote}
+                  labels={docLabels}
+                  backTo={docBack}
+                />
+                <GenerateDocument
+                  kind="housing_certificate"
+                  sourceId={l.id}
+                  label={d.baux.docCertificate}
+                  existing={existingOf(generatedFor("housing_certificate", l.id), d, locale)}
+                  writable={!sample}
+                  sampleNote={sampleNote}
+                  labels={docLabels}
+                  backTo={docBack}
+                />
+              </div>
               {docs.length === 0 ? (
                 <p className="text-sm text-ink-soft">{d.baux.docsNone}</p>
               ) : (
                 <ul className="divide-y divide-sand-100">
                   {docs.map((doc) => (
-                    <li key={doc.id} className="flex items-center gap-3 py-2.5 text-sm">
-                      <p className="min-w-0 flex-1 truncate text-ink" title={doc.name}>
-                        {doc.name}
-                      </p>
+                    <li key={doc.id} className="flex items-center gap-3 py-2.5 text-sm" data-lease-document={doc.id}>
+                      <div className="min-w-0 flex-1">
+                        {doc.hasFile ? (
+                          <a href={`/api/documents/${encodeURIComponent(doc.id)}/fichier`} className="block truncate text-ink hover:text-brand-700 hover:underline" title={doc.name}>
+                            {doc.name}
+                          </a>
+                        ) : (
+                          <p className="truncate text-ink" title={doc.name}>
+                            {doc.name}
+                          </p>
+                        )}
+                        {(doc.kind || (doc.sealed && doc.sha256)) && (
+                          <p className="truncate text-[11px] tabular-nums text-ink-soft" title={doc.sha256 ?? undefined}>
+                            {doc.kind ? kindLabels[doc.kind] ?? doc.kind : ""}
+                            {doc.kind && doc.sealed && doc.sha256 ? " · " : ""}
+                            {doc.sealed && doc.sha256 ? `${d.documents.fingerprint} ${shortSha(doc.sha256)}` : ""}
+                          </p>
+                        )}
+                      </div>
                       {doc.sealed && (
                         <Badge className="bg-brand-50 text-brand-800">{d.baux.edlSealed}</Badge>
                       )}
@@ -646,9 +693,33 @@ export default async function BailDetailPage({
                       {e.itemsCount > 0 &&
                         ` · ${fmt(d.baux.edlItems, { items: e.itemsCount, photos: e.photosCount })}`}
                     </p>
-                    {e.hashSealed && (
-                      <Badge className="mt-2 bg-brand-50 text-brand-800">{d.baux.edlSealed}</Badge>
-                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {e.hashSealed && <Badge className="bg-brand-50 text-brand-800">{d.baux.edlSealed}</Badge>}
+                      {(() => {
+                        const report = generatedFor("edl_report", e.id);
+                        return report ? (
+                          <a
+                            href={`/api/documents/${encodeURIComponent(report.documentId)}/fichier`}
+                            className="text-xs font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
+                            data-edl-report={e.id}
+                          >
+                            {d.baux.edlReport} · {report.name}
+                          </a>
+                        ) : e.hashSealed && !sample ? (
+                          <GenerateDocument
+                            kind="edl_report"
+                            sourceId={e.id}
+                            label={d.baux.edlReport}
+                            existing={null}
+                            writable={!sample}
+                            sampleNote={sampleNote}
+                            labels={docLabels}
+                            backTo={`/app/baux/${l.id}?onglet=edl`}
+                            compact
+                          />
+                        ) : null;
+                      })()}
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const [{ data: period, error: periodErr }, { data: done, error: doneErr }] = await Promise.all([
     g.from("rent_periods").select("id,period,total_cents").eq("org_id", org.id).eq("lease_id", leaseId).eq("id", rentPeriodId).maybeSingle(),
-    g.from("arrears_actions").select("id,stage,registered_letter_id").eq("org_id", org.id).eq("rent_period_id", rentPeriodId),
+    g.from("arrears_actions").select("id,stage,registered_letter_id,executed_at").eq("org_id", org.id).eq("rent_period_id", rentPeriodId),
   ]);
   if (periodErr) return dbError("rent period lookup", periodErr);
   if (!period) return NextResponse.json({ error: "invalid" }, { status: 400 });
@@ -44,7 +44,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // The recipient: the tenant of record, first named.
     const { data: parties } = await g.from("lease_parties").select("contact_id,role,moved_out_on").eq("org_id", org.id).eq("lease_id", leaseId);
     const tenant = ((parties ?? []) as Array<Record<string, unknown>>).find((p) => p.role === "tenant" && !p.moved_out_on);
-    const content = JSON.stringify({ template: "mise_en_demeure", lease: leaseId, period: period.period, amountCents: period.total_cents, dispatchedOn: doneOn });
+    // What the letter says, kept with it: the open periods of the tenancy as
+    // they stand today, the steps already taken, the amount. The document is
+    // produced from this snapshot, now or later, never from rows that moved.
+    const { data: statuses } = await g.from("rent_period_status").select("id,allocated_cents,status").eq("org_id", org.id).eq("lease_id", leaseId).in("status", ["late", "partial_late", "partial", "pending"]);
+    const statusRows = (statuses ?? []) as Array<{ id: string; allocated_cents: number; status: string }>;
+    const { data: openRows } = statusRows.length > 0
+      ? await g.from("rent_periods").select("id,period,due_date,total_cents").eq("org_id", org.id).in("id", statusRows.map((r) => r.id)).order("period")
+      : { data: [] };
+    const allocated = new Map(statusRows.map((r) => [r.id, Number(r.allocated_cents) || 0]));
+    const openPeriods = ((openRows ?? []) as Array<{ id: string; period: string; due_date: string; total_cents: number }>)
+      .map((r) => ({ period: String(r.period).slice(0, 7), dueDate: String(r.due_date).slice(0, 10), totalCents: Number(r.total_cents) || 0, openCents: (Number(r.total_cents) || 0) - (allocated.get(r.id) ?? 0) }))
+      .filter((r) => r.openCents > 0);
+    const stepOn = (stage: string) => {
+      const step = (done ?? []).find((a) => a.stage === stage) as { executed_at?: string } | undefined;
+      return step?.executed_at ? String(step.executed_at).slice(0, 10) : null;
+    };
+    const snapshot = {
+      template: "mise_en_demeure",
+      lease: leaseId,
+      period: String(period.period).slice(0, 7),
+      amountCents: period.total_cents,
+      openCents: (Number(period.total_cents) || 0) - (allocated.get(rentPeriodId) ?? 0),
+      friendlyOn: stepOn("friendly"),
+      formalOn: stepOn("formal"),
+      openPeriods,
+      dispatchedOn: doneOn,
+    };
+    const content = JSON.stringify(snapshot);
     const { data: letter, error: letterErr } = await g
       .from("registered_letters")
       .insert({
@@ -54,6 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         related_id: rentPeriodId,
         recipient_contact_id: tenant ? String(tenant.contact_id) : null,
         content_sha256: createHash("sha256").update(content).digest("hex"),
+        content: snapshot,
         status: arReceivedOn ? "ar_received" : "dispatched",
         dispatched_on: doneOn,
         ar_received_on: arReceivedOn,

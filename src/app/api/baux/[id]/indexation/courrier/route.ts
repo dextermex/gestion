@@ -66,7 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: parties } = await g.from("lease_parties").select("contact_id,role,moved_out_on").eq("org_id", org.id).eq("lease_id", id);
   const tenant = ((parties ?? []) as Array<Record<string, unknown>>).find((p) => p.role === "tenant" && !p.moved_out_on);
-  const content = JSON.stringify({
+  const snapshot = {
     template: "rent_adjustment",
     lease: id,
     currentRentCents: lease.rent_cents,
@@ -74,7 +74,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ceilingMonthlyCents: proposal.caps.ceilingMonthly,
     bindingConstraint: proposal.bindingConstraint,
     dispatchedOn,
-  });
+  };
+  const content = JSON.stringify(snapshot);
   const { data: letter, error: insertErr } = await g
     .from("registered_letters")
     .insert({
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       related_id: id,
       recipient_contact_id: tenant ? String(tenant.contact_id) : null,
       content_sha256: createHash("sha256").update(content).digest("hex"),
+      content: snapshot,
       status: "dispatched",
       dispatched_on: dispatchedOn,
     })

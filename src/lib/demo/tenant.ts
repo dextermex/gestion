@@ -113,6 +113,7 @@ export function tenantSpaceFromSample(demo: DemoData): TenantSpace {
     others: [],
     past: [],
     managers: [{ orgId: demo.ORG.id, name: demo.ORG.shortName, email: demo.ORG.managerEmail || null, phone: null }],
+    paymentInstructions: demo.LESSOR.hasPayment ? { legalName: demo.LESSOR.legalName, iban: demo.LESSOR.iban, bic: demo.LESSOR.bic || null, holderName: demo.LESSOR.holderName } : null,
     requests,
     conversations,
     payments: current ? paymentsOf(current, demo.TODAY) : null,

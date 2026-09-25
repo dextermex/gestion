@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { AdjustmentSteps, CapitalEditor, LagReminder, type LetterStep } from "@/components/gestion/IndexationActions";
+import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { euros, formatDate, formatMonth, formatNumber } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { adjustmentLetterState } from "@/lib/gestion/indexation";
+import { existingOf, generateLabels } from "@/lib/documents/labels";
 import {
   applyCommercialIndexation,
   computeCapitalInvesti,
@@ -15,11 +17,12 @@ import {
 
 export default async function IndexationPage() {
   const { locale, d } = await getI18n();
-  const { LEASES, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { LEASES, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const writable = !sample;
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
   const indexationLabels = { ...d.indexation, close: d.common.close };
+  const docLabels = generateLabels(d);
 
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
@@ -54,7 +57,9 @@ export default async function IndexationPage() {
           ? { kind: "ar_received", effectiveFrom: state.effectiveFrom }
           : { kind: "none" };
     const increase = Boolean(proposal?.allowed && proposal.proposedMonthlyRent > l.rentCents);
-    return { l, proposal, step, showSteps: step.kind !== "none" || increase };
+    // The notice is the letter's paper: it exists once a letter went out.
+    const letterId = state.kind === "none" ? null : state.letter.id;
+    return { l, proposal, step, letterId, showSteps: step.kind !== "none" || increase };
   });
 
   // The commercial computation needs the latest IPC STATEC value. The demo
@@ -114,7 +119,7 @@ export default async function IndexationPage() {
               </tr>
             </thead>
             <tbody>
-              {proposals.map(({ l, proposal, step, showSteps }) => (
+              {proposals.map(({ l, proposal, step, letterId, showSteps }) => (
                 <tr key={l.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50" data-indexation-lease={l.id}>
                   <td className="px-4 py-3">
                     <Link href={`/app/baux/${l.id}`} className="font-semibold text-ink hover:text-brand-700">
@@ -161,6 +166,19 @@ export default async function IndexationPage() {
                         sampleNote={sampleNote}
                         labels={indexationLabels}
                       />
+                      {letterId && (
+                        <GenerateDocument
+                          kind="indexation_notice"
+                          sourceId={letterId}
+                          label={d.indexation.docNotice}
+                          existing={existingOf(generatedFor("indexation_notice", letterId), d, locale)}
+                          writable={writable}
+                          sampleNote={sampleNote}
+                          labels={docLabels}
+                          backTo="/app/indexation"
+                          compact
+                        />
+                      )}
                       {showSteps && (
                         <AdjustmentSteps
                           leaseId={l.id}

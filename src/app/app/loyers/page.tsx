@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import ArrearsActions, { type ArrearsLabels } from "@/components/gestion/ArrearsActions";
+import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { CountCard } from "@/components/gestion/filters";
 import { getDemo, isSampleData } from "@/lib/demo";
@@ -9,6 +10,7 @@ import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
 import { addMonths } from "@/domain/dates";
+import { existingOf, generateLabels } from "@/lib/documents/labels";
 
 export default async function LoyersPage({
   searchParams,
@@ -17,7 +19,7 @@ export default async function LoyersPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { ARREARS_ACTIONS, LEASES, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { ARREARS_ACTIONS, LEASES, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const rentMeta = rentStatusMeta(d);
   // The live month and its four neighbours, derived from today — the demo
@@ -114,6 +116,10 @@ export default async function LoyersPage({
     sampleConfirmed: d.loyers.arrearsConfirmed,
   };
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
+  // The paper of a period: its notice, and its receipt once the ledger says
+  // it is paid. Both come from the register, produced from the rows.
+  const docLabels = generateLabels(d);
+  const backTo = `/app/loyers?mois=${month}${view ? `&vue=${view}` : ""}`;
 
   return (
     <div>
@@ -183,7 +189,10 @@ export default async function LoyersPage({
                   <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colCollected}</th>
                   <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colBalance}</th>
                   <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colDue}</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">{d.loyers.colStatus}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">{d.loyers.colStatus}</th>
+                  <th className="relative px-4 py-2.5 text-right font-semibold">
+                    <span className="sr-only">{d.hubs.library}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -209,8 +218,36 @@ export default async function LoyersPage({
                         {euros(rowOpen, locale)}
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{formatDate(rp.dueDate, locale)}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-3 text-right">
                         <MetaBadge meta={rentMeta[rp.status]} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-1.5">
+                          <GenerateDocument
+                            kind="rent_notice"
+                            sourceId={rp.id}
+                            label={d.loyers.docNotice}
+                            existing={existingOf(generatedFor("rent_notice", rp.id), d, locale)}
+                            writable={!sample}
+                            sampleNote={sampleNote}
+                            labels={docLabels}
+                            backTo={backTo}
+                            compact
+                          />
+                          {rp.status === "paid" && (
+                            <GenerateDocument
+                              kind="rent_receipt"
+                              sourceId={rp.id}
+                              label={d.loyers.docReceipt}
+                              existing={existingOf(generatedFor("rent_receipt", rp.id), d, locale)}
+                              writable={!sample}
+                              sampleNote={sampleNote}
+                              labels={docLabels}
+                              backTo={backTo}
+                              compact
+                            />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -263,9 +300,37 @@ export default async function LoyersPage({
                   {(steps.length > 0 || letter?.arReceivedOn) && (
                     <dl className="mt-2.5 space-y-0.5 text-[11px] text-ink-soft" aria-label={d.loyers.arrearsHistory}>
                       {steps.map((a) => (
-                        <div key={a.id} className="flex items-baseline justify-between gap-3">
+                        <div key={a.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                           <dt>{stageLabel[a.stage]}</dt>
-                          <dd className="tabular-nums">{formatDate(a.executedOn, locale)}</dd>
+                          <dd className="flex flex-wrap items-center gap-2 tabular-nums">
+                            {a.stage === "formal" && (
+                              <GenerateDocument
+                                kind="arrears_formal"
+                                sourceId={a.id}
+                                label={d.loyers.docLetter}
+                                existing={existingOf(generatedFor("arrears_formal", a.id), d, locale)}
+                                writable={!sample}
+                                sampleNote={sampleNote}
+                                labels={docLabels}
+                                backTo={backTo}
+                                compact
+                              />
+                            )}
+                            {a.stage === "mise_en_demeure" && letter && (
+                              <GenerateDocument
+                                kind="arrears_mise_en_demeure"
+                                sourceId={letter.id}
+                                label={d.loyers.docLetter}
+                                existing={existingOf(generatedFor("arrears_mise_en_demeure", letter.id), d, locale)}
+                                writable={!sample}
+                                sampleNote={sampleNote}
+                                labels={docLabels}
+                                backTo={backTo}
+                                compact
+                              />
+                            )}
+                            {formatDate(a.executedOn, locale)}
+                          </dd>
                         </div>
                       ))}
                       {letter?.arReceivedOn && (

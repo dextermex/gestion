@@ -7,6 +7,7 @@ import { formatDate } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { INTL_LOCALE, fmt, type Locale } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
+import { shortSha } from "@/lib/documents/labels";
 
 const CLASS_COLORS: Record<string, string> = {
   lease: "bg-brand-100 text-brand-800",
@@ -79,6 +80,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   const sample = await isSampleData();
   const cls = classLabels(d);
   const ret = retentionLabels(d);
+  const kindLabels = d.documents.kindLabels as Record<string, string>;
   const paging = PAGING.documents;
   const hrefFor = (page: number) => `/app/documents?page=${page}${params.taille ? `&taille=${encodeURIComponent(params.taille)}` : ""}`;
 
@@ -138,9 +140,15 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                       )}
                     </p>
                     <p className="truncate text-xs text-ink-soft">
+                      {doc.kind ? `${kindLabels[doc.kind] ?? doc.kind} · ` : ""}
                       {doc.relatedLabel}
                       {!sample && !doc.hasFile ? (doc.relatedLabel ? " · " : "") + d.documents.noFile : ""}
                     </p>
+                    {doc.sealed && doc.sha256 && (
+                      <p className="truncate text-[11px] tabular-nums text-ink-soft" title={doc.sha256} data-document-sha={doc.id}>
+                        {d.documents.fingerprint} {shortSha(doc.sha256)}
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-3">
                     <Badge className={CLASS_COLORS[doc.klass] ?? CLASS_COLORS.other}>

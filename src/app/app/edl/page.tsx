@@ -13,7 +13,7 @@ import { fmt } from "@/lib/i18n/config";
  */
 export default async function EdlPage() {
   const { locale, d } = await getI18n();
-  const { EDLS } = await getDemo();
+  const { EDLS, generatedFor } = await getDemo();
 
   if (EDLS.length === 0)
     return <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.edl })} body={d.common.emptyBody} />;
@@ -68,6 +68,18 @@ export default async function EdlPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <span className="inline-flex items-center gap-1.5">
+                      {(() => {
+                        const report = generatedFor("edl_report", e.id);
+                        return report ? (
+                          <a
+                            href={`/api/documents/${encodeURIComponent(report.documentId)}/fichier`}
+                            className="text-xs font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
+                            data-edl-report={e.id}
+                          >
+                            {d.baux.edlReport}
+                          </a>
+                        ) : null;
+                      })()}
                       {e.hashSealed && <Badge className="bg-brand-50 text-brand-800">{d.baux.edlSealed}</Badge>}
                       <MetaBadge meta={statusMeta[e.status]} />
                     </span>

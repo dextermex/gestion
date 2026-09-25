@@ -161,6 +161,8 @@ export interface TenantSpace {
   /** Tenancies that ended: the tenant keeps reading them. */
   past: TenantLease[];
   managers: Array<{ orgId: string; name: string; email: string | null; phone: string | null }>;
+  /** The account the current tenancy is paid into, as the lessor set it; null while unset. */
+  paymentInstructions: { legalName: string; iban: string; bic: string | null; holderName: string } | null;
   requests: TenantRequest[];
   /** One conversation per tenancy, the current one first. */
   conversations: TenantConversation[];
@@ -197,7 +199,7 @@ export async function buildTenantSpace(
     return (data as unknown as Row[]) ?? [];
   };
 
-  const [homes, partyRows, managerRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers")]);
+  const [homes, partyRows, managerRows, instructionRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers"), rpc("my_payment_instructions")]);
   const leaseIds = homes.map((h) => s(h.lease_id));
   if (leaseIds.length === 0) {
     return {
@@ -208,6 +210,7 @@ export async function buildTenantSpace(
       others: [],
       past: [],
       managers: [],
+      paymentInstructions: null,
       requests: [],
       conversations: [],
       payments: null,
@@ -389,6 +392,10 @@ export async function buildTenantSpace(
     others,
     past,
     managers: managerRows.map((m) => ({ orgId: s(m.org_id), name: s(m.name), email: s(m.email) || null, phone: s(m.phone) || null })),
+    paymentInstructions: (() => {
+      const row = current ? instructionRows.find((r) => s(r.org_id) === current.orgId) : undefined;
+      return row && s(row.iban) ? { legalName: s(row.legal_name), iban: s(row.iban), bic: s(row.bic) || null, holderName: s(row.holder_name) || s(row.legal_name) } : null;
+    })(),
     requests,
     conversations,
     payments: current ? paymentsOf(current, opts.today) : null,

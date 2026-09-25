@@ -2,10 +2,12 @@ import Link from "next/link";
 import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { ChargeDecompteForm, ChargePeriodActions } from "@/components/gestion/ChargeDecompte";
+import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { chargePeriodStatusMeta, euros, formatDate, formatMonth } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { existingOf, generateLabels } from "@/lib/documents/labels";
 
 /**
  * Charges: the décomptes as rows. A period per tenancy and year, its lines
@@ -16,7 +18,7 @@ import { fmt } from "@/lib/i18n/config";
  */
 export default async function ChargesPage({ searchParams }: { searchParams: Promise<{ periode?: string }> }) {
   const { locale, d } = await getI18n();
-  const { CHARGE_PERIODS, ENDED_LEASES, LEASES, ORG, RENT_PERIODS, TODAY, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { CHARGE_PERIODS, ENDED_LEASES, LEASES, ORG, RENT_PERIODS, TODAY, generatedFor, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const { periode } = await searchParams;
   const sample = await isSampleData();
   const writable = !sample;
@@ -63,6 +65,7 @@ export default async function ChargesPage({ searchParams }: { searchParams: Prom
   }));
   const categories = Object.keys(categoryLabel).map((value) => ({ value, label: categoryLabel[value] }));
   const chargeLabels = { ...d.charges, close: d.common.close };
+  const docLabels = generateLabels(d);
 
   const month = TODAY.slice(0, 7);
   const chargeRegimes = RENT_PERIODS.filter((rp) => rp.period === month);
@@ -210,9 +213,23 @@ export default async function ChargesPage({ searchParams }: { searchParams: Prom
                           <MetaBadge meta={periodMeta[p.status]} />
                         </div>
                       </div>
-                      {p.status === "draft" && (
+                      {p.status === "draft" ? (
                         <div className="mt-2">
                           <ChargePeriodActions periodId={p.id} locale={locale} writable={writable} labels={chargeLabels} />
+                        </div>
+                      ) : (
+                        <div className="mt-2">
+                          <GenerateDocument
+                            kind="charges_statement"
+                            sourceId={p.id}
+                            label={d.charges.docStatement}
+                            existing={existingOf(generatedFor("charges_statement", p.id), d, locale)}
+                            writable={writable}
+                            sampleNote={sampleNote}
+                            labels={docLabels}
+                            backTo={`/app/charges?periode=${encodeURIComponent(p.id)}`}
+                            compact
+                          />
                         </div>
                       )}
                     </li>

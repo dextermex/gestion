@@ -432,6 +432,48 @@ views run as the caller (`security_invoker`). On a production project where 0020
 applied yet the previews are empty and there are no bills, the bill routes answer 503
 `schema_outdated`, and nothing else changes.
 
+### The paper trail: validated templates, one renderer, sealed pieces, a journal
+
+Every document the application produces (`src/lib/documents/kinds.ts`: the notice of a
+month and its receipt, the formal reminder and the mise en demeure, the adjustment
+notice, the charges statement, the guarantee settlement, the contract, the housing
+certificate, the inventory report) is made the same way. The wording is a template
+written explicitly per language in `src/lib/documents/wording/<lang>.ts` (French only
+today; nothing is translated on the fly, and a language without a template is refused),
+each kind carrying a version, the notes that say what a validator validates and the
+legal parameters it prints. A workspace validates a (kind, language, version) from
+Réglages (`gestion.template_validations`, 0022) after opening its preview, the same
+composer over fictitious values watermarked as such; a changed version asks again, and
+`POST /api/documents/generer` answers `template_not_validated` until then. The lessor's
+identity and the account tenants pay into are one row (`gestion.workspace_settings`),
+saved from Réglages and checked once (`settings-rules.ts`: the IBAN by its ISO 7064
+remainder, the holder kept as typed); a document that prints payment instructions is
+refused with the fields still missing.
+
+`assemble.ts` reads the rows the document is about under the caller's token (a source id
+of another workspace answers not found) and `compose.ts` fills the template into a model
+of blocks, every legal figure read from the registry as of the document's date with its
+status; `render.tsx` draws the model with `@react-pdf/renderer` (the EPC payment code on
+a notice through `qrcode`). The PDF is stored by `storeBytes` as a sealed `documents` row
+related to the tenancy, with its SHA-256, and `gestion.generated_documents` records the
+kind, language, template version, source and the hash of the data it was made from.
+Asked again for the same source, the register hands the same document back; a new
+version is explicit (`force`) and keeps the first. A receipt exists only for a period the
+allocations say is paid, a settlement only once the keys are back, an inventory report
+only once the session is sealed: `POST /api/edl/[id]/photos` stores each picture under
+`<org>/edl/<session>/` chained to the previous one's fingerprint, `POST /api/edl/[id]/
+sceller` hashes items and photos into one manifest (`manifest.ts`), fixes it on the
+session and produces the report. The mise en demeure and the adjustment letter keep the
+content they were sent with (`registered_letters.content`), so their documents are
+regenerated from the snapshot, never from rows that moved since.
+
+Tenants read what is theirs through the policies that already exist: the pieces related
+to their lease (`documents_portal_select`), their files through the bucket's portal
+policy extended to `<org>/documents/` objects whose row they may read, the account to pay
+through `gestion.my_payment_instructions()` and nothing else of the settings. The base's
+journal (`gestion.audit_log`, fed by `gestion.audit_row()` triggers on the tables with
+legal effect) records every write with its actor; Réglages shows it.
+
 ### RLS model
 
 One `security definer` predicate — `g_can(org_id, perm)` — behind every policy, resolving
@@ -471,7 +513,7 @@ over this data — swapping in Supabase changes the data source, not a single co
 
 Continuous integration, the end-to-end suite against a throwaway local Supabase, the
 database security audit and error monitoring are described in docs/QUALITY.md. In
-one line: every push runs typecheck, lint, 303 tests and the build, then the real
+one line: every push runs typecheck, lint, 322 tests and the build, then the real
 flows (sign-up, sign-in, two accounts on one browser, property, rental dossier to
 activation, invitation accepted by a new account, isolation, departure, typing) in a
 real browser through the same policies as production.

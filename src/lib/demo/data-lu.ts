@@ -10,7 +10,8 @@
 
 import * as fr from "./data";
 import { periodFromSyndic } from "./charges-seed";
-import type { DemoBankTx, DemoBill, DemoContact, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoMeter, DemoProperty, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DemoAuditEntry, DemoBankTx, DemoBill, DemoContact, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DocumentKind } from "@/lib/documents/kinds";
 import type { OpenInvoice } from "@/domain/banking/matching";
 
 /** Merge per-id string overrides into a copy of the FR rows. Throws at module
@@ -423,3 +424,26 @@ export const BILLS: DemoBill[] = overlay(fr.BILLS, {
 });
 
 export const PAGING = fr.PAGING;
+
+// The paper trail: the Majerus cabinet as its documents print it; the same templates, the same produced pieces.
+export const LESSOR: DemoLessor = {
+  ...fr.LESSOR,
+  legalName: "Cabinet Majerus s.à r.l.",
+  signatoryName: "Anne Majerus",
+  addressStreet: "Rue de l'Alzette",
+  addressNumber: "8",
+  postalCode: "4011",
+  city: "Esch-sur-Alzette",
+  email: "anne@cabinet-majerus.lu",
+  holderName: "Cabinet Majerus s.à r.l.",
+};
+export const TEMPLATES: DemoTemplate[] = fr.TEMPLATES;
+const GENERATED_NAMES: Record<string, string> = {
+  "d-1": "Bail Apt 3B · Weis (ënnerschriwwen AES).pdf",
+  "d-2": "EDL Entrée Studio RDC (verséigelt, SHA-256-Manifest).pdf",
+};
+export const GENERATED: DemoGenerated[] = fr.GENERATED.map((g) => ({ ...g, name: GENERATED_NAMES[g.documentId] ?? g.name }));
+export function generatedFor(kind: DocumentKind, sourceId: string): DemoGenerated | null {
+  return GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null;
+}
+export const AUDIT: DemoAuditEntry[] = fr.AUDIT;
