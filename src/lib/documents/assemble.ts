@@ -311,7 +311,7 @@ export async function assemble(ctx: OrgContext, kind: DocumentKind, sourceId: st
       if (!cp) return { error: "not_found" };
       const t = await tenancy(ctx, s(cp.lease_id));
       if (isFailure(t)) return t;
-      const { data: lines, error: lErr } = await g.from("charge_lines").select("id,label,category,building_total_cents,tantiemes,tantiemes_total,lot_share_cents,tenant_share_cents,blocked").eq("org_id", org.id).eq("charge_period_id", sourceId).order("created_at");
+      const { data: lines, error: lErr } = await g.from("charge_lines").select("id,label,category,building_total_cents,tantiemes,tantiemes_total,lot_share_cents,tenant_share_cents,blocked").eq("org_id", org.id).eq("charge_period_id", sourceId);
       if (lErr) return { error: "storage_failed", context: "charge lines lookup", detail: lErr };
       const rows = (lines ?? []) as Row[];
       const actual = n(cp.actual_cents);
