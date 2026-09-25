@@ -44,6 +44,7 @@
 --   drop table gestion.generated_documents; drop table gestion.template_validations;
 --   drop table gestion.workspace_settings;
 --   drop index gestion.documents_storage_path_idx ;
+--   drop function gestion.portal_document_readable(text) ;
 --   puis recréer gestion_media_portal_select telle qu'en 0015 (deux branches :
 --   tickets, et le reste par le bien).
 
@@ -191,15 +192,28 @@ create trigger audit_edl_media after insert or update or delete on gestion.edl_m
 create trigger audit_bills after insert or update or delete on gestion.bills for each row execute function gestion.audit_row();
 create trigger audit_payments after insert or update or delete on gestion.payments for each row execute function gestion.audit_row();
 
--- 7. Le locataire ouvre les pièces de son bail.
+-- 7. Le locataire ouvre les pièces de son bail. Le test « la ligne de
+--    gestion.documents dont c'est l'objet m'est lisible » est une fonction
+--    aux droits de l'appelant (invoker) : les policies de gestion.documents
+--    décident, et le chemin lui est passé en argument (dans la policy même,
+--    `name` désignerait la colonne homonyme de gestion.documents).
 create index if not exists documents_storage_path_idx on gestion.documents (storage_path);
+create or replace function gestion.portal_document_readable(path text)
+returns boolean
+language sql stable security invoker
+set search_path = ''
+as $$
+  select exists (select 1 from gestion.documents d where d.storage_path = path)
+$$;
+revoke all on function gestion.portal_document_readable(text) from public;
+grant execute on function gestion.portal_document_readable(text) to authenticated;
 drop policy if exists gestion_media_portal_select on storage.objects;
 create policy gestion_media_portal_select on storage.objects for select to authenticated
   using (
     bucket_id = 'gestion-media'
     and (
       ((storage.foldername(name))[2] = 'tickets' and gestion.portal_tenant_lease(gestion.media_segment(name, 3)))
-      or ((storage.foldername(name))[2] = 'documents' and exists (select 1 from gestion.documents d where d.storage_path = name))
+      or ((storage.foldername(name))[2] = 'documents' and gestion.portal_document_readable(name))
       or ((storage.foldername(name))[2] not in ('tickets', 'documents') and gestion.portal_tenant_property(gestion.media_segment(name, 2)))
     )
   );

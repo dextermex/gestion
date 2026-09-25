@@ -274,14 +274,16 @@ approbation explicite. Elle est rejouée sur la base jetable de CI par
 `e2e/db/prepare.mjs`, où `paper.spec.ts` et l'audit RLS la vérifient. Tout est
 additif : trois tables (`gestion.workspace_settings`, `gestion.template_validations`,
 `gestion.generated_documents`, chacune sous RLS sur le motif gestion.can existant),
-une colonne (`registered_letters.content`, jsonb), une fonction portail
-(`gestion.my_payment_instructions()`, definer, search_path fixé, exécution réservée à
-`authenticated`), une fonction de journal (`gestion.audit_row()`) et ses déclencheurs
+une colonne (`registered_letters.content`, jsonb), deux fonctions portail
+(`gestion.my_payment_instructions()`, definer, search_path fixé, et
+`gestion.portal_document_readable(text)`, aux droits de l'appelant ; exécution réservée à
+`authenticated` pour les deux), une fonction de journal (`gestion.audit_row()`) et ses déclencheurs
 sur les tables à effet juridique (alimentent `gestion.audit_log`, table de 0002),
 un index sur `documents.storage_path`, et une seule policy existante recréée :
 `gestion_media_portal_select` sur `storage.objects` (0015), qui lit en plus l'objet
 `<org>/documents/<uuid>.<ext>` d'une ligne de `gestion.documents` que les policies
-de l'appelant lui laissent lire. Aucune table existante supprimée, renommée ni
+de l'appelant lui laissent lire (test porté par `portal_document_readable`, le chemin
+passé en argument). Aucune table existante supprimée, renommée ni
 réécrite ; rien dans `public` ; `g_can` non touchée. Le repli est noté en tête du
 fichier. Avant application : ré-auditer la production (dérive de schéma, 64 tables,
 policies, `g_can` à 60d98f80cccaa74f02b4afb1ebd6b859), appliquer, vérifier RLS et
