@@ -511,6 +511,7 @@ export const fr = {
     connectDiagnostic: "Diagnostic du déploiement",
     connectOpening: "Ouverture du parcours de consentement Salt Edge.",
     connectReturning: "Retour vers Morada.",
+    connectOpenTab: "Ouvrir dans un nouvel onglet",
     connectDemo: "Parcours de démonstration sur la banque fictive de Salt Edge (identifiants : username / secret). Aucune donnée réelle, rien n'est enregistré.",
     connectDemoReturned: "Parcours de démonstration terminé. Rien n'est enregistré : sur un compte réel, les comptes et les opérations seraient importés maintenant.",
     connectDemoRead: "Lecture en direct chez {provider} : {accounts} compte(s), {operations} opération(s).",

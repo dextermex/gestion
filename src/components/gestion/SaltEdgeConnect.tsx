@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/pro/ui";
+import { useEffect, useState } from "react";
+import { Button, Modal } from "@/components/pro/ui";
 import { BANK_RETURN_MESSAGE } from "@/components/gestion/BankReturnRelay";
 
 /**
  * The real "connect a bank account" button: asks the server to open a Salt
- * Edge consent session and shows the returned URL in a popup window, opened
- * on the click itself so no browser blocks it, then loaded once the server
- * answers (a blocked popup falls back to the tab itself). The return page
- * posts the bank screen's address back here, and this window moves there.
+ * Edge consent session and runs the returned URL inside the house dialog, on
+ * the page, in a frame. The return page, loaded in that frame at the end,
+ * posts the bank screen's address up to this page, which closes the dialog
+ * and moves there. A link opens the same journey in a tab for a browser that
+ * will not frame it; that tab hands its result back the same way.
+ *
  * Errors stay next to the button, in words, with a stable meaning per HTTP
  * code and, when the provider refused, per class of refusal: wrong
  * credentials, an app not yet allowed to reach real banks, a request the
@@ -32,8 +34,12 @@ export interface ConnectLabels {
   failedWithCode?: string;
   /** Where the deployment's own diagnosis can be read. */
   diagnostic?: string;
-  /** What the popup says while the server opens the session. */
+  /** What the dialog says while the journey loads. */
   opening?: string;
+  /** The link that opens the journey in a tab instead. */
+  openTab?: string;
+  /** The dialog's close button. */
+  close?: string;
 }
 
 const CREDENTIALS = new Set(["ApiKeyNotFound", "AppIdNotProvided", "SecretNotProvided", "WrongSecret", "InvalidSecret", "ClientNotFound"]);
@@ -48,25 +54,6 @@ export function explainConnectFailure(code: string | null, labels: ConnectLabels
   if (code && SIGNATURE.has(code) && labels.signatureRequired) return `${labels.signatureRequired} (${code})`;
   if (code && labels.failedWithCode) return labels.failedWithCode.replace("{code}", code);
   return labels.failed;
-}
-
-const POPUP_NAME = "morada-saltedge";
-
-/** A centred popup, opened synchronously on the click so browsers allow it; null when blocked. */
-function openPopup(): Window | null {
-  const width = 480;
-  const height = Math.min(800, Math.max(560, window.outerHeight - 80));
-  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
-  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
-  try {
-    return window.open("", POPUP_NAME, `popup=yes,width=${width},height=${height},left=${left},top=${top}`);
-  } catch {
-    return null;
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
 }
 
 export default function SaltEdgeConnect({
@@ -85,15 +72,8 @@ export default function SaltEdgeConnect({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const popupRef = useRef<Window | null>(null);
-  const watchRef = useRef<number | null>(null);
-
-  const stopWatching = () => {
-    if (watchRef.current !== null) {
-      window.clearInterval(watchRef.current);
-      watchRef.current = null;
-    }
-  };
+  const [url, setUrl] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     // The return page, on this origin, says where the bank screen continues.
@@ -102,54 +82,25 @@ export default function SaltEdgeConnect({
       const data = e.data as { type?: unknown; target?: unknown } | null;
       if (!data || data.type !== BANK_RETURN_MESSAGE || typeof data.target !== "string") return;
       if (!data.target.startsWith("/") || data.target.startsWith("//")) return;
-      stopWatching();
-      try {
-        popupRef.current?.close();
-      } catch {
-        /* already gone */
-      }
+      setUrl(null);
       window.location.assign(data.target);
     };
     window.addEventListener("message", onMessage);
-    return () => {
-      window.removeEventListener("message", onMessage);
-      stopWatching();
-    };
+    return () => window.removeEventListener("message", onMessage);
   }, []);
 
   const start = async () => {
     setBusy(true);
     setError(null);
-    const popup = openPopup();
-    popupRef.current = popup;
-    if (popup) {
-      try {
-        popup.document.write(
-          `<!doctype html><title>Salt Edge</title><body style="margin:0;display:grid;place-items:center;min-height:100vh;font:15px system-ui,sans-serif;color:#3f3a33;background:#fbfaf7"><p>${escapeHtml(labels.opening ?? "")}</p></body>`,
-        );
-      } catch {
-        /* nothing to show yet */
-      }
-    }
     try {
       const res = await fetch("/api/banking/connect", { method: "POST" });
       if (res.ok) {
-        const { url } = (await res.json()) as { url: string };
-        if (popup && !popup.closed) {
-          popup.location.href = url;
-          // Closed by hand before the end: the button is free again.
-          watchRef.current = window.setInterval(() => {
-            if (popup.closed) {
-              stopWatching();
-              setBusy(false);
-            }
-          }, 500);
-          return; // busy while the journey runs in the popup
-        }
-        window.location.assign(url);
-        return; // keep the button busy while the journey opens
+        const { url: connectUrl } = (await res.json()) as { url: string };
+        setLoaded(false);
+        setUrl(connectUrl);
+        setBusy(false);
+        return;
       }
-      popup?.close();
       if (res.status === 401) {
         window.location.assign("/connexion?next=/app/banque");
         return;
@@ -163,7 +114,6 @@ export default function SaltEdgeConnect({
         setError(text);
       }
     } catch {
-      popup?.close();
       setError(labels.failed);
     }
     setBusy(false);
@@ -195,6 +145,35 @@ export default function SaltEdgeConnect({
           )}
         </p>
       )}
+      <Modal open={url !== null} onClose={() => setUrl(null)} title={label} wide closeLabel={labels.close ?? "Fermer"}>
+        {url && (
+          <>
+            <div className="relative overflow-hidden rounded-xl border border-sand-200 bg-sand-50" data-connect-dialog>
+              {!loaded && (
+                <p role="status" className="absolute inset-0 z-10 flex items-center justify-center text-sm text-ink-soft">
+                  {labels.opening}
+                </p>
+              )}
+              <iframe
+                title="Salt Edge Connect"
+                src={url}
+                onLoad={() => setLoaded(true)}
+                className="relative block h-[70dvh] min-h-[480px] w-full bg-white max-sm:h-[74dvh]"
+                referrerPolicy="strict-origin-when-cross-origin"
+                data-connect-frame
+              />
+            </div>
+            {labels.openTab && (
+              <p className="mt-3 text-xs text-ink-soft">
+                {/* The tab keeps its opener so its return can come back here and close it. */}
+                <a href={url} target="_blank" rel="opener" className="font-semibold text-brand-700 hover:underline">
+                  {labels.openTab}
+                </a>
+              </p>
+            )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -507,6 +507,7 @@ export const lu: Dict = {
     connectDiagnostic: "Diagnos vum Deploiement",
     connectOpening: "D'Salt-Edge-Averständnis gëtt opgemaach.",
     connectReturning: "Zréck op Morada.",
+    connectOpenTab: "An engem neien Tab opmaachen",
     connectDemo: "Demonstratiounsparcours op der Testbank vu Salt Edge (Zougangsdaten: username / secret). Keng echt Donnéeën, näischt gëtt gespäichert.",
     connectDemoReturned: "Demonstratiounsparcours ofgeschloss. Näischt gëtt gespäichert: op engem echte Kont géifen elo d'Konten an d'Operatiounen importéiert.",
     connectDemoRead: "Live gelies bei {provider}: Konten: {accounts}, Operatiounen: {operations}.",

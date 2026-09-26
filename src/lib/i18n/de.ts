@@ -502,6 +502,7 @@ export const de: Dict = {
     connectDiagnostic: "Diagnose der Bereitstellung",
     connectOpening: "Die Salt-Edge-Einwilligung wird geöffnet.",
     connectReturning: "Zurück zu Morada.",
+    connectOpenTab: "In neuem Tab öffnen",
     connectDemo: "Demonstrationsstrecke auf der Testbank von Salt Edge (Zugangsdaten: username / secret). Keine echten Daten, nichts wird gespeichert.",
     connectDemoReturned: "Demonstrationsstrecke abgeschlossen. Nichts wird gespeichert: bei einem echten Konto würden jetzt Konten und Umsätze importiert.",
     connectDemoRead: "Live gelesen bei {provider}: Konten: {accounts}, Umsätze: {operations}.",

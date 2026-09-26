@@ -18,6 +18,8 @@ export function connectLabels(d: Dict): ConnectLabels {
     failedWithCode: d.banque.connectFailedCode,
     diagnostic: d.banque.connectDiagnostic,
     opening: d.banque.connectOpening,
+    openTab: d.banque.connectOpenTab,
+    close: d.common.close,
   };
 }
 

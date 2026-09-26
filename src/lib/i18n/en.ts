@@ -502,6 +502,7 @@ export const en: Dict = {
     connectDiagnostic: "Deployment diagnosis",
     connectOpening: "Opening the Salt Edge consent journey.",
     connectReturning: "Back to Morada.",
+    connectOpenTab: "Open in a new tab",
     connectDemo: "Demonstration journey on Salt Edge's fake bank (credentials: username / secret). No real data, nothing is stored.",
     connectDemoReturned: "Demonstration journey completed. Nothing is stored: on a real account the accounts and transactions would be imported now.",
     connectDemoRead: "Live reading from {provider}: {accounts} account(s), {operations} transaction(s).",
