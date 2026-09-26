@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
     // or a secret. The message stays in the server log.
     if (e instanceof SaltEdgeError) {
       console.error("saltedge connect failed:", `${e.code}: ${e.message}`);
-      return NextResponse.json({ error: "saltedge_error", code: e.code }, { status: 502 });
+      const body: Record<string, string> = { error: "saltedge_error", code: e.code };
+      // A refusal of the request's shape names fields, never a person or a
+      // secret: it goes back too, so the screen can say which field.
+      if (e.code === "WrongRequestFormat") body.detail = e.message;
+      return NextResponse.json(body, { status: 502 });
     }
     console.error("saltedge connect failed:", e);
     return NextResponse.json({ error: "saltedge_error", code: "network" }, { status: 502 });

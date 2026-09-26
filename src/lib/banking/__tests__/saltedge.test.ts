@@ -78,7 +78,8 @@ describe("saltedge client", () => {
     expect(body.data.consent.scopes).toEqual(["accounts", "transactions"]);
     expect(body.data.attempt.return_to).toBe("https://app.morada.lu/app/banque?connexion=retour");
     expect(body.data.attempt.locale).toBe("fr");
-    // A live app lists real banks only: neither option leaves unless asked.
+    // A live app lists real banks only: no provider object leaves unless asked.
+    expect(body.data.provider).toBeUndefined();
     expect(body.data.include_fake_providers).toBeUndefined();
     expect(body.data.provider_code).toBeUndefined();
   });
@@ -94,8 +95,10 @@ describe("saltedge client", () => {
       }),
     ).resolves.toBe("https://connect.example/demo");
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.data.include_fake_providers).toBe(true);
-    expect(body.data.provider_code).toBe("fakebank_simple_xf");
+    // v6 groups them under `provider`; the flat v5 keys are refused.
+    expect(body.data.provider).toEqual({ include_fake_providers: true, code: "fakebank_simple_xf" });
+    expect(body.data.include_fake_providers).toBeUndefined();
+    expect(body.data.provider_code).toBeUndefined();
     expect(body.data.consent.scopes).toEqual(["accounts", "transactions"]);
   });
 

@@ -234,15 +234,19 @@ export async function createConnectSession(
   locale: "fr" | "en" | "de",
   options: ConnectOptions = {},
 ): Promise<string> {
-  // v6 moved session creation under /connections/connect and renamed the
-  // consent scopes.
+  // v6 moved session creation under /connections/connect, renamed the
+  // consent scopes, and groups what concerns the provider (its code, the
+  // fake ones) under a `provider` object: the flat v5 keys are refused as
+  // WrongRequestFormat. Only what is asked for is sent.
   const data: Json = {
     customer_id: customerId,
     consent: { scopes: ["accounts", "transactions"] },
     attempt: { return_to: returnTo, locale },
   };
-  if (options.includeFakeProviders) data.include_fake_providers = true;
-  if (options.providerCode) data.provider_code = options.providerCode;
+  const provider: Json = {};
+  if (options.includeFakeProviders) provider.include_fake_providers = true;
+  if (options.providerCode) provider.code = options.providerCode;
+  if (Object.keys(provider).length > 0) data.provider = provider;
   const session = await se<{ data: { connect_url: string } }>("/connections/connect", {
     method: "POST",
     body: { data },
