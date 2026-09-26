@@ -5,6 +5,9 @@ import BankImport from "@/components/gestion/BankImport";
 import BankWorkspace, { type LeaseOption, type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
 import SaltEdgeConnect from "@/components/gestion/SaltEdgeConnect";
 import SyncBank from "@/components/gestion/SyncBank";
+import { connectLabels, syncLabels } from "@/lib/banking/labels";
+import { SaltEdgeError, demoSnapshot, saltEdgeConfigured, type DemoSnapshot } from "@/lib/banking/saltedge";
+import { getSession } from "@/lib/supabase/server";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { bankTxStatusMeta, euros, formatDate, formatPct, matchTierMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
@@ -14,6 +17,22 @@ import type { DemoBankTx } from "@/lib/demo/data";
 import { diffDays } from "@/domain/dates";
 import { scoreFuzzy } from "@/domain/banking/matching";
 import { vopNameCheck } from "@/domain/banking/rf";
+
+/**
+ * Back from the sample cabinet's demonstration journey: what Salt Edge's fake
+ * bank answered for the signed-in account's demo customer, read live and
+ * stored nowhere. A failed read is logged and shows nothing, never a sample.
+ */
+async function readDemoSnapshot(): Promise<DemoSnapshot | null> {
+  const session = await getSession();
+  if (!session) return null;
+  try {
+    return await demoSnapshot(`morada-demo-${session.userId}`);
+  } catch (e) {
+    console.error("saltedge demo read failed:", e instanceof SaltEdgeError ? `${e.code}: ${e.message}` : e);
+    return null;
+  }
+}
 
 /**
  * Banking: an accounts rail on the left, the transactions workspace on the
@@ -29,18 +48,22 @@ export default async function BanquePage({
   const { locale, d } = await getI18n();
   const [{ BANK_ACCOUNTS, BANK_TXS, IBAN_BINDINGS, LEASES, ORG, TODAY, leaseTenantNames, leaseUnitLabel, openInvoicesForMatching }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
 
-  // Real accounts get the real consent journey; sample cabinets keep the
-  // demo action, and nothing sample-side ever calls the provider.
+  // Real accounts get the real consent journey. A sample cabinet gets the
+  // same journey on Salt Edge's fake bank when the deployment carries the
+  // credentials (a demonstration: nothing of it is stored), and the demo
+  // action when it does not.
   const real = datasetId === "real";
-  const connectCta = real ? (
-    <SaltEdgeConnect
-      label={d.banque.connectAccount}
-      notConfigured={d.banque.connectNotConfigured}
-      failed={d.banque.connectFailed}
-    />
+  const liveJourney = real || saltEdgeConfigured();
+  const connectCta = liveJourney ? (
+    <SaltEdgeConnect label={d.banque.connectAccount} labels={connectLabels(d)} hint={real ? undefined : d.banque.connectDemo} />
   ) : (
     <DemoAction label={`+ ${d.banque.connectAccount}`} doneMessage={d.banque.connectDone} />
   );
+  // Back from the demonstration journey: what the fake bank answered, live.
+  const demoRead = !real && liveJourney && params.connexion === "demo" ? await readDemoSnapshot() : null;
+  const demoOps = demoRead ? demoRead.accounts.reduce((n, a) => n + a.transactions, 0) : 0;
+  const money = (amount: number, currency: string): string =>
+    currency === "EUR" ? euros(Math.round(amount * 100), locale) : `${amount.toFixed(2)} ${currency}`;
   const txMeta = bankTxStatusMeta(d);
   const tierMeta = matchTierMeta(d);
   const importLabels = {
@@ -154,11 +177,7 @@ export default async function BanquePage({
               (real ? (
                 <SyncBank
                   label={d.banque.retrieve}
-                  labels={{
-                    notConfigured: d.banque.connectNotConfigured,
-                    failed: d.banque.syncFailed,
-                    schemaUnexposed: d.banque.schemaUnexposed,
-                  }}
+                  labels={syncLabels(d)}
                 />
               ) : (
                 <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
@@ -177,12 +196,33 @@ export default async function BanquePage({
           <SyncBank
             auto
             label={d.banque.retrieve}
-            labels={{
-              notConfigured: d.banque.connectNotConfigured,
-              failed: d.banque.syncFailed,
-              schemaUnexposed: d.banque.schemaUnexposed,
-            }}
+            labels={syncLabels(d)}
           />
+        </div>
+      )}
+
+      {!real && params.connexion === "demo" && (
+        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3" data-demo-return>
+          <p role="status" className="text-sm font-semibold text-emerald-800">
+            {d.banque.connectDemoReturned}
+          </p>
+          {demoRead && demoRead.accounts.length > 0 && (
+            <>
+              <p className="mt-1 text-xs leading-relaxed text-emerald-900">
+                {fmt(d.banque.connectDemoRead, { provider: demoRead.provider, accounts: demoRead.accounts.length, operations: demoOps })}
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {demoRead.accounts.map((a) => (
+                  <li key={a.id} className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs text-ink">
+                    <span className="font-semibold">{a.name}</span>
+                    {a.iban && <span className="ml-1.5 tabular-nums text-ink-soft">{a.iban}</span>}
+                    <span className="ml-1.5 font-display font-bold tabular-nums">{money(a.balance, a.currency)}</span>
+                    <span className="ml-1.5 text-ink-soft">· {fmt(d.banque.connectDemoAccountOps, { n: a.transactions })}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
 

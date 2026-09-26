@@ -3,6 +3,7 @@ import { DemoAction } from "@/components/gestion/DemoAction";
 import SaltEdgeConnect from "@/components/gestion/SaltEdgeConnect";
 import SyncBank from "@/components/gestion/SyncBank";
 import { getDatasetId, getDemo } from "@/lib/demo";
+import { connectLabels, syncLabels } from "@/lib/banking/labels";
 import { saltEdgeConfigured } from "@/lib/banking/saltedge";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -43,24 +44,13 @@ export default async function IntegrationsPage() {
               ? fmt(d.integrations.saltAccounts, { n: linked.length })
               : d.integrations.saltNone}
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {real ? (
+          {/* A real account opens the real consent journey; a sample cabinet opens
+              the same journey on the fake bank when the credentials are there. */}
+          <div className="mt-4 flex flex-wrap items-start gap-2">
+            {real || configured ? (
               <>
-                <SaltEdgeConnect
-                  label={`+ ${d.banque.connectAccount}`}
-                  notConfigured={d.banque.connectNotConfigured}
-                  failed={d.banque.connectFailed}
-                />
-                {linked.length > 0 && (
-                  <SyncBank
-                    label={d.banque.retrieve}
-                    labels={{
-                      notConfigured: d.banque.connectNotConfigured,
-                      failed: d.banque.syncFailed,
-                      schemaUnexposed: d.banque.schemaUnexposed,
-                    }}
-                  />
-                )}
+                <SaltEdgeConnect label={`+ ${d.banque.connectAccount}`} labels={connectLabels(d)} hint={real ? undefined : d.banque.connectDemo} />
+                {real && linked.length > 0 && <SyncBank label={d.banque.retrieve} labels={syncLabels(d)} />}
               </>
             ) : (
               <DemoAction label={`+ ${d.banque.connectAccount}`} doneMessage={d.banque.connectDone} />

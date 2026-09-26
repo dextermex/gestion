@@ -8,10 +8,12 @@
  * repository and never in any NEXT_PUBLIC_* variable) and must not reach a
  * client bundle: import this module from route handlers only.
  *
- * Scope today: create (or find) the Salt Edge customer for a Morada account
- * and open a connect session, whose URL hosts the bank-consent journey.
- * Reading back accounts and transactions starts once the gestion banking
- * tables are approved and applied; nothing is persisted before that.
+ * Scope: create (or find) the Salt Edge customer for a workspace, open a
+ * connect session (whose URL hosts the bank-consent journey), and read the
+ * connections, accounts and transactions back for the sync route. While the
+ * Salt Edge app is in its test status only the fake banks answer: the
+ * deployment says so with SALTEDGE_FAKE_PROVIDERS=1, and the sample cabinet
+ * always runs its demonstration journey on one of them.
  */
 
 const BASE = "https://www.saltedge.com/api/v6";
@@ -29,6 +31,21 @@ export class SaltEdgeError extends Error {
 
 export function saltEdgeConfigured(): boolean {
   return Boolean(process.env.SALTEDGE_APP_ID && process.env.SALTEDGE_SECRET);
+}
+
+/**
+ * Whether the consent journey should list Salt Edge's fake banks next to
+ * the real ones (SALTEDGE_FAKE_PROVIDERS=1). A Salt Edge app still in its
+ * test status can only connect to those; a live app never needs them.
+ */
+export function fakeProvidersWanted(): boolean {
+  const v = (process.env.SALTEDGE_FAKE_PROVIDERS ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+/** The fake bank the sample cabinet's journey opens on (SALTEDGE_DEMO_PROVIDER to change it). */
+export function demoProviderCode(): string {
+  return (process.env.SALTEDGE_DEMO_PROVIDER ?? "").trim() || "fakebank_simple_xf";
 }
 
 type Json = Record<string, unknown>;
@@ -164,23 +181,71 @@ export function listTransactions(connectionId: string, accountId: string): Promi
   );
 }
 
+export interface DemoAccount {
+  id: string;
+  name: string;
+  iban: string | null;
+  balance: number;
+  currency: string;
+  transactions: number;
+}
+
+export interface DemoSnapshot {
+  provider: string;
+  accounts: DemoAccount[];
+}
+
+/**
+ * What the sample cabinet's demonstration journey produced, read live and
+ * never stored: the demo customer's latest connection, its accounts and the
+ * number of operations each carries. Null while no journey has completed.
+ */
+export async function demoSnapshot(identifier: string): Promise<DemoSnapshot | null> {
+  const customerId = await ensureCustomer(identifier);
+  const connections = await listConnections(customerId);
+  const latest = connections[connections.length - 1];
+  if (!latest) return null;
+  const accounts: DemoAccount[] = [];
+  for (const a of await listAccounts(latest.id)) {
+    const txs = await listTransactions(latest.id, a.id);
+    accounts.push({
+      id: a.id,
+      name: a.name,
+      iban: a.extra?.iban ?? null,
+      balance: a.balance,
+      currency: a.currency_code,
+      transactions: txs.length,
+    });
+  }
+  return { provider: latest.provider_name, accounts };
+}
+
+export interface ConnectOptions {
+  /** List the fake banks too (a test-status app can connect to nothing else). */
+  includeFakeProviders?: boolean;
+  /** Open the journey on one provider instead of the bank list. */
+  providerCode?: string;
+}
+
 /** Open a consent journey; the returned URL hosts the bank selection. */
 export async function createConnectSession(
   customerId: string,
   returnTo: string,
   locale: "fr" | "en" | "de",
+  options: ConnectOptions = {},
 ): Promise<string> {
   // v6 moved session creation under /connections/connect and renamed the
   // consent scopes.
+  const data: Json = {
+    customer_id: customerId,
+    consent: { scopes: ["accounts", "transactions"] },
+    attempt: { return_to: returnTo, locale },
+  };
+  if (options.includeFakeProviders) data.include_fake_providers = true;
+  if (options.providerCode) data.provider_code = options.providerCode;
   const session = await se<{ data: { connect_url: string } }>("/connections/connect", {
     method: "POST",
-    body: {
-      data: {
-        customer_id: customerId,
-        consent: { scopes: ["accounts", "transactions"] },
-        attempt: { return_to: returnTo, locale },
-      },
-    },
+    body: { data },
   });
   return session.data.connect_url;
 }

@@ -348,7 +348,13 @@ payment with FIFO allocations through `recordPaymentFifo` (`src/lib/banking/allo
 the one writer manual payments and the matcher's auto-posts share), and, when asked, an
 `iban_bindings` row, so each manual match becomes permanent automation; ignore and
 reopen move the operation out of and back into the queue. Operations arrive through Salt
-Edge when configured, or through the CSV statement import (`src/lib/banking/csv.ts`:
+Edge when configured (`SALTEDGE_APP_ID` and `SALTEDGE_SECRET`, server only; while the Salt
+Edge app is in its Pending or Test status only its fake banks answer, and
+`SALTEDGE_FAKE_PROVIDERS=1` lists them in the consent journey; a sample cabinet runs the
+same journey on `SALTEDGE_DEMO_PROVIDER`, `fakebank_simple_xf` by default, for a demo
+customer of the signed-in account, reads the answer live on return and stores nothing; the
+provider's class of refusal reaches the button and `/api/banking/health`), or through the
+CSV statement import (`src/lib/banking/csv.ts`:
 delimiter detection, headers in four languages, credit/debit or signed columns, every
 European amount notation, a stable id per line so a file imported twice lands once), into
 an existing account or a manual one named with its IBAN and registered holder.
