@@ -6,6 +6,8 @@ import {
   demoSnapshot,
   ensureCustomer,
   fakeProvidersWanted,
+  registerCustomer,
+  returnToFor,
   saltEdgeConfigured,
 } from "@/lib/banking/saltedge";
 
@@ -30,11 +32,16 @@ describe("saltedge client", () => {
     expect(saltEdgeConfigured()).toBe(false);
   });
 
-  it("creates a customer and returns its id", async () => {
+  it("creates a customer and returns its id, whichever field v6 or v5 puts it in", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(ok({ data: { id: "cust-1" } }));
+      .mockResolvedValueOnce(ok({ data: { customer_id: "cust-1", identifier: "morada-u1" } }))
+      .mockResolvedValueOnce(ok({ data: { id: "cust-2", identifier: "morada-u2" } }))
+      .mockResolvedValueOnce(ok({ data: { identifier: "morada-u3", secret: "s" } }));
     await expect(ensureCustomer("morada-u1")).resolves.toBe("cust-1");
+    await expect(ensureCustomer("morada-u2")).resolves.toBe("cust-2");
+    // No id at all: said as such, with the field names only.
+    await expect(ensureCustomer("morada-u3")).rejects.toMatchObject({ code: "CustomerIdMissing", message: expect.stringContaining("identifier, secret") });
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toBe("https://www.saltedge.com/api/v6/customers");
     expect(init?.method).toBe("POST");
@@ -51,9 +58,27 @@ describe("saltedge client", () => {
         ok({ data: [{ id: "a", identifier: "other" }], meta: { next_id: "a" } }),
       )
       .mockResolvedValueOnce(
-        ok({ data: [{ id: "cust-9", identifier: "morada-u1" }], meta: { next_id: null } }),
+        ok({ data: [{ customer_id: "cust-9", identifier: "morada-u1" }], meta: { next_id: null } }),
       );
     await expect(ensureCustomer("morada-u1")).resolves.toBe("cust-9");
+  });
+
+  it("registers a customer and takes an existing one as done", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(ok({ data: { customer_id: "cust-1", identifier: "morada-ws-1" } }))
+      .mockResolvedValueOnce(ko(409, { error: { class: "DuplicatedCustomer", message: "exists" } }))
+      .mockResolvedValueOnce(ko(401, { error: { class: "WrongSecret", message: "nope" } }));
+    await expect(registerCustomer("morada-ws-1")).resolves.toBeUndefined();
+    await expect(registerCustomer("morada-ws-1")).resolves.toBeUndefined();
+    await expect(registerCustomer("morada-ws-1")).rejects.toMatchObject({ code: "WrongSecret" });
+    // Registration is one call each time: no list walk, nothing else.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("builds the return address on the deployment's origin, without a query", () => {
+    expect(returnToFor("https://app.morada.lu")).toBe("https://app.morada.lu/app/banque/retour");
+    expect(returnToFor("http://localhost:3000")).toBe("http://localhost:3000/app/banque/retour");
   });
 
   it("propagates provider errors with their class", async () => {
@@ -71,12 +96,14 @@ describe("saltedge client", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(ok({ data: { connect_url: "https://connect.example/x" } }));
     await expect(
-      createConnectSession("cust-1", "https://app.morada.lu/app/banque?connexion=retour", "fr"),
+      createConnectSession("morada-ws-1", "https://app.morada.lu/app/banque/retour", "fr"),
     ).resolves.toBe("https://connect.example/x");
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.data.customer_id).toBe("cust-1");
+    // v6 takes the customer by the identifier we gave it, not by its id.
+    expect(body.data.customer_identifier).toBe("morada-ws-1");
+    expect(body.data.customer_id).toBeUndefined();
     expect(body.data.consent.scopes).toEqual(["accounts", "transactions"]);
-    expect(body.data.attempt.return_to).toBe("https://app.morada.lu/app/banque?connexion=retour");
+    expect(body.data.attempt.return_to).toBe("https://app.morada.lu/app/banque/retour");
     expect(body.data.attempt.locale).toBe("fr");
     // A live app lists real banks only: no provider object leaves unless asked.
     expect(body.data.provider).toBeUndefined();
@@ -89,7 +116,7 @@ describe("saltedge client", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(ok({ data: { connect_url: "https://connect.example/demo" } }));
     await expect(
-      createConnectSession("cust-1", "https://app.morada.lu/app/banque?connexion=demo", "en", {
+      createConnectSession("morada-demo-u1", "https://app.morada.lu/app/banque/retour", "en", {
         includeFakeProviders: true,
         providerCode: "fakebank_simple_xf",
       }),

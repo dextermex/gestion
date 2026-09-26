@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { demoProviderCode, fakeProvidersWanted, saltEdgeConfigured, saltEdgeProbe } from "@/lib/banking/saltedge";
+import { NextRequest, NextResponse } from "next/server";
+import { demoProviderCode, fakeProvidersWanted, returnToFor, saltEdgeConfigured, saltEdgeProbe } from "@/lib/banking/saltedge";
 
 /**
  * Deployment X-ray for the bank connection: which commit is live, and whether
  * the two Salt Edge variables reached the runtime. Booleans and variable
  * NAMES only — no value ever leaves the server, so this can stay public.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   return NextResponse.json(
     {
       deployedCommit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
@@ -19,6 +19,9 @@ export async function GET() {
       // The journey's options: fake banks listed for a test-status app, and the sample cabinet's bank.
       fakeProviders: fakeProvidersWanted(),
       demoProvider: demoProviderCode(),
+      // The return address this deployment gives Salt Edge: it must be listed
+      // among the app's allowed return URIs in the Salt Edge dashboard.
+      returnTo: returnToFor(req.nextUrl.origin),
       // The provider's own verdict on the deployed credentials.
       saltedge: saltEdgeConfigured() ? await saltEdgeProbe() : { ok: false, code: "not_configured" },
     },

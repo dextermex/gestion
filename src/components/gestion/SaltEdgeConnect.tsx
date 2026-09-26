@@ -76,9 +76,11 @@ export default function SaltEdgeConnect({
       }
       if (res.status === 503) setError(labels.notConfigured);
       else {
-        const payload = (await res.json().catch(() => ({}))) as { code?: string; detail?: string };
-        const text = explainConnectFailure(typeof payload.code === "string" ? payload.code : null, labels);
-        setError(typeof payload.detail === "string" && payload.detail ? `${text} ${payload.detail}` : text);
+        const payload = (await res.json().catch(() => ({}))) as { code?: string; detail?: string; returnTo?: string };
+        let text = explainConnectFailure(typeof payload.code === "string" ? payload.code : null, labels);
+        if (typeof payload.detail === "string" && payload.detail) text = `${text} ${payload.detail}`;
+        if (typeof payload.returnTo === "string" && payload.returnTo) text = `${text} (return_to: ${payload.returnTo})`;
+        setError(text);
       }
     } catch {
       setError(labels.failed);

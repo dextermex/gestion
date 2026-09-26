@@ -48,6 +48,17 @@ export function demoProviderCode(): string {
   return (process.env.SALTEDGE_DEMO_PROVIDER ?? "").trim() || "fakebank_simple_xf";
 }
 
+/**
+ * Where Salt Edge sends the visitor back after the journey, on the given
+ * origin: a clean path, no query, so that one entry per deployment in the
+ * app's allowed return URIs covers it. The page behind it routes to the
+ * bank screen's real or demonstration return.
+ */
+export const RETURN_PATH = "/app/banque/retour";
+export function returnToFor(origin: string): string {
+  return new URL(RETURN_PATH, origin).toString();
+}
+
 type Json = Record<string, unknown>;
 
 async function se<T>(path: string, init?: { method?: string; body?: Json }): Promise<T> {
@@ -80,14 +91,43 @@ async function se<T>(path: string, init?: { method?: string; body?: Json }): Pro
   return parsed as T;
 }
 
-/** Create the customer, or find it again when it already exists. */
+type CustomerShape = { id?: unknown; customer_id?: unknown; identifier?: unknown };
+
+/** The customer's Salt Edge id, whichever field carries it (v6 says customer_id, v5 said id). */
+function customerIdOf(c: CustomerShape | undefined): string | null {
+  const v = c?.customer_id ?? c?.id;
+  if (typeof v === "string" && v) return v;
+  if (typeof v === "number") return String(v);
+  return null;
+}
+
+function idMissing(c: CustomerShape | undefined): SaltEdgeError {
+  // Field NAMES only: enough to see the shape, nothing of the customer.
+  return new SaltEdgeError("CustomerIdMissing", `customer answered without an id (fields: ${Object.keys(c ?? {}).join(", ")})`);
+}
+
+/**
+ * Make sure the customer exists; one that already does is fine. This is all
+ * a consent journey needs, since v6 opens it on the identifier itself.
+ */
+export async function registerCustomer(identifier: string): Promise<void> {
+  try {
+    await se<{ data: CustomerShape }>("/customers", { method: "POST", body: { data: { identifier } } });
+  } catch (e) {
+    if (!(e instanceof SaltEdgeError) || e.code !== "DuplicatedCustomer") throw e;
+  }
+}
+
+/** Create the customer, or find it again when it already exists, and return its Salt Edge id. */
 export async function ensureCustomer(identifier: string): Promise<string> {
   try {
-    const created = await se<{ data: { id: string } }>("/customers", {
+    const created = await se<{ data: CustomerShape }>("/customers", {
       method: "POST",
       body: { data: { identifier } },
     });
-    return created.data.id;
+    const id = customerIdOf(created.data);
+    if (!id) throw idMissing(created.data);
+    return id;
   } catch (e) {
     if (!(e instanceof SaltEdgeError) || e.code !== "DuplicatedCustomer") throw e;
   }
@@ -97,11 +137,15 @@ export async function ensureCustomer(identifier: string): Promise<string> {
   for (let page = 0; page < 20; page += 1) {
     const q = fromId ? `?from_id=${encodeURIComponent(fromId)}` : "";
     const list = await se<{
-      data: Array<{ id: string; identifier: string }>;
+      data: CustomerShape[];
       meta?: { next_id?: string | null };
     }>(`/customers${q}`);
     const hit = list.data.find((c) => c.identifier === identifier);
-    if (hit) return hit.id;
+    if (hit) {
+      const id = customerIdOf(hit);
+      if (!id) throw idMissing(hit);
+      return id;
+    }
     if (!list.meta?.next_id) break;
     fromId = list.meta.next_id;
   }
@@ -227,19 +271,25 @@ export interface ConnectOptions {
   providerCode?: string;
 }
 
-/** Open a consent journey; the returned URL hosts the bank selection. */
+/**
+ * Open a consent journey for the customer with this identifier (ours, the
+ * one given at registration); the returned URL hosts the bank selection.
+ * `returnTo` must be listed among the app's allowed return URIs in the
+ * Salt Edge dashboard, or the provider refuses the request.
+ */
 export async function createConnectSession(
-  customerId: string,
+  customerIdentifier: string,
   returnTo: string,
   locale: "fr" | "en" | "de",
   options: ConnectOptions = {},
 ): Promise<string> {
   // v6 moved session creation under /connections/connect, renamed the
-  // consent scopes, and groups what concerns the provider (its code, the
-  // fake ones) under a `provider` object: the flat v5 keys are refused as
-  // WrongRequestFormat. Only what is asked for is sent.
+  // consent scopes, takes the customer by identifier, and groups what
+  // concerns the provider (its code, the fake ones) under a `provider`
+  // object: the flat v5 keys are refused as WrongRequestFormat. Only what
+  // is asked for is sent.
   const data: Json = {
-    customer_id: customerId,
+    customer_identifier: customerIdentifier,
     consent: { scopes: ["accounts", "transactions"] },
     attempt: { return_to: returnTo, locale },
   };

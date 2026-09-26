@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
 import { DATASET_COOKIE } from "@/lib/demo";
-import { SaltEdgeError, createConnectSession, demoProviderCode, ensureCustomer, fakeProvidersWanted, saltEdgeConfigured } from "@/lib/banking/saltedge";
+import { SaltEdgeError, createConnectSession, demoProviderCode, fakeProvidersWanted, registerCustomer, returnToFor, saltEdgeConfigured } from "@/lib/banking/saltedge";
 
 /**
  * Starts the bank-consent journey for the signed-in Morada account: one Salt
@@ -30,12 +30,17 @@ export async function POST(req: NextRequest) {
   const locale = cookieLocale === "en" || cookieLocale === "de" ? cookieLocale : "fr";
   const dataset = req.cookies.get(DATASET_COOKIE)?.value;
   const sample = dataset === "fr" || dataset === "lu";
+  // One return address for both journeys, on this deployment's own origin:
+  // the page behind it tells a demonstration from a real return by the
+  // dataset cookie. Salt Edge only sends the visitor back to an address
+  // listed on the app, so this exact URL must be in that list.
+  const returnTo = returnToFor(req.nextUrl.origin);
 
   try {
     if (sample) {
-      const customerId = await ensureCustomer(`morada-demo-${session.userId}`);
-      const returnTo = new URL("/app/banque?connexion=demo", req.nextUrl.origin).toString();
-      const url = await createConnectSession(customerId, returnTo, locale, { includeFakeProviders: true, providerCode: demoProviderCode() });
+      const identifier = `morada-demo-${session.userId}`;
+      await registerCustomer(identifier);
+      const url = await createConnectSession(identifier, returnTo, locale, { includeFakeProviders: true, providerCode: demoProviderCode() });
       return NextResponse.json({ url, demo: true });
     }
 
@@ -45,9 +50,9 @@ export async function POST(req: NextRequest) {
     const org = identity?.active;
     if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
 
-    const customerId = await ensureCustomer(`morada-ws-${org.id}`);
-    const returnTo = new URL("/app/banque?connexion=retour", req.nextUrl.origin).toString();
-    const url = await createConnectSession(customerId, returnTo, locale, { includeFakeProviders: fakeProvidersWanted() });
+    const identifier = `morada-ws-${org.id}`;
+    await registerCustomer(identifier);
+    const url = await createConnectSession(identifier, returnTo, locale, { includeFakeProviders: fakeProvidersWanted() });
     return NextResponse.json({ url });
   } catch (e) {
     // The class is safe to hand back: it names the refusal, never a person
@@ -56,8 +61,12 @@ export async function POST(req: NextRequest) {
       console.error("saltedge connect failed:", `${e.code}: ${e.message}`);
       const body: Record<string, string> = { error: "saltedge_error", code: e.code };
       // A refusal of the request's shape names fields, never a person or a
-      // secret: it goes back too, so the screen can say which field.
-      if (e.code === "WrongRequestFormat") body.detail = e.message;
+      // secret: it goes back too, with the return address the provider must
+      // know, so the screen can say which field and which address.
+      if (e.code === "WrongRequestFormat") {
+        body.detail = e.message;
+        body.returnTo = returnTo;
+      }
       return NextResponse.json(body, { status: 502 });
     }
     console.error("saltedge connect failed:", e);
