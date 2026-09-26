@@ -36,7 +36,7 @@ export async function generateMetadata(): Promise<Metadata> {
 // `viewportFit: cover` lets the page reach an iPhone's rounded corners and
 // home indicator; the safe-area insets (globals.css) keep the chrome and the
 // content out of them.
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#10505c" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
