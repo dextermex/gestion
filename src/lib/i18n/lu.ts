@@ -505,6 +505,8 @@ export const lu: Dict = {
     connectSignatureRequired: "Salt Edge erwaart signéiert Ufroen: op der Salt-Edge-App ass en ëffentleche Schlëssel hannerluecht, dëst Deployment signéiert seng Ufroen awer net. Huelt den ëffentleche Schlëssel am Salt-Edge-Dashboard eraus.",
     connectFailedCode: "D'Bankverbindung konnt net starten (Salt Edge: {code}).",
     connectDiagnostic: "Diagnos vum Deploiement",
+    connectOpening: "D'Salt-Edge-Averständnis gëtt opgemaach.",
+    connectReturning: "Zréck op Morada.",
     connectDemo: "Demonstratiounsparcours op der Testbank vu Salt Edge (Zougangsdaten: username / secret). Keng echt Donnéeën, näischt gëtt gespäichert.",
     connectDemoReturned: "Demonstratiounsparcours ofgeschloss. Näischt gëtt gespäichert: op engem echte Kont géifen elo d'Konten an d'Operatiounen importéiert.",
     connectDemoRead: "Live gelies bei {provider}: Konten: {accounts}, Operatiounen: {operations}.",

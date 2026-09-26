@@ -500,6 +500,8 @@ export const de: Dict = {
     connectSignatureRequired: "Salt Edge erwartet signierte Anfragen: auf der Salt-Edge-App ist ein öffentlicher Schlüssel hinterlegt, dieses Deployment signiert seine Anfragen aber nicht. Entfernen Sie den öffentlichen Schlüssel im Salt-Edge-Dashboard.",
     connectFailedCode: "Die Bankverbindung konnte nicht gestartet werden (Salt Edge: {code}).",
     connectDiagnostic: "Diagnose der Bereitstellung",
+    connectOpening: "Die Salt-Edge-Einwilligung wird geöffnet.",
+    connectReturning: "Zurück zu Morada.",
     connectDemo: "Demonstrationsstrecke auf der Testbank von Salt Edge (Zugangsdaten: username / secret). Keine echten Daten, nichts wird gespeichert.",
     connectDemoReturned: "Demonstrationsstrecke abgeschlossen. Nichts wird gespeichert: bei einem echten Konto würden jetzt Konten und Umsätze importiert.",
     connectDemoRead: "Live gelesen bei {provider}: Konten: {accounts}, Umsätze: {operations}.",

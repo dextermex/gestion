@@ -17,6 +17,7 @@ export function connectLabels(d: Dict): ConnectLabels {
     signatureRequired: d.banque.connectSignatureRequired,
     failedWithCode: d.banque.connectFailedCode,
     diagnostic: d.banque.connectDiagnostic,
+    opening: d.banque.connectOpening,
   };
 }
 

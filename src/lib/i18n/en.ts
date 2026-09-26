@@ -500,6 +500,8 @@ export const en: Dict = {
     connectSignatureRequired: "Salt Edge expects signed requests: a public key is registered on the Salt Edge app, while this deployment does not sign its requests. Remove the public key in the Salt Edge dashboard.",
     connectFailedCode: "The bank connection could not start (Salt Edge: {code}).",
     connectDiagnostic: "Deployment diagnosis",
+    connectOpening: "Opening the Salt Edge consent journey.",
+    connectReturning: "Back to Morada.",
     connectDemo: "Demonstration journey on Salt Edge's fake bank (credentials: username / secret). No real data, nothing is stored.",
     connectDemoReturned: "Demonstration journey completed. Nothing is stored: on a real account the accounts and transactions would be imported now.",
     connectDemoRead: "Live reading from {provider}: {accounts} account(s), {operations} transaction(s).",

@@ -353,10 +353,13 @@ Edge app is in its Pending or Test status only its fake banks answer, and
 `SALTEDGE_FAKE_PROVIDERS=1` lists them in the consent journey; a sample cabinet runs the
 same journey on `SALTEDGE_DEMO_PROVIDER`, `fakebank_simple_xf` by default, for a demo
 customer of the signed-in account, reads the answer live on return and stores nothing; the
-journey takes the customer by its identifier and comes back to `/app/banque/retour` on the
-deployment's own origin, an address that must be listed among the app's allowed return URIs
-in the Salt Edge dashboard; the provider's class of refusal reaches the button and
-`/api/banking/health`, which also prints that return address), or through the CSV statement
+journey takes the customer by its identifier, opens in a popup window the button opens on
+the click itself (same-tab navigation when a popup is blocked), and comes back to
+`/app/banque/retour` on the deployment's own origin, whose domain must be among the app's
+allowed redirect domains in the Salt Edge dashboard; that page hands the result to the
+opener window, which moves to the bank screen, and closes itself; the provider's class of
+refusal reaches the button and `/api/banking/health`, which also prints that return
+address), or through the CSV statement
 import (`src/lib/banking/csv.ts`:
 delimiter detection, headers in four languages, credit/debit or signed columns, every
 European amount notation, a stable id per line so a file imported twice lands once), into
