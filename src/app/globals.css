@@ -713,7 +713,7 @@ button:not(:disabled),
 .crm-metric-action { position: relative; margin-top: 1rem; min-height: 2.75rem; font-size: .875rem; }
 .glass-house { width: 100%; height: auto; pointer-events: none; }
 .crm-metric-art { position: absolute; width: 12rem; right: -1.75rem; top: 3.25rem; opacity: .5; }
-.crm-metric:first-child .crm-metric-value, .crm-metric:first-child .crm-metric-sub { max-width: 80%; }
+.crm-metric:first-child .crm-metric-sub { max-width: 80%; }
 .crm-dashboard-grid { gap: 1.5rem; margin-top: 1.5rem; grid-template-columns: 1.1fr 1fr; grid-template-areas: "chart chart" "todo activity" "workflows vigilance"; }
 .crm-todo .crm-link-row { padding-block: 1.5rem; gap: 1rem; }
 .crm-todo .crm-link-row > div p:first-child { font-size: .9375rem; line-height: 1.6; }
@@ -967,6 +967,10 @@ button:not(:disabled),
 }
 .crm-metric:first-child .crm-metric-value { font-size: clamp(2.75rem,3.8vw,3.75rem); }
 .crm-metric:not(:first-child) .crm-metric-value { font-size: 2.5rem; }
+@media (40rem <= width < 48rem) {
+  .crm-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .crm-metric:first-child { grid-column: 1 / -1; }
+}
 .crm-main .text-sm { font-size: .9375rem; line-height: 1.6; }
 .crm-shell .table-scroll td { padding-block: 1.125rem; }
 .crm-nav-parent { font-size: .9375rem; }
