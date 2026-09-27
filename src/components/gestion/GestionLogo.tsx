@@ -2,7 +2,7 @@
 // read "I am in Morada Gestion" while recognising the ecosystem brand.
 export default function GestionLogo({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-2.5">
+    <span className="gestion-logo inline-flex items-center gap-2.5">
       <svg viewBox="0 0 32 32" className="h-8 w-auto" aria-hidden>
         <rect x="1" y="1" width="30" height="30" rx="9" className="fill-brand-700" />
         <path

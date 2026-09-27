@@ -328,11 +328,28 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
 };
 
+/**
+ * Symbol weights, after SF Symbols: a symbol is drawn at the weight of the
+ * text beside it. The value is the stroke, in viewBox units, of a 20px symbol.
+ */
+const WEIGHT = { light: 1.45, regular: 1.7, medium: 1.9, semibold: 2.1 } as const;
+export type IconWeight = keyof typeof WEIGHT;
+
+/**
+ * Optical compensation: a stroke scaled linearly with the symbol would look
+ * hairline in a 44px well and heavy at 14px. Like SF Symbols' scales, the
+ * rendered stroke grows with size, but more slowly than the drawing does.
+ */
+export function strokeFor(size: number, weight: IconWeight = "regular"): number {
+  return Math.round(WEIGHT[weight] * Math.sqrt(20 / size) * 100) / 100;
+}
+
 export function Icon({
   name,
   size = 20,
+  weight = "regular",
   ...props
-}: { name: IconName; size?: number } & SVGProps<SVGSVGElement>) {
+}: { name: IconName; size?: number; weight?: IconWeight } & SVGProps<SVGSVGElement>) {
   return (
     <svg
       width={size}
@@ -340,7 +357,7 @@ export function Icon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.8}
+      strokeWidth={strokeFor(size, weight)}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden

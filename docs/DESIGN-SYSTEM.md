@@ -79,3 +79,24 @@ Tables scroll within their own containers and keep currency/date strings intact.
 FR/EN/DE/LU dictionaries remain mandatory. Domain calculations, integer cents,
 status maps, permissions, routes and persistence semantics are unchanged. Keep the
 sample/real distinction visible. Do not fill an empty account with invented metrics.
+
+## Human Interface layer (September 2026, second pass)
+
+`src/app/hig.css` loads after `globals.css` and has the last word on visual
+grammar. It translates Apple's Human Interface Guidelines to the web within
+the rules above; it changes no figure, route, label or behaviour.
+
+| Area | Rule |
+|---|---|
+| Typeface | `--font-sans` is the system stack first (San Francisco on Apple devices), Inter elsewhere. No Apple font or symbol file is shipped: Apple licenses SF Pro and SF Symbols for Apple-platform software, not for a website. The Bricolage wordmark keeps its own face everywhere (`.gestion-logo`). |
+| Tracking | Size-specific: large title -0.024em, section titles -0.016em, body -0.006em, captions slightly open. The earlier -0.045em to -0.055em collided letters in SF Display. |
+| Weight | Large titles bold (700), section titles and figures semibold (600). Hierarchy comes from weight with size, not size alone. |
+| Status colours | The `red`, `emerald`, `amber`, `orange`, `sky`, `violet` and `neutral` shades used by the badge maps are Apple's accessible system colours (light appearance). Every text shade holds 4.5:1 or more on white and on its own 100 tint. The maps in `src/lib/types.ts` are unchanged. |
+| Separators | Hairlines (0.5px on 2x screens) in a translucent separator colour, not drawn borders. Table headers sit on the card, not on a grey band. |
+| Materials | One glass recipe (`--hig-glass`, `blur(28px) saturate(180%)`, specular top edge) for the sidebar, toolbars, menus and the tenant tab bar. Records stay opaque. Toolbars have no rule: a soft scroll-edge fade appears once content passes under them (`is-scrolled`). |
+| Corners | Concentric: an inner radius is the outer radius minus the padding between them. Sidebar 28px with 12px inset gives 16px destinations; capsule tracks hold capsule thumbs. |
+| Buttons | Capsules in the components layer (callers' utilities still win): filled primary (`brand-700`), tinted secondary (accent at 9% opacity, no border), plain ghost, destructive. Regular 46px, compact 36px under a pointer, 44px minimum on touch. A link that reads as a button uses `.hig-tinted`. |
+| Symbols | The house icon set follows the SF Symbols idiom: `weight` (light, regular, medium, semibold) matches adjacent text, and stroke width is optically compensated by size (`strokeFor`) so a 14px symbol does not look heavy nor a 44px one hairline. |
+| Focus | A 3px keyboard ring in the accent at 55%, 2px off the edge. |
+| Motion | Sheets use a critically damped spring (no overshoot, 0.32s visual duration), entering and leaving along one path. The house easing and every reduced-motion escape remain. |
+| Accessibility | Reduced transparency and increased contrast turn every glass surface solid and remove the scroll-edge fade; increased contrast strengthens separators and outlines the tinted button; forced colours draws borders on tinted and plain buttons. |

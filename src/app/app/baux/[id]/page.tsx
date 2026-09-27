@@ -233,7 +233,7 @@ export default async function BailDetailPage({
             {(l.status === "active" || l.status === "notice") && (
               <Link
                 href={`/app/biens/depart?bail=${l.id}`}
-                className="tactile inline-flex min-h-9 items-center rounded-xl border border-sand-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-ink shadow-sm transition hover:border-brand-300 hover:text-brand-700"
+                className="tactile inline-flex min-h-9 items-center hig-tinted rounded-full px-3.5 py-1.5 text-sm font-semibold text-ink transition hover:text-brand-700"
               >
                 {l.departure ? d.bien.departureResume : d.modify.departure}
               </Link>

@@ -146,7 +146,7 @@ export default function TenantChat({
         </div>
         {newRequestHref && (
           <>
-            <Link href={newRequestHref} className="tactile shrink-0 rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:border-brand-300 max-lg:hidden">
+            <Link href={newRequestHref} className="tactile shrink-0 hig-tinted rounded-full px-3 py-1.5 text-xs font-semibold text-brand-700 transition max-lg:hidden">
               {labels.newRequest}
             </Link>
             {/* The same way to a new request, as a button a thumb can hit, where the header has no room for its words. */}

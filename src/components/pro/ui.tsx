@@ -24,14 +24,12 @@ export function Button({
   return (
     <button
       className={clsx(
-        "ui-button inline-flex items-center justify-center gap-2 rounded-full font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-50 disabled:pointer-events-none motion-reduce:active:scale-100",
-        // On a phone every button is at least 40px tall (44 for the main size): the touch target, not the label, sets the height.
-        size === "sm" ? "px-3 py-1.5 text-sm max-sm:min-h-10" : "px-4 py-2.5 text-sm max-sm:min-h-11",
-        variant === "primary" && "bg-brand-600 text-white hover:bg-brand-700",
-        variant === "secondary" &&
-          "bg-white text-ink border border-sand-200 hover:border-brand-300 hover:text-brand-700 shadow-sm",
-        variant === "ghost" && "text-ink-soft hover:bg-sand-100 hover:text-ink",
-        variant === "danger" && "bg-accent-600 text-white hover:bg-accent-700",
+        // Colour, size and press live in hig.css (components layer), after the
+        // HIG button styles: filled, tinted, plain and destructive capsules.
+        // A caller's own utilities still override them.
+        "ui-button inline-flex items-center justify-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:pointer-events-none",
+        `ui-button-${variant}`,
+        `ui-button-${size}`,
         className
       )}
       disabled={disabled || loading}
@@ -396,13 +394,15 @@ export function Modal({
             initial={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}
             animate={reduced ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 }}
             exit={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}
-            transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 380, damping: 32 }}
+            // Critically damped (no overshoot): the sheet was not thrown, it
+            // was presented. Enters and leaves along the same path.
+            transition={reduced ? { duration: 0.15 } : { type: "spring", bounce: 0, visualDuration: 0.32 }}
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
               <button
                 onClick={onClose}
-                className="-m-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100"
+                className="-m-2 flex h-11 w-11 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-sand-100 hover:text-ink"
                 aria-label={closeLabel}
               >
                 <Icon name="x" size={18} />

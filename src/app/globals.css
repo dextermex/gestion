@@ -31,10 +31,53 @@
   --color-sand-200: #e5d9c4;
   --color-sand-300: #d4c0a0;
 
+  /* Status palettes on Apple's accessible system colours (light appearance).
+     Text shades hold at least 4.5:1 on white and on their own 100 tint. */
+  --color-red-50: #fff3f2;
+  --color-red-100: #ffe5e3;
+  --color-red-200: #ffcbc6;
+  --color-red-300: #ff9d95;
+  --color-red-500: #ff3b30;
+  --color-red-600: #d70015;
+  --color-red-700: #c0000f;
+  --color-red-800: #a00010;
+  --color-emerald-50: #f0faf3;
+  --color-emerald-100: #ddf5e3;
+  --color-emerald-200: #b9ebc6;
+  --color-emerald-500: #34c759;
+  --color-emerald-600: #248a3d;
+  --color-emerald-700: #1f7a37;
+  --color-emerald-800: #1c6e31;
+  --color-emerald-900: #134e22;
+  --color-amber-50: #fff8e8;
+  --color-amber-100: #fff0cc;
+  --color-amber-200: #ffe199;
+  --color-amber-400: #ffcc00;
+  --color-amber-500: #ff9500;
+  --color-amber-700: #b25000;
+  --color-amber-800: #9a4700;
+  --color-amber-900: #6b3000;
+  --color-orange-50: #fff5eb;
+  --color-orange-100: #ffe8d1;
+  --color-orange-200: #ffd0a3;
+  --color-orange-800: #8a2a00;
+  --color-sky-50: #eef5ff;
+  --color-sky-100: #dcebff;
+  --color-sky-200: #b8d6ff;
+  --color-sky-800: #0a4fc9;
+  --color-violet-50: #f9f1fd;
+  --color-violet-100: #f3e6fa;
+  --color-violet-200: #e4c8f3;
+  --color-violet-800: #7a3a9a;
+  --color-neutral-200: #e5e5ea;
+  --color-neutral-600: #636366;
+
   --color-ink: #14232a;
   --color-ink-soft: #4a5b63;
 
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  /* The platform face first (San Francisco on Apple devices, via the system
+     stack; no Apple font file is shipped), Inter everywhere else. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", Roboto, ui-sans-serif, sans-serif;
   --font-display: "Bricolage Grotesque Variable", "Inter Variable", ui-sans-serif, sans-serif;
 
   --shadow-card: 0 1px 2px rgb(20 35 42 / 0.06), 0 8px 24px -8px rgb(20 35 42 / 0.12);
@@ -496,7 +539,7 @@ button:not(:disabled),
 .crm-shell .crm-panel-heading h2 { font-size: 1rem; }
 .crm-shell .ui-page-header { margin-bottom: 1.75rem; }
 .crm-shell .ui-page-header p { line-height: 1.65; max-width: 70ch; }
-.ui-button { max-width: 100%; white-space: normal; text-align: center; min-height: 2.5rem; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12); }
+.ui-button { max-width: 100%; white-space: normal; text-align: center; }
 .ui-field { min-height: 2.75rem; transition: border-color 150ms, box-shadow 150ms; }
 .crm-shell .ui-field, body:has(.crm-shell) .ui-modal .ui-field { border-color: #82949e; }
 .ui-field:focus, .crm-shell .ui-field:focus, body:has(.crm-shell) .ui-modal .ui-field:focus { border-color: var(--color-brand-600); box-shadow: 0 0 0 3px rgb(31 124 142 / 0.15); }
@@ -603,7 +646,6 @@ button:not(:disabled),
   .crm-shell .crm-property-stats .ui-card { padding: 1rem; }
   .crm-shell .crm-property-stats .ui-card:nth-child(3) { border-left: 0; }
   .crm-shell .table-scroll td { padding-top: 0.875rem; padding-bottom: 0.875rem; }
-  .ui-button { min-height: 2.75rem; }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .crm-sidebar, .crm-toolbar, .crm-dropdown { background: #fff !important; background-image: none; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
@@ -748,7 +790,6 @@ button:not(:disabled),
 .ui-field-group:has(input[type="file"]) .ui-field { padding-top: 1.65rem; min-height: 4.25rem; }
 .ui-field-group:has(input[type="checkbox"], input[type="radio"]) > .ui-field-label { position: static; transform: none; }
 .ui-field:focus { background: #fff; }
-.ui-button { min-height: 2.875rem; padding-inline: 1.25rem; font-size: .9375rem; }
 .ui-modal { border-radius: 1.75rem; padding: 2rem; background: linear-gradient(145deg, #fff, #f8fbfe); }
 .ui-modal > div:first-child { margin-bottom: 1.75rem; gap: 1rem; }
 .ui-modal h2 { font-size: 1.5rem; letter-spacing: -.035em; }

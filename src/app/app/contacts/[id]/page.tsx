@@ -144,13 +144,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
                   href="/app/finance"
-                  className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
+                  className="hig-tinted rounded-full px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:text-brand-700"
                 >
                   {d.contacts.mandateStatements}
                 </Link>
                 <Link
                   href="/app/fiscalite"
-                  className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
+                  className="hig-tinted rounded-full px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:text-brand-700"
                 >
                   {d.contacts.mandateTaxPack}
                 </Link>

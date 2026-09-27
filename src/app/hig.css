@@ -1,0 +1,457 @@
+/* Human Interface layer · September 2026 (second pass).
+
+   The last word on the product's visual grammar, loaded after globals.css.
+   It follows Apple's Human Interface Guidelines as a web translation, within
+   the Morada system (docs/DESIGN-SYSTEM.md): teal brand and logo, cool sky
+   surfaces, glass reserved for navigation, opaque records, 56px fields.
+
+   What it settles, in order:
+   1. Type: the platform's own face first (San Francisco on Apple devices,
+      through the system stack, never a shipped font file), size-specific
+      tracking and leading, weight before size for hierarchy.
+   2. Semantic colours: labels, fills and hairline separators on Apple's
+      model; status palettes remapped to the accessible system colours.
+   3. Materials: one glass recipe for floating chrome (sidebar, toolbar,
+      tab bar, menus), a scroll-edge fade instead of a hard rule.
+   4. Concentric corners: an inner radius is the outer radius minus the
+      padding between them, so nested shapes share a centre.
+   5. Controls: capsule buttons in three sizes, tinted secondary style,
+      a keyboard focus ring in the accent colour.
+   Nothing here changes a figure, a route, a label or a behaviour. */
+
+:root {
+  /* Labels (Apple: label, secondaryLabel, tertiaryLabel, placeholder). */
+  --hig-label: #192e3c;
+  --hig-label-2: #506576;
+  --hig-label-3: rgb(80 101 118 / 0.72);
+  /* Fills for controls, from strongest to faintest (systemFill family). */
+  --hig-fill: rgb(60 90 110 / 0.14);
+  --hig-fill-2: rgb(60 90 110 / 0.1);
+  --hig-fill-3: rgb(60 90 110 / 0.065);
+  /* Hairline separator: one device pixel where the screen can draw it. */
+  --hig-separator: rgb(40 70 90 / 0.12);
+  --hig-hairline: 1px;
+  /* Accent tints for the tinted button style and selection wells. */
+  --hig-tint: var(--color-brand-700);
+  --hig-tint-fill: rgb(16 80 92 / 0.09);
+  --hig-tint-fill-hover: rgb(16 80 92 / 0.14);
+  /* Glass: translucent, saturated, with a specular top edge. */
+  --hig-glass: rgb(255 255 255 / 0.68);
+  --hig-glass-strong: rgb(255 255 255 / 0.82);
+  --hig-glass-blur: blur(28px) saturate(180%);
+  --hig-glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(40 70 90 / 0.04);
+  --hig-glass-shadow: 0 1px 1px rgb(30 60 80 / 0.04), 0 10px 30px -12px rgb(30 60 80 / 0.2);
+  /* Motion: the house curve, and Apple's critically damped default. */
+  --hig-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --hig-fast: 150ms;
+  /* Type scale, after the HIG text styles, adapted to a 16px web root. */
+  --hig-large-title: clamp(1.875rem, 2.4vw, 2.375rem);
+  --hig-title-1: 1.75rem;
+  --hig-title-2: 1.375rem;
+  --hig-title-3: 1.1875rem;
+  --hig-headline: 1.0625rem;
+  --hig-body: 0.9375rem;
+  --hig-callout: 0.9375rem;
+  --hig-subhead: 0.875rem;
+  --hig-footnote: 0.8125rem;
+  --hig-caption: 0.75rem;
+}
+@media (min-resolution: 2dppx) {
+  :root { --hig-hairline: 0.5px; }
+}
+
+/* ---------------------------------------------------------------- 1. Type */
+
+/* The display face inside the product is the system face too; the body
+   face comes from --font-sans (globals.css). The Bricolage wordmark keeps
+   its own family in the logo. */
+body {
+  font-optical-sizing: auto;
+  letter-spacing: -0.006em;
+}
+.crm-shell .font-display,
+.tenant-space .font-display,
+.journey-shell .font-display,
+.ui-modal .font-display {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", sans-serif;
+}
+/* The wordmark is branding, not a heading: it keeps its drawn face. */
+.crm-logo .font-display,
+.gestion-logo .font-display {
+  font-family: "Bricolage Grotesque Variable", var(--font-sans);
+  letter-spacing: -0.02em;
+}
+
+/* Tracking follows size: tight on large type, near zero on body, slightly
+   open on captions. The earlier -0.045em to -0.055em collided letters in
+   San Francisco Display, which is already spaced for large sizes. */
+.crm-shell h1,
+.tenant-space h1,
+.journey-title {
+  font-size: var(--hig-large-title);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.024em;
+}
+.crm-shell h2,
+.tenant-space h2,
+.ui-modal h2 {
+  letter-spacing: -0.016em;
+  font-weight: 600;
+}
+.crm-shell .crm-panel-heading h2,
+.tenant-space .crm-panel-heading h2 {
+  font-size: var(--hig-title-3);
+  line-height: 1.3;
+}
+.ui-modal h2 {
+  font-size: var(--hig-title-2);
+  line-height: 1.25;
+}
+.crm-shell h3,
+.tenant-space h3 {
+  letter-spacing: -0.01em;
+}
+.crm-shell .ui-page-header p,
+.crm-dashboard-heading p,
+.tenant-greeting p {
+  color: var(--hig-label-2);
+  letter-spacing: -0.004em;
+}
+.crm-shell .text-xs,
+.tenant-space .text-xs,
+.crm-shell .text-\[11px\] {
+  letter-spacing: 0.004em;
+}
+.crm-shell .uppercase,
+.tenant-space .uppercase {
+  letter-spacing: 0.04em;
+}
+/* Figures: tabular, tighter as they grow, semibold rather than light. */
+.crm-metric-value,
+.cashflow-total,
+.tenant-space .tenant-rent-card .tenant-next-amount,
+.tenant-payment-summary .text-3xl {
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  font-variant-numeric: tabular-nums;
+}
+.crm-workflow-stat p:first-child {
+  letter-spacing: -0.02em;
+}
+.tabular-nums {
+  letter-spacing: -0.004em;
+}
+
+/* ------------------------------------------------------- 2. Colour & lists */
+
+::selection {
+  background: rgb(31 124 142 / 0.2);
+}
+
+/* Separators become hairlines: a structural line, not a drawn border. */
+.crm-shell .table-scroll tbody tr,
+.tenant-main table tbody tr {
+  border-bottom: var(--hig-hairline) solid var(--hig-separator);
+}
+.crm-shell .table-scroll thead tr {
+  background: transparent;
+  border-bottom: var(--hig-hairline) solid var(--hig-separator);
+  color: var(--hig-label-2);
+  font-size: var(--hig-footnote);
+}
+.crm-shell .table-scroll th {
+  font-weight: 500;
+}
+.crm-shell .table-scroll tbody tr:hover {
+  background: rgb(60 90 110 / 0.035);
+}
+.crm-timeline li,
+.crm-watchlist li + li,
+.crm-more-actions,
+.journey-option,
+.cashflow-details {
+  border-color: var(--hig-separator);
+}
+
+/* ------------------------------------------------------------ 3. Materials */
+
+/* The sidebar: a single floating glass pane. Concentric insets follow. */
+.crm-sidebar {
+  background: var(--hig-glass);
+  border: 1px solid rgb(255 255 255 / 0.7);
+  box-shadow: var(--hig-glass-edge), var(--hig-glass-shadow), 0 0 0 0.5px rgb(30 60 80 / 0.06);
+  -webkit-backdrop-filter: var(--hig-glass-blur);
+  backdrop-filter: var(--hig-glass-blur);
+}
+
+/* The toolbar: glass with no rule. Once content scrolls under it, a soft
+   scroll-edge fade marks the boundary instead of a 1px line. */
+.crm-toolbar,
+.tenant-toolbar {
+  background: rgb(245 248 250 / 0.72) !important;
+  -webkit-backdrop-filter: var(--hig-glass-blur);
+  backdrop-filter: var(--hig-glass-blur);
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
+}
+.crm-toolbar::after,
+.tenant-toolbar::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto;
+  height: 1rem;
+  pointer-events: none;
+  background: linear-gradient(rgb(40 70 90 / 0.06), rgb(40 70 90 / 0));
+  opacity: 0;
+  transition: opacity 200ms var(--hig-ease);
+}
+.crm-toolbar.is-scrolled::after,
+.tenant-toolbar.is-scrolled::after {
+  opacity: 1;
+}
+
+/* Search: a filled field in the toolbar, the way macOS draws it. */
+.crm-search {
+  border-color: transparent !important;
+  background: var(--hig-fill-3) !important;
+  color: var(--hig-label-2);
+  transition: background var(--hig-fast) var(--hig-ease);
+}
+.crm-search:hover {
+  background: var(--hig-fill-2) !important;
+}
+.crm-search kbd {
+  border: 0;
+  background: rgb(255 255 255 / 0.75);
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+
+/* Segmented controls: capsule track, capsule thumb (concentric). */
+.crm-role-switch {
+  background: var(--hig-fill-2);
+  padding: 0.1875rem;
+}
+.crm-role-switch > * {
+  border-radius: 999px !important;
+}
+.crm-role-switch > [aria-current] {
+  box-shadow: 0 1px 2px rgb(30 60 80 / 0.12), 0 0 0 0.5px rgb(30 60 80 / 0.04);
+}
+
+/* Menus: a heavier glass so text stays legible over any content. */
+.crm-dropdown {
+  background: var(--hig-glass-strong);
+  -webkit-backdrop-filter: var(--hig-glass-blur);
+  backdrop-filter: var(--hig-glass-blur);
+  border: 1px solid rgb(255 255 255 / 0.8);
+  border-radius: 1.125rem;
+  box-shadow: var(--hig-glass-edge), 0 18px 48px -16px rgb(30 60 80 / 0.3), 0 0 0 0.5px rgb(30 60 80 / 0.08);
+}
+.crm-dropdown a,
+.crm-dropdown button {
+  border-radius: 0.75rem;
+}
+
+/* The tenant tab bar: a floating glass capsule; the selected tab is a
+   lighter well inside it, sharing the capsule's centre. */
+.tenant-bottom-nav {
+  background: var(--hig-glass) !important;
+  -webkit-backdrop-filter: var(--hig-glass-blur);
+  backdrop-filter: var(--hig-glass-blur);
+  border: 1px solid rgb(255 255 255 / 0.75);
+  border-radius: 2rem;
+  box-shadow: var(--hig-glass-edge), 0 12px 36px -12px rgb(30 60 80 / 0.28), 0 0 0 0.5px rgb(30 60 80 / 0.06);
+  padding: 0.3125rem;
+}
+.tenant-bottom-nav a,
+.tenant-bottom-nav button {
+  border-radius: 1.6875rem;
+}
+.tenant-bottom-nav [aria-current="page"] {
+  background: var(--hig-tint-fill);
+  color: var(--color-brand-800);
+}
+
+/* Records stay opaque: glass is for chrome, never for figures. */
+.crm-shell .ui-card,
+.tenant-space .ui-card {
+  background: rgb(255 255 255 / 0.96);
+  border-color: rgb(255 255 255 / 0.9);
+  box-shadow: 0 0 0 0.5px rgb(30 60 80 / 0.07), 0 1px 2px rgb(30 60 80 / 0.04), 0 14px 40px -26px rgb(30 60 80 / 0.24);
+}
+
+/* Modal presentation: a dim that recedes the page, a sheet that reads as
+   a solid layer above it. */
+.ui-modal {
+  background: #fff;
+  border: 0;
+  box-shadow: 0 0 0 0.5px rgb(30 60 80 / 0.1), 0 32px 80px -24px rgb(20 40 55 / 0.4);
+}
+
+/* ------------------------------------------------- 4. Concentric corners */
+
+/* Sidebar 28px, inner padding 12px: destinations take 16px. */
+.crm-sidebar { border-radius: 1.75rem; }
+.crm-navigation { padding-inline: 0.75rem; }
+.crm-nav-parent { border-radius: 1rem; }
+.crm-nav-child { border-radius: 0.875rem; }
+.crm-workspace { border-radius: 1rem; background: var(--hig-fill-3); border-color: transparent; }
+.crm-workspace-icon { border-radius: 0.625rem; }
+/* The selected destination: a tinted well, the way a source list marks it. */
+.crm-nav-parent[aria-current="page"] {
+  background: var(--color-brand-700);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 4px 12px -6px rgb(16 80 92 / 0.45);
+}
+.crm-nav-child[aria-current="page"] {
+  background: var(--hig-tint-fill);
+  color: var(--color-brand-800);
+}
+.crm-nav-parent:hover,
+.crm-nav-child:hover {
+  background: var(--hig-fill-3);
+}
+.crm-nav-children {
+  border-left-color: var(--hig-separator);
+}
+/* Cards of 28px with 28px padding: rows inside are plain, symbol wells 14px. */
+.crm-symbol { border-radius: 0.875rem; }
+.crm-shell .table-scroll { border-radius: 1.25rem; }
+.tenant-shortcut { border-radius: 1.25rem; }
+
+/* --------------------------------------------------------------- 5. Controls */
+
+/* Keyboard focus: the accent at half strength, a clear halo off the edge. */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="radio"]:focus-visible,
+summary:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 3px solid rgb(31 124 142 / 0.55);
+  outline-offset: 2px;
+}
+
+/* Buttons live in the components layer, so a caller's utility classes
+   still win. Capsules, weight 600, the press darkens on pointer-down. */
+@layer components {
+  .ui-button {
+    border-radius: 999px;
+    font-weight: 600;
+    letter-spacing: -0.008em;
+    transition:
+      background-color var(--hig-fast) var(--hig-ease),
+      color var(--hig-fast) var(--hig-ease),
+      box-shadow var(--hig-fast) var(--hig-ease),
+      transform 120ms var(--hig-ease),
+      opacity var(--hig-fast) var(--hig-ease);
+  }
+  .ui-button:active { transform: scale(0.97); }
+  .ui-button-primary {
+    background: var(--color-brand-700);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 1px 2px rgb(16 80 92 / 0.22);
+  }
+  .ui-button-primary:hover { background: var(--color-brand-800); }
+  .ui-button-primary:active { background: var(--color-brand-900); }
+  /* Tinted: the accent at low opacity, no border; the default secondary. */
+  .ui-button-secondary { background: var(--hig-tint-fill); color: var(--color-brand-800); }
+  .ui-button-secondary:hover { background: var(--hig-tint-fill-hover); color: var(--color-brand-900); }
+  .ui-button-secondary:active { background: rgb(16 80 92 / 0.2); }
+  /* Plain: text in the accent, a fill only under the pointer. */
+  .ui-button-ghost { color: var(--color-brand-700); }
+  .ui-button-ghost:hover { background: var(--hig-fill-3); color: var(--color-brand-800); }
+  .ui-button-danger { background: var(--color-red-700); color: #fff; }
+  .ui-button-danger:hover { background: var(--color-red-800); }
+  /* Sizes: regular 46px and compact 36px under a pointer; 44px on touch. */
+  .ui-button-md { min-height: 2.875rem; padding: 0.625rem 1.25rem; font-size: var(--hig-body); }
+  .ui-button-sm { min-height: 2.25rem; padding: 0.375rem 0.875rem; font-size: var(--hig-subhead); }
+  @media (pointer: coarse), (width < 40rem) {
+    .ui-button-md { min-height: 2.75rem; }
+    .ui-button-sm { min-height: 2.75rem; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-button:active { transform: none; }
+}
+/* Row actions in a table stay on one line. */
+.crm-shell .table-scroll td .ui-button { white-space: nowrap; }
+
+/* Fields: filled, 56px, 16px corners (concentric with 28px cards at 12px). */
+.ui-field,
+.crm-shell .ui-field,
+body:has(.crm-shell) .ui-modal .ui-field {
+  background: rgb(240 245 249 / 0.9);
+  border-color: rgb(80 101 118 / 0.45);
+}
+.ui-field:hover {
+  border-color: rgb(80 101 118 / 0.7);
+}
+.ui-field:focus,
+.crm-shell .ui-field:focus,
+body:has(.crm-shell) .ui-modal .ui-field:focus {
+  background: #fff;
+  border-color: var(--color-brand-600);
+  box-shadow: 0 0 0 4px rgb(31 124 142 / 0.16);
+}
+
+/* Badges: tinted capsules with medium weight, never uppercase shouting. */
+.ui-badge {
+  font-weight: 550;
+  letter-spacing: 0;
+  padding-inline: 0.625rem;
+}
+
+/* Empty states: a quiet symbol well, a title, one line of guidance. */
+.crm-shell .ui-empty > span {
+  border-radius: 1.125rem;
+  background: var(--hig-tint-fill);
+  box-shadow: none;
+  color: var(--color-brand-700);
+}
+
+/* ------------------------------------------------------------ Accessibility */
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .crm-sidebar,
+  .crm-toolbar,
+  .crm-dropdown,
+  .tenant-bottom-nav,
+  .tenant-toolbar {
+    background: #fff !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border-color: #9dadb9;
+  }
+  .crm-toolbar::after,
+  .tenant-toolbar::after { display: none; }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --hig-separator: rgb(40 70 90 / 0.4);
+    --hig-label-2: #3b4f5e;
+  }
+  .ui-field { border-color: #506576; }
+  .ui-button-secondary { box-shadow: inset 0 0 0 1px var(--color-brand-700); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crm-toolbar::after,
+  .tenant-toolbar::after { transition: none; }
+}
+@media (forced-colors: active) {
+  .ui-button-secondary,
+  .ui-button-ghost { border: 1px solid ButtonText; }
+}
+
+/* The tinted capsule for a link that reads as a button (the kit's
+   secondary Button, when the element must stay an <a>). */
+@layer components {
+  .hig-tinted {
+    background: var(--hig-tint-fill);
+    color: var(--color-brand-800);
+    transition: background-color var(--hig-fast) var(--hig-ease), color var(--hig-fast) var(--hig-ease);
+  }
+  .hig-tinted:hover { background: var(--hig-tint-fill-hover); }
+}

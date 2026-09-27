@@ -32,7 +32,9 @@ FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
 3. **Legal effect dates derive from AR dates** (registered letters), never click dates.
 4. **Morada CRM design system** — follow docs/DESIGN-SYSTEM.md and the September
    2026 frontend redesign in docs/UI-REDESIGN.md. Preserve the teal brand and logo;
-   manager and tenant screens use cool sky surfaces, restrained glass navigation,
+   manager and tenant screens use cool sky surfaces, restrained glass navigation
+   (the Human Interface layer in `src/app/hig.css` has the last word on type,
+   colour, materials, corners and controls),
    high-opacity records, 56px floating-label fields and system/Inter headings. Keep the house easing `cubic-bezier(0.22,1,0.36,1)`,
    reduced-motion escapes and light theme. Do not reintroduce marketing typography
    or decorative charts into dense operational screens.
