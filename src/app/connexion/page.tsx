@@ -1,23 +1,22 @@
+import SignupFunnel from "@/components/signup/SignupFunnel";
+import "../inscription/signup.css";
+import { redirect } from "next/navigation";
+import { safeSignupNext } from "@/lib/signup/model";
 import WelcomeAuth from "@/components/gestion/WelcomeAuth";
 import { getI18n } from "@/lib/i18n";
 import { getSession } from "@/lib/supabase/server";
 
 export const metadata = { title: "Morada Gestion", robots: { index: false, follow: false } };
 
-/** Only same-origin paths are accepted, so this is never an open redirect. */
-function safeNext(raw: string | undefined): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/app";
-  return raw;
-}
-
 export default async function WelcomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; onglet?: string; email?: string }>;
+  searchParams: Promise<{ next?: string; onglet?: string; email?: string; legacy?: string }>;
 }) {
   const { locale, d } = await getI18n();
   const params = await searchParams;
-  const next = safeNext(params.next);
+  const next = safeSignupNext(params.next);
+  const phoneEnabled = process.env.NEXT_PUBLIC_PHONE_SIGNUP_ENABLED === "1" && !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   // A visitor the cookie already identifies is told so and chooses: carry on
   // with that account, or leave it to sign in or sign up with another. The
   // door never bounces anyone past itself, so a second account can always be
@@ -26,8 +25,13 @@ export default async function WelcomePage({
   // An invitation link lands here with the sign-up tab open and the invited
   // address filled in: the account is created for that address, nothing else.
   const email = typeof params.email === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(params.email) ? params.email.slice(0, 160) : "";
+  const newSignup = phoneEnabled && params.legacy !== "1" && !email;
+  if (newSignup && params.onglet === "inscription") redirect("/inscription?lang=" + locale + "&next=" + encodeURIComponent(next));
+  if (newSignup) return <SignupFunnel locale={locale} next={next} signedIn={!!session} loginMode />;
   return (
     <WelcomeAuth
+      newSignup={newSignup}
+      phoneEnabled={phoneEnabled}
       d={d}
       next={next}
       locale={locale}

@@ -26,6 +26,7 @@
     "@sentry/nextjs": "^10.75.1",
     "@supabase/supabase-js": "^2.110.0",
     "clsx": "^2.1.1",
+    "libphonenumber-js": "1.12.21",
     "motion": "^12.42.2",
     "next": "^15.5.23",
     "qrcode": "^1.5.4",

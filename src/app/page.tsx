@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/supabase/server";
 
-/**
- * app.morada.lu: signed in, straight to the space; signed out, the single
- * welcome-and-sign-in page. Nothing in between.
- */
+/** Activate the new entry only after SMS and CAPTCHA are configured. */
 export default async function Home() {
-  redirect((await getSession()) ? "/app" : "/connexion");
+  const signupReady = process.env.NEXT_PUBLIC_PHONE_SIGNUP_ENABLED === "1" && !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  redirect((await getSession()) ? "/app" : signupReady ? "/inscription" : "/connexion");
 }

@@ -1,0 +1,6 @@
+{
+  "confirmation": "{{ if eq .Data.preferred_language \"en\" }}Confirm your email address{{ else if eq .Data.preferred_language \"de\" }}Bestätigen Sie Ihre E-Mail-Adresse{{ else if eq .Data.preferred_language \"lu\" }}Bestätegt Är E-Mail-Adress{{ else }}Confirmez votre adresse e-mail{{ end }}",
+  "email_change": "{{ if eq .Data.preferred_language \"en\" }}Confirm your Morada email address{{ else if eq .Data.preferred_language \"de\" }}Bestätigen Sie Ihre Morada-E-Mail-Adresse{{ else if eq .Data.preferred_language \"lu\" }}Bestätegt Är Morada-E-Mail-Adress{{ else }}Confirmez votre adresse e-mail Morada{{ end }}",
+  "recovery": "{{ if eq .Data.preferred_language \"en\" }}Reset your Morada password{{ else if eq .Data.preferred_language \"de\" }}Setzen Sie Ihr Morada-Passwort zurück{{ else if eq .Data.preferred_language \"lu\" }}Setzt Äert Morada-Passwuert zréck{{ else }}Réinitialisez votre mot de passe Morada{{ end }}",
+  "magic_link": "{{ if eq .Data.preferred_language \"en\" }}Your Morada sign-in link{{ else if eq .Data.preferred_language \"de\" }}Ihr Morada-Anmeldelink{{ else if eq .Data.preferred_language \"lu\" }}Äre Morada-Umeldungslink{{ else }}Votre lien de connexion Morada{{ end }}"
+}
