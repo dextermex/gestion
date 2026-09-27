@@ -112,21 +112,21 @@ export async function nextStep(page: Page, name: string): Promise<void> {
 }
 
 /**
- * The property wizard, start to finish, for a standalone house: type, name,
- * address, then straight through to "Créer le bien". Returns the property id
+ * The property wizard, start to finish, for a standalone house: essentials, optional details,
+ * then review to "Créer le bien". Returns the property id
  * and the "add a tenant" lot link the done screen offers.
  */
 export async function createHouse(page: Page, name: string): Promise<{ propertyId: string; unitId: string }> {
   await page.goto("/app/biens/nouveau");
-  await page.getByRole("button", { name: "Maison individuelle" }).click();
-  await page.getByLabel("Nom du bien").fill(name);
-  await page.getByRole("button", { name: "Suivant", exact: true }).click();
+  await page.getByRole("radio", { name: "Maison individuelle", exact: true }).check();
+  await page.getByLabel("Nom du bien", { exact: true }).fill(name);
   await page.getByLabel("Rue").fill("Rue de la Gare");
   await page.getByLabel("N°").fill("12");
   await page.getByLabel("Code postal").fill("L-8001");
   await page.getByLabel("Localité").fill("Strassen");
   await page.getByRole("button", { name: "Suivant", exact: true }).click();
-  await nextUntil(page, page.getByRole("button", { name: "Créer le bien" }));
+  await page.getByRole("button", { name: "Passer à la vérification", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Créer le bien" })).toBeVisible();
   await page.getByRole("button", { name: "Créer le bien" }).first().click();
   await expect(page.getByText(`${name} a été créé.`)).toBeVisible({ timeout: 30_000 });
 

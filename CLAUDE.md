@@ -32,8 +32,8 @@ FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
 3. **Legal effect dates derive from AR dates** (registered letters), never click dates.
 4. **Morada CRM design system** — follow docs/DESIGN-SYSTEM.md and the September
    2026 frontend redesign in docs/UI-REDESIGN.md. Preserve the teal brand and logo;
-   manager screens use cool neutrals, restrained glass navigation, opaque records,
-   and system/Inter headings. Keep the house easing `cubic-bezier(0.22,1,0.36,1)`,
+   manager and tenant screens use cool sky surfaces, restrained glass navigation,
+   high-opacity records, 56px floating-label fields and system/Inter headings. Keep the house easing `cubic-bezier(0.22,1,0.36,1)`,
    reduced-motion escapes and light theme. Do not reintroduce marketing typography
    or decorative charts into dense operational screens.
 5. Badge colours come from the colour maps + meta factories in `src/lib/types.ts`

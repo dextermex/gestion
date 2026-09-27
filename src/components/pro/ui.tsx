@@ -2,7 +2,7 @@
 
 import { clsx } from "clsx";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
@@ -51,14 +51,18 @@ export function Button({
 const fieldClass =
   "ui-field w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50 max-sm:min-h-11 max-sm:text-base";
 
+const FieldContext = createContext<string | undefined>(undefined);
+
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
-  return <input className={clsx(fieldClass, className)} {...rest} />;
+  const hint = useContext(FieldContext);
+  return <input className={clsx(fieldClass, className)} placeholder=" " aria-describedby={hint} {...rest} />;
 }
 
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const { className, ...rest } = props;
-  return <textarea className={clsx(fieldClass, "min-h-24", className)} {...rest} />;
+  const hint = useContext(FieldContext);
+  return <textarea className={clsx(fieldClass, "min-h-24", className)} placeholder=" " aria-describedby={hint} {...rest} />;
 }
 
 export function Select({
@@ -66,11 +70,12 @@ export function Select({
   children,
   ...rest
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const hint = useContext(FieldContext);
   return (
     <span className="relative block">
       {/* Long options never widen the page: the selected line is clipped inside the
           field (Safari otherwise lets the widest option's text overflow the box). */}
-      <select className={clsx(fieldClass, "appearance-none overflow-hidden text-ellipsis whitespace-nowrap pr-8", className)} {...rest}>
+      <select className={clsx(fieldClass, "appearance-none overflow-hidden text-ellipsis whitespace-nowrap pr-8", className)} aria-describedby={hint} {...rest}>
         {children}
       </select>
       <Icon
@@ -91,14 +96,17 @@ export function Field({
   hint?: string;
   children: React.ReactNode;
 }) {
+  const hintId = useId();
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-ink">
+    <FieldContext.Provider value={hint ? hintId : undefined}>
+    <label className={clsx("ui-field-group block", !label && "ui-field-unlabelled")}>
+      <span className="ui-field-label mb-2 block text-sm font-medium text-ink">
         {label}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-ink-soft">{hint}</span>}
+      {hint && <span id={hintId} className="ui-field-hint mt-1 block text-xs text-ink-soft">{hint}</span>}
     </label>
+    </FieldContext.Provider>
   );
 }
 
@@ -339,9 +347,9 @@ export function Modal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close.current();
       if (e.key === "Tab" && panelRef.current) {
-        const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        const focusables = Array.from(panelRef.current.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
+        )).filter((element) => element.getClientRects().length > 0 && !element.hasAttribute("disabled"));
         if (focusables.length === 0) return;
         const first = focusables[0];
         const last = focusables[focusables.length - 1];

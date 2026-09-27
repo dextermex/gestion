@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { useDismiss } from "@/lib/useDismiss";
-import { Button, Field, InlineError, Input, Modal, Select, Textarea } from "@/components/pro/ui";
+import { Button, Field, InlineError, Input, Modal, Select } from "@/components/pro/ui";
 import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
 import GestionLogo from "./GestionLogo";
@@ -593,9 +593,9 @@ function QuickAddMenu({
               setOpen(false);
               onPick(i.kind);
             }}
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-ink hover:bg-sand-50"
+            className="quick-add-item flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium text-ink hover:bg-sand-50"
           >
-            {i.label}
+            <Icon name={i.kind === "property" ? "properties" : i.kind === "lease" ? "contract" : i.kind === "contact" ? "contacts" : i.kind === "payment" ? "euro" : i.kind === "ticket" ? "tasks" : "documents"} size={21}/>{i.label}
           </button>
         ))}
       </Dropdown>
@@ -983,14 +983,22 @@ function CreateDialog({
   contactOptions: Array<{ id: string; label: string }>;
 }) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [leaseStep, setLeaseStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    setLeaseStep(0);
     setSubmitted(false);
     setSaving(false);
     setError(null);
   }, [kind]);
+
+  useEffect(() => {
+    if (kind !== "lease") return;
+    formRef.current?.querySelector<HTMLElement>('fieldset:not([hidden]) input, fieldset:not([hidden]) select')?.focus();
+  }, [kind, leaseStep]);
 
   // On a real account the form persists through the API, under the caller's
   // own session; the sample cabinets keep their explicitly-fake dialog.
@@ -1059,12 +1067,13 @@ function CreateDialog({
       title={kind ? d.shell.createDialogTitle.replace("{what}", labels[kind]) : ""}
       closeLabel={d.common.close}
     >
-      {kind && real && (
-        <form className="space-y-4" onSubmit={submitReal}>
+      {kind && (
+        <form ref={formRef} className="space-y-4 crm-create-form" onSubmit={(event) => { if (kind === "lease" && leaseStep === 0) { event.preventDefault(); setLeaseStep(1); } else if (real) void submitReal(event); else { event.preventDefault(); setSubmitted(true); } }}>
           {kind === "contact" && (
             <>
-              <Field label={d.shell.fieldName}>
-                <Input name="name" required maxLength={120} />
+              <div className="create-intro"><span className="crm-symbol"><Icon name="contacts" size={24} /></span><p>{d.experience.contactHint}</p></div>
+              <Field label={`${d.shell.fieldName} *`}>
+                <Input aria-label={d.shell.fieldName} name="name" autoComplete="name" required maxLength={120} />
               </Field>
               <Field label={d.shell.fieldRole}>
                 <Select name="role" defaultValue="tenant">
@@ -1075,16 +1084,23 @@ function CreateDialog({
                   ))}
                 </Select>
               </Field>
+              <details className="create-optional" open>
+                <summary>{d.experience.contactDetails}<span>{d.experience.optional}</span><Icon name="chevron-down" size={16}/></summary>
+                <div className="space-y-4 pt-4">
               <Field label={d.shell.fieldEmail}>
-                <Input name="email" type="email" autoComplete="off" />
+                <Input name="email" type="email" autoComplete="email" />
               </Field>
               <Field label={d.shell.fieldPhone}>
-                <Input name="phone" type="tel" autoComplete="off" />
+                <Input name="phone" type="tel" autoComplete="tel" />
               </Field>
+                </div>
+              </details>
             </>
           )}
           {kind === "lease" && (
             <>
+              <ol className="create-progress"><li aria-current={leaseStep === 0 ? "step" : undefined}>1 · {d.experience.leaseDetails}</li><li aria-current={leaseStep === 1 ? "step" : undefined}>2 · {d.experience.leaseMoney}</li></ol>
+              <fieldset hidden={leaseStep !== 0} className="space-y-4">
               <Field label={d.shell.fieldUnit}>
                 <Select name="unitId" required defaultValue={unitOptions[0]?.id}>
                   {unitOptions.map((u) => (
@@ -1114,6 +1130,8 @@ function CreateDialog({
                   <Input name="startDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
                 </Field>
               </div>
+              </fieldset>
+              <fieldset hidden={leaseStep !== 1} disabled={leaseStep === 0} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <Field label={d.shell.fieldRent}>
                   <Input name="rent" required inputMode="decimal" placeholder="1 850,00" />
@@ -1138,6 +1156,7 @@ function CreateDialog({
                   </Select>
                 </Field>
               </div>
+              </fieldset>
             </>
           )}
           {kind === "payment" && (
@@ -1180,89 +1199,19 @@ function CreateDialog({
           {(kind === "property" || kind === "document") && null}
 
           <InlineError>{error}</InlineError>
-          <div className="flex justify-end gap-2">
+          {submitted && !real && <p role="status" className="rounded-xl bg-brand-50 px-4 py-3 text-sm font-medium text-brand-800">{d.common.demoCreateNotice}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            {kind === "lease" && leaseStep === 1 && <Button type="button" variant="ghost" onClick={() => setLeaseStep(0)}>{d.common.back}</Button>}
             <Button type="button" variant="ghost" onClick={onClose}>
               {d.common.cancel}
             </Button>
             <Button type="submit" disabled={saving}>
-              {d.shell.submitCreate}
+              {kind === "lease" && leaseStep === 0 ? d.common.next : d.shell.submitCreate}
             </Button>
           </div>
         </form>
       )}
-      {kind && !real && (
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setSubmitted(true);
-          }}
-        >
-          {(kind === "property" || kind === "contact") && (
-            <>
-              <Field label={d.shell.fieldName}>
-                <Input required maxLength={120} />
-              </Field>
-              <Field label={d.shell.fieldAddress}>
-                <Input maxLength={200} />
-              </Field>
-              {kind === "contact" && (
-                <>
-                  <Field label={d.shell.fieldEmail}>
-                    <Input type="email" autoComplete="email" />
-                  </Field>
-                  <Field label={d.shell.fieldPhone}>
-                    <Input type="tel" autoComplete="tel" />
-                  </Field>
-                </>
-              )}
-            </>
-          )}
-          {(kind === "lease" || kind === "payment" || kind === "ticket") && (
-            <>
-              <Field label={d.shell.fieldUnit}>
-                <Select defaultValue={unitOptions[0]?.id}>
-                  {unitOptions.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {kind !== "ticket" && (
-                <Field label={d.shell.fieldAmount}>
-                  <Input inputMode="decimal" placeholder="1 850,00" />
-                </Field>
-              )}
-              {kind === "ticket" && (
-                <Field label={d.shell.fieldNote}>
-                  <Textarea maxLength={500} />
-                </Field>
-              )}
-            </>
-          )}
-          {kind === "document" && (
-            <Field label={d.shell.fieldLabel}>
-              <Input required maxLength={160} />
-            </Field>
-          )}
 
-          {submitted ? (
-            <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-              {d.common.demoCreateNotice}
-            </p>
-          ) : (
-            <InlineError>{null}</InlineError>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              {d.common.cancel}
-            </Button>
-            <Button type="submit">{d.shell.submitCreate}</Button>
-          </div>
-        </form>
-      )}
     </Modal>
   );
 }

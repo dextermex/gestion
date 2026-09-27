@@ -120,13 +120,13 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
     await test.step(`${width}x${height}`, async () => {
       await page.setViewportSize({ width, height });
       await page.goto("/locataire/bail");
-      // The bar: fixed at the foot, the whole width, every entry a thumb's size, the open one lit.
+      // The floating bar: 12px side gutters and 8px bottom clearance, every entry a thumb's size.
       const bar = page.getByRole("navigation", { name: "Espace locataire" });
       await expect(bar).toBeVisible();
       const box = (await bar.boundingBox())!;
-      expect(box.x).toBe(0);
-      expect(box.width).toBe(width);
-      expect(box.y + box.height).toBe(height);
+      expect(box.x).toBe(12);
+      expect(box.width).toBe(width - 24);
+      expect(box.y + box.height).toBe(height - 8);
       const entries = bar.locator("a, button");
       await expect(entries).toHaveText(["Accueil", "Bail", "Paiements", "Messages", "Plus"]);
       for (const e of await entries.all()) expect((await e.boundingBox())!.height).toBeGreaterThanOrEqual(40);
@@ -142,7 +142,7 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       });
       await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
       const footerLine = (await page.locator("footer p").first().boundingBox())!;
-      expect(footerLine.y + footerLine.height).toBeLessThanOrEqual(height - box.height + 1);
+      expect(footerLine.y + footerLine.height).toBeLessThanOrEqual(box.y + 1);
       // Plus: the requests, the owner's space, signing out, as a sheet within the screen.
       await bar.getByRole("button", { name: "Plus", exact: true }).click();
       const sheet = page.getByRole("dialog");

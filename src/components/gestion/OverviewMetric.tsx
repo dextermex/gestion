@@ -1,9 +1,11 @@
 import Link from "next/link";
+import GlassHouse from "./GlassHouse";
 import { Card } from "@/components/pro/ui";
 import { Icon, type IconName } from "@/components/pro/icons";
 
 /** The existing ledger projection, presented as a readable financial summary. */
-export default function OverviewMetric({ fraction, label, value, sub, actionHref, actionLabel, icon }: {
+export default function OverviewMetric({ fraction, label, value, sub, actionHref, actionLabel, icon, attention = false }: {
+  attention?: boolean;
   fraction: number;
   label: string;
   value: string;
@@ -13,8 +15,9 @@ export default function OverviewMetric({ fraction, label, value, sub, actionHref
   icon: IconName;
 }) {
   const percent = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
-  return <Card className="crm-metric">
-    <div className="crm-metric-top"><span>{label}</span><Icon name={icon} size={19} /></div>
+  return <Card className={`crm-metric ${attention ? "crm-metric-attention" : ""}`}>
+    {icon === "euro" && <GlassHouse className="crm-metric-art" />}
+    <div className="crm-metric-top"><span>{label}</span><span className="crm-symbol"><Icon name={icon} size={22} /></span></div>
     <p className="crm-metric-value">{value}</p>
     <p className="crm-metric-sub">{sub}</p>
     <div className="crm-metric-progress">

@@ -1,77 +1,72 @@
-# CRM frontend redesign · September 2026
+# Morada CRM experience redesign · September 2026
 
-The brief is an operational CRM with the clarity and depth of contemporary
-fintech and Apple interfaces. The supplied competitor image informs disclosure
-navigation and spacing; it is not a specification for new features or sample data.
+## Audience and direction
 
-## Audit and decisions
+A property manager or tenant around 45, with little appetite for learning software,
+should be able to identify the important amount, understand the next action, and
+finish a form without hunting for labels. The second pass therefore changes the
+flows behind the main screens, alongside their visual presentation.
 
-| Finding | Change |
+Preserve Morada's teal identity, actual records, routes and permissions. Use cool
+sky surfaces, restrained glass navigation, generous whitespace, and a custom glass
+house illustration. The house is decorative vector artwork, never a property
+photograph or a representation of a dataset record. There are no new dependencies.
+
+## References inspected
+
+- [Revolut balance overview](https://mobbin.com/screens/5be4e584-20cf-45a5-aade-d505997121b7):
+  dominant balance, secondary context, consistent circular action symbols, separated
+  content groups. Adapt those relationships to a desktop CRM rather than copying
+  the mobile screen.
+- [Revolut address, filled](https://mobbin.com/screens/e2edf931-36c7-4a5f-b719-f6f07f14652f)
+  and [empty](https://mobbin.com/screens/256eb687-1020-473f-857b-66987e9eaba6):
+  in-field labels, larger rounded controls, a separate continuation action.
+- [Revolut adding a friend](https://mobbin.com/flows/3458e20d-ef6b-4d27-8978-17fdc032a90a):
+  a short contact form with minimal required information.
+- [Attio activity and record details](https://mobbin.com/screens/297adfeb-8312-496b-8acf-41839a6cf775):
+  distinguish chronological activity from reference information. Morada uses more
+  space and larger labels for its intended audience.
+- Apple's HIG: Layout / Visual hierarchy; Typography / Ensuring legibility;
+  Entering data / Best practices; Text fields / Best practices; Icons / Consistency;
+  Charting data / Best practices. Read through the supplied apple-design references.
+
+These are visual observations, not measured conversion claims. The 56px field
+height is the user's requirement. The four supplied skills inform hierarchy,
+progressive disclosure, accessibility and restrained motion. Their marketing-only
+random layouts, scrolling choreography and stock imagery are inappropriate here.
+The earlier CSS-Tricks and byq.supply requests returned HTTP 403; no byq assets or
+credentials are included in the repository.
+
+## What changed
+
+| Previous issue | Current behavior |
 |---|---|
-| Section labels combined navigation with a separate, small disclosure target. Common destinations were hidden on arrival. | Make the entire parent row a disclosure button. Open Portfolio, Relations and Finances initially. Keep destinations as child links. |
-| Repeated heavy outlines, colored boxes and display type competed with records. | Cool neutral canvas, white content surfaces, shallow elevation, system/Inter headings and fewer nested cards. Retain Morada teal and its wordmark. |
-| Circular dashboard widgets made people interpret decoration before seeing amounts. | Lead with the amount, paid-rent count and occupancy. Use thin progress indicators and one direct action per metric. |
-| The cashflow graphic scaled its labels down on phones and overlaid its series. | Use native-size labels and adjacent bars. Include both series in the visual scale, and expose exact values in a native disclosure table. |
-| The onboarding overlay competed with navigation and page actions. | Start collapsed at the lower right, honoring an explicit stored preference. |
-| Mobile drawer left keyboard focus on the page behind it. | Move focus into the drawer, wrap Tab and Shift-Tab around visible controls, close on Escape/outside pointer, restore focus and scroll on close. Close when switching to a desktop viewport. |
-| A pinned drawer footer consumed the navigation area in landscape. | On short screens, make the whole drawer scroll and omit the redundant workspace tile. |
-| Long German labels overflowed rents, settings and AML at 320px. | Allow button labels to wrap, stack definition labels on phones, and wrap AML metadata beneath the record name. |
+| Property creation required eight or nine separate screens. | Three stages: type/name/address, optional additions, review. Surface, photos, lots and technical data remain available in independent disclosures. Back/edit retains the answers. |
+| Small fields with external labels cluttered forms. | Shared native controls are at least 56px high, with semantic floating labels. Filled, focused, autofilled and date/select/file states retain context; helper text is connected with aria-describedby. |
+| Demo contact creation differed from the real form. | Both use name, role and optional contact details. Only the submit behavior differs. |
+| Quick lease creation was one long form. | Two screens, first the parties and tenancy details, then the money and guarantee. The same controls remain mounted and the same payload is submitted. |
+| Dashboard figures competed equally. | A larger collected-rent figure leads. Arrears use explicit text and a restrained warning tone. Overdue work and deposit tasks appear before routine checks. |
+| Recommended actions overwhelmed the page. | Three actions are initially visible; remaining actions stay in an explicit disclosure. Category, title and context have separate visual roles. |
+| Recent activity combined dates, amounts and descriptions into crowded rows. | Consistent 44px icon wells, separate dates, spacious text blocks and standalone payment amounts. |
+| Chart values required hover or a dense bar comparison. | A shared-baseline monthly line chart with solid/dashed series, keyboard/touch month selection, prominent exact values and an accessible table. |
+| Tenant home retained the old styling and proportions. | The next amount due leads, arrears remain explicit, property context is separate, and labelled shortcuts lead to requests, lease and payments. Wider desktop layout and floating phone navigation use the same system. |
+| Deeper operations looked unrelated. | Rental, departure, inspection, contact, payment and request forms share the larger controls and sheet treatments. The resumable nine-step rental workflow retains its persistence semantics and gains a named desktop roadmap. |
 
-## Material and hierarchy
+## Boundaries and validation
 
-Glass belongs to navigation. The floating sidebar uses a translucent white fill,
-24px backdrop blur, a modest saturation increase and an inset edge highlight.
-The toolbar uses a quieter variant. Financial tables, forms and reading surfaces
-stay opaque. This is a browser approximation rather than Apple's native material
-or a promise of optical refraction. There are no SVG displacement filters, looping
-glare effects or new animation dependencies.
+No datasets, domain calculations, authorization rules, schemas or API handlers are
+changed. Amounts still come from the existing integer-cent engines. No production
+records were created to test the design. Sample submissions stay visibly nonpersistent.
+The existing rental draft/save/activation and departure/inventory sequence remains
+intact; a shorter property journey does not change the meaning of those workflows.
 
-The design follows Apple's distinction between floating controls and content:
-[Meet Liquid Glass, WWDC25](https://developer.apple.com/videos/play/wwdc2025/219/).
-The user-provided CSS-Tricks article and byq.supply endpoint returned HTTP 403 in
-this environment. No byq assets or components were imported and no credentials
-were written to the repository.
+Browser review covers manager Home, property creation through review, contact and
+lease dialogs, tenant Home, payment details and request creation at desktop and phone
+sizes, including 320px. Shared forms are checked for 56px height and 16px input text.
+Reduced motion, reduced transparency, keyboard focus and native controls remain.
 
-The requested apple-design, gpt-taste, design-taste-frontend and ui-ux-pro-max
-skills informed the review. Marketing-specific hero layouts, random art direction,
-stock imagery and scroll choreography do not fit a dense, multilingual CRM.
-
-## Accessibility and responsive contract
-
-- Native links and buttons, distinct focus outlines, semantic disclosure state and
-  unique relationships for desktop and mobile navigation instances.
-- Text, outlines and labels carry state alongside color. Existing financial status
-  maps remain authoritative.
-- Reduced motion preserves immediate feedback without spatial animation. Reduced
-  transparency and increased contrast use solid navigation surfaces. Forced colors
-  retains an explicit selected-destination outline.
-- Phone fields use 16px text and at least 44px height. Shared buttons are at least
-  44px on phones. Table overflow remains inside the table, with dates and amounts
-  kept intact. Long labels can wrap.
-- Calculated contrast: ink on white **14.67:1**; muted text on canvas **5.51:1**;
-  muted text on white **5.92:1**; white on active teal **9.04:1**; muted text on the
-  sample banner **5.21:1**; editable-field edges on white **3.14:1**. These checks
-  cover the new tokens, not a claim of full-product accessibility certification.
-
-## Scope and validation
-
-Changes are frontend presentation, navigation behavior, localized chart copy,
-component regression tests and design documentation. Domain engines, datasets,
-database schema, authorization, persistence, document generation and API handlers
-are unchanged. Monetary amounts still come from the existing integer-cent engines.
-The sample/real distinction stays visible and uses the existing dataset control.
-
-Browser checks use the local preview harness and the existing sample cabinet.
-Checks include 320/375px phones, 768px tablet, 812×375 landscape, and 1024/1440px
-desktop; English, French and longer German labels; 25 manager routes, including
-property and tenancy details; disclosure toggles, drawer focus wrapping and return,
-search results, unsubmitted contact forms, chart figures and empty-account Home.
-The existing CI database-backed E2E suite remains the authority for authenticated
-write flows; it is not replaced by these read-only visual checks.
-
-The navigation tests cover full-row disclosure, correct current-location state,
-unique IDs, focus wrapping, Escape, scroll restoration and returning focus to the
-trigger. Typecheck, full lint and production build passed; Vitest passed **344 tests
-across 39 files**. The responsive E2E button selector now uses the stable `.ui-button`
-class instead of a corner-radius utility. The database-backed E2E suite was not run
-locally. See [QUALITY.md](QUALITY.md) for its separate database setup.
+The property regression tests check essential validation, retained answers after
+editing, the unchanged creation payload, no writes from samples, and semantic label
+and help associations. The existing database E2E helpers now use the three-stage
+property flow; responsive tests assert the new floating tenant-bar geometry while
+retaining touch-target, overflow and footer-clearance checks.

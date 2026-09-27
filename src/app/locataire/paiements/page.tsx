@@ -37,7 +37,7 @@ export default async function TenantPaymentsPage() {
       </div>
 
       {!ended && (
-        <Card className="mb-5 p-5">
+        <Card className="tenant-payment-summary mb-5 p-5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payCurrentTitle}</p>
           {current ? (
             <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-2">

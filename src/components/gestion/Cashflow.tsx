@@ -1,9 +1,12 @@
+"use client";
+
+import { useId, useState } from "react";
 import type { CashflowMonth } from "@/domain/finance/cashflow";
 import { euros, formatMonth } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/config";
 
-/** Two adjacent series make expected and received amounts independently visible.
- * Exact amounts are also available as a native, keyboard-accessible table. */
+/** Monthly values are plotted directly, with a shared zero baseline. Month
+ * controls work with pointer, touch and keyboard; the exact ledger stays below. */
 export function CashflowChart({ data, locale, currentMonth, legendExpected, legendCollected, ariaLabel, detailsLabel, monthLabel }: {
   data: CashflowMonth[];
   locale: Locale;
@@ -14,38 +17,47 @@ export function CashflowChart({ data, locale, currentMonth, legendExpected, lege
   detailsLabel: string;
   monthLabel: string;
 }) {
+  const gradientId = useId().replace(/:/g, "");
+  const initial = Math.max(0, data.findIndex((month) => month.month === currentMonth));
+  const [selected, setSelected] = useState(initial);
+  const activeIndex = Math.min(selected, Math.max(0, data.length - 1));
+  const active = data[activeIndex];
   const maximum = Math.max(1, ...data.flatMap((month) => [month.expectedCents, month.collectedCents]));
-  const step = Math.pow(10, Math.floor(Math.log10(maximum)));
-  const max = Math.ceil(maximum / step) * step;
+  const magnitude = 10 ** Math.floor(Math.log10(maximum));
+  const max = Math.ceil(maximum / magnitude) * magnitude;
   const axis = new Intl.NumberFormat(locale === "lu" ? "fr-LU" : locale, { notation: "compact", maximumFractionDigits: 0, style: "currency", currency: "EUR" });
+  const x = (i: number) => data.length > 1 ? 24 + i / (data.length - 1) * 752 : 400;
+  const y = (value: number) => 180 - Math.max(0, value) / max * 156;
+  const line = (key: "expectedCents" | "collectedCents") => data.map((month, i) => `${i === 0 ? "M" : "L"}${x(i)} ${y(month[key])}`).join(" ");
 
   return <div className="crm-cashflow">
-    <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-soft">
-      <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-brand-600" aria-hidden />{legendCollected}</span>
-      <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm border border-brand-600 bg-brand-100" aria-hidden />{legendExpected}</span>
+    {active && <div className="cashflow-summary" aria-live="polite" aria-atomic="true">
+      <div><p className="cashflow-period">{formatMonth(active.month, locale)}</p><p className="cashflow-total">{euros(active.collectedCents, locale)}</p><span className="cashflow-key"><i aria-hidden />{legendCollected}</span></div>
+      <div><p className="cashflow-expected-value">{euros(active.expectedCents, locale)}</p><span className="cashflow-key expected"><i aria-hidden />{legendExpected}</span></div>
+    </div>}
+    <div className="cashflow-graph" role="img" aria-label={ariaLabel}>
+      <div className="cashflow-axis" aria-hidden>{[1, .5, 0].map(f => <span key={f}>{axis.format(max * f / 100)}</span>)}</div>
+      <svg viewBox="0 0 800 200" preserveAspectRatio="none" aria-hidden>
+        <defs><linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#6babcc" stopOpacity=".25"/><stop offset="1" stopColor="#6babcc" stopOpacity="0"/></linearGradient></defs>
+        {[24, 102, 180].map(gridY => <line key={gridY} x1="0" x2="800" y1={gridY} y2={gridY} stroke="#dde7ef" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+        {data.length > 0 && <>
+          <path d={`${line("collectedCents")} L${x(data.length - 1)} 180 L${x(0)} 180 Z`} fill={`url(#${gradientId})`} />
+          <path d={line("expectedCents")} stroke="#7b8e9e" strokeWidth="2" strokeDasharray="6 6" vectorEffect="non-scaling-stroke" fill="none" />
+          <path d={line("collectedCents")} stroke="#286786" strokeWidth="3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" fill="none" />
+        </>}
+        {active && <line x1={x(activeIndex)} x2={x(activeIndex)} y1="12" y2="186" stroke="#91aaba" strokeWidth="1" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />}
+      </svg>
+      {active && <span className="cashflow-point" aria-hidden style={{ left: `calc(3.5rem + (100% - 3.5rem) * ${x(activeIndex) / 800})`, top: `${y(active.collectedCents) / 2}%` }} />}
     </div>
-    <div className="crm-chart" role="img" aria-label={ariaLabel}>
-      <div className="crm-chart-plot" aria-hidden>
-        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => <div key={fraction} className="crm-chart-gridline" style={{ bottom: `${fraction * 100}%` }}>
-          <span>{axis.format(max * fraction / 100)}</span>
-        </div>)}
-        <div className="crm-chart-columns" style={{ gridTemplateColumns: `repeat(${Math.max(1, data.length)}, minmax(0, 1fr))` }}>
-          {data.map((month) => <div key={month.month} className="crm-chart-column" title={`${formatMonth(month.month, locale)}: ${legendCollected} ${euros(month.collectedCents, locale)}, ${legendExpected} ${euros(month.expectedCents, locale)}`}>
-            <div className="crm-chart-bars">
-              <div className="crm-chart-received" style={{ height: `${Math.max(0, month.collectedCents / max * 100)}%` }} />
-              <div className="crm-chart-expected" style={{ height: `${Math.max(0, month.expectedCents / max * 100)}%` }} />
-            </div>
-            <span className={`crm-chart-month ${month.month === currentMonth ? "font-semibold text-ink" : "text-ink-soft"}`}>
-              {new Intl.DateTimeFormat(locale === "lu" ? "fr-LU" : locale, { month: "short", timeZone: "UTC" }).format(new Date(`${month.month}-15T12:00:00Z`))}
-            </span>
-          </div>)}
-        </div>
-      </div>
+    <div className="cashflow-months" aria-label={monthLabel}>
+      {data.map((month, index) => <button key={month.month} type="button" aria-pressed={index === activeIndex} aria-label={formatMonth(month.month, locale)} onClick={() => setSelected(index)} onFocus={() => setSelected(index)}>
+        {new Intl.DateTimeFormat(locale === "lu" ? "fr-LU" : locale, { month: "short", timeZone: "UTC" }).format(new Date(`${month.month}-15T12:00:00Z`))}
+      </button>)}
     </div>
-    <details className="mt-3 border-t border-sand-100 pt-3">
-      <summary className="w-fit cursor-pointer rounded text-xs font-medium text-brand-700">{detailsLabel}</summary>
+    <details className="cashflow-details">
+      <summary>{detailsLabel}</summary>
       <div className="table-scroll mt-3">
-        <table className="w-full text-left text-xs tabular-nums">
+        <table className="w-full text-left text-sm tabular-nums">
           <caption className="sr-only">{ariaLabel}</caption>
           <thead><tr><th scope="col">{monthLabel}</th><th scope="col" className="px-2 text-right">{legendCollected}</th><th scope="col" className="px-2 text-right">{legendExpected}</th></tr></thead>
           <tbody>{data.map((month) => <tr key={month.month} className="border-b border-sand-100">

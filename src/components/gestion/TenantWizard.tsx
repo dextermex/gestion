@@ -11,6 +11,7 @@ import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 import {
   RENTAL_TOTAL,
+  RENTAL_STEPS,
   canLeave,
   isFirstStep,
   nextStep,
@@ -384,11 +385,11 @@ export default function TenantWizard({
       <h1
         ref={headingRef}
         tabIndex={-1}
-        className="text-balance text-center font-display text-2xl font-bold tracking-tight text-ink outline-none sm:text-3xl"
+        className="journey-title font-display text-2xl font-bold tracking-tight text-ink outline-none sm:text-3xl"
       >
         {titles[step]}
       </h1>
-      <p className="mt-2 text-center text-sm text-ink-soft">
+      <p className="journey-intro">
         {unitLabel} · {propertyName}
       </p>
     </>
@@ -419,8 +420,8 @@ export default function TenantWizard({
   );
 
   const overlay = (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
-      <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
+    <div className="journey-shell fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
+      <div className="journey-topbar sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {isFirstStep(step) ? (
           <Link
             href={`/app/biens/${propertyId}`}
@@ -442,13 +443,18 @@ export default function TenantWizard({
         </p>
       </div>
 
-      <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
+      <div className="journey-layout mx-auto w-full px-4 py-10 sm:px-6">
+        <aside className="journey-guide rental-guide">
+          <p className="mb-6 text-base font-semibold text-ink">{unitLabel}</p>
+          <nav aria-label={d.experience.journey}><ol>{RENTAL_STEPS.map((item) => <li key={item} aria-current={item === step ? "step" : undefined} className={stepNumber(item) < stepNumber(step) ? "is-complete" : ""}><span>{stepNumber(item) < stepNumber(step) ? <Icon name="check" size={16}/> : stepNumber(item)}</span>{titles[item]}</li>)}</ol></nav>
+        </aside>
+        <div className="journey-content">
         <AnimatePresence mode="wait" initial={false}>
           {step === "tenant" && (
             <motion.div key="t1" {...slide(-1)}>
               {Heading}
               <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                className="journey-card"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (nameOk) void advance();
@@ -537,7 +543,7 @@ export default function TenantWizard({
             <motion.div key="t2" {...slide(1)}>
               {Heading}
               <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                className="journey-card"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void advance();
@@ -567,7 +573,7 @@ export default function TenantWizard({
             <motion.div key="t3" {...slide(1)}>
               {Heading}
               <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                className="journey-card"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (rentOk) void advance();
@@ -609,7 +615,7 @@ export default function TenantWizard({
             <motion.div key="t4" {...slide(1)}>
               {Heading}
               <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                className="journey-card"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void advance();
@@ -640,7 +646,7 @@ export default function TenantWizard({
             <motion.div key="t5" {...slide(1)}>
               {Heading}
               <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                className="journey-card"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void advance();
@@ -705,7 +711,7 @@ export default function TenantWizard({
           {step === "inspection" && (
             <motion.div key="t6" {...slide(1)}>
               {Heading}
-              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+              <div className="journey-card">
                 <p className="text-sm leading-relaxed text-ink-soft">{d.location.inspectionHint}</p>
                 {real ? (
                   <Button
@@ -741,7 +747,7 @@ export default function TenantWizard({
             <motion.div key="t7" {...slide(1)}>
               {Heading}
               <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
+                className="journey-card"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void advanceInsurance();
@@ -771,7 +777,7 @@ export default function TenantWizard({
           {step === "documents" && (
             <motion.div key="t8" {...slide(1)}>
               {Heading}
-              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+              <div className="journey-card">
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-display text-lg font-bold text-ink">
                     {d.location.dossierComplete.replace("{pct}", String(completion))}
@@ -814,7 +820,7 @@ export default function TenantWizard({
           {step === "activation" && (
             <motion.div key="t9" {...slide(1)}>
               {Heading}
-              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+              <div className="journey-card">
                 <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
                   <div>
                     <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.checkTenant}</dt>
@@ -883,6 +889,7 @@ export default function TenantWizard({
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import GlassHouse from "@/components/gestion/GlassHouse";
+import { Icon, type IconName } from "@/components/pro/icons";
 import { Badge, Card } from "@/components/pro/ui";
 import { LinkRow, MetaBadge, Panel } from "@/components/gestion/bits";
 import TenantEmpty from "@/components/gestion/TenantEmpty";
@@ -39,7 +41,7 @@ export default async function TenantHomePage() {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="tenant-greeting mb-6">
         <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{fmt(d.tenant.hello, { name: space.me.firstName || space.me.name })}</h1>
         <p className="mt-1 text-sm text-ink-soft">{fmt(d.tenant.homeSub, { unit: home })}</p>
       </div>
@@ -51,17 +53,42 @@ export default async function TenantHomePage() {
         </Card>
       )}
 
-      <div className="stagger-rise grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card className="overflow-hidden">
+      <div className="tenant-overview">
+
+        {!ended && (
+          <Card className="tenant-rent-card p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.rentTitle}</p>
+              <Badge className={situationColor}>{situationLabel}</Badge>
+            </div>
+            <p className="mt-1 text-sm text-ink-soft">{fmt(d.tenant.rentTotal, { amount: euros(lease.rentCents + lease.chargesCents, locale) })}</p>
+            {payments.outstandingCents > 0 && (
+              <p className="mt-1 text-sm font-semibold text-red-700">{fmt(d.tenant.rentOutstanding, { amount: euros(payments.outstandingCents, locale) })}</p>
+            )}
+            <p className="mt-8 text-sm font-medium text-ink-soft">{d.tenant.nextRentTitle}</p>
+            {payments.nextDueOn ? (
+              <>
+                <p className="tenant-next-amount mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">{euros(payments.nextDueCents, locale)}</p>
+                <p className="text-xs text-ink-soft">{fmt(d.tenant.nextRentDue, { date: formatDate(payments.nextDueOn, locale) })}</p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-emerald-700">{d.tenant.nextRentNone}</p>
+            )}
+            {lease.rfReference && (
+              <>
+                <p className="mt-3 text-[11px] font-semibold text-ink-soft">{d.tenant.nextRentRef}</p>
+                <code className="mt-1 inline-block rounded-md bg-sand-50 px-2 py-1 text-[11px] font-semibold tabular-nums text-brand-800">{lease.rfReference}</code>
+              </>
+            )}
+            <Link href="/locataire/paiements" className="tenant-primary-action">{d.tenant.navPayments}<Icon name="chevron-right" size={18}/></Link>
+          </Card>
+        )}
+        <Card className="tenant-home-card overflow-hidden">
           {lease.property.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={lease.property.photoUrl} alt="" className="aspect-[16/9] w-full object-cover" />
           ) : (
-            <div className="flex aspect-[16/9] w-full items-center justify-center bg-sand-100 text-ink-soft" aria-hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 11.2 12 4l9 7.2M5.5 9.6V20h13V9.6" />
-              </svg>
-            </div>
+            <div className="tenant-house-illustration"><GlassHouse /></div>
           )}
           <div className="p-5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.unitTitle}</p>
@@ -78,33 +105,6 @@ export default async function TenantHomePage() {
           </div>
         </Card>
 
-        {!ended && (
-          <Card className="p-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.rentTitle}</p>
-              <Badge className={situationColor}>{situationLabel}</Badge>
-            </div>
-            <p className="mt-1 text-sm text-ink-soft">{fmt(d.tenant.rentTotal, { amount: euros(lease.rentCents + lease.chargesCents, locale) })}</p>
-            {payments.outstandingCents > 0 && (
-              <p className="mt-1 text-sm font-semibold text-red-700">{fmt(d.tenant.rentOutstanding, { amount: euros(payments.outstandingCents, locale) })}</p>
-            )}
-            <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.nextRentTitle}</p>
-            {payments.nextDueOn ? (
-              <>
-                <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">{euros(payments.nextDueCents, locale)}</p>
-                <p className="text-xs text-ink-soft">{fmt(d.tenant.nextRentDue, { date: formatDate(payments.nextDueOn, locale) })}</p>
-              </>
-            ) : (
-              <p className="mt-2 text-sm text-emerald-700">{d.tenant.nextRentNone}</p>
-            )}
-            {lease.rfReference && (
-              <>
-                <p className="mt-3 text-[11px] font-semibold text-ink-soft">{d.tenant.nextRentRef}</p>
-                <code className="mt-1 inline-block rounded-md bg-sand-50 px-2 py-1 text-[11px] font-semibold tabular-nums text-brand-800">{lease.rfReference}</code>
-              </>
-            )}
-          </Card>
-        )}
       </div>
 
       {!ended && (
@@ -127,14 +127,15 @@ export default async function TenantHomePage() {
         </Panel>
       )}
 
-      <Panel title={d.tenant.quickTitle} className="mt-5">
+      <Panel title={d.tenant.quickTitle} className="tenant-shortcuts mt-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
-            { href: ended ? "/locataire/demandes" : "/locataire/demandes?nouvelle=1", title: d.tenant.quickRequest, sub: d.tenant.quickRequestSub },
-            { href: "/locataire/bail", title: d.tenant.quickLease, sub: d.tenant.quickLeaseSub },
-            { href: "/locataire/paiements", title: d.tenant.quickPayments, sub: d.tenant.quickPaymentsSub },
+            { icon: "inbox", href: ended ? "/locataire/demandes" : "/locataire/demandes?nouvelle=1", title: d.tenant.quickRequest, sub: d.tenant.quickRequestSub },
+            { icon: "contract", href: "/locataire/bail", title: d.tenant.quickLease, sub: d.tenant.quickLeaseSub },
+            { icon: "euro", href: "/locataire/paiements", title: d.tenant.quickPayments, sub: d.tenant.quickPaymentsSub },
           ].map((q) => (
-            <Link key={q.href} href={q.href} className="tactile rounded-xl border border-transparent bg-sand-50 p-4 transition hover:border-brand-200 hover:bg-sand-100">
+            <Link key={q.href} href={q.href} className="tenant-shortcut">
+              <span className="crm-symbol"><Icon name={q.icon as IconName} size={24}/></span>
               <p className="font-display text-sm font-bold text-ink">{q.title}</p>
               <p className="mt-1 text-xs leading-relaxed text-ink-soft">{q.sub}</p>
             </Link>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
 import type { RequestLabels } from "@/lib/portal/labels";
 import { REQUEST_KINDS, TECHNICAL_CATEGORIES, type RequestKind } from "@/lib/portal/types";
 
@@ -116,8 +117,9 @@ export default function TenantRequests({
                   key={k}
                   type="button"
                   onClick={() => setKind(k)}
-                  className="tactile rounded-2xl border border-sand-200 bg-white p-4 text-left shadow-sm transition hover:border-brand-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                  className="request-kind-card tactile rounded-2xl border border-sand-200 bg-white p-4 text-left shadow-sm transition hover:border-brand-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
                 >
+                  <span className="crm-symbol"><Icon name={k === "technical" ? "tasks" : k === "document" ? "documents" : k === "question" ? "messages" : "inbox"} size={24}/></span>
                   <p className="font-display text-base font-bold text-ink">{labels.kinds[k][0]}</p>
                   <p className="mt-1 text-sm leading-relaxed text-ink-soft">{labels.kinds[k][1]}</p>
                 </button>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge, EmptyState, PageHeader } from "@/components/pro/ui";
 import { LinkRow, Panel, Timeline } from "@/components/gestion/bits";
+import GlassHouse from "@/components/gestion/GlassHouse";
 import OverviewMetric from "@/components/gestion/OverviewMetric";
 import { Icon } from "@/components/pro/icons";
 import { CashflowChart } from "@/components/gestion/Cashflow";
@@ -31,8 +32,8 @@ export default async function DashboardPage() {
   if (demo.UNITS.length === 0)
     return <div>
       <PageHeader title={d.nav.home} subtitle={d.biens.subtitle} />
-      <EmptyState icon="properties" title={d.biens.emptyFirstTitle} body={d.biens.emptyFirstBody}
-        action={<Link href="/app/biens/nouveau" className="ui-button inline-flex items-center gap-2 rounded-full bg-brand-700 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-800"><Icon name="plus" size={16} />{d.biens.addProperty}</Link>} />
+      <div className="crm-welcome"><GlassHouse /><EmptyState icon="properties" title={d.biens.emptyFirstTitle} body={d.biens.emptyFirstBody}
+        action={<Link href="/app/biens/nouveau" className="ui-button inline-flex items-center gap-2 rounded-full bg-brand-700 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-800"><Icon name="plus" size={16} />{d.biens.addProperty}</Link>} /></div>
     </div>;
   const {
     BANK_ACCOUNTS,
@@ -75,7 +76,7 @@ export default async function DashboardPage() {
   const vacantCount = lettable.length - occupiedCount;
 
   // ── Recommended actions: each row exists because its signal exists ──
-  const todo: Array<{ href: string; title: string; sub: string; badge: { label: string; color: string } }> = [];
+  const todo: Array<{ priority?: number; href: string; title: string; sub: string; badge: { label: string; color: string } }> = [];
 
   const reviewQueue = BANK_TXS.filter((t) => t.status === "review");
   if (reviewQueue.length > 0) {
@@ -123,6 +124,7 @@ export default async function DashboardPage() {
       TODAY,
     );
     todo.push({
+      priority: 1,
       href: "/app/loyers?vue=impayes",
       title: fmt(d.dash.todoMed, {
         unit: labelOfLease(worst.leaseId),
@@ -164,6 +166,7 @@ export default async function DashboardPage() {
     const pending = settlement.lines.filter((li) => li.status !== "justified").length;
     if (pending > 0) {
       todo.push({
+        priority: 2,
         href: "/app/garanties",
         title: fmt(d.dash.todoDeposit, { unit: labelOfLease(dep.leaseId), n: pending }),
         sub: settlementNotes(d, locale, input, settlement)[0] ?? "",
@@ -201,6 +204,8 @@ export default async function DashboardPage() {
     });
   }
 
+  todo.sort((a, b) => (a.priority ?? 3) - (b.priority ?? 3));
+
   // ── Workflow counters ──
   const wfBlocked = WORKFLOWS.filter((w) => w.blockedReason);
   const wfCounts = [
@@ -219,11 +224,9 @@ export default async function DashboardPage() {
       .slice(-3)
       .map((t) => ({
         kind: "payment",
-        label: fmt(d.dash.activityRent, {
-          unit: t.matchedLeaseId ? labelOfLease(t.matchedLeaseId) : t.counterpartyName,
-          amount: euros(t.amount, locale),
-        }),
-        sub: d.dash.activityRentSub,
+        label: d.experience.activityPayment,
+        sub: `${t.matchedLeaseId ? labelOfLease(t.matchedLeaseId) : t.counterpartyName} · ${d.dash.activityRentSub}`,
+        amount: euros(t.amount, locale),
         atIso: t.bookedAt,
       })),
     ...TICKETS.slice(-2).map((t) => ({
@@ -314,7 +317,8 @@ export default async function DashboardPage() {
           label={d.dash.ringPaid}
           value={`${paidCount}/${month.length}`}
           sub={lateCount > 0 ? fmt(d.dash.ringPaidSub, { late: lateCount }) : d.dash.ringPaidNone}
-          icon="check"
+          icon={lateCount > 0 ? "alert" : "check"}
+          attention={lateCount > 0}
           actionHref="/app/loyers?vue=impayes"
           actionLabel={d.dash.ringPaidAction}
         />
@@ -336,39 +340,6 @@ export default async function DashboardPage() {
       </div>
 
       <div className="crm-dashboard-grid">
-        <Panel
-          title={d.dash.todoTitle}
-          className="crm-todo"
-          action={
-            todo.length > 0 ? (
-              <Badge className="bg-brand-50 text-brand-700">{fmt(d.dash.todoCount, { n: todo.length })}</Badge>
-            ) : undefined
-          }
-        >
-          {todo.length === 0 ? (
-            <p className="text-sm text-ink-soft">{d.dash.todoNone}</p>
-          ) : (
-            <ul className="divide-y divide-sand-100">
-              {todo.map((t) => (
-                <li key={t.title}>
-                  <LinkRow
-                    href={t.href}
-                    title={t.title}
-                    sub={t.sub}
-                    right={
-                      // On a phone the chip would squeeze the sentence it labels;
-                      // the row itself already says where it leads.
-                      <span className="max-sm:hidden">
-                        <Badge className={t.badge.color}>{t.badge.label}</Badge>
-                      </span>
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
         <Panel title={d.dash.cashflowTitle} className="crm-dashboard-chart">
           <p className="-mt-2 mb-4 text-xs text-ink-soft">{d.dash.cashflowSub}</p>
           <CashflowChart
@@ -382,6 +353,34 @@ export default async function DashboardPage() {
             monthLabel={d.dash.cashflowMonth}
           />
         </Panel>
+
+        <Panel
+          title={d.dash.todoTitle}
+          className="crm-todo"
+          action={
+            todo.length > 0 ? (
+              <Badge className="bg-brand-50 text-brand-700">{fmt(d.dash.todoCount, { n: todo.length })}</Badge>
+            ) : undefined
+          }
+        >
+          {todo.length === 0 ? (
+            <p className="text-sm text-ink-soft">{d.dash.todoNone}</p>
+          ) : (
+            <>
+              <ul className="divide-y divide-sand-100">{todo.slice(0, 3).map((t) => (<li key={t.title}><Link href={t.href} className={`crm-action-row ${t.priority === 1 ? "is-urgent" : ""}`}>
+                      <span className="crm-symbol"><Icon name={t.href.includes("banque") ? "bank" : t.href.includes("garanties") ? "shield-check" : t.href.includes("loyers") ? "euro" : t.href.includes("indexation") ? "trending-up" : "calendar"} size={22} /></span>
+                      <div><span className="crm-action-category">{t.badge.label}</span><p className="crm-action-title">{t.title}</p><p className="crm-action-description">{t.sub}</p></div>
+                      <Icon name="chevron-right" size={18} />
+                    </Link></li>))}</ul>
+              {todo.length > 3 && <details className="crm-more-actions"><summary><span className="when-closed">{fmt(d.experience.moreActions, { n: todo.length - 3 })}</span><span className="when-open">{d.experience.lessActions}</span></summary><ul className="divide-y divide-sand-100">{todo.slice(3).map((t) => (<li key={t.title}><Link href={t.href} className={`crm-action-row ${t.priority === 1 ? "is-urgent" : ""}`}>
+                      <span className="crm-symbol"><Icon name={t.href.includes("banque") ? "bank" : t.href.includes("garanties") ? "shield-check" : t.href.includes("loyers") ? "euro" : t.href.includes("indexation") ? "trending-up" : "calendar"} size={22} /></span>
+                      <div><span className="crm-action-category">{t.badge.label}</span><p className="crm-action-title">{t.title}</p><p className="crm-action-description">{t.sub}</p></div>
+                      <Icon name="chevron-right" size={18} />
+                    </Link></li>))}</ul></details>}
+            </>
+          )}
+        </Panel>
+
 
         <Panel
           title={d.dash.workflowsTitle}
