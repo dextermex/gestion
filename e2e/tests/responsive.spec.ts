@@ -70,7 +70,7 @@ async function read(page: Page): Promise<Reading> {
     const zooming = fields.filter((f) => parseFloat(getComputedStyle(f).fontSize) < 16).map(describe);
     const lowFields = fields.filter((f) => f.getBoundingClientRect().height < 40).map(describe);
     // The kit's buttons: at least 40px tall, the thumb's size, however short their label.
-    const smallButtons = Array.from(document.querySelectorAll<HTMLElement>("button.rounded-xl.inline-flex")).filter((b) => visible(b) && b.getBoundingClientRect().height < 40).map(describe);
+    const smallButtons = Array.from(document.querySelectorAll<HTMLElement>("button.ui-button")).filter((b) => visible(b) && b.getBoundingClientRect().height < 40).map(describe);
     const bar = document.querySelector("header");
     const title = document.querySelector("h1");
     const titleUnderBar = Boolean(bar && title && visible(title) && title.getBoundingClientRect().top < bar.getBoundingClientRect().bottom - 1);

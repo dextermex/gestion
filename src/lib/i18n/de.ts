@@ -378,6 +378,8 @@ export const de: Dict = {
     cashflowSub: "Miete und Nebenkosten pro Monat, abgeleitet aus dem Allokationsregister.",
     cashflowExpected: "Erwartet",
     cashflowCollected: "Eingezogen",
+    cashflowMonth: "Monat",
+    cashflowDetails: "Beträge anzeigen",
     cashflowAria: "Monatliche Eingänge: erwartet und eingezogen",
     activityTitle: "Letzte Aktivität",
     activityNone: "Aktivität (Zahlungen, Interventionen, Kündigungen) erscheint hier.",

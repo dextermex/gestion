@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Badge, EmptyState } from "@/components/pro/ui";
+import { Badge, EmptyState, PageHeader } from "@/components/pro/ui";
 import { LinkRow, Panel, Timeline } from "@/components/gestion/bits";
-import { RingCard } from "@/components/gestion/Ring";
+import OverviewMetric from "@/components/gestion/OverviewMetric";
+import { Icon } from "@/components/pro/icons";
 import { CashflowChart } from "@/components/gestion/Cashflow";
 import { getDemo } from "@/lib/demo";
 import { getIdentity } from "@/lib/workspace";
@@ -28,7 +29,11 @@ export default async function DashboardPage() {
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
   if (demo.UNITS.length === 0)
-    return <EmptyState title={fmt(d.common.emptyTitle, { section: d.nav.home })} body={d.common.emptyBody} />;
+    return <div>
+      <PageHeader title={d.nav.home} subtitle={d.biens.subtitle} />
+      <EmptyState icon="properties" title={d.biens.emptyFirstTitle} body={d.biens.emptyFirstBody}
+        action={<Link href="/app/biens/nouveau" className="ui-button inline-flex items-center gap-2 rounded-full bg-brand-700 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-800"><Icon name="plus" size={16} />{d.biens.addProperty}</Link>} />
+    </div>;
   const {
     BANK_ACCOUNTS,
     BANK_TXS,
@@ -55,7 +60,7 @@ export default async function DashboardPage() {
     return ENDED_LEASES.find((e) => e.id === id)?.label ?? "";
   };
 
-  // ── Rings: computed from the ledger, never hand-written ──
+  // ── Overview: computed from the ledger, never hand-written ──
   const month = RENT_PERIODS.filter((rp) => rp.period === liveMonth);
   const expected = month.reduce((a, rp) => a + rp.totalCents, 0);
   const collected = month.reduce((a, rp) => a + rp.allocatedCents, 0);
@@ -279,34 +284,41 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-ink">
-          {fmt(d.dash.greeting, { name: firstName })}
-        </h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          {fmt(d.dash.subtitle, { org: ORG.shortName, date: formatDate(TODAY, locale) })}
-        </p>
+      <div className="crm-dashboard-heading">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-ink">
+            {fmt(d.dash.greeting, { name: firstName })}
+          </h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            {fmt(d.dash.subtitle, { org: ORG.shortName, date: formatDate(TODAY, locale) })}
+          </p>
+        </div>
+        <Link href="/app/biens" className="crm-overview-link inline-flex min-h-10 items-center gap-2 rounded-full border border-sand-200 bg-white px-4 text-sm font-medium text-ink transition hover:border-brand-300">
+          <Icon name="properties" size={16} />{d.hubs.portfolio}<Icon name="chevron-right" size={14} />
+        </Link>
       </div>
 
-      {/* Personal overview — three rings, one action each */}
-      <div className="stagger-rise grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <RingCard
+      {/* The ledger, rent status and occupancy stay visible at a glance. */}
+      <div className="crm-overview">
+        <OverviewMetric
           fraction={expected === 0 ? 0 : collected / expected}
           label={fmt(d.dash.ringCollected, { month: formatMonth(liveMonth, locale) })}
           value={eurosWhole(collected, locale)}
           sub={fmt(d.dash.ringCollectedSub, { expected: eurosWhole(expected, locale) })}
+          icon="euro"
           actionHref="/app/banque"
           actionLabel={d.dash.ringCollectedAction}
         />
-        <RingCard
+        <OverviewMetric
           fraction={month.length === 0 ? 0 : paidCount / month.length}
           label={d.dash.ringPaid}
           value={`${paidCount}/${month.length}`}
           sub={lateCount > 0 ? fmt(d.dash.ringPaidSub, { late: lateCount }) : d.dash.ringPaidNone}
+          icon="check"
           actionHref="/app/loyers?vue=impayes"
           actionLabel={d.dash.ringPaidAction}
         />
-        <RingCard
+        <OverviewMetric
           fraction={lettable.length === 0 ? 0 : occupiedCount / lettable.length}
           label={d.dash.ringOccupancy}
           value={`${occupiedCount}/${lettable.length}`}
@@ -317,15 +329,16 @@ export default async function DashboardPage() {
                 ? d.dash.ringOccupancySubOne
                 : fmt(d.dash.ringOccupancySubMany, { n: vacantCount })
           }
+          icon="key"
           actionHref="/app/biens?occupation=vacants"
           actionLabel={d.dash.ringOccupancyAction}
         />
       </div>
 
-      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+      <div className="crm-dashboard-grid">
         <Panel
           title={d.dash.todoTitle}
-          className="lg:col-span-2"
+          className="crm-todo"
           action={
             todo.length > 0 ? (
               <Badge className="bg-brand-50 text-brand-700">{fmt(d.dash.todoCount, { n: todo.length })}</Badge>
@@ -356,20 +369,35 @@ export default async function DashboardPage() {
           )}
         </Panel>
 
+        <Panel title={d.dash.cashflowTitle} className="crm-dashboard-chart">
+          <p className="-mt-2 mb-4 text-xs text-ink-soft">{d.dash.cashflowSub}</p>
+          <CashflowChart
+            data={cashflow}
+            locale={locale}
+            currentMonth={liveMonth}
+            legendExpected={d.dash.cashflowExpected}
+            legendCollected={d.dash.cashflowCollected}
+            ariaLabel={d.dash.cashflowAria}
+            detailsLabel={d.dash.cashflowDetails}
+            monthLabel={d.dash.cashflowMonth}
+          />
+        </Panel>
+
         <Panel
           title={d.dash.workflowsTitle}
+          className="crm-dashboard-workflows"
           action={
             <Link href="/app/workflows" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
               {d.common.seeAll}
             </Link>
           }
         >
-          <div className="grid grid-cols-2 gap-3">
+          <div className="crm-workflow-stats">
             {wfCounts.map((w) => (
               <Link
                 key={w.label}
                 href="/app/workflows"
-                className={`rounded-xl border border-sand-200 bg-white p-3.5 transition hover:border-brand-200 border-l-4 ${w.edge}`}
+                className="crm-workflow-stat"
               >
                 <p className="font-display text-xl font-bold tabular-nums text-ink">{w.value}</p>
                 <p className="mt-0.5 text-xs font-medium text-ink-soft">{w.label}</p>
@@ -389,24 +417,8 @@ export default async function DashboardPage() {
             ))}
           </ul>
         </Panel>
-      </div>
 
-      <div className="mt-5">
-        <Panel title={d.dash.cashflowTitle}>
-          <p className="-mt-2 mb-4 text-xs text-ink-soft">{d.dash.cashflowSub}</p>
-          <CashflowChart
-            data={cashflow}
-            locale={locale}
-            currentMonth={liveMonth}
-            legendExpected={d.dash.cashflowExpected}
-            legendCollected={d.dash.cashflowCollected}
-            ariaLabel={d.dash.cashflowAria}
-          />
-        </Panel>
-      </div>
-
-      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-        <Panel title={d.dash.activityTitle}>
+        <Panel title={d.dash.activityTitle} className="crm-dashboard-activity">
           {activity.length === 0 ? (
             <p className="text-sm text-ink-soft">{d.dash.activityNone}</p>
           ) : (
@@ -414,11 +426,11 @@ export default async function DashboardPage() {
           )}
         </Panel>
 
-        <Panel title={d.dash.vigilanceTitle}>
+        <Panel title={d.dash.vigilanceTitle} className="crm-dashboard-vigilance">
           {vigilance.length === 0 ? (
             <p className="text-sm text-ink-soft">{d.dash.vigilanceNone}</p>
           ) : (
-            <ul className="space-y-3 text-sm">
+            <ul className="crm-watchlist space-y-4 text-sm">
               {vigilance.map((v) => (
                 <li key={v.title} className="flex items-start justify-between gap-2">
                   <div>

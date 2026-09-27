@@ -15,8 +15,8 @@ export function Kpi({
   tone?: "default" | "good" | "bad";
 }) {
   return (
-    <Card className="p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
+    <Card className="crm-kpi p-5">
+      <p className="text-sm font-medium text-ink-soft">{label}</p>
       <p
         className={
           "mt-1 font-display text-2xl font-bold tracking-tight tabular-nums " +
@@ -47,8 +47,8 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <Card className={"p-5 " + (className ?? "")}>
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <Card className={"crm-panel p-5 " + (className ?? "")}>
+      <div className="crm-panel-heading mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
         {action}
       </div>
@@ -103,7 +103,7 @@ export function LinkRow({
   return (
     <Link
       href={href}
-      className="tactile flex items-center gap-3 rounded-lg py-3 transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+      className="crm-link-row tactile flex items-center gap-3 rounded-xl py-3 transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
     >
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-sm font-semibold text-ink">{title}</p>

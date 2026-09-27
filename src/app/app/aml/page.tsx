@@ -136,7 +136,7 @@ export default async function AmlPage() {
       <Panel title={d.aml.filesTitle} className="mt-5">
         <ul className="divide-y divide-sand-100">
           {parties.map((c) => (
-            <li key={c.id} className="flex items-center gap-3 py-3">
+            <li key={c.id} className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 py-4 sm:flex sm:flex-wrap">
               <span
                 className={
                   "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold " +
@@ -153,13 +153,15 @@ export default async function AmlPage() {
                     ` · ${fmt(d.contacts.nonResidentEdd, { country: c.country ?? "—" })}`}
                 </p>
               </div>
-              {c.riskBand && <MetaBadge meta={riskMeta[c.riskBand]} />}
-              <MetaBadge meta={amlMeta[c.amlTier!]} />
-              <span className="text-[11px] tabular-nums text-ink-soft">
-                {fmt(d.contacts.reviewMonths, {
-                  n: c.riskBand === "high" ? 12 : c.riskBand === "medium" ? 24 : 36,
-                })}
-              </span>
+              <div className="col-start-2 flex flex-wrap items-center gap-2 sm:ml-auto">
+                {c.riskBand && <MetaBadge meta={riskMeta[c.riskBand]} />}
+                <MetaBadge meta={amlMeta[c.amlTier!]} />
+                <span className="text-[11px] tabular-nums text-ink-soft">
+                  {fmt(d.contacts.reviewMonths, {
+                    n: c.riskBand === "high" ? 12 : c.riskBand === "medium" ? 24 : 36,
+                  })}
+                </span>
+              </div>
             </li>
           ))}
         </ul>

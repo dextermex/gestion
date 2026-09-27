@@ -19,8 +19,8 @@ import { MORADA_URL } from "@/lib/constants";
  * "add your first property" over an account that had two, because its ticks
  * lived in localStorage, contradicted the very screen it floated over.
  *
- * On a phone the open card would cover most of the screen, so it starts as
- * the pill there unless the owner has already chosen otherwise.
+ * Start as a compact control on every screen so setup never obscures work.
+ * An explicit saved choice still wins.
  */
 
 const STORE = "morada_getting_started";
@@ -34,14 +34,14 @@ interface Stored {
 }
 
 function load(): Stored {
-  const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
+  // Open on request: the checklist must never cover the page on arrival.
   try {
     const raw = localStorage.getItem(STORE);
-    if (raw) return { done: [], collapsed: phone, hidden: false, ...JSON.parse(raw) };
+    if (raw) return { done: [], collapsed: true, hidden: false, ...JSON.parse(raw) };
   } catch {
     // Private mode or blocked storage: start fresh each visit.
   }
-  return { done: [], collapsed: phone, hidden: false };
+  return { done: [], collapsed: true, hidden: false };
 }
 
 function save(s: Stored) {
@@ -86,13 +86,13 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
 
   return (
     // Steps aside while a conversation fills a phone's screen (Messages sets the attribute on the document).
-    <div className="fixed bottom-[max(1rem,var(--safe-bottom))] left-[max(1rem,var(--safe-left))] z-40 max-sm:right-[max(1rem,var(--safe-right))] print:hidden max-lg:[html[data-phone-chat]_&]:hidden">
+    <div className="crm-onboarding fixed bottom-[max(1rem,var(--safe-bottom))] right-[max(1rem,var(--safe-right))] z-40 print:hidden max-lg:[html[data-phone-chat]_&]:hidden">
       <AnimatePresence initial={false} mode="wait">
         {state.collapsed ? (
           <motion.button
             key="pill"
             onClick={() => update({ ...state, collapsed: false })}
-            className="tactile flex items-center gap-2 rounded-full border border-sand-200 bg-white py-2 pl-3 pr-4 text-sm font-semibold text-ink shadow-pop"
+            className="tactile flex min-h-11 items-center gap-2 rounded-full border border-sand-200 bg-white py-2 pl-3 pr-4 text-sm font-semibold text-ink shadow-pop"
             initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
             animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
             exit={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}

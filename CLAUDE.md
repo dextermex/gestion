@@ -4,7 +4,7 @@ Luxembourg property-management SaaS, sibling of Morada.lu. App UI in four langua
 FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
 
 ## Commands
-- `npm run dev` / `npm run build` / `npm test` (vitest, 339 tests) / `npm run lint` /
+- `npm run dev` / `npm run build` / `npm test` (vitest) / `npm run lint` /
   `npm run typecheck`
 - `npm run e2e` (Playwright, real browser against a throwaway local Supabase; needs
   Docker: see docs/QUALITY.md for the four commands that bring the stack up)
@@ -30,9 +30,12 @@ FR (default) / EN / DE / LU — switched by the `morada_locale` cookie.
 2. **Money is integer cents**; splits via `splitExact()`; paid-ness derived from
    allocations, never a boolean.
 3. **Legal effect dates derive from AR dates** (registered letters), never click dates.
-4. **Design fidelity to Morada.lu** — tokens/kit ported verbatim (see
-   docs/DESIGN-SYSTEM.md). No new hues, no dark mode, `font-display font-bold` on every
-   heading/number, house easing `cubic-bezier(0.22,1,0.36,1)`, reduced-motion escapes.
+4. **Morada CRM design system** — follow docs/DESIGN-SYSTEM.md and the September
+   2026 frontend redesign in docs/UI-REDESIGN.md. Preserve the teal brand and logo;
+   manager screens use cool neutrals, restrained glass navigation, opaque records,
+   and system/Inter headings. Keep the house easing `cubic-bezier(0.22,1,0.36,1)`,
+   reduced-motion escapes and light theme. Do not reintroduce marketing typography
+   or decorative charts into dense operational screens.
 5. Badge colours come from the colour maps + meta factories in `src/lib/types.ts`
    (`rentStatusMeta(d)` etc. — `bg-{c}-100 text-{c}-800` pairs, labels from the active
    dictionary). New status enums follow the same shape.

@@ -174,9 +174,9 @@ export default async function ReglagesPage() {
           <Panel title={d.reglages.workspaceTitle}>
             <dl className="divide-y divide-sand-100">
               {rows.map((r) => (
-                <div key={r.label} className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="shrink-0 text-sm text-ink-soft">{r.label}</dt>
-                  <dd className="min-w-0 text-right text-sm font-semibold text-ink">{r.value}</dd>
+                <div key={r.label} className="grid gap-1.5 py-3 sm:grid-cols-2 sm:gap-4">
+                  <dt className="min-w-0 break-words text-sm text-ink-soft">{r.label}</dt>
+                  <dd className="min-w-0 break-words text-sm font-medium text-ink sm:text-right">{r.value}</dd>
                 </div>
               ))}
             </dl>
