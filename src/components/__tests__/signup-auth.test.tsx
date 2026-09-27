@@ -6,6 +6,7 @@ import SignupFunnel from "@/components/signup/SignupFunnel";
 
 const auth = vi.hoisted(() => ({
   getUser: vi.fn(), signInWithOtp: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), linkIdentity: vi.fn(), signInWithOAuth: vi.fn(), signInWithPassword: vi.fn(),
+  resetPasswordForEmail: vi.fn(), updateUser: vi.fn(),
 }));
 vi.mock("@/lib/supabase/browser", () => ({ getSupabase: () => ({ auth }) }));
 vi.mock("next/image", () => ({ default: () => null }));
@@ -208,4 +209,63 @@ it("a lost SMS response closes confirmation and requires a fresh security challe
   expect(host.querySelector<HTMLButtonElement>('form .signup-primary')?.disabled).toBe(true);
   await submit();
   expect(auth.signInWithOtp).toHaveBeenCalledTimes(1);
+});
+it("an SMS the provider refuses is named, logged by code only, and keeps the visitor on the number", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  auth.signInWithOtp.mockResolvedValue({ data: {}, error: { code: "sms_send_failed", status: 422, name: "AuthApiError", message: "Invalid From Number (caller ID): VA0" } });
+  await act(async () => root.render(<SignupFunnel locale="en" />));
+  await phone(); await click("Solve test challenge"); await submit(); await click("Confirm and send code");
+  expect(host.querySelector("h1")?.textContent).toBe("Secure your account");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("We couldn’t send a text to this number. Check it, or try again in a few minutes.");
+  const logged = JSON.stringify(warn.mock.calls);
+  expect(logged).toContain("sms_send_failed");
+  expect(logged).not.toContain("352");
+  warn.mockRestore();
+});
+it("a completed account signs in straight to its space", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign, protocol: "http:" });
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode next="/app/loyers" />));
+  host.querySelector<HTMLInputElement>("#signup-email")!.value = "alex@example.test";
+  await submit();
+  host.querySelector<HTMLInputElement>("#login-password")!.value = "test-only-password";
+  auth.signInWithPassword.mockResolvedValue({ data: { user: { id: "u1", email: "alex@example.test", user_metadata: {} } }, error: null });
+  await click("Solve test challenge"); await submit();
+  expect(assign).toHaveBeenCalledWith("/app/loyers");
+  vi.unstubAllGlobals();
+});
+it("forgot password sends a recovery link back to this app and answers the same for any address", async () => {
+  auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode next="/app" />));
+  host.querySelector<HTMLInputElement>("#signup-email")!.value = "alex@example.test";
+  await submit();
+  await click("Solve test challenge"); await click("Forgot password?");
+  expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("alex@example.test", { redirectTo: "https://app.morada.lu/connexion?mode=reset&next=%2Fapp", captchaToken: "one-use-captcha" });
+  expect(host.querySelector('[role="status"]')?.textContent).toBe("If an account uses this address, a reset link is on its way.");
+  expect(host.innerHTML).not.toContain("legacy=1");
+});
+it("the recovery link opens a new-password step, and an expired link says so", async () => {
+  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", email: "alex@example.test", user_metadata: {} } }, error: null });
+  auth.updateUser.mockResolvedValue({ data: { user: null }, error: { code: "weak_password", status: 422 } });
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode recovery />));
+  expect(host.querySelector("h1")?.textContent).toBe("Choose a new password");
+  host.querySelector<HTMLInputElement>("#reset-password")!.value = "short";
+  await submit();
+  expect(auth.updateUser).not.toHaveBeenCalled();
+  host.querySelector<HTMLInputElement>("#reset-password")!.value = "long-enough-1";
+  await submit();
+  expect(auth.updateUser).toHaveBeenCalledWith({ password: "long-enough-1" });
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("too weak");
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  auth.getUser.mockResolvedValue({ data: { user: null }, error: { code: "session_not_found" } });
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode recovery />));
+  expect(host.querySelector("h1")?.textContent).toBe("Welcome back");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("This reset link has expired. Request a new one.");
+});
+it("an invitation's address is prefilled and survives the phone verification", async () => {
+  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", user_metadata: { morada_signup: { version: 1, stage: "email", role: "tenant" } } } }, error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn initialEmail="tenant@example.test" next="/invitation/abc" />));
+  expect(host.querySelector<HTMLInputElement>("#signup-email")?.value).toBe("tenant@example.test");
 });

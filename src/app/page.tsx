@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/supabase/server";
-import { phoneSignupEntryEnabled } from "@/lib/signup/rollout";
 
-/** Open the new entry only once SMS, CAPTCHA and a live signup are proven. */
+/** app.morada.lu itself: the space when signed in, the sign-in door otherwise. New accounts start at /inscription. */
 export default async function Home() {
-  redirect((await getSession()) ? "/app" : phoneSignupEntryEnabled() ? "/inscription" : "/connexion");
+  redirect((await getSession()) ? "/app" : "/connexion");
 }

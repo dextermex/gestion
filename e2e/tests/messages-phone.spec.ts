@@ -1,5 +1,5 @@
 import { devices, expect, test, type Page } from "@playwright/test";
-import { createHouse, inviteTenant, letLot, mail, PASSWORD, signIn, signOutFromShell, signOutFromTenantSpace, signUp } from "./helpers";
+import { createHouse, inviteTenant, letLot, mail, signIn, signOutFromShell, signOutFromTenantSpace, signUp, createAccountFromInvitation } from "./helpers";
 
 /**
  * Messages on a phone. The desk's inbox behaves like a messaging app
@@ -82,12 +82,7 @@ test.describe("set up at a laptop's size", () => {
   test("the tenant creates the account from the link, writes, then asks", async ({ page }) => {
     await page.goto(`/invitation/${token}`);
     await expect(page.getByText(houseA).first()).toBeVisible();
-    await page.getByRole("link", { name: "Créer mon compte" }).click();
-    await expect(page.locator("#signup-email")).toHaveValue(tenant.email);
-    await page.locator("#signup-first-name").fill(tenant.first);
-    await page.locator("#signup-last-name").fill(tenant.last);
-    await page.locator("#signup-password").fill(PASSWORD);
-    await page.locator("#signup-form button[type=submit]").click();
+    await createAccountFromInvitation(page, tenant, token);
     await page.waitForURL(/\/locataire/, { timeout: 90_000 });
     await page.goto("/locataire/messages");
     await page.locator("#tenant-message-body").fill(firstWord);

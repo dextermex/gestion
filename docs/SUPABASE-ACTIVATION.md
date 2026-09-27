@@ -119,11 +119,11 @@ is provisioned and verified; it can involve a paid add-on.
    Auth CAPTCHA settings and public site key in Vercel's
    `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Confirm that the shared marketing/Pro Auth
    clients send CAPTCHA tokens before enabling this project-wide setting.
-3. Enable phone signup in Vercel with `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1`, then
-   rebuild after a real SMS/confirmation test in staging. Keep
-   `PHONE_SIGNUP_ENTRY_ENABLED=0` until a real signup on `/inscription` succeeds
-   in production, then set it to `1` and redeploy to route `/connexion` and the
-   morada.lu CTAs into the funnel.
+3. Enable phone signup in Vercel with `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1` and
+   rebuild. The SMS provider must be **Twilio Verify** (Account SID, Auth Token,
+   Verify Service SID `VA…`). Choosing plain **Twilio** with a `VA…` value makes
+   every request fail with `sms_send_failed` / Twilio 21212; see
+   docs/SIGNUP-FUNNEL.md, “Diagnosing a failed code request”.
 4. Configure **Google** and **Apple** in Auth Providers. Register
    `https://lgmoocvumiuqjcqnrlej.supabase.co/auth/v1/callback` as their provider
    callback. Use Google Web OAuth credentials and an Apple Services ID plus
@@ -203,9 +203,8 @@ Verified in the signed-in production dashboard on 2026-09-27:
   `Can't resolve 'libphonenumber-js/min'`. The project now uses `npm ci`, also
   pinned in `vercel.json`, so each build installs its own lockfile. Code is
   deployed to `app.morada.lu/inscription` through merged PR #3; production phone
-  activation remains gated on the provider setup above. Existing marketing links
-  to `/connexion?onglet=inscription` will redirect into the new funnel when the
-  phone flag and Turnstile public key are enabled.
+  activation depends on the provider setup above. Existing marketing links to
+  `/connexion?onglet=inscription` redirect to `/inscription` unconditionally.
 
 Real SMS, OAuth and inbox delivery remain unverified. No production rows or
 database schemas were changed. The phone and social UI flags remain gated until

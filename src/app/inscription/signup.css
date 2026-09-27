@@ -219,6 +219,8 @@
 .signup-provider img, .signup-provider svg { height: 20px; width: 20px; object-fit: contain; }
 .signup-recovery, .signup-alternative { display: flex; align-items: center; min-height: 44px; color: var(--color-brand-700); font-size: 13px; text-underline-offset: 4px; }
 .signup-recovery { margin-top: 8px; text-decoration: underline; }
+button.signup-recovery { padding: 0; border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer; }
+button.signup-recovery:disabled { cursor: default; opacity: 0.6; }
 .signup-alternative { justify-content: center; margin-top: 12px; }
 .signup-email-verified { margin: 16px 0 0; }
 .signup-confirm-dialog { position: fixed; width: min(440px,calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; margin: auto; padding: 36px 28px 24px; border: 1px solid #fff; border-radius: 28px; color: var(--color-ink); background: #fff; text-align: center; box-shadow: 0 24px 90px rgb(6 34 41 / .18); }
