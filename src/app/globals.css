@@ -927,6 +927,7 @@ button:not(:disabled),
 .tenant-payment-summary .text-3xl { font-size: 2.75rem; font-weight: 550; margin-bottom: .75rem; }
 .tenant-bottom-nav { inset: auto .75rem max(.5rem,var(--safe-bottom)); border: 1px solid #fff; border-radius: 1.5rem; box-shadow: 0 6px 24px #2c547d20; padding: .25rem; }
 .tenant-bottom-nav ul { height: 4rem; padding-inline: .25rem; }
+.tenant-bottom-nav ul > li { flex: 1 1 auto; }
 .tenant-bottom-nav a, .tenant-bottom-nav button { border-radius: 1rem; }
 .tenant-bottom-nav [aria-current="page"] { background: #e3eff7; }
 @media (width < 64rem) {
