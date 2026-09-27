@@ -105,22 +105,25 @@ test("phone signup persists one identity, confirms its email by code, sets a pas
   expect(wrongCode.error).not.toBeNull();
   const confirmedByCode = await db.auth.verifyOtp({ email, token: await emailCode(request, email), type: "email_change" });
   expect(confirmedByCode.error).toBeNull();
+  // As in the browser, the session the code returns is the one the cookie
+  // carries from here on. Setting a password revokes every other session.
+  const current = confirmedByCode.data.session ?? session;
   const user = await db.auth.getUser();
   expect(user.data.user?.id).toBe(id);
   expect(user.data.user?.email).toBe(email);
   expect(user.data.user?.email_confirmed_at).toBeTruthy();
-  expect((await save(request, session, { action: "email_confirmed" })).status()).toBe(200);
-  expect(await (await save(request, session, { action: "complete", preferences })).json()).toEqual({ error: "password_required" });
-  const passwordSet = await save(request, session, { action: "password", password: "Signup-Passw0rd" });
+  expect((await save(request, current, { action: "email_confirmed" })).status()).toBe(200);
+  expect(await (await save(request, current, { action: "complete", preferences })).json()).toEqual({ error: "password_required" });
+  const passwordSet = await save(request, current, { action: "password", password: "Signup-Passw0rd" });
   expect(await passwordSet.json()).toEqual({ ok: true, stage: "tailor" });
   // The same account now signs in with its email and password.
   const byPassword = await client().auth.signInWithPassword({ email, password: "Signup-Passw0rd" });
   expect(byPassword.error).toBeNull();
   expect(byPassword.data.user?.id).toBe(id);
-  expect((await save(request, session, { action: "complete", preferences })).status()).toBe(200);
+  expect((await save(request, current, { action: "complete", preferences })).status()).toBe(200);
   const completed = (await db.auth.getUser()).data.user;
   expect(completed?.user_metadata.morada_signup).toMatchObject({ role: "landlord", stage: "complete", preferences });
-  const dashboard = await request.get("/app", { headers: sessionHeaders(session) });
+  const dashboard = await request.get("/app", { headers: sessionHeaders(current) });
   expect(dashboard.status()).toBe(200);
   expect(new URL(dashboard.url()).pathname).toBe("/app");
   const memberships = await db.from("crm_members").select("agency_id,role").eq("user_id", id);
