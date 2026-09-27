@@ -9,7 +9,7 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 15_000 },
   reporter: "list",
-  use: { baseURL: "http://127.0.0.1:4321" },
+  use: { baseURL: "http://localhost:4321" },
   webServer: {
     command: "npx next start -H 127.0.0.1 -p 4321",
     url: "http://127.0.0.1:4321/inscription",
