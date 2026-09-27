@@ -668,3 +668,337 @@ button:not(:disabled),
 .crm-onboarding { max-width: calc(100vw - 2rem); }
 .crm-onboarding > button { max-width: 100%; text-align: left; }
 .crm-onboarding > button > span { flex-shrink: 0; }
+
+/* Spacious product system: 8px rhythm, 56px fields, consistent symbols.
+   The sky material is a CSS approximation; data stays on high-opacity surfaces. */
+.crm-shell, .tenant-space, .journey-shell, .ui-modal {
+  --color-sand-50: #f3f7fa;
+  --color-sand-100: #eaf1f6;
+  --color-sand-200: #dce6ed;
+  --color-sand-300: #9dadb9;
+  --color-ink: #192e3c;
+  --color-ink-soft: #506576;
+  --font-display: -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", sans-serif;
+  --crm-radius: 1.75rem;
+}
+.crm-shell, .tenant-space, .journey-shell {
+  background: radial-gradient(ellipse at 90% 0, #d9edff 0, transparent 50rem), radial-gradient(ellipse at 0 40%, #e8f3f8, transparent 50rem), #f5f8fa;
+}
+.crm-main { max-width: 100rem; padding: 2.5rem clamp(1.25rem, 3vw, 3.5rem) 4rem; }
+.crm-shell h1, .tenant-space h1 { font-size: clamp(1.8rem, 2.5vw, 2.5rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.2; }
+.crm-dashboard-heading { margin-bottom: 2rem; }
+.crm-dashboard-heading p, .ui-page-header p { font-size: .9375rem; margin-top: .65rem; }
+.crm-nav-parent, .crm-nav-child { font-size: .875rem; min-height: 2.75rem; }
+.crm-nav-parent > svg:first-child { width: 21px; height: 21px; }
+.crm-nav-list { gap: .25rem; }
+.crm-sidebar-footer { padding-top: .75rem; }
+.crm-shell .ui-card, .tenant-space .ui-card {
+  border: 1px solid rgb(255 255 255 / .95);
+  border-radius: var(--crm-radius);
+  background: rgb(255 255 255 / .92);
+  box-shadow: inset 0 1px 0 white, 0 4px 6px -4px rgb(47 83 110 / .08), 0 16px 45px -28px rgb(47 83 110 / .22), 0 0 0 1px rgb(60 101 130 / .04);
+}
+.crm-shell .crm-panel, .tenant-space .crm-panel { padding: 1.75rem; }
+.crm-panel-heading { margin-bottom: 1.5rem; }
+.crm-shell .crm-panel-heading h2, .tenant-space .crm-panel-heading h2 { font-size: 1.125rem; font-weight: 600; letter-spacing: -.025em; }
+.crm-symbol { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; flex-shrink: 0; border-radius: 1rem; background: #edf4f9; color: #35617b; }
+.crm-overview { grid-template-columns: 1.45fr 1fr 1fr; gap: 1.5rem; }
+.crm-shell .crm-metric { position: relative; overflow: hidden; padding: 1.75rem; }
+.crm-shell .crm-metric:first-child { background: linear-gradient(125deg, #fafdff 10%, #e1f0ff 65%, #d2e8fa); border-color: #fff; }
+.crm-metric-top { position: relative; font-size: .9375rem; min-height: 2.75rem; }
+.crm-metric-value { position: relative; font-size: clamp(2.25rem, 3vw, 3.25rem); font-weight: 550; margin-top: 1rem; }
+.crm-metric-sub { position: relative; font-size: .875rem; line-height: 1.6; max-width: 27ch; }
+.crm-metric-progress { position: relative; margin-top: 1.5rem; }
+.crm-metric-percent { font-size: .8125rem; }
+.crm-metric-action { position: relative; margin-top: 1rem; min-height: 2.75rem; font-size: .875rem; }
+.glass-house { width: 100%; height: auto; pointer-events: none; }
+.crm-metric-art { position: absolute; width: 12rem; right: -1.75rem; top: 3.25rem; opacity: .5; }
+.crm-metric:first-child .crm-metric-value, .crm-metric:first-child .crm-metric-sub { max-width: 80%; }
+.crm-dashboard-grid { gap: 1.5rem; margin-top: 1.5rem; grid-template-columns: 1.1fr 1fr; grid-template-areas: "chart chart" "todo activity" "workflows vigilance"; }
+.crm-todo .crm-link-row { padding-block: 1.5rem; gap: 1rem; }
+.crm-todo .crm-link-row > div p:first-child { font-size: .9375rem; line-height: 1.6; }
+.crm-todo .crm-link-row > div p + p { font-size: .875rem; line-height: 1.65; margin-top: .5rem; }
+.crm-watchlist li { gap: 1rem; }
+.crm-watchlist li + li { padding-top: 1.5rem; margin-top: 1.5rem; }
+.crm-watchlist p + p { margin-top: .5rem; font-size: .875rem; line-height: 1.6; }
+.crm-more-actions { border-top: 1px solid var(--color-sand-200); }
+.crm-more-actions > summary { padding: 1.25rem 0; font-weight: 600; font-size: .875rem; color: var(--color-brand-700); cursor: pointer; }
+.crm-more-actions[open] .when-closed, .crm-more-actions:not([open]) .when-open { display: none; }
+.crm-timeline { list-style: none; padding: 0; }
+.crm-timeline li { display: flex; gap: 1rem; padding: 1.4rem 0; border-bottom: 1px solid var(--color-sand-100); }
+.crm-timeline li:first-child { padding-top: .25rem; }
+.crm-timeline li:last-child { border-bottom: 0; padding-bottom: 0; }
+.crm-timeline-body { flex: 1; min-width: 0; }
+.crm-timeline-date { display: block; font-size: .8125rem; color: var(--color-ink-soft); margin-bottom: .4rem; }
+.crm-timeline-title { font-size: .9375rem; font-weight: 550; line-height: 1.55; overflow-wrap: anywhere; }
+.crm-timeline-sub { font-size: .875rem; line-height: 1.6; color: var(--color-ink-soft); margin-top: .3rem; }
+.crm-timeline-amount { display: block; margin-top: .6rem; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ui-field-group { position: relative; min-width: 0; }
+.ui-field-group:where(:has(.ui-field):not(.ui-field-unlabelled)) > .ui-field-label { position: absolute; z-index: 1; pointer-events: none; top: 1.125rem; left: 1rem; right: 2rem; margin: 0; font-size: .9375rem; line-height: 1.25rem; color: var(--color-ink-soft); transform-origin: left top; transition: transform 150ms, top 150ms; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-field, .crm-shell .ui-field, body:has(.crm-shell) .ui-modal .ui-field { min-height: 3.5rem; border: 1px solid #7b909e; border-radius: 1rem; background: #f6f9fc; font-size: 1rem; line-height: 1.4; padding: 1rem; }
+.ui-field-group:has(.ui-field):not(.ui-field-unlabelled) .ui-field { padding-top: 1.5rem; padding-bottom: .375rem; }
+.ui-field-group:has(.ui-field:focus) > .ui-field-label,
+.ui-field-group:has(input:not(:placeholder-shown)) > .ui-field-label,
+.ui-field-group:has(textarea:not(:placeholder-shown)) > .ui-field-label,
+.ui-field-group:has(select, input[type="date"], input[type="month"], input[type="datetime-local"], input[type="file"], input[type="time"]) > .ui-field-label { top: .4rem; transform: scale(.8); }
+.ui-field-group .ui-field::placeholder { color: transparent; }
+.ui-field-group .ui-field:focus::placeholder { color: #637989; }
+.ui-field-group:has(input:-webkit-autofill) > .ui-field-label { top: .4rem; transform: scale(.8); }
+.ui-field-hint { padding-inline: .25rem; margin-top: .5rem; font-size: .8125rem; line-height: 1.6; }
+.ui-field-group:has(input[type="file"]) .ui-field { padding-top: 1.65rem; min-height: 4.25rem; }
+.ui-field-group:has(input[type="checkbox"], input[type="radio"]) > .ui-field-label { position: static; transform: none; }
+.ui-field:focus { background: #fff; }
+.ui-button { min-height: 2.875rem; padding-inline: 1.25rem; font-size: .9375rem; }
+.ui-modal { border-radius: 1.75rem; padding: 2rem; background: linear-gradient(145deg, #fff, #f8fbfe); }
+.ui-modal > div:first-child { margin-bottom: 1.75rem; gap: 1rem; }
+.ui-modal h2 { font-size: 1.5rem; letter-spacing: -.035em; }
+.ui-modal form.space-y-4 > :not(:last-child) { margin-bottom: 1.25rem; }
+.ui-modal form > div:last-child { padding-top: .75rem; }
+.ui-modal form > div:last-child .ui-button:last-child { min-width: 8rem; }
+.journey-shell { overscroll-behavior: contain; }
+.journey-topbar { min-height: 4.5rem; background: rgb(249 252 255 / .9); backdrop-filter: blur(20px); padding-inline: max(1.25rem, calc((100vw - 1180px)/2)); }
+.journey-layout { max-width: 1180px; display: grid; grid-template-columns: 240px minmax(0, 680px); justify-content: space-between; gap: 4rem; padding-block: 3rem; }
+.journey-guide { position: sticky; top: 7rem; align-self: start; }
+.journey-guide .glass-house { margin-bottom: 2rem; }
+.journey-guide ol { display: grid; gap: 1.5rem; }
+.journey-guide li { display: flex; align-items: center; gap: 1rem; font-size: .9375rem; color: var(--color-ink-soft); }
+.journey-guide li > span { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; border: 1px solid #b3c8d8; background: rgb(255 255 255 / .65); font-variant-numeric: tabular-nums; }
+.journey-guide li[aria-current] { color: var(--color-ink); font-weight: 650; }
+.journey-guide li[aria-current] > span { color: white; background: var(--color-brand-700); border-color: var(--color-brand-700); box-shadow: 0 4px 12px #20586720; }
+.journey-guide li.is-complete > span { background: #dcecf0; color: var(--color-brand-800); }
+.journey-content { min-width: 0; }
+.journey-title { font-size: 2.25rem; letter-spacing: -.045em; line-height: 1.2; font-weight: 600; }
+.journey-intro { margin-top: .875rem; color: var(--color-ink-soft); font-size: 1rem; line-height: 1.65; max-width: 55ch; }
+.journey-card, .journey-shell .journey-step-card { margin-top: 1.75rem; border: 1px solid #fff; border-radius: 1.75rem; padding: 2rem; background: rgb(255 255 255 / .92); box-shadow: 0 20px 60px -35px #517d9b55, 0 0 0 1px #517d9b0a; }
+.property-type-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: .65rem; }
+.property-type-option { position: relative; display: flex; align-items: center; flex-direction: column; justify-content: center; gap: .65rem; min-height: 6rem; padding: .75rem .4rem; border: 1px solid #d4e0e9; border-radius: 1rem; background: #f5f9fc; font-size: .8125rem; cursor: pointer; text-align: center; color: var(--color-ink-soft); }
+.property-type-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.property-type-option:has(input:checked) { border-color: var(--color-brand-600); background: #e7f2f8; box-shadow: inset 0 0 0 1px var(--color-brand-600); color: var(--color-brand-800); }
+.property-type-option:has(input:focus-visible) { outline: 3px solid #83bddd; outline-offset: 3px; }
+.property-type-symbol svg { width: 28px; height: 28px; }
+.journey-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--color-sand-100); }
+.journey-footer .ui-button { min-height: 3.5rem; min-width: 9rem; }
+.journey-option { border-bottom: 1px solid var(--color-sand-200); }
+.journey-option > summary { display: flex; align-items: center; gap: 1rem; padding-block: 1.1rem; list-style: none; cursor: pointer; font-size: 1rem; font-weight: 550; }
+.journey-option > summary::-webkit-details-marker { display: none; }
+.journey-option > summary > svg:last-child { margin-left: auto; flex-shrink: 0; transition: transform 150ms; }
+.journey-option[open] > summary > svg:last-child { transform: rotate(180deg); }
+.journey-option-body { padding-block: .75rem 1.75rem; }
+.journey-option-body > p { line-height: 1.65; }
+.journey-review-row { display: grid; grid-template-columns: 1fr 1.5fr; align-items: start; gap: 1.5rem; padding-block: 1.25rem; }
+.journey-review-row dd { overflow-wrap: anywhere; }
+.journey-step-card { max-width: 42rem; }
+.journey-shell .journey-step-card .grid { gap: 1rem; }
+@media (width < 80rem) {
+  .crm-dashboard-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: "chart" "todo" "activity" "workflows" "vigilance"; }
+  .crm-overview { gap: 1rem; grid-template-columns: 1.25fr 1fr 1fr; }
+  .crm-shell .crm-metric { padding: 1.25rem; }
+  .crm-metric-art { width: 10rem; opacity: .3; }
+}
+@media (width < 64rem) {
+  .crm-main { padding: 1.75rem 1.25rem 5rem; }
+  .journey-layout { grid-template-columns: minmax(0, 680px); justify-content: center; gap: 2rem; }
+  .journey-guide { position: static; }
+  .journey-guide .glass-house { display: none; }
+  .journey-guide ol { display: flex; justify-content: space-between; gap: .75rem; }
+  .journey-guide li { font-size: .8125rem; gap: .5rem; }
+}
+@media (width < 40rem) {
+  .crm-main { padding-inline: 1rem; }
+  .crm-overview { grid-template-columns: 1fr; gap: 1rem; }
+  .crm-metric:first-child { grid-column: auto; }
+  .crm-shell .crm-metric { padding: 1.5rem; }
+  .crm-metric-top { font-size: .9375rem; }
+  .crm-metric-action { font-size: .875rem; align-items: center; }
+  .crm-metric-top svg { width: 22px; }
+  .crm-metric-art { opacity: .6; width: 12rem; }
+  .crm-shell .crm-panel, .tenant-space .crm-panel { padding: 1.5rem; }
+  .crm-todo .crm-link-row > div p + p { display: block; -webkit-line-clamp: unset; }
+  .crm-dashboard-grid { gap: 1.25rem; }
+  .ui-modal { padding: 1.5rem; border-radius: 1.75rem 1.75rem 0 0; }
+  .journey-layout { padding-block: 1.5rem 3rem; }
+  .journey-topbar { min-height: 4rem; }
+  .journey-guide li { flex-direction: column; align-items: center; gap: .5rem; text-align: center; font-size: .75rem; flex: 1; }
+  .journey-guide li > span { height: 2rem; width: 2rem; }
+  .journey-title { font-size: 1.875rem; }
+  .journey-card, .journey-shell .journey-step-card { padding: 1.25rem; }
+  .property-type-options { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .property-type-option { min-height: 5rem; }
+  .journey-option-body .grid-cols-4, .journey-option-body .grid-cols-3 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .journey-option-body li.grid-cols-12 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .journey-option-body li.grid-cols-12 > * { grid-column: auto; }
+  .journey-review-row { grid-template-columns: 1fr; gap: .375rem; }
+  .journey-review-row dd { text-align: left; }
+  .journey-footer .ui-button { flex: 1; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .crm-shell, .tenant-space, .journey-shell { background: #f3f7fa; }
+  .crm-shell .ui-card, .tenant-space .ui-card, .journey-card, .ui-modal, .journey-topbar { background: #fff; border-color: #9dadb9; backdrop-filter: none; }
+  .crm-metric-art { display: none; }
+  .ui-field { border-color: #506576; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-field-label, .journey-option > summary > svg:last-child { transition: none !important; }
+}
+.crm-action-row { display: grid; grid-template-columns: 2.75rem minmax(0,1fr) 1rem; align-items: start; gap: 1rem; padding-block: 1.5rem; border-radius: .75rem; }
+.crm-action-row:hover .crm-action-title { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; }
+.crm-action-row > svg { margin-top: 1rem; }
+.crm-action-category { display: block; margin-bottom: .4rem; color: var(--color-ink-soft); font-size: .8125rem; }
+.crm-action-title { font-size: .9375rem; font-weight: 550; line-height: 1.55; }
+.crm-action-description { margin-top: .5rem; color: var(--color-ink-soft); font-size: .875rem; line-height: 1.65; }
+.cashflow-summary { display: flex; flex-wrap: wrap; align-items: end; gap: 1.5rem 3rem; margin-block: 1.5rem 2rem; }
+.cashflow-period { font-size: .875rem; color: var(--color-ink-soft); margin-bottom: .5rem; }
+.cashflow-total { font-size: clamp(2rem, 3vw, 2.75rem); line-height: 1.15; font-weight: 550; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.cashflow-expected-value { font-size: 1.375rem; line-height: 1.5; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
+.cashflow-key { display: flex; gap: .5rem; align-items: center; font-size: .8125rem; margin-top: .625rem; color: var(--color-ink-soft); }
+.cashflow-key i { width: 1.25rem; height: 3px; border-radius: 2px; background: #286786; }
+.cashflow-key.expected i { background: none; border-top: 2px dashed #7b8e9e; }
+.cashflow-graph { position: relative; height: 14rem; padding-left: 3.5rem; }
+.cashflow-graph > svg { height: 100%; width: 100%; overflow: visible; }
+.cashflow-axis { position: absolute; inset: 12% auto 10% 0; display: flex; flex-direction: column; justify-content: space-between; width: 3rem; font-size: .8125rem; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
+.cashflow-axis span { transform: translateY(-50%); }
+.cashflow-axis span:last-child { transform: translateY(50%); }
+.cashflow-point { position: absolute; width: .8rem; height: .8rem; border: 3px solid #fff; background: #286786; box-shadow: 0 0 0 1px #286786; border-radius: 50%; transform: translate(-50%,-50%); }
+.cashflow-months { display: flex; justify-content: space-between; margin-left: 3.5rem; gap: .25rem; }
+.cashflow-months button { min-width: 2.75rem; min-height: 2.75rem; padding: .5rem .75rem; border-radius: .875rem; color: var(--color-ink-soft); font-size: .8125rem; cursor: pointer; }
+.cashflow-months button[aria-pressed="true"] { background: #e4eff7; color: #1d4c69; font-weight: 650; }
+.cashflow-months button:hover { background: #edf4f9; }
+.cashflow-details { margin-top: 1.25rem; border-top: 1px solid var(--color-sand-100); }
+.cashflow-details > summary { width: fit-content; min-height: 2.75rem; padding-top: 1rem; cursor: pointer; font-size: .875rem; font-weight: 550; color: var(--color-brand-700); }
+@media (width < 40rem) {
+  .crm-action-row { grid-template-columns: 2.5rem minmax(0,1fr); gap: .75rem; }
+  .crm-action-row > svg { display: none; }
+  .crm-action-row .crm-symbol { width: 2.5rem; height: 2.5rem; }
+  .cashflow-summary { gap: 1rem; }
+  .cashflow-summary > div { min-width: 0; }
+  .cashflow-expected-value { font-size: 1.125rem; }
+  .cashflow-graph { height: 11rem; }
+  .cashflow-months button { padding-inline: .25rem; min-width: 2rem; }
+}
+.crm-metric-attention .crm-symbol { color: #a24724; background: #fff0e7; }
+.crm-metric-attention .crm-metric-sub { color: #9b411f; font-weight: 550; }
+.crm-action-row.is-urgent .crm-symbol { color: #a24724; background: #fff0e7; }
+.crm-action-row.is-urgent .crm-action-category { color: #9b411f; font-weight: 650; }
+.create-intro { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.75rem; }
+.create-intro p { font-size: .9375rem; line-height: 1.6; color: var(--color-ink-soft); }
+.create-optional { padding-top: .5rem; }
+.create-optional summary { display: flex; align-items: center; gap: .75rem; font-size: .9375rem; font-weight: 550; cursor: pointer; list-style: none; min-height: 2.75rem; }
+.create-optional summary::-webkit-details-marker { display: none; }
+.create-optional summary span { margin-left: auto; font-size: .8125rem; font-weight: 400; color: var(--color-ink-soft); }
+.tenant-space { --bar-h: calc(5rem + var(--safe-top)); font-size: 1rem; }
+.tenant-space .font-display { font-family: var(--font-display); letter-spacing: -.025em; }
+.tenant-space header { background: rgb(249 252 255 / .85); }
+.tenant-main { padding-block: 2.75rem 2rem; }
+.tenant-main > div > .mb-6 { margin-bottom: 2rem; }
+.tenant-greeting p { font-size: 1rem; margin-top: .65rem; line-height: 1.65; }
+.tenant-tabs { gap: .5rem; padding-block: .25rem 1rem; }
+.tenant-tabs a { gap: .65rem; border: 0; border-radius: 1rem; padding: .75rem 1.15rem; font-weight: 550; font-size: .9375rem; }
+.tenant-tabs a[aria-current="page"] { background: #e0edf7; color: #254e67; box-shadow: inset 0 1px 0 white, 0 2px 8px #36596e0a; }
+.tenant-overview { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem; }
+.tenant-space .tenant-rent-card { display: flex; flex-direction: column; padding: 2rem; background: linear-gradient(125deg,#fafdff,#e1f0ff 65%,#d2e8fa); min-height: 22rem; }
+.tenant-rent-card > p:first-of-type { margin-top: .75rem; font-size: .9375rem; }
+.tenant-space .tenant-rent-card .tenant-next-amount { font-size: clamp(2.5rem, 5vw, 3.5rem); font-weight: 550; margin-block: .75rem .5rem; letter-spacing: -.05em; }
+.tenant-rent-card .text-xs { font-size: .875rem; }
+.tenant-rent-card code { font-size: .9375rem; padding: .5rem .75rem; }
+.tenant-primary-action { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 1.75rem; font-size: .9375rem; font-weight: 600; color: var(--color-brand-800); min-height: 3.5rem; }
+.tenant-primary-action:hover { text-decoration: underline; }
+.tenant-home-card { display: flex; flex-direction: column; }
+.tenant-home-card > img { max-height: 13rem; }
+.tenant-house-illustration { height: 12rem; display: flex; justify-content: center; background: linear-gradient(120deg,#f4faff,#eaf3f9); }
+.tenant-house-illustration .glass-house { width: 15rem; }
+.tenant-home-card > .p-5 { padding: 1.5rem 2rem; }
+.tenant-home-card .text-xs { font-size: .875rem; line-height: 1.65; }
+.tenant-home-card .text-lg { font-size: 1.25rem; }
+.tenant-main .text-\[11px\] { font-size: .8125rem; line-height: 1.5; letter-spacing: 0; text-transform: none; }
+.tenant-main .text-xs { font-size: .875rem; line-height: 1.6; }
+.tenant-main .text-sm { font-size: .9375rem; line-height: 1.6; }
+.tenant-main .mt-5 { margin-top: 1.5rem; }
+.tenant-main .gap-5 { gap: 1.5rem; }
+.tenant-shortcut { border: 1px solid #dce8f0; border-radius: 1.25rem; padding: 1.5rem; background: linear-gradient(135deg,#f7fbff,#eff5fa); transition: background 150ms,border-color 150ms; }
+.tenant-shortcut .crm-symbol { margin-bottom: 1.25rem; background: #fff; box-shadow: 0 4px 10px #294d650a; }
+.tenant-shortcut:hover { border-color: #a6bdcc; background: #e7f1f8; }
+.tenant-shortcut p + p { margin-top: .5rem; }
+.tenant-main dl > div { padding-block: .875rem; }
+.tenant-main .crm-link-row { padding-block: 1.25rem; }
+.tenant-main table th { font-size: .8125rem; text-transform: none; letter-spacing: 0; font-weight: 550; padding-block: 1rem; }
+.tenant-main table td { padding-block: 1.25rem; }
+.tenant-main table .tabular-nums { white-space: nowrap; }
+.tenant-space .tenant-payment-summary { padding: 2rem; background: linear-gradient(120deg,#fff,#e6f2fc); }
+.tenant-payment-summary .text-3xl { font-size: 2.75rem; font-weight: 550; margin-bottom: .75rem; }
+.tenant-bottom-nav { inset: auto .75rem max(.5rem,var(--safe-bottom)); border: 1px solid #fff; border-radius: 1.5rem; box-shadow: 0 6px 24px #2c547d20; padding: .25rem; }
+.tenant-bottom-nav ul { height: 4rem; padding-inline: .25rem; }
+.tenant-bottom-nav a, .tenant-bottom-nav button { border-radius: 1rem; }
+.tenant-bottom-nav [aria-current="page"] { background: #e3eff7; }
+@media (width < 64rem) {
+  .tenant-space { --nav-b: calc(5.75rem + var(--safe-bottom)); }
+  .tenant-main { padding-block: 2rem; }
+}
+@media (width < 40rem) {
+  .tenant-overview { grid-template-columns: 1fr; }
+  .tenant-space .tenant-rent-card { padding: 1.5rem; min-height: 20rem; }
+  .tenant-home-card { display: grid; grid-template-columns: 6rem minmax(0,1fr); }
+  .tenant-house-illustration { height: 100%; align-items: center; background: transparent; }
+  .tenant-house-illustration .glass-house { width: 8rem; max-width: none; }
+  .tenant-home-card > .p-5 { padding: 1.5rem 1.25rem 1.5rem .25rem; }
+  .tenant-home-card > img { height: 100%; max-height: none; aspect-ratio: auto; }
+  .tenant-shortcuts .grid { grid-template-columns: 1fr; }
+  .tenant-shortcut { display: grid; grid-template-columns: 2.75rem 1fr; column-gap: 1rem; padding: 1.25rem; }
+  .tenant-shortcut .crm-symbol { grid-row: 1 / 3; margin-bottom: 0; }
+  .tenant-shortcut p + p { margin-top: .25rem; }
+  .tenant-space .tenant-payment-summary { padding: 1.5rem; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .tenant-space .tenant-rent-card, .tenant-space .tenant-payment-summary, .tenant-bottom-nav { background: #fff; border-color: #9dadb9; }
+}
+.property-unit-draft { padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--color-sand-200); background: #f5f9fc; }
+.property-unit-draft .ui-field { background: #fff; }
+.rental-guide ol { gap: 1.1rem; }
+.rental-guide li { line-height: 1.45; }
+.rental-guide li > span { width: 1.875rem; height: 1.875rem; font-size: .8125rem; flex-shrink: 0; }
+@media (width >= 90rem) {
+  .crm-dashboard-grid { grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); grid-template-areas: "chart todo" "activity workflows" "activity vigilance"; }
+}
+@media (width < 90rem) {
+  .crm-dashboard-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: "todo" "chart" "activity" "workflows" "vigilance"; }
+}
+@media (width < 64rem) {
+  .rental-guide { display: none; }
+}
+.crm-metric:first-child .crm-metric-value { font-size: clamp(2.75rem,3.8vw,3.75rem); }
+.crm-metric:not(:first-child) .crm-metric-value { font-size: 2.5rem; }
+.crm-main .text-sm { font-size: .9375rem; line-height: 1.6; }
+.crm-shell .table-scroll td { padding-block: 1.125rem; }
+.crm-nav-parent { font-size: .9375rem; }
+.tenant-bottom-nav a, .tenant-bottom-nav button { font-size: .75rem; }
+@media (width < 40rem) {
+  .crm-metric:first-child .crm-metric-value { font-size: 3rem; }
+  .journey-card .grid-cols-3 > .ui-field-group:has(input[autocomplete="postal-code"]) { grid-column: span 1; }
+  .ui-field-group:where(:has(.ui-field):not(.ui-field-unlabelled)) > .ui-field-label { right: 1rem; }
+}
+.crm-welcome { position: relative; border-radius: 2rem; background: linear-gradient(125deg,#fff,#dceeff); padding: 2.5rem; }
+.crm-welcome > .glass-house { width: 15rem; margin: auto; }
+.crm-shell .crm-welcome .ui-empty { border: 0; background: transparent; min-height: 0; padding-top: 1rem; }
+.crm-welcome .ui-empty > span { display: none; }
+.crm-welcome h3 { font-size: 1.75rem; letter-spacing: -.04em; }
+.crm-welcome .ui-empty p { font-size: 1rem; line-height: 1.65; max-width: 40ch; }
+.request-kind-card { padding: 1.5rem; border-color: #dce6ed; background: #f5f9fc; box-shadow: none; }
+.request-kind-card > .crm-symbol { margin-bottom: 1.25rem; background: #fff; }
+.request-kind-card:hover { background: #eaf3fa; }
+@media (width < 40rem) {
+  .request-kind-card { display: grid; grid-template-columns: 2.75rem minmax(0,1fr); gap: .25rem 1rem; padding: 1.25rem; }
+  .request-kind-card > .crm-symbol { grid-row: 1/3; margin-bottom: 0; }
+}
+.crm-shell .ui-field, .tenant-space .ui-field, .journey-shell .ui-field, .ui-modal .ui-field { font-size: 1rem; }
+@media (width < 40rem) {
+  .property-address-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .property-address-grid > .col-span-3 { grid-column: span 2; }
+}
+.create-progress { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+.create-progress li { flex: 1; padding-bottom: .75rem; border-bottom: 2px solid #dce6ed; font-size: .8125rem; line-height: 1.5; color: var(--color-ink-soft); }
+.create-progress li[aria-current] { border-color: var(--color-brand-600); color: var(--color-brand-800); font-weight: 600; }
+.crm-create-form fieldset[hidden] { display: none; }
+.crm-create-form .grid-cols-2 { grid-template-columns: minmax(0,1fr); }
+@media (width < 40rem) {
+  .ui-modal .grid-cols-2 { grid-template-columns: minmax(0,1fr); }
+  .ui-modal .grid-cols-2 > .col-span-2 { grid-column: span 1; }
+}

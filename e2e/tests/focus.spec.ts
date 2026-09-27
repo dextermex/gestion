@@ -27,8 +27,8 @@ test("the door's fields keep the caret", async ({ page }) => {
 test("the property and tenant wizards keep the caret", async ({ page }) => {
   await signUp(page, owner);
   await page.goto("/app/biens/nouveau");
-  await page.getByRole("button", { name: "Maison individuelle" }).click();
-  await typeAndKeepFocus(page, "input", "Maison Kohl");
+  await page.getByRole("radio", { name: "Maison individuelle", exact: true }).check();
+  await typeAndKeepFocus(page, 'input[aria-label="Nom du bien"]', "Maison Kohl");
   ({ propertyId, unitId } = await createHouse(page, `Maison Kohl ${Date.now().toString(36)}`));
   await page.goto(`/app/biens/locataire?lot=${encodeURIComponent(unitId)}`);
   await typeAndKeepFocus(page, "input", "Tom");

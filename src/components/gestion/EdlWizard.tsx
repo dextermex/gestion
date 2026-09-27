@@ -251,8 +251,8 @@ export default function EdlWizard({
   );
 
   const overlay = (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
-      <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
+    <div className="journey-shell fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
+      <div className="journey-topbar sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 0 || step === doneStep ? (
           <Link
             href={returnTo ?? `/app/biens/${propertyId}?onglet=location`}

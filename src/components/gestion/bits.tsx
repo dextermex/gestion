@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon, type IconName } from "@/components/pro/icons";
 import { Badge, Card } from "@/components/pro/ui";
 import type { Meta } from "@/lib/types";
 
@@ -57,35 +58,24 @@ export function Panel({
   );
 }
 
-/** Timeline row dot colours by event kind (-500 step, per convention). */
-const KIND_DOT: Record<string, string> = {
-  payment: "bg-emerald-500",
-  lease: "bg-violet-500",
-  document: "bg-amber-500",
-  ticket: "bg-sky-500",
-  letter: "bg-accent-500",
-  system: "bg-brand-500",
+const EVENT_ICONS: Record<string, IconName> = {
+  payment: "euro", lease: "key", document: "documents", ticket: "tasks", letter: "mail", system: "bell",
 };
 
-export function Timeline({
-  entries,
-}: {
-  entries: Array<{ kind: string; label: string; sub?: string; at: string }>;
+export function Timeline({ entries }: {
+  entries: Array<{ kind: string; label: string; sub?: string; at: string; amount?: string }>;
 }) {
-  return (
-    <ul className="space-y-3">
-      {entries.map((e, i) => (
-        <li key={i} className="flex items-start gap-3">
-          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND_DOT[e.kind] ?? "bg-sand-300"}`} aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-ink">{e.label}</p>
-            {e.sub && <p className="text-xs text-ink-soft">{e.sub}</p>}
-          </div>
-          <p className="shrink-0 text-[11px] text-ink-soft">{e.at}</p>
-        </li>
-      ))}
-    </ul>
-  );
+  return <ol className="crm-timeline">
+    {entries.map((entry, index) => <li key={index}>
+      <span className="crm-symbol"><Icon name={EVENT_ICONS[entry.kind] ?? "bell"} size={22} /></span>
+      <div className="crm-timeline-body">
+        <span className="crm-timeline-date">{entry.at}</span>
+        <p className="crm-timeline-title">{entry.label}</p>
+        {entry.sub && <p className="crm-timeline-sub">{entry.sub}</p>}
+        {entry.amount && <span className="crm-timeline-amount">{entry.amount}</span>}
+      </div>
+    </li>)}
+  </ol>;
 }
 
 /** Standard list row with chevron, linking to a record. */

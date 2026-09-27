@@ -1,6 +1,29 @@
 import type { Dict } from "./fr";
 
 export const de: Dict = {
+  experience: {
+    "propertyDetails": "Ihre Immobilie",
+    "propertyDetailsHint": "Typ, Name und Adresse genügen für den Anfang.",
+    "propertyExtras": "Details in Ihrem Tempo",
+    "propertyExtrasHint": "Ergänzen Sie, was Sie wissen. Alles Weitere können Sie später in der Immobilienakte hinzufügen.",
+    "essentials": "Die Immobilie",
+    "extras": "Die Details",
+    "review": "Prüfung",
+    "optional": "Optional",
+    "required": "Mit * markierte Felder sind Pflichtfelder.",
+    "skipExtras": "Weiter zur Prüfung",
+    "editDetails": "Angaben bearbeiten",
+    "moreActions": "{n} weitere Aufgaben anzeigen",
+    "lessActions": "Weniger anzeigen",
+    "activityPayment": "Miete eingegangen",
+    "contactHint": "Name und Rolle genügen. Fügen Sie Kontaktdaten hinzu, sofern bekannt.",
+    "contactDetails": "Kontaktdaten",
+    "leaseDetails": "Immobilie und Mieter",
+    "leaseMoney": "Miete und Nebenkosten",
+    "leaseGuarantee": "Mietgarantie",
+    "newProperty": "Immobilie hinzufügen",
+    "journey": "Ihr Fortschritt"
+},
   common: {
     pagePrev: "Zurück",
     pageNext: "Weiter",

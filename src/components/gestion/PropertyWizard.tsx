@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Select } from "@/components/pro/ui";
+import GlassHouse from "./GlassHouse";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 
@@ -85,6 +86,7 @@ export default function PropertyWizard({
 }) {
   const router = useRouter();
   const reduced = useReducedMotion();
+  const shellRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const [type, setType] = useState<PropertyType | null>(null);
@@ -123,20 +125,18 @@ export default function PropertyWizard({
 
   const needsUnits = type === NEEDS_UNITS;
   const isDwelling = type !== null && DWELLING.includes(type);
-  // Step 4 only exists for a container; the numbering follows.
-  const flow = useMemo(
-    () => (needsUnits ? [1, 2, 3, 4, 5, 6, 7, 8, 9] : [1, 2, 3, 4, 5, 7, 8, 9]),
-    [needsUnits],
-  );
+  // Three user-facing stages. Optional sections never block creation.
+  const flow = [1, 2, 8, 9];
   const position = flow.indexOf(step) + 1;
-  const canSubmit = name.trim() !== "" && street.trim() !== "" && city.trim() !== "";
+  const canSubmit = type !== null && name.trim() !== "" && street.trim() !== "" && city.trim() !== "";
 
   useEffect(() => {
-    headingRef.current?.focus();
+    headingRef.current?.focus({ preventScroll: true });
+    shellRef.current?.scrollTo({ top: 0 });
   }, [step]);
 
-  // Object URLs are a resource: release them when the wizard goes away.
-  useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), [photos]);
+  const photoUrls = useRef(new Set<string>());
+  useEffect(() => { const urls = photoUrls.current; return () => urls.forEach((url) => URL.revokeObjectURL(url)); }, []);
 
   const go = (delta: 1 | -1) => {
     const i = flow.indexOf(step);
@@ -149,7 +149,11 @@ export default function PropertyWizard({
     const added = Array.from(files)
       .filter((f) => f.type.startsWith("image/"))
       .slice(0, 12)
-      .map((file) => ({ key: `${file.name}-${file.size}-${file.lastModified}`, file, url: URL.createObjectURL(file) }));
+      .map((file) => {
+        const url = URL.createObjectURL(file);
+        photoUrls.current.add(url);
+        return { key: `${file.name}-${file.size}-${file.lastModified}`, file, url };
+      });
     setPhotos((prev) => {
       const merged = [...prev];
       for (const p of added) if (!merged.some((m) => m.key === p.key)) merged.push(p);
@@ -239,15 +243,13 @@ export default function PropertyWizard({
     else setStep(9);
   };
 
-  const slide = (dir: 1 | -1) =>
-    reduced
-      ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.15 } }
-      : {
-          initial: { opacity: 0, x: 32 * dir },
-          animate: { opacity: 1, x: 0 },
-          exit: { opacity: 0, x: -32 * dir },
-          transition: { type: "spring" as const, stiffness: 340, damping: 34 },
-        };
+  const slide = (dir: 1 | -1) => ({
+    initial: { opacity: 0, x: reduced ? 0 : 8 * dir },
+    animate: { opacity: 1, x: 0 },
+    exit: { opacity: 0 },
+    transition: { duration: reduced ? 0 : 0.14 },
+    onAnimationComplete: () => headingRef.current?.focus({ preventScroll: true }),
+  });
 
   const types: Array<{ id: PropertyType; title: string; body: string }> = [
     { id: "apartment", title: d.biens.wizTypeApartment, body: d.biens.wizTypeApartmentBody },
@@ -257,17 +259,7 @@ export default function PropertyWizard({
     { id: "other", title: d.biens.wizTypeOther, body: d.biens.wizTypeOtherBody },
   ];
 
-  const stepTitle =
-    ({
-      1: d.biens.wizTitle1,
-      2: d.biens.wizTitle2,
-      3: d.biens.wizTitleAddress,
-      4: d.biens.wizTitleRooms,
-      5: d.biens.wizTitlePhotos,
-      6: d.biens.wizTitleUnits,
-      7: d.biens.wizTitleTech,
-      8: d.biens.wizTitleReview,
-    } as Record<number, string>)[step] ?? "";
+  const stepTitle = step === 1 ? d.experience.propertyDetails : step === 2 ? d.experience.propertyExtras : d.biens.wizTitleReview;
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -276,15 +268,15 @@ export default function PropertyWizard({
     <h1
       ref={headingRef}
       tabIndex={-1}
-      className="text-balance text-center font-display text-2xl font-bold tracking-tight text-ink outline-none sm:text-3xl"
+      className="journey-title font-display text-2xl font-bold tracking-tight text-ink outline-none sm:text-3xl"
     >
       {stepTitle}
     </h1>
   );
 
   const overlay = (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
-      <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
+    <div ref={shellRef} className="journey-shell fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
+      <div className="journey-topbar sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 1 || step === 9 ? (
           <Link href="/app/biens" className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
             <BackIcon />
@@ -302,86 +294,57 @@ export default function PropertyWizard({
           </p>
         )}
         <div className="flex-1" />
-        {step === 8 && (
-          <Button onClick={submit} disabled={!canSubmit} loading={saving}>
-            {d.biens.wizCreate}
-          </Button>
-        )}
+        <span className="text-sm font-semibold text-ink">{d.experience.newProperty}</span>
       </div>
 
-      <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
+      <div className="journey-layout mx-auto w-full px-4 py-10 sm:px-6">
+        {step !== 9 && <aside className="journey-guide">
+          <GlassHouse />
+          <nav aria-label={d.experience.journey}><ol>
+            {[d.experience.essentials, d.experience.extras, d.experience.review].map((label, i) => <li key={label} aria-current={position === i + 1 ? "step" : undefined} className={position > i + 1 ? "is-complete" : ""}>
+              <span>{position > i + 1 ? <Icon name="check" size={18} /> : i + 1}</span>{label}
+            </li>)}
+          </ol></nav>
+        </aside>}
+        <div className="journey-content">
         <AnimatePresence mode="wait" initial={false}>
           {step === 1 && (
-            <motion.div key="s1" {...slide(-1)}>
+            <motion.div key="essentials" {...slide(1)}>
               {Heading}
-              <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {types.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      setType(t.id);
-                      setStep(2);
-                    }}
-                    className="tactile group flex flex-col items-center rounded-2xl border border-sand-200 bg-white p-6 text-center shadow-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md motion-reduce:hover:translate-y-0"
-                  >
-                    <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
-                      {TYPE_ICONS[t.id]}
-                    </span>
-                    <span className="mt-4 font-display text-base font-bold text-ink">{t.title}</span>
-                    <span className="mt-1.5 text-sm leading-relaxed text-ink-soft">{t.body}</span>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {step === 2 && (
-            <motion.div key="s2" {...slide(1)}>
-              {Heading}
-              <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (name.trim() !== "") go(1);
-                }}
-              >
-                <Field label={d.biens.wizNameLabel} hint={d.biens.wizNameHint}>
-                  <Input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
-                </Field>
-                <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={name.trim() === ""}>
-                    {d.common.next}
-                  </Button>
+              <p className="journey-intro">{d.experience.propertyDetailsHint}</p>
+              <form className="journey-card" onSubmit={(e) => { e.preventDefault(); if (canSubmit) go(1); }}>
+                <fieldset>
+                  <legend className="mb-3 text-sm font-semibold text-ink">{d.biens.type} *</legend>
+                  <div className="property-type-options">
+                    {types.map((t) => <label key={t.id} className="property-type-option">
+                      <input type="radio" name="property-type" value={t.id} checked={type === t.id} required onChange={() => setType(t.id)} />
+                      <span className="property-type-symbol">{TYPE_ICONS[t.id]}</span>
+                      <span>{t.title}</span>
+                    </label>)}
+                  </div>
+                </fieldset>
+                <div className="mt-7">
+                  <Field label={`${d.biens.wizNameLabel} *`} hint={d.biens.wizNameHint}>
+                    <Input aria-label={d.biens.wizNameLabel} required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+                  </Field>
                 </div>
-              </form>
-            </motion.div>
-          )}
-
-          {step === 3 && (
-            <motion.div key="s3" {...slide(1)}>
-              {Heading}
-              <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (canSubmit) go(1);
-                }}
-              >
-                <div className="grid grid-cols-3 gap-3">
+                <fieldset className="mt-7">
+                  <legend className="mb-3 text-sm font-semibold text-ink">{d.bien.address}</legend>
+                <div className="property-address-grid grid grid-cols-3 gap-4">
                   <div className="col-span-2">
-                    <Field label={d.biens.wizStreet}>
-                      <Input required maxLength={160} value={street} onChange={(e) => setStreet(e.target.value)} />
+                    <Field label={`${d.biens.wizStreet} *`}>
+                      <Input aria-label={d.biens.wizStreet} autoComplete="address-line1" required maxLength={160} value={street} onChange={(e) => setStreet(e.target.value)} />
                     </Field>
                   </div>
                   <Field label={d.biens.wizNumber}>
                     <Input maxLength={10} value={num} onChange={(e) => setNum(e.target.value)} />
                   </Field>
                   <Field label={d.biens.wizPostal}>
-                    <Input maxLength={10} placeholder="L-" value={postal} onChange={(e) => setPostal(e.target.value)} />
+                    <Input autoComplete="postal-code" maxLength={10} placeholder="L-" value={postal} onChange={(e) => setPostal(e.target.value)} />
                   </Field>
                   <div className="col-span-2">
-                    <Field label={d.biens.wizCity}>
-                      <Input required maxLength={80} value={city} onChange={(e) => setCity(e.target.value)} />
+                    <Field label={`${d.biens.wizCity} *`}>
+                      <Input aria-label={d.biens.wizCity} autoComplete="address-level2" required maxLength={80} value={city} onChange={(e) => setCity(e.target.value)} />
                     </Field>
                   </div>
                   <div className="col-span-3">
@@ -395,26 +358,22 @@ export default function PropertyWizard({
                     </Field>
                   </div>
                 </div>
-                <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={!canSubmit}>
-                    {d.common.next}
-                  </Button>
-                </div>
+
+                </fieldset>
+                <p className="mt-4 text-sm text-ink-soft">{d.experience.required}</p>
+                <div className="journey-footer"><Button type="submit" disabled={!canSubmit}>{d.common.next}<Icon name="chevron-right" size={18} /></Button></div>
               </form>
             </motion.div>
           )}
-
-          {step === 4 && (
-            <motion.div key="s4" {...slide(1)}>
+          {step === 2 && (
+            <motion.div key="extras" {...slide(1)}>
               {Heading}
-              <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  go(1);
-                }}
-              >
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <p className="journey-intro">{d.experience.propertyExtrasHint}</p>
+              <div className="journey-card">
+                <p className="mb-4 text-sm text-ink-soft">{d.experience.optional}</p>
+<details className="journey-option" name="property-extras">
+                  <summary><span className="crm-symbol"><Icon name="home" size={22} /></span><span>{d.biens.wizTitleRooms}</span><Icon name="chevron-down" size={18} /></summary>
+                  <div className="journey-option-body">                <div className="grid grid-cols-2 gap-4">
                   {!needsUnits && (
                     <Field label={d.biens.wizSurface}>
                       <Input inputMode="decimal" value={areaSqm} onChange={(e) => setAreaSqm(e.target.value)} />
@@ -439,21 +398,11 @@ export default function PropertyWizard({
                     <Input inputMode="numeric" maxLength={4} value={year} onChange={(e) => setYear(e.target.value)} />
                   </Field>
                 </div>
-                <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={() => go(1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button type="submit">{d.common.next}</Button>
-                </div>
-              </form>
-            </motion.div>
-          )}
-
-          {step === 5 && (
-            <motion.div key="s5" {...slide(1)}>
-              {Heading}
-              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-                <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizPhotosHint}</p>
+</div>
+                </details>
+<details className="journey-option" name="property-extras">
+                  <summary><span className="crm-symbol"><Icon name="properties" size={22} /></span><span>{d.biens.wizTitlePhotos}</span><Icon name="chevron-down" size={18} /></summary>
+                  <div className="journey-option-body">                <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizPhotosHint}</p>
                 <label className="tactile mt-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-sand-300 bg-sand-50 px-4 py-8 text-center transition hover:border-brand-300 hover:bg-brand-50/40">
                   <Icon name="plus" size={22} className="text-ink-soft" />
                   <span className="mt-2 text-sm font-semibold text-ink">{d.biens.wizAddPhotos}</span>
@@ -496,28 +445,18 @@ export default function PropertyWizard({
                   </ul>
                 )}
 
-                <div className="mt-6 flex items-center justify-between">
-                  <button onClick={() => go(1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button onClick={() => go(1)}>{d.common.next}</Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {step === 6 && (
-            <motion.div key="s6" {...slide(1)}>
-              {Heading}
-              <div className="mx-auto mt-10 max-w-2xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-                <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizUnitsHint}</p>
+</div>
+                </details>
+{needsUnits && (<details className="journey-option" name="property-extras">
+                  <summary><span className="crm-symbol"><Icon name="key" size={22} /></span><span>{d.biens.wizTitleUnits}</span><Icon name="chevron-down" size={18} /></summary>
+                  <div className="journey-option-body">                <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizUnitsHint}</p>
 
                 {units.length > 0 && (
                   <ul className="mt-4 space-y-2">
-                    {units.map((u, i) => (
-                      <li key={u.key} className="grid grid-cols-12 items-end gap-2">
-                        <div className="col-span-4">
-                          <Field label={i === 0 ? d.biens.wizUnitLabel : ""}>
+                    {units.map((u) => (
+                      <li key={u.key} className="property-unit-draft grid grid-cols-2 items-end gap-4">
+                        <div className="col-span-1">
+                          <Field label={d.biens.wizUnitLabel}>
                             <Input
                               value={u.label}
                               maxLength={60}
@@ -527,8 +466,8 @@ export default function PropertyWizard({
                             />
                           </Field>
                         </div>
-                        <div className="col-span-3">
-                          <Field label={i === 0 ? d.biens.wizUnitKind : ""}>
+                        <div className="col-span-1">
+                          <Field label={d.biens.wizUnitKind}>
                             <Select
                               value={u.kind}
                               onChange={(e) =>
@@ -543,8 +482,8 @@ export default function PropertyWizard({
                             </Select>
                           </Field>
                         </div>
-                        <div className="col-span-2">
-                          <Field label={i === 0 ? d.biens.wizFloor : ""}>
+                        <div className="col-span-1">
+                          <Field label={d.biens.wizFloor}>
                             <Input
                               value={u.floor}
                               maxLength={20}
@@ -554,8 +493,8 @@ export default function PropertyWizard({
                             />
                           </Field>
                         </div>
-                        <div className="col-span-2">
-                          <Field label={i === 0 ? d.biens.wizSurface : ""}>
+                        <div className="col-span-1">
+                          <Field label={d.biens.wizSurface}>
                             <Input
                               inputMode="decimal"
                               value={u.areaSqm}
@@ -590,27 +529,11 @@ export default function PropertyWizard({
                   {d.biens.wizAddUnit}
                 </button>
 
-                <div className="mt-6 flex items-center justify-between">
-                  <button onClick={() => go(1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button onClick={() => go(1)}>{d.common.next}</Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {step === 7 && (
-            <motion.div key="s7" {...slide(1)}>
-              {Heading}
-              <form
-                className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  go(1);
-                }}
-              >
-                <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizTechHint}</p>
+</div>
+                </details>)}
+<details className="journey-option" name="property-extras">
+                  <summary><span className="crm-symbol"><Icon name="documents" size={22} /></span><span>{d.biens.wizTitleTech}</span><Icon name="chevron-down" size={18} /></summary>
+                  <div className="journey-option-body">                <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizTechHint}</p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <Field label={d.biens.wizEnergyClass}>
                     <Select value={energyClass} onChange={(e) => setEnergyClass(e.target.value)}>
@@ -639,25 +562,17 @@ export default function PropertyWizard({
                   </Field>
                 </div>
 
-                {saveError && (
-                  <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                    {saveError}
-                  </p>
-                )}
-                <div className="mt-6 flex items-center justify-between">
-                  <button type="button" onClick={() => go(1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
-                    {d.biens.wizLater}
-                  </button>
-                  <Button type="submit">{d.common.next}</Button>
-                </div>
-              </form>
+</div>
+                </details>
+
+                <div className="journey-footer"><Button onClick={() => go(1)}>{d.experience.skipExtras}<Icon name="chevron-right" size={18} /></Button></div>
+              </div>
             </motion.div>
           )}
-
           {step === 8 && (
             <motion.div key="s8" {...slide(1)}>
               {Heading}
-              <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+              <div className="journey-card mt-6">
                 <p className="text-sm leading-relaxed text-ink-soft">{d.biens.wizReviewHint}</p>
                 <dl className="mt-4 divide-y divide-sand-100">
                   {[
@@ -673,7 +588,7 @@ export default function PropertyWizard({
                       : []),
                     ...(energyClass ? [{ k: d.biens.wizEnergyClass, v: energyClass }] : []),
                   ].map((r) => (
-                    <div key={r.k} className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
+                    <div key={r.k} className="journey-review-row">
                       <dt className="text-sm text-ink-soft">{r.k}</dt>
                       <dd className="text-right text-sm font-semibold text-ink">{r.v || d.common.none}</dd>
                     </div>
@@ -684,7 +599,7 @@ export default function PropertyWizard({
                     {saveError}
                   </p>
                 )}
-                <div className="mt-6 flex justify-end">
+                <div className="journey-footer"><Button variant="ghost" onClick={() => setStep(1)}>{d.experience.editDetails}</Button>
                   <Button onClick={submit} disabled={!canSubmit} loading={saving}>
                     {d.biens.wizCreate}
                   </Button>
@@ -758,6 +673,7 @@ export default function PropertyWizard({
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
     </div>
   );

@@ -6,6 +6,29 @@ import type { Dict } from "./fr";
  * borrows the French terms of art (Bail, Loyer, Garantie, Décompte, CPE).
  */
 export const lu: Dict = {
+  experience: {
+    "propertyDetails": "Är Immobilie",
+    "propertyDetailsHint": "Typ, Numm an Adress ginn duer fir unzefänken.",
+    "propertyExtras": "Detailer an Ärem Rhythmus",
+    "propertyExtrasHint": "Füügt bäi, wat Dir wësst. De Rescht kënnt Dir spéider an der Fiche ergänzen.",
+    "essentials": "D’Immobilie",
+    "extras": "D’Detailer",
+    "review": "Iwwerpréiwung",
+    "optional": "Optional",
+    "required": "Felder mat * sinn obligatoresch.",
+    "skipExtras": "Weider bei d’Iwwerpréiwung",
+    "editDetails": "Informatiounen änneren",
+    "moreActions": "{n} weider Aufgaben weisen",
+    "lessActions": "Manner weisen",
+    "activityPayment": "Loyer erakomm",
+    "contactHint": "Numm a Roll ginn duer. Füügt Kontaktdaten bäi, wann Dir se kennt.",
+    "contactDetails": "Kontaktdaten",
+    "leaseDetails": "Wunneng a Locataire",
+    "leaseMoney": "Loyer a Käschten",
+    "leaseGuarantee": "Locatiounsgarantie",
+    "newProperty": "Eng Immobilie dobäisetzen",
+    "journey": "Äre Fortschrëtt"
+},
   common: {
     pagePrev: "Zréck",
     pageNext: "Weider",

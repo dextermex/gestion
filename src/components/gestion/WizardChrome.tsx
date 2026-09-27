@@ -15,7 +15,7 @@ import type { Dict } from "@/lib/i18n/fr";
 
 /** The step's white card. */
 export function StepCard({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">{children}</div>;
+  return <div className="journey-step-card mx-auto mt-8 max-w-xl rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">{children}</div>;
 }
 
 /**
@@ -51,7 +51,7 @@ export function WizardFooter({
   canNext?: boolean;
 }) {
   return (
-    <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="journey-footer mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       {backHref ? (
         <Link
           href={backHref}

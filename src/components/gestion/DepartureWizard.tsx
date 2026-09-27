@@ -343,8 +343,8 @@ export default function DepartureWizard({
   ];
 
   const overlay = (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
-      <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
+    <div className="journey-shell fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
+      <div className="journey-topbar sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 1 || step > TOTAL ? (
           <Link
             href={`/app/biens/${lease.propertyId}?onglet=location&lot=${lease.unitId}`}

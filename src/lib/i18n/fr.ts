@@ -5,6 +5,29 @@
  */
 
 export const fr = {
+  experience: {
+    "propertyDetails": "Votre bien",
+    "propertyDetailsHint": "Le type, le nom et l’adresse suffisent pour commencer.",
+    "propertyExtras": "Les détails, à votre rythme",
+    "propertyExtrasHint": "Ajoutez ce que vous connaissez. Vous pourrez compléter le reste depuis la fiche du bien.",
+    "essentials": "Le bien",
+    "extras": "Les détails",
+    "review": "Vérification",
+    "optional": "Facultatif",
+    "required": "Les champs marqués * sont obligatoires.",
+    "skipExtras": "Passer à la vérification",
+    "editDetails": "Modifier les informations",
+    "moreActions": "Voir les {n} autres actions",
+    "lessActions": "Réduire la liste",
+    "activityPayment": "Loyer reçu",
+    "contactHint": "Un nom et un rôle suffisent. Ajoutez les coordonnées si vous les connaissez.",
+    "contactDetails": "Coordonnées",
+    "leaseDetails": "Le logement et le locataire",
+    "leaseMoney": "Loyer et charges",
+    "leaseGuarantee": "Garantie locative",
+    "newProperty": "Ajouter un bien",
+    "journey": "Votre progression"
+},
   common: {
     pagePrev: "Précédente",
     pageNext: "Suivante",
