@@ -46,6 +46,15 @@ const escape = (s) => s.replaceAll("&", "&amp;").replaceAll('"', "&quot;").repla
 function localized(select) {
   return ["en", "de", "lu"].map((lang, i) => `{{ ${i ? "else if" : "if"} eq .Data.preferred_language "${lang}" }}${escape(select(copy[lang]))}`).join("") + `{{ else }}${escape(select(copy.fr))}{{ end }}`;
 }
+// Hosted Auth limits the unrendered subject template to 255 characters.
+// Bind the language once so all four translations fit that limit.
+function localizedSubject(kind) {
+  const subject = '{{$l := .Data.preferred_language}}' +
+    ["en", "de", "lu"].map((lang, i) => `{{${i ? "else if" : "if"} eq $l "${lang}"}}${copy[lang][kind][0]}`).join("") +
+    `{{else}}${copy.fr[kind][0]}{{end}}`;
+  if (subject.length > 255) throw new Error(`Auth subject exceeds 255 characters: ${kind}`);
+  return subject;
+}
 function render(kind, preview = false) {
   const t = (select) => preview ? escape(select(copy.en)) : localized(select);
   const link = preview ? "https://app.morada.lu/inscription" : "{{ .ConfirmationURL }}";
@@ -79,7 +88,7 @@ mkdirSync(directory, { recursive: true });
 const subjects = {};
 for (const kind of ["confirmation", "email_change", "recovery", "magic_link"]) {
   writeFileSync(directory + kind + ".html", render(kind));
-  subjects[kind] = localized(c => c[kind][0]);
+  subjects[kind] = localizedSubject(kind);
 }
 writeFileSync(directory + "subjects.json", JSON.stringify(subjects, null, 2) + "\n");
 writeFileSync(fileURLToPath(new URL("../docs/auth-email-preview.html", import.meta.url)), render("confirmation", true));
