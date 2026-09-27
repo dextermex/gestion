@@ -994,6 +994,7 @@ button:not(:disabled),
   .request-kind-card > .crm-symbol { grid-row: 1/3; margin-bottom: 0; }
 }
 .crm-shell .ui-field, .tenant-space .ui-field, .journey-shell .ui-field, .ui-modal .ui-field { font-size: 1rem; }
+.crm-shell .crm-main :is(input, select, textarea), .tenant-space .tenant-main :is(input, select, textarea) { font-size: 1rem; }
 @media (width < 40rem) {
   .property-address-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .property-address-grid > .col-span-3 { grid-column: span 2; }
