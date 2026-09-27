@@ -8,9 +8,11 @@ import GestionLogo from "@/components/gestion/GestionLogo";
 import { getSupabase } from "@/lib/supabase/browser";
 import { fmt, htmlLang, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
 import { signupCopy, type SignupCopy } from "@/lib/i18n/signup";
-import { EMPTY_PREFERENCES, safeSignupNext, type Preferences, type SignupRole, type SignupStep } from "@/lib/signup/model";
+import { EMPTY_PREFERENCES, emailConfirmed, resumeStep, safeSignupNext, type Preferences, type SignupRole, type SignupStep } from "@/lib/signup/model";
 import { normalizePhone } from "@/lib/signup/phone";
 import { MORADA_URL } from "@/lib/constants";
+import { AUTH_APP_URL } from "@/lib/auth/redirects";
+import { logSignupFailure, signupErrorKey, type SignupStage } from "@/lib/signup/errors";
 import CountryPicker from "./CountryPicker";
 import Turnstile from "./Turnstile";
 import SocialButtons from "./SocialButtons";
@@ -56,18 +58,21 @@ function Choices({ labels, values, selected, onSelect, name, descriptions, icons
   </fieldset>;
 }
 
-function errorMessage(code: string | undefined, copy: SignupCopy) {
-  if (code?.includes("rate_limit") || code === "over_request_rate_limit") return copy.rateLimited;
-  if (code === "captcha_failed") return copy.captchaError;
-  if (code === "otp_expired" || code === "otp_disabled") return copy.expiredCode;
-  if (code === "email_exists") return copy.emailExists;
-  if (code === "session_expired" || code === "phone_required") return copy.sessionExpired;
-  if (code === "save_failed") return copy.saveFailed;
-  return copy.unavailable;
+/** The sentence for a failed call, after logging its code (never its payload). */
+function errorMessage(stage: SignupStage, failure: { code?: string; status?: number; name?: string } | null | undefined, copy: SignupCopy) {
+  logSignupFailure(stage, failure);
+  return copy[signupErrorKey(stage, failure)];
 }
 
-export default function SignupFunnel({ locale: initialLocale, preview = false, signedIn = false, next, loginMode = false, phoneLogin = false, oauthIntent }: {
+/** A session delivered by an email link (confirmation, magic link, recovery). */
+const fromAuthLink = (url: URL) => /access_token=|refresh_token=|type=(signup|magiclink|recovery|invite|email_change)|[?&]code=/.test(url.hash + url.search);
+
+export default function SignupFunnel({ locale: initialLocale, preview = false, signedIn = false, next, loginMode = false, phoneLogin = false, oauthIntent, initialEmail = "", recovery = false }: {
   locale: Locale; preview?: boolean; signedIn?: boolean; next?: string; loginMode?: boolean; phoneLogin?: boolean; oauthIntent?: "link" | "login";
+  /** An invitation's address: prefilled, never trusted (Auth confirms it). */
+  initialEmail?: string;
+  /** Arriving from a password-recovery email: choose a new password. */
+  recovery?: boolean;
 }) {
   const [locale, setLocale] = useState(initialLocale);
   const c = signupCopy[locale];
@@ -77,13 +82,15 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   const [phoneInput, setPhoneInput] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const confirming = useRef(false);
   const [role, setRole] = useState<SignupRole | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [emailPending, setEmailPending] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>({ ...EMPTY_PREFERENCES });
-  const [busy, setBusy] = useState(signedIn || !!oauthIntent);
+  const [busy, setBusy] = useState(signedIn || !!oauthIntent || recovery);
   const [pendingPhone, setPendingPhone] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
   const [error, setError] = useState("");
@@ -112,20 +119,26 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     setDirection(backwards ? -1 : 1); setStep(target); setError(""); setStatus("");
   }, []);
 
+  // Signing in (password, phone code, email link) opens the space directly
+  // when the profile is complete; an unfinished signup resumes where it stopped.
+  const land = useCallback((user: User) => {
+    if (resumeStep(user) !== "existing") return false;
+    window.location.assign(safeSignupNext(next, user.user_metadata?.morada_signup?.role === "tenant" ? "tenant" : "landlord"));
+    return true;
+  }, [next]);
+
   const restoreUser = useCallback((user: User) => {
     const meta = user.user_metadata?.morada_signup;
     setAccount(user.email || user.phone || "");
     setPhone(user.phone ? "+" + user.phone.replace(/^\+/, "") : "");
     setFirstName(user.user_metadata?.first_name ?? "");
     setLastName(user.user_metadata?.last_name ?? "");
-    setEmail(user.new_email || user.email || "");
+    setEmail(user.new_email || user.email || initialEmail);
     setEmailPending(!!user.new_email);
     setEmailVerified(confirmedEmail(user));
     setRole(meta?.role === "tenant" ? "tenant" : meta?.role === "landlord" ? "landlord" : null);
-    if (!meta || meta.stage === "complete") { go("existing"); return; }
-    if (!user.phone_confirmed_at) { go("phone"); return; }
-    go(meta.stage === "tailor" ? (meta.role === "tenant" ? "email" : "properties") : meta.stage === "email" ? "email" : "role");
-  }, [go]);
+    go(resumeStep(user));
+  }, [go, initialEmail]);
 
   useEffect(() => {
     if (preview) return;
@@ -135,8 +148,14 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     const url = new URL(window.location.href);
     const callbackReason = url.searchParams.get("error_description") ?? new URLSearchParams(url.hash.slice(1)).get("error_description") ?? "";
     const callbackFailed = url.searchParams.has("error") || new URLSearchParams(url.hash.slice(1)).has("error");
+    const linkSession = fromAuthLink(url);
     getSupabase().auth.getUser().then(async ({ data, error: authError }) => {
       if (!active) return;
+      if (recovery) {
+        if (data.user && !authError) go("reset");
+        else { go("login"); setError(copyRef.current.resetExpired); }
+        return;
+      }
       if (oauthIntent === "link") {
         let intent: { userId?: string; provider?: string; at?: number } | null = null;
         try { intent = JSON.parse(sessionStorage.getItem(LINK_INTENT_KEY) ?? "null"); } catch { /* A missing intent cannot approve a link. */ }
@@ -150,10 +169,11 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         const linked = intent && Date.now() - (intent.at ?? 0) < 15 * 60 * 1000 && data.user?.id === intent.userId &&
           data.user?.phone_confirmed_at && data.user.identities?.some((identity) => identity.provider === intent.provider);
         if (callbackFailed || !linked) setError(copyRef.current.linkError);
-      } else if (!authError && data.user) restoreUser(data.user);
-      else if (signedIn || oauthIntent) go(loginMode ? "login" : "phone");
+      } else if (!authError && data.user) {
+        if (!(loginMode && (linkSession || oauthIntent === "login") && land(data.user))) restoreUser(data.user);
+      } else if (signedIn || oauthIntent) go(loginMode ? "login" : "phone");
       if (callbackFailed || (oauthIntent === "login" && (authError || !data.user))) setError(callbackReason.includes("morada_phone_signup_required") ? copyRef.current.socialNoAccount : copyRef.current.socialError);
-    }).catch(() => { if (active) { go(loginMode ? "login" : "phone"); setError(copyRef.current.unavailable); } }).finally(() => {
+    }).catch((failure) => { if (active) { go(loginMode ? "login" : "phone"); setError(errorMessage("login", failure, copyRef.current)); } }).finally(() => {
       if (!active) return;
       setBusy(false);
       if (oauthIntent) {
@@ -163,7 +183,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
       }
     });
     return () => { active = false; };
-  }, [preview, signedIn, restoreUser, go, oauthIntent, loginMode]);
+  }, [preview, signedIn, restoreUser, land, go, oauthIntent, loginMode, recovery]);
 
   useEffect(() => {
     if (mounted.current) title.current?.focus({ preventScroll: true });
@@ -193,7 +213,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   const run = async (work: () => Promise<void>) => {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError(""); setStatus("");
-    try { await work(); } catch { setError(c.unavailable); } finally { lock.current = false; setBusy(false); }
+    try { await work(); } catch (failure) { setError(errorMessage("save", failure as { name?: string }, c)); } finally { lock.current = false; setBusy(false); }
   };
 
   const save = async (body: Record<string, unknown>) => {
@@ -204,7 +224,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     const result = await response.json();
     if (!response.ok) {
       if (result.error === "session_expired" || result.error === "phone_required") go("phone");
-      setError(errorMessage(result.error, c)); return null;
+      setError(errorMessage("save", { code: result.error, status: response.status }, c)); return null;
     }
     return result;
   };
@@ -220,9 +240,9 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
             ...(!loginMode ? { data: { preferred_language: locale, morada_signup: { version: 1, stage: "role" } } } : {}),
           },
         });
-        if (answer.error) { setPendingPhone(""); setError(errorMessage(answer.error.code, c)); return; }
-      } catch {
-        setPendingPhone(""); setError(c.unavailable); return;
+        if (answer.error) { setPendingPhone(""); setError(errorMessage("send", answer.error, c)); return; }
+      } catch (failure) {
+        setPendingPhone(""); setError(errorMessage("send", failure as { name?: string }, c)); return;
       } finally {
         // A failed network response may still have consumed the single-use token.
         setCaptcha(""); setCaptchaGeneration((value) => value + 1);
@@ -231,6 +251,40 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     setPendingPhone(""); setPhone(number); setCode(""); setRetryAt(Date.now() + 60000); setRemaining(60);
     if (resend) setStatus(c.resent); else go("verify");
   };
+
+  // The code, or the link clicked on any device: Auth marks the address
+  // confirmed, the server records the stage, the password step follows.
+  const emailConfirmedNow = async () => {
+    if (confirming.current) return;
+    confirming.current = true;
+    try {
+      if (await save({ action: "email_confirmed" })) { setEmailPending(false); setEmailVerified(true); go("create-password"); }
+    } finally { confirming.current = false; }
+  };
+  const emailConfirmedRef = useRef(emailConfirmedNow);
+  emailConfirmedRef.current = emailConfirmedNow;
+
+  useEffect(() => {
+    if (step !== "email-code" || preview) return;
+    const started = Date.now();
+    const check = async () => {
+      if (document.visibilityState !== "visible" || lock.current || Date.now() - started > 30 * 60 * 1000) return;
+      const { data } = await getSupabase().auth.getUser().catch(() => ({ data: { user: null } }));
+      if (data.user && emailConfirmed(data.user)) await emailConfirmedRef.current();
+    };
+    const interval = setInterval(() => { void check(); }, 5000);
+    document.addEventListener("visibilitychange", check);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", check); };
+  }, [step, preview]);
+
+  const resendEmail = () => void run(async () => {
+    if (Date.now() < retryAt) return;
+    if (!preview) {
+      const result = await getSupabase().auth.resend({ type: "email_change", email });
+      if (result.error) { setError(errorMessage("send", result.error, c)); return; }
+    }
+    setRetryAt(Date.now() + 60000); setRemaining(60); setStatus(c.emailResent);
+  });
 
   const finish = async (answers = preferences) => {
     if (await save({ action: "complete", preferences: answers })) go("welcome");
@@ -277,8 +331,15 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         if (ready && !captcha) { setError(c.captchaError); return; }
         const result = await getSupabase().auth.signInWithPassword({ email, password, options: { captchaToken: captcha || undefined } });
         setCaptcha(""); setCaptchaGeneration((value) => value + 1);
-        if (result.error) { invalid(result.error.code === "invalid_credentials" ? c.wrongPassword : errorMessage(result.error.code, c), "login-password"); return; }
-        if (result.data.user) restoreUser(result.data.user);
+        if (result.error) { invalid(errorMessage("login", result.error, c), "login-password"); return; }
+        if (result.data.user && !land(result.data.user)) restoreUser(result.data.user);
+      } else if (step === "reset") {
+        const password = String(data.get("new-password") ?? "");
+        if (password.length < 8) { invalid(c.weakPassword, "reset-password"); return; }
+        if (preview) { setAccount(email); go("existing"); return; }
+        const result = await getSupabase().auth.updateUser({ password });
+        if (result.error) { invalid(errorMessage("reset", result.error, c), "reset-password"); return; }
+        if (result.data.user && !land(result.data.user)) restoreUser(result.data.user);
       } else if (step === "phone") {
         const raw = String(data.get("phone") ?? ""); setPhoneInput(raw);
         const normalized = normalizePhone(raw, country);
@@ -293,8 +354,8 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
           go("role");
         } else {
           const result = await getSupabase().auth.verifyOtp({ phone, token, type: "sms" });
-          if (result.error || !result.data.user) { invalid(errorMessage(result.error?.code ?? "otp_expired", c), "signup-code"); return; }
-          restoreUser(result.data.user);
+          if (result.error || !result.data.user) { invalid(errorMessage("verify", result.error ?? { code: "otp_expired" }, c), "signup-code"); return; }
+          if (!(loginMode && land(result.data.user))) restoreUser(result.data.user);
         }
       } else if (step === "role") {
         if (!role) { invalid(c.selectOption); return; } go("name");
@@ -310,7 +371,24 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         const result = await save({ action: "email", email: value });
         if (!result) return;
         setEmailPending(result.emailPending === true);
-        if (role === "tenant") await finish(); else go("properties");
+        setEmailCode(""); setRetryAt(Date.now() + 60000); setRemaining(60);
+        go(result.emailPending === true ? "email-code" : "create-password");
+      } else if (step === "email-code") {
+        const token = String(data.get("email-code") ?? "").replace(/\s/g, "");
+        if (!/^\d{6}$/.test(token)) { invalid(c.invalidCode, "email-code"); return; }
+        if (!preview) {
+          const result = await getSupabase().auth.verifyOtp({ email, token, type: "email_change" });
+          if (result.error) { invalid(errorMessage("verify", result.error, c), "email-code"); return; }
+        }
+        await emailConfirmedNow();
+      } else if (step === "create-password") {
+        const password = String(data.get("new-password") ?? "");
+        const repeat = String(data.get("confirm-password") ?? "");
+        if (password.length < 8) { invalid(c.weakPassword, "create-password"); return; }
+        if (password !== repeat) { invalid(c.passwordMismatch, "confirm-password"); return; }
+        const result = await save({ action: "password", password });
+        if (!result) return;
+        if (result.stage === "complete" || role === "tenant") go("welcome"); else go("properties");
       } else if (step === "properties") {
         if (!preferences.properties) { invalid(c.selectOption); return; } go("challenge");
       } else if (step === "challenge") {
@@ -323,8 +401,9 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
 
   const back = () => {
     if (busy) return;
-    const previous: Partial<Record<SignupStep, SignupStep>> = { password: "login", verify: "phone", name: "role", email: "name", properties: "email", challenge: "properties", involvement: "challenge" };
-    if (previous[step]) { setCode(""); go(previous[step]!, true); }
+    // Once the email is confirmed and the password set, there is no way back into them.
+    const previous: Partial<Record<SignupStep, SignupStep>> = { password: "login", verify: "phone", name: "role", email: "name", "email-code": "email", challenge: "properties", involvement: "challenge" };
+    if (previous[step]) { setCode(""); setEmailCode(""); go(previous[step]!, true); }
   };
 
   const useOtherAccount = () => void run(async () => {
@@ -337,28 +416,43 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     setPreferences({ ...EMPTY_PREFERENCES }); setEmailPending(false); setEmailVerified(false); setCaptchaGeneration((value) => value + 1); go(loginMode ? "login" : "phone");
   });
 
+  // The recovery email returns to this page in reset mode, on this app's own
+  // domain (allow-listed in Supabase Auth), never to a retired Morada page.
+  const sendReset = () => void run(async () => {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { go("login", true); invalid(c.invalidEmail, "signup-email"); return; }
+    if (preview) { setStatus(c.resetSent); return; }
+    if (ready && !captcha) { setError(c.captchaError); return; }
+    const redirectTo = AUTH_APP_URL + "/connexion?mode=reset" + (next ? "&next=" + encodeURIComponent(safeSignupNext(next)) : "");
+    const result = await getSupabase().auth.resetPasswordForEmail(email, { redirectTo, captchaToken: captcha || undefined });
+    setCaptcha(""); setCaptchaGeneration((value) => value + 1);
+    // Same answer whether or not the address has an account.
+    if (result.error && !["user_not_found", "email_address_invalid"].includes(result.error.code ?? "")) { setError(errorMessage("login", result.error, c)); return; }
+    setStatus(c.resetSent);
+  });
+
   const openSpace = () => {
     if (preview) { setPreviewDone(true); return; }
     window.location.assign(safeSignupNext(next, role ?? "landlord"));
   };
-  const stage = ["phone", "verify"].includes(step) ? 0 : ["role", "name", "email", "existing"].includes(step) ? 1 : 2;
+  const stage = ["phone", "verify"].includes(step) ? 0 : ["role", "name", "email", "email-code", "create-password", "existing"].includes(step) ? 1 : 2;
   const tailoring = ["properties", "challenge", "involvement"].includes(step);
-  const canBack = ["password", "verify", "name", "email", "properties", "challenge", "involvement"].includes(step);
+  const canBack = ["password", "verify", "name", "email", "email-code", "challenge", "involvement"].includes(step);
   const titles: Record<SignupStep, string> = {
     login: c.loginTitle, password: c.passwordTitle, phone: loginMode ? c.login : c.secure, verify: c.codeTitle, role: c.roleTitle, name: c.nameTitle, email: c.emailTitle,
+    "email-code": c.emailCodeTitle, "create-password": c.createPasswordTitle,
     properties: c.propertiesTitle, challenge: c.challengeTitle, involvement: c.involvementTitle,
-    welcome: fmt(c.welcomeTitle, { name: firstName || "Morada" }), existing: c.existingTitle,
+    welcome: fmt(c.welcomeTitle, { name: firstName || "Morada" }), existing: c.existingTitle, reset: c.resetTitle,
   };
   const intros: Record<SignupStep, string> = {
     login: c.loginIntro, password: email, phone: c.phoneIntro, verify: c.codeIntro, role: c.roleIntro, name: c.nameIntro, email: c.emailIntro,
+    "email-code": c.emailCodeIntro, "create-password": fmt(c.createPasswordIntro, { email }),
     properties: c.propertiesIntro, challenge: c.challengeIntro, involvement: c.involvementIntro,
-    welcome: role === "tenant" ? c.tenantWelcome : c.welcomeIntro, existing: fmt(c.existingIntro, { account }),
+    welcome: role === "tenant" ? c.tenantWelcome : c.welcomeIntro, existing: fmt(c.existingIntro, { account }), reset: c.resetIntro,
   };
-  const buttonText = step === "verify" ? c.verify : step === "involvement" ? c.finish : c.continue;
+  const buttonText = step === "verify" ? c.verify : step === "email-code" ? c.verifyEmail : step === "involvement" ? c.finish : step === "reset" ? c.savePassword : c.continue;
   const baseUrl = preview ? "/inscription/apercu" : "/inscription";
   const routeParams = "lang=" + locale + (next ? "&next=" + encodeURIComponent(safeSignupNext(next, role ?? "landlord")) : "");
   const loginUrl = baseUrl + "?mode=login&" + routeParams;
-  const emailSignupUrl = "/connexion?onglet=inscription&legacy=1" + (next ? "&next=" + encodeURIComponent(safeSignupNext(next, role ?? "landlord")) : "");
 
   return <main className="signup-page" lang={htmlLang(locale)} data-preview={preview || undefined}>
     {preview && <div className="signup-preview-banner">{c.preview}</div>}
@@ -368,7 +462,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         <label className="signup-language"><span className="sr-only">{c.language}</span><select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>{LOCALES.map((language) => <option key={language} value={language}>{LOCALE_LABELS[language]}</option>)}</select></label>
       </header>
       <div className="signup-form-wrap">
-        {step !== "phone" && step !== "login" && step !== "existing" && step !== "welcome" && <div className="signup-navigation">
+        {step !== "phone" && step !== "login" && step !== "existing" && step !== "welcome" && step !== "reset" && <div className="signup-navigation">
           {canBack ? <button className="signup-back" type="button" onClick={back} disabled={busy} aria-label={c.back}><Icon name="back" /></button> : <span />}
           <span>{tailoring ? fmt(c.progressCount, { current: ["properties", "challenge", "involvement"].indexOf(step) + 1, total: 3 }) : stage === 0 ? c.account : c.details}</span>
           {tailoring ? <button className="signup-nav-skip" type="button" disabled={busy} onClick={() => void run(() => finish(preferences))}>{c.skip}</button> : <nav className="signup-progress" aria-label={c.progress}>
@@ -379,7 +473,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
           {step === "welcome" && <div className="signup-complete-icon"><Icon name="check" /></div>}
           {step === "role" && <p className="signup-verified"><Icon name="check" />{c.verified}</p>}
           <h1 id="signup-title" ref={title} tabIndex={-1} className="font-display font-bold">{titles[step]}</h1>
-          <p className="signup-intro">{intros[step]}{step === "verify" && <><br /><strong dir="ltr">{phone}</strong><button type="button" className="signup-inline-link" onClick={() => go("phone", true)} disabled={busy}>{c.editNumber}</button></>}</p>
+          <p className="signup-intro">{intros[step]}{step === "verify" && <><br /><strong dir="ltr">{phone}</strong><button type="button" className="signup-inline-link" onClick={() => go("phone", true)} disabled={busy}>{c.editNumber}</button></>}{step === "email-code" && <><br /><strong>{email}</strong><button type="button" className="signup-inline-link" onClick={() => go("email", true)} disabled={busy}>{c.changeEmail}</button></>}</p>
 
           {step === "existing" ? <div className="signup-actions">
             <button type="button" className="signup-primary" onClick={openSpace} disabled={busy}>{c.useAccount}</button>
@@ -395,8 +489,12 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
               {step === "password" && <>
                 <input type="hidden" name="email" autoComplete="username" value={email} />
                 <FloatingField id="login-password" name="password" label={c.password} type="password" autoComplete="current-password" required error={!!error} />
-                <a className="signup-recovery" href={"/connexion?legacy=1&email=" + encodeURIComponent(email) + "&next=" + encodeURIComponent(safeSignupNext(next))}>{c.forgotPassword}</a>
+                <button type="button" className="signup-recovery" onClick={sendReset} disabled={busy}>{c.forgotPassword}</button>
                 {!preview && ready && <Turnstile key={captchaGeneration} siteKey={siteKey} onToken={setCaptcha} copy={c} locale={locale} />}
+              </>}
+              {step === "reset" && <>
+                <input type="hidden" name="email" autoComplete="username" value={account || email} />
+                <FloatingField id="reset-password" name="new-password" label={c.newPassword} type="password" autoComplete="new-password" minLength={8} required error={!!error} />
               </>}
               {step === "phone" && <>
                 <div className="signup-phone-row">
@@ -405,7 +503,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
                 </div>
                 <p id="phone-privacy" className="signup-helper">{c.privacyNote}</p>
                 {preview ? <p className="signup-preview-security">{c.previewSecurity}</p> : ready ? <Turnstile key={captchaGeneration} siteKey={siteKey} onToken={setCaptcha} copy={c} locale={locale} /> :
-                  <p className="signup-setup-note">{c.setupUnavailable} <a href={emailSignupUrl}>{c.emailAlternative}</a></p>}
+                  <p className="signup-setup-note">{c.setupUnavailable}</p>}
               </>}
               {step === "verify" && <>
                 <div className="signup-otp" data-error={!!error || undefined}>
@@ -415,6 +513,20 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
                 </div>
                 {preview && <p className="signup-preview-security">{c.previewCode}</p>}
               </>}
+              {step === "email-code" && <>
+                <div className="signup-otp" data-error={!!error || undefined}>
+                  <label className="sr-only" htmlFor="email-code">{c.code}</label>
+                  <input id="email-code" name="email-code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))} aria-invalid={!!error || undefined} aria-describedby={error ? "signup-error" : "email-code-hint"} />
+                  <div className="signup-otp-slots" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} data-current={index === emailCode.length}>{emailCode[index] ?? ""}</span>)}</div>
+                </div>
+                <p id="email-code-hint" className="signup-helper">{c.emailCodeHint}</p>
+                {preview && <p className="signup-preview-security">{c.previewCode}</p>}
+              </>}
+              {step === "create-password" && <div className="signup-fields-stack">
+                <input type="hidden" name="email" autoComplete="username" value={email} />
+                <FloatingField id="create-password" name="new-password" label={c.password} type="password" autoComplete="new-password" minLength={8} maxLength={72} required error={!!error} />
+                <FloatingField id="confirm-password" name="confirm-password" label={c.confirmPassword} type="password" autoComplete="new-password" minLength={8} maxLength={72} required error={!!error} />
+              </div>}
               {step === "role" && <Choices name="role" labels={[c.landlord, c.tenant]} values={["landlord", "tenant"]} descriptions={[c.landlordBody, c.tenantBody]} icons={["home", "key"]} selected={role} onSelect={(value) => { setRole(value as SignupRole); setError(""); }} />}
               {step === "name" && <div className="signup-fields-stack">
                 <FloatingField id="signup-first" name="given-name" label={c.firstName} autoComplete="given-name" defaultValue={firstName} onChange={(event) => setFirstName(event.target.value)} maxLength={60} required error={!!error} />
@@ -442,6 +554,10 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
               <p className="signup-login">{loginMode ? <><a href={loginUrl}>{c.emailLogin}</a><br />{c.noAccount} <a href={baseUrl + "?" + routeParams}>{c.createAccount}</a></> : <>{c.haveAccount} <a href={loginUrl}>{c.login}</a></>}</p>
               {!loginMode && <p className="signup-terms">{c.termsPrefix} <a href={MORADA_URL + "/" + locale + "/legal#conditions"} target="_blank" rel="noreferrer">{c.terms}</a> {c.and} <a href={MORADA_URL + "/" + locale + "/legal#confidentialite"} target="_blank" rel="noreferrer">{c.privacy}</a>.</p>}
             </>}
+            {step === "email-code" && <div className="signup-resend">
+              <span>{c.noCode}</span>
+              <button type="button" className="signup-text-button" disabled={busy || remaining > 0} onClick={resendEmail}>{remaining > 0 ? fmt(c.resendIn, { seconds: remaining }) : c.resendEmail}</button>
+            </div>}
             {step === "verify" && <div className="signup-resend">
               <span>{c.noCode}</span>
               <button type="button" className="signup-text-button" disabled={busy || remaining > 0 || (!preview && !captcha)} onClick={() => void run(() => sendCode(phone, true))}>{remaining > 0 ? fmt(c.resendIn, { seconds: remaining }) : c.resend}</button>

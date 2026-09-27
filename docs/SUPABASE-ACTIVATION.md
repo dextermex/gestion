@@ -119,8 +119,11 @@ is provisioned and verified; it can involve a paid add-on.
    Auth CAPTCHA settings and public site key in Vercel's
    `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Confirm that the shared marketing/Pro Auth
    clients send CAPTCHA tokens before enabling this project-wide setting.
-3. Enable phone signup in Vercel with `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1`, then
-   rebuild after a real SMS/confirmation test in staging.
+3. Enable phone signup in Vercel with `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1` and
+   rebuild. The SMS provider must be **Twilio Verify** (Account SID, Auth Token,
+   Verify Service SID `VA…`). Choosing plain **Twilio** with a `VA…` value makes
+   every request fail with `sms_send_failed` / Twilio 21212; see
+   docs/SIGNUP-FUNNEL.md, “Diagnosing a failed code request”.
 4. Configure **Google** and **Apple** in Auth Providers. Register
    `https://lgmoocvumiuqjcqnrlej.supabase.co/auth/v1/callback` as their provider
    callback. Use Google Web OAuth credentials and an Apple Services ID plus
@@ -160,11 +163,17 @@ Verified in the signed-in production dashboard on 2026-09-27:
   the allowlist had previously been empty. No existing entry was removed.
 - **Vercel application URL:** `NEXT_PUBLIC_APP_URL=https://app.morada.lu`
   was saved as a Production config variable on `morada-gestion` and deployed.
-- **Email delivery:** custom SMTP is disabled. Supabase currently uses its
-  default templates and requires SMTP setup (or a paid plan) to edit them.
-  The branded templates are committed but are **not installed** in hosted Auth.
-- **Phone:** still disabled in Supabase. Twilio Verify is selected in the open
-  setup panel, but credential entry and saving remain with the user. The actual
+- **Email delivery:** the user saved Resend SMTP credentials. A fresh settings
+  page confirms custom SMTP is enabled, host `smtp.resend.com`, port `465`,
+  sender name `Morada`, and no unsaved changes. Actual inbox delivery and the
+  visible From address still need a live confirmation test.
+- **Email templates:** the four branded templates are installed in hosted Auth;
+  their bodies were compared with the repository output after reloading each
+  settings page. Supabase rejects subject templates longer than 255 characters.
+  The generator now binds the language once, keeping all four translated
+  subjects within that limit, and fails if future copy exceeds it.
+- **Phone:** the user saved the provider credentials. The production provider
+  list now confirms **Phone Enabled**. The actual
   Twilio service named Morada has SMS enabled, six-digit codes, custom-code
   generation off and Fraud Guard on. Billing was separately verified as already
   pay-as-you-go, with auto-recharge enabled: no account upgrade is needed. The
@@ -172,12 +181,20 @@ Verified in the signed-in production dashboard on 2026-09-27:
   customer-profile screen still shows Draft, whereas Verify links to a newer
   Compliance Profile console requiring a separate sign-in. Do not treat the
   legacy label or the generic Verify banner as proof that the account needs an
-  upgrade or another profile. The concrete current blocker is Supabase Phone:
-  its provider is disabled and credentials remain empty. Verify actual SMS
-  delivery once the user saves them.
+  upgrade or another profile. Verify actual SMS delivery through Supabase next;
+  enabled configuration alone does not establish that an SMS was delivered.
 - **Sender:** the user selected a separate sending subdomain. The intended
-  address is `accounts@notify.morada.lu`; it is not activated. Resend account
-  setup, domain verification, SMTP and branded-template installation remain.
+  address is `accounts@notify.morada.lu`. Resend now confirms
+  `notify.morada.lu` is **Verified**, in the Ireland region. No root-domain mail
+  records were changed by this task.
+- **Bot protection:** the Cloudflare widget `Morada signup` was created for
+  `morada.lu` (including its subdomains), in Managed mode, without pre-clearance.
+  Its secret still needs to be entered by the user in Supabase. Do not enable
+  project-wide CAPTCHA until the sibling-app compatibility question is resolved:
+  `dextermex/morada` still has login, signup and reset calls without CAPTCHA
+  tokens in `src/app/pro/login/page.tsx` and `src/lib/account/context.tsx`.
+  The current marketing repository itself has no Auth forms. Public-key setup,
+  production activation and real delivery testing remain.
 - **Google, Apple and Manual Linking:** disabled. Email confirmation remains on;
   anonymous sign-in remains off. No provider secrets or permissions were changed.
 - **Deployment configuration:** the `morada-gestion` project had an install
@@ -186,9 +203,8 @@ Verified in the signed-in production dashboard on 2026-09-27:
   `Can't resolve 'libphonenumber-js/min'`. The project now uses `npm ci`, also
   pinned in `vercel.json`, so each build installs its own lockfile. Code is
   deployed to `app.morada.lu/inscription` through merged PR #3; production phone
-  activation remains gated on the provider setup above. Existing marketing links
-  to `/connexion?onglet=inscription` will redirect into the new funnel when the
-  phone flag and Turnstile public key are enabled.
+  activation depends on the provider setup above. Existing marketing links to
+  `/connexion?onglet=inscription` redirect to `/inscription` unconditionally.
 
 Real SMS, OAuth and inbox delivery remain unverified. No production rows or
 database schemas were changed. The phone and social UI flags remain gated until

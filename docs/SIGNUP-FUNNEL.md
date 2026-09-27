@@ -15,17 +15,23 @@ Keep the funnel on **https://app.morada.lu/inscription**. A separate
 without improving the customer journey. Gestion already owns the destination,
 the shared Morada session cookie and the workspace provisioner.
 
-After activation, signed-out visits to the app root and ordinary
-`/connexion?onglet=inscription` links open the new funnel. The marketing
-agent can point “Start for free” directly at `/inscription?lang=en`
-(also `fr`, `de`, `lu`). Invitation links with an invited email keep the
-existing invitation registration route.
+`/inscription` is the only account-creation page. `/connexion` is the only
+sign-in page and renders the same design in login mode: email and password
+(with “Forgot password?” in place), phone code, and Google or Apple where
+configured. The retired “Bienvenue sur Morada Gestion” page (`WelcomeAuth`)
+is deleted; nothing renders it as a fallback.
 
-`/connexion` retains email/password login and recovery and gains phone login.
-`/inscription?mode=phone` sends codes with `shouldCreateUser: false`.
-`/connexion?onglet=inscription&legacy=1` retains email registration.
-No hosted settings, database migrations or production deployment are part of
-this change.
+- `/connexion?onglet=inscription…` (older morada.lu CTAs, invitations and
+  emails) redirects server-side to `/inscription`, keeping `next`, `lang`, an
+  invited `email` and the `ref` placement tag.
+- The marketing site links “Start for free” to `https://app.morada.lu/inscription`.
+- Invitations open `/inscription?next=/invitation/…&email=…`; the invited
+  address is prefilled at the email step and still confirmed by Auth.
+- Password recovery emails return to `/connexion?mode=reset` (allow-listed as
+  `https://app.morada.lu/connexion?**`), where the new design asks for a new
+  password.
+- The app root sends a signed-out visitor to `/connexion`.
+- `/inscription?mode=phone` sends codes with `shouldCreateUser: false`.
 
 ## Journey
 
@@ -37,13 +43,37 @@ this change.
    cooldown are provided.
 3. Landlord or tenant.
 4. First and last name.
-5. Email, added to the same authenticated phone account. Confirmation is sent;
-   the UI distinguishes a pending email from a confirmed one.
-6. Landlords can answer three optional questions: portfolio size, main challenge
-   and time spent. “Skip for now” remains visible above the choices. Tenants
-   bypass these questions.
-7. Welcome and handoff to `/app` or `/locataire`. A tenant still needs an actual
+5. Email, added to the same authenticated phone account (`email_change`).
+6. Email code. The email carries a six-digit code and a link; either confirms
+   it (`verifyOtp({ email, token, type: "email_change" })`). The page also
+   polls Auth every 5 seconds, so a link clicked on another device moves it
+   on. Resend has a 60-second cooldown; the address can be corrected.
+7. Password (required, at least 8 characters, typed twice). Set only after the
+   email is confirmed, so every finished account signs in with email and
+   password on `/connexion`; phone login stays available.
+8. Landlords answer three optional questions: portfolio size, main challenge
+   and time spent. “Skip for now” remains visible. Tenants finish at step 7.
+9. Welcome and handoff to `/app` or `/locataire`. A tenant still needs an actual
    invitation to access a tenancy. Choosing a role grants no access.
+
+### Stages (server-side, `/api/signup/profile`)
+
+`user_metadata.morada_signup.stage` records the last step the server accepted:
+`role` → `email` → `email_code` → `password` → `tailor` (landlords) →
+`complete`. The server refuses `email_confirmed`, `password` and `complete`
+(409 `email_unconfirmed`) until Auth reports the email confirmed, and refuses
+`complete` without `password_set_at` (`password_required`). The password is
+sent once, over HTTPS, to Supabase Auth, which stores only its bcrypt hash;
+it is never logged or kept. `resumeStep()` (`src/lib/signup/model.ts`) sends
+any signed-in account, including one finished before this order existed, to
+its first missing step, and a sign-in does not skip it.
+
+### Hosted template (manual)
+
+The six-digit code needs the regenerated `supabase/templates/email_change.html`
+(`node scripts/build-auth-emails.mjs`) pasted into Supabase: Authentication,
+Emails, Templates, “Change email address”. Until then the email holds the
+link only, which the page still detects.
 
 There are no extra “you completed a step” interstitials. Saved account stages
 resume after a refresh; unsaved text and optional answers are kept during
@@ -96,6 +126,8 @@ Before enabling:
    environments. Keep secure email confirmation enabled.
 5. Set `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1` alongside the site key and rebuild.
    These are build-time public variables. No service-role key is needed.
+   Without them the funnel shows “Sign-up is temporarily unavailable” rather
+   than an email form.
 6. In an isolated staging project, test an actual SMS, an incorrect and expired
    code, resend, an existing phone account, a duplicate email, email confirmation,
    recovery, logout/re-entry, and both app handoffs before production rollout.
@@ -182,8 +214,22 @@ Continue, Google, Apple, phone login and a create-account link. The email path
 retains the existing password authentication and recovery. Phone-created accounts
 can sign in by phone or their linked provider; no password is invented for them.
 `/inscription?mode=phone` sends an SMS with `shouldCreateUser: false`.
-When the phone rollout is enabled, `/connexion` uses the new login layout.
-Legacy email registration, invitations and recovery retain `?legacy=1`.
+`/connexion` renders this same login layout; `?legacy=1` no longer exists.
+
+### Diagnosing a failed code request
+
+The funnel names each Auth failure (`src/lib/signup/errors.ts`) and logs one
+console line, `[morada-signup] <stage> failed { code, status }`, never the
+number, address or provider message. The same request appears in Supabase
+(Logs, Auth) with the provider's reason. Common causes:
+
+| Console code | Supabase log | Fix |
+|---|---|---|
+| `sms_send_failed` + Twilio 21212 “Invalid From Number … VA…” | Phone provider set to **Twilio** with the Verify Service SID in the sender field | Authentication, Sign In / Providers, Phone: choose **Twilio Verify**, then Account SID, Auth Token, Verify Service SID (`VA…`) |
+| `sms_send_failed` + Twilio 20003 | Wrong Account SID or Auth Token | Re-enter both (rotate the token if exposed) |
+| `phone_provider_disabled` | Phone provider off | Enable Phone |
+| `captcha_failed` | Turnstile secret missing or wrong | Attack Protection: Turnstile secret for the `Morada signup` widget |
+| `over_sms_send_rate_limit` | Rate limit | Wait, or raise the SMS limit in Auth rate limits |
 
 ### Social provider activation (not performed)
 

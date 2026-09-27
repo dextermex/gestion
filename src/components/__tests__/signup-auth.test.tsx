@@ -6,6 +6,7 @@ import SignupFunnel from "@/components/signup/SignupFunnel";
 
 const auth = vi.hoisted(() => ({
   getUser: vi.fn(), signInWithOtp: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), linkIdentity: vi.fn(), signInWithOAuth: vi.fn(), signInWithPassword: vi.fn(),
+  resetPasswordForEmail: vi.fn(), updateUser: vi.fn(), resend: vi.fn(),
 }));
 vi.mock("@/lib/supabase/browser", () => ({ getSupabase: () => ({ auth }) }));
 vi.mock("next/image", () => ({ default: () => null }));
@@ -208,4 +209,112 @@ it("a lost SMS response closes confirmation and requires a fresh security challe
   expect(host.querySelector<HTMLButtonElement>('form .signup-primary')?.disabled).toBe(true);
   await submit();
   expect(auth.signInWithOtp).toHaveBeenCalledTimes(1);
+});
+it("an SMS the provider refuses is named, logged by code only, and keeps the visitor on the number", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  auth.signInWithOtp.mockResolvedValue({ data: {}, error: { code: "sms_send_failed", status: 422, name: "AuthApiError", message: "Invalid From Number (caller ID): VA0" } });
+  await act(async () => root.render(<SignupFunnel locale="en" />));
+  await phone(); await click("Solve test challenge"); await submit(); await click("Confirm and send code");
+  expect(host.querySelector("h1")?.textContent).toBe("Secure your account");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("We couldn’t send a text to this number. Check it, or try again in a few minutes.");
+  const logged = JSON.stringify(warn.mock.calls);
+  expect(logged).toContain("sms_send_failed");
+  expect(logged).not.toContain("352");
+  warn.mockRestore();
+});
+it("a completed account signs in straight to its space", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign, protocol: "http:" });
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode next="/app/loyers" />));
+  host.querySelector<HTMLInputElement>("#signup-email")!.value = "alex@example.test";
+  await submit();
+  host.querySelector<HTMLInputElement>("#login-password")!.value = "test-only-password";
+  auth.signInWithPassword.mockResolvedValue({ data: { user: { id: "u1", email: "alex@example.test", user_metadata: {} } }, error: null });
+  await click("Solve test challenge"); await submit();
+  expect(assign).toHaveBeenCalledWith("/app/loyers");
+  vi.unstubAllGlobals();
+});
+it("forgot password sends a recovery link back to this app and answers the same for any address", async () => {
+  auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode next="/app" />));
+  host.querySelector<HTMLInputElement>("#signup-email")!.value = "alex@example.test";
+  await submit();
+  await click("Solve test challenge"); await click("Forgot password?");
+  expect(auth.resetPasswordForEmail).toHaveBeenCalledWith("alex@example.test", { redirectTo: "https://app.morada.lu/connexion?mode=reset&next=%2Fapp", captchaToken: "one-use-captcha" });
+  expect(host.querySelector('[role="status"]')?.textContent).toBe("If an account uses this address, a reset link is on its way.");
+  expect(host.innerHTML).not.toContain("legacy=1");
+});
+it("the recovery link opens a new-password step, and an expired link says so", async () => {
+  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", email: "alex@example.test", user_metadata: {} } }, error: null });
+  auth.updateUser.mockResolvedValue({ data: { user: null }, error: { code: "weak_password", status: 422 } });
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode recovery />));
+  expect(host.querySelector("h1")?.textContent).toBe("Choose a new password");
+  host.querySelector<HTMLInputElement>("#reset-password")!.value = "short";
+  await submit();
+  expect(auth.updateUser).not.toHaveBeenCalled();
+  host.querySelector<HTMLInputElement>("#reset-password")!.value = "long-enough-1";
+  await submit();
+  expect(auth.updateUser).toHaveBeenCalledWith({ password: "long-enough-1" });
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("too weak");
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  auth.getUser.mockResolvedValue({ data: { user: null }, error: { code: "session_not_found" } });
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode recovery />));
+  expect(host.querySelector("h1")?.textContent).toBe("Welcome back");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("This reset link has expired. Request a new one.");
+});
+it("an invitation's address is prefilled and survives the phone verification", async () => {
+  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", user_metadata: { morada_signup: { version: 1, stage: "email", role: "tenant" } } } }, error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn initialEmail="tenant@example.test" next="/invitation/abc" />));
+  expect(host.querySelector<HTMLInputElement>("#signup-email")?.value).toBe("tenant@example.test");
+});
+it("after the email the funnel asks for the emailed code, then a password, then the landlord questions", async () => {
+  const phoneUser = { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", new_email: "", email_confirmed_at: undefined,
+    user_metadata: { first_name: "Alex", last_name: "Example", morada_signup: { version: 1, role: "landlord", stage: "email" } } };
+  auth.getUser.mockResolvedValue({ data: { user: phoneUser }, error: null });
+  const calls: Record<string, unknown>[] = [];
+  const answers: Record<string, unknown> = { email: { ok: true, emailPending: true }, email_confirmed: { ok: true }, password: { ok: true, stage: "tailor" } };
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+    const body = JSON.parse(init.body); calls.push(body);
+    return { ok: true, status: 200, json: async () => answers[body.action] };
+  }));
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn />));
+  expect(host.querySelector("h1")?.textContent).toBe("Add your email");
+  host.querySelector<HTMLInputElement>("#signup-email")!.value = "alex@example.test";
+  await act(async () => { host.querySelector<HTMLInputElement>("#signup-email")!.dispatchEvent(new Event("input", { bubbles: true })); });
+  await submit();
+  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
+  auth.verifyOtp.mockResolvedValueOnce({ data: { user: null }, error: { code: "otp_expired", status: 403 } });
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  host.querySelector<HTMLInputElement>("#email-code")!.value = "111111";
+  await submit();
+  expect(auth.verifyOtp).toHaveBeenCalledWith({ email: "alex@example.test", token: "111111", type: "email_change" });
+  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  auth.verifyOtp.mockResolvedValueOnce({ data: { user: {} }, error: null });
+  host.querySelector<HTMLInputElement>("#email-code")!.value = "123456";
+  await submit();
+  expect(host.querySelector("h1")?.textContent).toBe("Create your password");
+  expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
+  host.querySelector<HTMLInputElement>("#create-password")!.value = "long-enough-1";
+  host.querySelector<HTMLInputElement>("#confirm-password")!.value = "long-enough-2";
+  await submit();
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("The two passwords don’t match.");
+  host.querySelector<HTMLInputElement>("#confirm-password")!.value = "long-enough-1";
+  await submit();
+  expect(calls.map((call) => call.action)).toEqual(["email", "email_confirmed", "password"]);
+  expect(calls[2]).toEqual({ action: "password", password: "long-enough-1" });
+  expect(host.querySelector("h1")?.textContent).toBe("How many properties\ndo you manage?");
+  vi.unstubAllGlobals();
+});
+it("an account finished before this change resumes at the email code, and a phone login does not skip it", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign, protocol: "http:" });
+  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", new_email: "alex@example.test",
+    user_metadata: { morada_signup: { version: 1, role: "landlord", stage: "complete" } } } }, error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn loginMode />));
+  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  expect(assign).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
 });

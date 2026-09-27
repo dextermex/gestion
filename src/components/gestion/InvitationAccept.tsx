@@ -165,7 +165,7 @@ export default function InvitationAccept({
 
               {pending && session === null && (
                 <div className="mt-7 flex flex-col gap-3">
-                  <a href={`/connexion?next=${next}&onglet=inscription&email=${encodeURIComponent(preview.email)}`} className={primary}>
+                  <a href={`/inscription?next=${next}&email=${encodeURIComponent(preview.email)}`} className={primary}>
                     {t.create}
                   </a>
                   <p className="text-center text-xs text-ink-soft">{fmt(t.createHint, { email: preview.email })}</p>

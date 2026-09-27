@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHouse, daysFromNow, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextStep, nextUntil, PASSWORD, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus } from "./helpers";
+import { createHouse, daysFromNow, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextStep, nextUntil, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus, createAccountFromInvitation } from "./helpers";
 
 /**
  * One tenancy, start to finish, on the real database: the owner creates a
@@ -57,12 +57,7 @@ test("the tenant creates an account from the link and sees the home", async ({ p
   await signOutFromShell(page);
   await page.goto(`/invitation/${token}`);
   await expect(page.getByText(houseName).first()).toBeVisible();
-  await page.getByRole("link", { name: "Créer mon compte" }).click();
-  await expect(page.locator("#signup-email")).toHaveValue(tenant.email);
-  await page.locator("#signup-first-name").fill(tenant.first);
-  await page.locator("#signup-last-name").fill(tenant.last);
-  await page.locator("#signup-password").fill(PASSWORD);
-  await page.locator("#signup-form button[type=submit]").click();
+  await createAccountFromInvitation(page, tenant, token);
   // Back on the invitation with the right account: accepted by itself, into the space.
   await page.waitForURL(/\/locataire/, { timeout: 90_000 });
   await expect(page.getByText(houseName).first()).toBeVisible();

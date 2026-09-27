@@ -24,35 +24,62 @@ export interface Person {
   email: string;
 }
 
-/** Create an account on the door and land where `next` says (the management space by default). */
+/**
+ * Create an account. Account creation in the product is phone-first
+ * (/inscription), and this local stack has no SMS provider; the phone funnel
+ * has its own suite (e2e/signup). So the account is registered through
+ * GoTrue's public signup endpoint with the publishable key (no service role,
+ * the same metadata the email registration always wrote), then signed in on
+ * the real door and landed where `next` says.
+ */
+export async function createAccount(person: Person): Promise<void> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must point at the local stack");
+  const res = await fetch(`${url}/auth/v1/signup`, {
+    method: "POST",
+    headers: { apikey: key, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: person.email, password: PASSWORD, data: { first_name: person.first, last_name: person.last, phone: "", preferred_language: "fr" } }),
+  });
+  if (!res.ok) throw new Error(`signup for ${person.email} failed: ${res.status} ${await res.text()}`);
+}
+
 export async function signUp(page: Page, person: Person, next = "/app"): Promise<void> {
-  await page.goto(`/connexion?onglet=inscription&next=${encodeURIComponent(next)}`);
-  await leaveSignedInAccountIfAny(page);
-  await page.locator("#signup-first-name").fill(person.first);
-  await page.locator("#signup-last-name").fill(person.last);
-  await page.locator("#signup-email").fill(person.email);
-  await page.locator("#signup-password").fill(PASSWORD);
-  await page.locator("#signup-form button[type=submit]").click();
-  await page.waitForURL((url) => url.pathname.startsWith(next.split("?")[0]), { timeout: 60_000 });
+  await createAccount(person);
+  await signIn(page, person.email, next);
 }
 
 /** Sign in on the door, leaving whatever account the browser still holds. */
 export async function signIn(page: Page, email: string, next = "/app"): Promise<void> {
   await page.goto(`/connexion?next=${encodeURIComponent(next)}`);
   await leaveSignedInAccountIfAny(page);
-  await page.locator("#signin-email").fill(email);
-  await page.locator("#signin-password").fill(PASSWORD);
-  await page.locator("#signin-form button[type=submit]").click();
+  await page.locator("#signup-email").fill(email);
+  await page.locator("form button[type=submit]").click();
+  await page.locator("#login-password").fill(PASSWORD);
+  await page.locator("form button[type=submit]").click();
   await page.waitForURL((url) => url.pathname.startsWith(next.split("?")[0]), { timeout: 60_000 });
 }
 
 /** The door shows a signed-in account as a choice: take the other one. */
 export async function leaveSignedInAccountIfAny(page: Page): Promise<void> {
-  const card = page.getByTestId("signed-in-card");
-  if (await card.isVisible().catch(() => false)) {
-    await card.getByRole("button").click();
-    await expect(page.locator("#signin-form, #signup-form").first()).toBeVisible();
+  const other = page.getByRole("button", { name: "Utiliser un autre compte" });
+  if (await other.isVisible().catch(() => false)) {
+    await other.click();
+    await expect(page.locator("#signup-email")).toBeVisible();
   }
+}
+
+/**
+ * An invited tenant's first visit: the invitation offers account creation on
+ * the phone funnel with the invited address, never the retired email form.
+ * The account is then created as above and signed in back to the invitation.
+ */
+export async function createAccountFromInvitation(page: Page, person: Person, token: string): Promise<void> {
+  const create = page.getByRole("link", { name: "Créer mon compte" });
+  const href = (await create.getAttribute("href")) ?? "";
+  expect(href).toContain("/inscription?");
+  expect(new URL(href, "http://x").searchParams.get("email")).toBe(person.email);
+  await signUp(page, person, `/invitation/${token}`);
 }
 
 /** Sign out from the management shell, through its account menu (wizard screens have no shell: start from the dashboard). */
