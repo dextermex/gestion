@@ -59,6 +59,8 @@ export const de: Dict = {
   },
 
   nav: {
+    mortgages: "Immobilienkredite",
+    acquisitions: "Kaufprojekte",
     home: "Übersicht",
     patrimoine: "Immobilien",
     relations: "Beziehungen",

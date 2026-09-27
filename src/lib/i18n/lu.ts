@@ -64,6 +64,8 @@ export const lu: Dict = {
   },
 
   nav: {
+    mortgages: "Immobiliekreditter",
+    acquisitions: "Kafprojeten",
     home: "Iwwerbléck",
     patrimoine: "Patrimoine",
     relations: "Relatiounen",
