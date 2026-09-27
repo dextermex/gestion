@@ -378,6 +378,8 @@ export const en: Dict = {
     cashflowSub: "Rent and charges per month, derived from the allocation ledger.",
     cashflowExpected: "Expected",
     cashflowCollected: "Collected",
+    cashflowMonth: "Month",
+    cashflowDetails: "View figures",
     cashflowAria: "Monthly collections: expected and collected",
     activityTitle: "Recent activity",
     activityNone: "Activity (payments, tickets, notices) will show up here.",

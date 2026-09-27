@@ -388,6 +388,8 @@ export const fr = {
     cashflowSub: "Loyers et charges par mois, dérivés du registre d'allocations.",
     cashflowExpected: "Attendu",
     cashflowCollected: "Encaissé",
+    cashflowMonth: "Mois",
+    cashflowDetails: "Voir les montants",
     cashflowAria: "Encaissements mensuels : attendu et encaissé",
     // Activity + vigilance
     activityTitle: "Activité récente",

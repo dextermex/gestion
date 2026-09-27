@@ -24,7 +24,7 @@ export function Button({
   return (
     <button
       className={clsx(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-50 disabled:pointer-events-none motion-reduce:active:scale-100",
+        "ui-button inline-flex items-center justify-center gap-2 rounded-full font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-50 disabled:pointer-events-none motion-reduce:active:scale-100",
         // On a phone every button is at least 40px tall (44 for the main size): the touch target, not the label, sets the height.
         size === "sm" ? "px-3 py-1.5 text-sm max-sm:min-h-10" : "px-4 py-2.5 text-sm max-sm:min-h-11",
         variant === "primary" && "bg-brand-600 text-white hover:bg-brand-700",
@@ -49,7 +49,7 @@ export function Button({
 // 16px on a phone: iOS Safari zooms the whole page into any smaller field
 // the moment it gets the caret, which is what makes a form look broken there.
 const fieldClass =
-  "w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50 max-sm:min-h-11 max-sm:text-base";
+  "ui-field w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50 max-sm:min-h-11 max-sm:text-base";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
@@ -93,7 +93,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-soft">
+      <span className="mb-2 block text-sm font-medium text-ink">
         {label}
       </span>
       {children}
@@ -111,7 +111,7 @@ export function Card({
 }: { className?: string; children: React.ReactNode; ref?: React.Ref<HTMLDivElement> } & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={clsx("rounded-2xl border border-sand-200 bg-white shadow-sm", className)}
+      className={clsx("ui-card rounded-2xl border border-sand-200 bg-white shadow-sm", className)}
       {...rest}
     >
       {children}
@@ -129,12 +129,12 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div>
+    <div className="ui-page-header mb-7 flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
         <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
@@ -149,7 +149,7 @@ export function Badge({
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold",
+        "ui-badge inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
         className ?? "bg-sand-100 text-ink-soft"
       )}
     >
@@ -228,7 +228,7 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-sand-200 bg-sand-50/50 px-6 py-14 text-center">
+    <div className="ui-empty flex flex-col items-center justify-center gap-3 rounded-2xl border border-sand-200 bg-white px-6 py-16 text-center">
       <span className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-white text-brand-600 shadow-sm">
         <Icon name={icon} size={22} />
       </span>
@@ -382,7 +382,7 @@ export function Modal({
             tabIndex={-1}
             className={clsx(
               // A sheet from the bottom on a phone, clear of the home indicator; a centred dialog above.
-              "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl outline-none max-sm:pb-[max(1.25rem,var(--safe-bottom))] sm:rounded-2xl",
+              "ui-modal max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl outline-none max-sm:pb-[max(1.25rem,var(--safe-bottom))] sm:rounded-2xl",
               wide ? "sm:max-w-2xl" : "sm:max-w-md"
             )}
             initial={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}

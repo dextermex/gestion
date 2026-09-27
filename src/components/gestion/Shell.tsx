@@ -9,6 +9,8 @@ import { Button, Field, InlineError, Input, Modal, Select, Textarea } from "@/co
 import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
 import GestionLogo from "./GestionLogo";
+import SidebarNav from "./SidebarNav";
+import MobileDrawer from "./MobileDrawer";
 import ScrollHeader from "./ScrollHeader";
 import GettingStarted, { type Progress } from "./GettingStarted";
 import type { Dict } from "@/lib/i18n/fr";
@@ -43,8 +45,8 @@ export interface ShellData {
 
 /* --------------------------------- nav model --------------------------------
    The sidebar names the main sections; each one folds its sub-sections
-   directly underneath, behind a small arrow. By default only the sections
-   show — expanding is a click, and the rail stays identical on every
+   directly underneath. The whole group row toggles disclosure; everyday
+   sections are open on arrival, and the rail stays identical on every
    screen. A section lights up for every path inside it, so /app/banque
    highlights Finances and /app/baux/b-12 highlights Patrimoine. */
 
@@ -224,9 +226,13 @@ export default function GestionShell({
   );
   const NAVIGABLE = useMemo(() => navigable(NAV, d), [NAV, d]);
 
-  // Collapsed by default; the section that holds the current page opens on
-  // arrival, and every manual toggle sticks for the rest of the visit.
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // The everyday destinations are visible from the first render. Explicit
+  // choices last for this visit; arriving in another group reveals its location.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    "/app/biens": true,
+    "/app/contacts": true,
+    "/app/loyers": true,
+  });
   useEffect(() => {
     const active = destinations(d, shell.badges, shell.workspaceKind).find(
       (i) => i.children && matchesOf(i).some((m) => pathname.startsWith(m)),
@@ -256,117 +262,34 @@ export default function GestionShell({
     setPaletteOpen(false);
   }, [pathname]);
 
-  // A section lights up for every path inside it: /app/banque belongs to
-  // Finances, /app/baux/b-12 to Patrimoine.
-  const isActive = (i: NavItem) =>
-    i.href === "/app" ? pathname === "/app" : matchesOf(i).some((m) => pathname.startsWith(m));
-  const isChildActive = (c: NavChild) => pathname === c.href || pathname.startsWith(`${c.href}/`);
-
-  const navSection = (i: NavItem) => {
-    const open = Boolean(i.children && expanded[i.href]);
-    const parentRow = (
-      <div
-        className={
-          "tactile flex items-center gap-1 rounded-xl transition " +
-          (isActive(i) ? "bg-brand-50" : "hover:bg-sand-50")
-        }
-      >
-        <Link
-          href={i.href}
-          aria-current={isActive(i) ? "page" : undefined}
-          className={
-            "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
-            (isActive(i) ? "font-semibold text-brand-800" : "text-ink-soft hover:text-ink")
-          }
-        >
-          <span className="flex min-w-0 items-center gap-2.5">
-            <Icon name={i.icon} size={18} className={"shrink-0 " + (isActive(i) ? "text-brand-700" : "text-ink-soft")} />
-            <span className="truncate">{i.label}</span>
-          </span>
-          {i.badge && !open && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
-              {i.badge}
-            </span>
-          )}
-        </Link>
-        {i.children && (
-          <button
-            onClick={() => setExpanded((prev) => ({ ...prev, [i.href]: !prev[i.href] }))}
-            aria-expanded={open}
-            aria-label={`${i.label} : ${open ? d.shell.navCollapse : d.shell.navExpand}`}
-            className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:h-10 max-sm:w-10"
-          >
-            <svg
-              className={
-                "h-3.5 w-3.5 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
-                (open ? "rotate-90" : "")
-              }
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              aria-hidden
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
-            </svg>
-          </button>
-        )}
-      </div>
-    );
-    return (
-      <div key={i.href}>
-        {parentRow}
-        {open && i.children && (
-          <ul className="mb-1 mt-0.5 space-y-0.5">
-            {i.children.map((c) => (
-              <li key={c.href}>
-                <Link
-                  href={c.href}
-                  aria-current={isChildActive(c) ? "page" : undefined}
-                  className={
-                    "tactile flex items-center justify-between gap-2 rounded-lg py-1.5 pl-[42px] pr-3 text-[13px] transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-10 " +
-                    (isChildActive(c)
-                      ? "bg-brand-50 font-semibold text-brand-800"
-                      : "font-medium text-ink-soft hover:bg-sand-50 hover:text-ink")
-                  }
-                >
-                  <span className="truncate">{c.label}</span>
-                  {c.badge && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
-                      {c.badge}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
-  };
-
   const sidebar = (
     // Two zones: the sections at the top, each folding its sub-sections;
-    // the dataset switch and ecosystem links stay pinned below — controls
-    // that change what the whole screen shows must never hide behind a
-    // scroll.
-    <div className="flex h-full flex-col">
-    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pt-2.5" aria-label="Morada Gestion">
+    // the dataset switch and ecosystem links stay below. On short landscape
+    // screens the entire drawer scrolls so destinations retain enough room.
+    <div className="crm-sidebar-inner flex h-full flex-col">
+    <nav className="crm-navigation flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Morada Gestion">
       {/* The logo is the way back to the ecosystem gateway, from every space. */}
       <a
         href={WELCOME_URL}
-        className="mb-2 block rounded-lg px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:flex max-sm:min-h-11 max-sm:items-center"
+        className="crm-logo block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       >
         <GestionLogo />
       </a>
-      {NAV.map(navSection)}
+      <div className="crm-workspace">
+        <span className="crm-workspace-icon"><Icon name="properties" size={19} /></span>
+        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{shell.orgShortName}</span>
+          <span className="block text-xs text-ink-soft">{d.shell.roleOwner}</span>
+        </span>
+      </div>
+      <SidebarNav items={NAV} pathname={pathname} expanded={expanded}
+        onToggle={(href) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }))} />
     </nav>
-    <div className="shrink-0 border-t border-sand-100 px-3 pb-[max(0.75rem,var(--safe-bottom))] pt-2">
-      {/* The role switch the bar carries from `md` up, here for a phone: the
+    <div className="crm-sidebar-footer shrink-0 border-t border-sand-100 px-3 pb-[max(0.75rem,var(--safe-bottom))] pt-2">
+      {/* The role switch lives here below `xl`, and in the toolbar above: the
           same two segments, one thumb's size each, so the tenant space is
           as reachable from a phone as from a laptop. */}
       {shell.tenant && (
-        <nav aria-label={d.shell.roleAria} className="mb-2 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 md:hidden">
+        <nav aria-label={d.shell.roleAria} className="mb-2 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 xl:hidden">
           <span aria-current="true" className="flex min-h-10 flex-1 items-center justify-center rounded-lg bg-white px-3 text-xs font-semibold text-brand-800 shadow-sm">
             {d.shell.roleOwner}
           </span>
@@ -399,24 +322,24 @@ export default function GestionShell({
         {d.common.skipToContent}
       </a>
       <NavigationProgress />
-      <div className="min-h-dvh bg-sand-50">
+      <div className="crm-shell min-h-dvh">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-sand-100 bg-white lg:block">
+        <aside className="crm-sidebar chrome-material fixed z-40 hidden lg:block">
           {sidebar}
         </aside>
 
         {/* Mobile drawer — a real dialog: Escape closes, focus contained,
             enters and exits along the same path. */}
-        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} label={d.shell.menuLabel}>
+        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} label={d.shell.menuLabel} closeLabel={d.common.close}>
           {sidebar}
         </MobileDrawer>
 
-        <div className="flex min-h-dvh flex-col lg:pl-64">
+        <div className="crm-workarea flex min-h-dvh min-w-0 flex-col">
           {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
               is the whole screen: the bar and the sample line step aside with the
               rest of the chrome, and the conversation's own header takes the top. */}
           <ScrollHeader
-            className="chrome-material sticky top-0 z-30 flex h-(--bar-h) items-center gap-2 border-b border-transparent bg-white px-safe-4 pt-(--safe-top) transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden sm:gap-3 sm:px-safe-6"
+            className="crm-toolbar chrome-material sticky top-0 z-30 flex h-(--bar-h) items-center gap-2 border-b border-transparent bg-white px-safe-4 pt-(--safe-top) transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden sm:gap-3 sm:px-safe-6"
             elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
           >
             <button
@@ -429,7 +352,7 @@ export default function GestionShell({
               </svg>
             </button>
 
-            <p className="hidden truncate text-sm font-semibold text-ink md:block">{shell.orgShortName}</p>
+            <p className="crm-location hidden truncate text-sm font-medium text-ink md:block">{NAV.find((item) => item.href === "/app" ? pathname === "/app" : matchesOf(item).some((path) => pathname.startsWith(path)))?.label ?? d.nav.home}</p>
             {/* The badge marks sample data, so it must not sit next to a real
                 workspace name. */}
             {shell.sampleCabinet && (
@@ -444,7 +367,7 @@ export default function GestionShell({
             {shell.tenant && (
               <nav
                 aria-label={d.shell.roleAria}
-                className="ml-1 hidden gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 md:flex"
+                className="crm-role-switch ml-1 hidden gap-1 rounded-full bg-sand-100 p-1 xl:flex"
               >
                 <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
                   {d.shell.roleOwner}
@@ -462,7 +385,7 @@ export default function GestionShell({
 
             <button
               onClick={() => setPaletteOpen(true)}
-              className="hidden items-center gap-2 rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-sm text-ink-soft transition hover:border-brand-200 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:flex"
+              className="crm-search hidden items-center gap-2 rounded-full border border-sand-200 bg-white px-3 py-1.5 text-sm text-ink-soft transition hover:border-brand-200 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:flex"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="11" cy="11" r="7" />
@@ -498,7 +421,7 @@ export default function GestionShell({
           {shell.sampleCabinet && (
             <div
               role="status"
-              className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-safe-4 py-2 text-center text-xs font-semibold text-amber-900 max-lg:[html[data-phone-chat]_&]:hidden"
+              className="crm-sample-banner flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-safe-4 py-2 text-center text-xs font-semibold text-amber-900 max-lg:[html[data-phone-chat]_&]:hidden"
             >
               <span>{fmt(d.shell.sampleBanner, { cabinet: shell.sampleCabinet })}</span>
               <button
@@ -517,7 +440,7 @@ export default function GestionShell({
               floating getting-started card when the account has one. A
               conversation open over the phone's screen gets the screen whole:
               no gutter, no width limit (the card keeps the safe areas itself). */}
-          <main id="main" className={"mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24")}>
+          <main id="main" tabIndex={-1} className={"crm-main mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24")}>
             {children}
           </main>
         </div>
@@ -555,61 +478,6 @@ export default function GestionShell({
   );
 }
 
-/* ------------------------------- mobile drawer ------------------------------ */
-
-function MobileDrawer({
-  open,
-  onClose,
-  label,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  label: string;
-  children: React.ReactNode;
-}) {
-  const ref = useDismiss<HTMLDivElement>(open, onClose);
-  const reduced = useReducedMotion();
-  return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <motion.div
-            className="absolute inset-0 bg-ink/40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            aria-hidden
-          />
-          <motion.aside
-            ref={ref}
-            role="dialog"
-            aria-modal
-            aria-label={label}
-            className="absolute inset-y-0 left-0 w-72 max-w-[calc(100vw-3rem)] bg-white pl-(--safe-left) pt-(--safe-top) shadow-pop"
-            initial={reduced ? { opacity: 0 } : { x: -288 }}
-            animate={reduced ? { opacity: 1 } : { x: 0 }}
-            exit={reduced ? { opacity: 0 } : { x: -288 }}
-            transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 380, damping: 32 }}
-          >
-            <button
-              onClick={onClose}
-              className="absolute right-2 top-[max(0.5rem,var(--safe-top))] z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-              aria-label={label}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-                <path strokeLinecap="round" d="m6 6 12 12M18 6 6 18" />
-              </svg>
-            </button>
-            {children}
-          </motion.aside>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-}
-
 /* ------------------------------ dropdown shell ------------------------------ */
 
 function Dropdown({
@@ -625,7 +493,7 @@ function Dropdown({
     <AnimatePresence>
       {open && (
         <motion.div
-          className={`absolute right-0 top-11 z-40 origin-top-right rounded-xl border border-sand-200 bg-white p-1.5 shadow-lg ${widthClass}`}
+          className={`crm-dropdown absolute right-0 top-11 z-40 origin-top-right rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg ${widthClass}`}
           initial={{ opacity: 0, scale: 0.96, y: -4 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: -4 }}
@@ -707,11 +575,12 @@ function QuickAddMenu({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11"
+        className="tactile flex min-h-9 items-center gap-1.5 rounded-full bg-brand-700 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11"
         aria-haspopup="true"
         aria-expanded={open}
+        aria-label={label}
       >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
           <path strokeLinecap="round" d="M12 5v14M5 12h14" />
         </svg>
         <span className="hidden sm:inline">{label}</span>

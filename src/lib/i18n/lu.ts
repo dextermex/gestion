@@ -383,6 +383,8 @@ export const lu: Dict = {
     cashflowSub: "Loyer a Chargen pro Mount, ofgeleet aus dem Allocatiouns-Register.",
     cashflowExpected: "Erwaart",
     cashflowCollected: "Encaisséiert",
+    cashflowMonth: "Mount",
+    cashflowDetails: "Beträg weisen",
     cashflowAria: "Monatlech Encaissementer: erwaart an encaisséiert",
     activityTitle: "Lescht Aktivitéit",
     activityNone: "Aktivitéit (Encaissementer, Interventiounen, Preavisen) erschéngt hei.",

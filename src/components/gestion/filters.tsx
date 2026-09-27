@@ -28,10 +28,10 @@ export function CountCard({
       href={href}
       aria-current={selected ? "true" : undefined}
       className={
-        "tactile block rounded-2xl border bg-white p-4 shadow-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+        "crm-count-card tactile block rounded-2xl border bg-white p-5 shadow-sm transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
         (selected
-          ? "border-brand-400 ring-1 ring-brand-200"
-          : "border-sand-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md motion-reduce:hover:translate-y-0")
+          ? "border-brand-400 bg-brand-50 ring-1 ring-brand-200"
+          : "border-sand-200 hover:border-brand-300 hover:bg-brand-50/40")
       }
     >
       <p className={`font-display text-2xl font-bold tracking-tight tabular-nums ${valueColor}`}>{value}</p>
@@ -58,7 +58,7 @@ export function ChipLink({
       href={href}
       aria-current={active ? "true" : undefined}
       className={
-        "tactile flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
+        "crm-filter tactile flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11 " +
         (active
           ? "bg-brand-600 text-white"
           : "border border-sand-200 bg-white text-ink-soft hover:border-brand-200 hover:text-brand-700")

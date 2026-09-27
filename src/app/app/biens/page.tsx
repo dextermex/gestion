@@ -257,7 +257,7 @@ export default async function BiensPage({
     <div>
       <PageHeader title={d.biens.title} subtitle={d.biens.subtitle} actions={addButton} />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="crm-property-stats mb-6 grid grid-cols-2 lg:grid-cols-4">
         {kpis.map((k) => (
           <Card key={k.label} className="flex items-center gap-3 p-4">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sand-100 text-ink-soft">
@@ -307,7 +307,7 @@ export default async function BiensPage({
             const single = card.single;
             return (
               <Link key={p.id} href={`/app/biens/${p.id}`} className="group">
-                <Card className="flex h-full flex-col overflow-hidden p-0 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-0.5 group-hover:border-brand-100 group-hover:shadow-md">
+                <Card className="crm-property-card flex h-full flex-col overflow-hidden p-0 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-0.5 group-hover:border-brand-100 group-hover:shadow-md">
                   <div className="aspect-[16/10] w-full overflow-hidden">
                     <PropertyPhoto
                       url={p.photoUrl}
