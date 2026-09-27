@@ -964,6 +964,7 @@ button:not(:disabled),
 }
 @media (width < 64rem) {
   .rental-guide { display: none; }
+  html[data-phone-chat] .tenant-main { padding: 0; max-width: none; }
 }
 .crm-metric:first-child .crm-metric-value { font-size: clamp(2.75rem,3.8vw,3.75rem); }
 .crm-metric:not(:first-child) .crm-metric-value { font-size: 2.5rem; }
