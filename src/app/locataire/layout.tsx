@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Avatar } from "@/components/pro/ui";
 import GestionLogo from "@/components/gestion/GestionLogo";
@@ -6,7 +7,6 @@ import ScrollHeader from "@/components/gestion/ScrollHeader";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
 import TenantTabs from "@/components/gestion/TenantTabs";
 import { TenantBecomeOwner, TenantSampleBanner, TenantSignOut } from "@/components/gestion/TenantChrome";
-import { WELCOME_URL } from "@/lib/constants";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -56,9 +56,9 @@ export default async function TenantLayout({ children }: { children: React.React
         elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
       >
         <div className="mx-auto flex h-(--bar-h) w-full max-w-6xl items-center gap-3 px-safe-4 pt-(--safe-top) sm:px-safe-6">
-          <a href={WELCOME_URL} aria-label="Morada">
+          <Link href="/locataire" aria-label="Morada">
             <GestionLogo />
-          </a>
+          </Link>
           <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-brand-700 max-sm:hidden">
             {d.tenant.space}
           </span>

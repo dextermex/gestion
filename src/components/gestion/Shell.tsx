@@ -268,13 +268,13 @@ export default function GestionShell({
     // screens the entire drawer scrolls so destinations retain enough room.
     <div className="crm-sidebar-inner flex h-full flex-col">
     <nav className="crm-navigation flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Morada Gestion">
-      {/* The logo is the way back to the ecosystem gateway, from every space. */}
-      <a
-        href={WELCOME_URL}
+      {/* The CRM logo always returns to the management dashboard. */}
+      <Link
+        href="/app"
         className="crm-logo block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       >
         <GestionLogo />
-      </a>
+      </Link>
       <div className="crm-workspace">
         <span className="crm-workspace-icon"><Icon name="properties" size={19} /></span>
         <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{shell.orgShortName}</span>
