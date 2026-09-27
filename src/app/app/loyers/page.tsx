@@ -222,7 +222,7 @@ export default async function LoyersPage({
                         <MetaBadge meta={rentMeta[rp.status]} />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           <GenerateDocument
                             kind="rent_notice"
                             sourceId={rp.id}

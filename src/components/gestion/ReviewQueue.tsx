@@ -184,7 +184,7 @@ export function ReviewQueue({
                           onClick={() => act(t, "match")}
                           disabled={s.status === "busy" || !s.leaseId}
                           aria-busy={s.status === "busy" || undefined}
-                          className="tactile inline-flex min-h-10 items-center rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50 max-sm:min-h-11"
+                          className="tactile inline-flex min-h-10 items-center rounded-full bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-50 max-sm:min-h-11"
                         >
                           {labels.match}
                         </button>
@@ -192,7 +192,7 @@ export function ReviewQueue({
                           type="button"
                           onClick={() => act(t, "ignore")}
                           disabled={s.status === "busy"}
-                          className="tactile inline-flex min-h-10 items-center rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 disabled:opacity-50 max-sm:min-h-11"
+                          className="tactile inline-flex min-h-10 items-center hig-tinted rounded-full px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-brand-700 disabled:opacity-50 max-sm:min-h-11"
                         >
                           {labels.ignore}
                         </button>

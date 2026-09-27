@@ -340,7 +340,7 @@ export default function GestionShell({
               rest of the chrome, and the conversation's own header takes the top. */}
           <ScrollHeader
             className="crm-toolbar chrome-material sticky top-0 z-30 flex h-(--bar-h) items-center gap-2 border-b border-transparent bg-white px-safe-4 pt-(--safe-top) transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden sm:gap-3 sm:px-safe-6"
-            elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
+            elevated="is-scrolled"
           >
             <button
               className="-ml-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:hidden"

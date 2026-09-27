@@ -12,7 +12,7 @@ export default function TenantEmpty({ d, manage = false }: { d: Dict; manage?: b
       <h2 className="mt-5 font-display text-lg font-bold text-ink">{d.tenant.emptyTitle}</h2>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-soft">{d.tenant.emptyBody}</p>
       {manage && (
-        <a href="/app" className="mt-6 inline-block rounded-xl border border-sand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm hover:border-brand-300">
+        <a href="/app" className="mt-6 inline-block hig-tinted rounded-full px-4 py-2 text-sm font-semibold text-brand-700">
           {d.tenant.backToOwner}
         </a>
       )}

@@ -146,7 +146,7 @@ export default function GenerateDocument({
         <>
           <a
             href={`/api/documents/${encodeURIComponent(doc.documentId)}/fichier`}
-            className="inline-flex min-h-9 items-center rounded-lg border border-sand-200 bg-white px-3 text-xs font-semibold text-brand-700 hover:border-brand-300 hover:underline"
+            className="hig-tinted inline-flex min-h-9 items-center rounded-full px-3.5 text-xs font-semibold text-brand-800"
             data-doc-open={doc.documentId}
           >
             {label} · {labels.open}

@@ -70,3 +70,31 @@ editing, the unchanged creation payload, no writes from samples, and semantic la
 and help associations. The existing database E2E helpers now use the three-stage
 property flow; responsive tests assert the new floating tenant-bar geometry while
 retaining touch-target, overflow and footer-clearance checks.
+
+## Human Interface audit · second pass
+
+An audit of the shipped screens against Apple's Human Interface Guidelines
+(foundations: typography, colour, materials, layout, icons; components:
+buttons, text fields, segmented controls, tab bars, sheets, menus). The
+findings and their disposition:
+
+| Finding | Change |
+|---|---|
+| The body face was Inter on every device, so Apple devices never showed their system face. | System stack first, Inter as the fallback. |
+| Headings were tracked at -0.045em to -0.055em whatever their size. | Size-specific tracking; bold large titles, semibold section titles. |
+| Status reds, greens and ambers were Tailwind's defaults, more saturated than the rest of the palette. | Apple's accessible system colours, contrast measured per text/tint pair. |
+| Four button shapes coexisted (capsule, 12px, 8px and bordered white). | One capsule family: filled, tinted, plain, destructive. Hand-built link buttons follow it. |
+| Compact buttons were as tall as regular ones (46px), so table rows swelled. | A true compact size (36px under a pointer, 44px on touch). |
+| The toolbar drew a rule and a shadow under itself once scrolled. | A scroll-edge fade instead. |
+| The owner/tenant switch put 8px-radius thumbs in a capsule track. | Concentric capsules. |
+| Icon strokes were one width at every size. | SF Symbols-style weights and optical compensation. |
+| The dialog spring could overshoot slightly. | Critically damped. |
+| On the tenant pages the wordmark fell back to the system face. | The Bricolage wordmark is restored. |
+
+Not adopted, deliberately: SF Pro and SF Symbols files (licensed for Apple
+platforms only), Apple's Product Bezels (marketing imagery; the application
+has no marketing page, and product screens should not wear a device frame),
+and a copy of macOS 27 window chrome (a web application imitating a system
+window misleads about what it is). The Liquid Glass idiom is applied to
+navigation only, as the HIG itself reserves it for the functional layer
+above content.

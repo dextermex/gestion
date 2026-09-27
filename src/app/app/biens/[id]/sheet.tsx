@@ -563,7 +563,7 @@ export function Rental({
                 </p>
                 <Link
                   href={`/app/biens/depart?bail=${lease.id}`}
-                  className="tactile inline-flex min-h-9 items-center justify-center rounded-xl border border-sand-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-ink shadow-sm transition hover:border-brand-300 hover:text-brand-700"
+                  className="tactile inline-flex min-h-9 items-center justify-center hig-tinted rounded-full px-3.5 py-1.5 text-sm font-semibold text-ink transition hover:text-brand-700"
                 >
                   {lease.departure ? d.bien.departureResume : d.modify.departure}
                 </Link>

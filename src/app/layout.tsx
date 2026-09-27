@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { getLocale } from "@/lib/i18n";
 import { htmlLang } from "@/lib/i18n/config";
 import "./globals.css";
+// The Human Interface layer: loaded after the base sheet, so it has the last word.
+import "./hig.css";
 
 // Morada Gestion is its own environment in the Morada ecosystem — same design
 // language as Morada.lu, different space. UI in FR/EN/DE/LU (cookie-switched).

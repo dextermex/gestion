@@ -89,7 +89,7 @@ export default function DraftDossierActions({
         {!obsolete && (
           <Link
             href={`/app/biens/locataire?bail=${encodeURIComponent(leaseId)}`}
-            className="tactile inline-flex min-h-9 items-center rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+            className="tactile inline-flex min-h-9 items-center rounded-full bg-brand-700 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-800"
           >
             {labels.resume}
           </Link>

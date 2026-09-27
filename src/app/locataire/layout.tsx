@@ -52,8 +52,8 @@ export default async function TenantLayout({ children }: { children: React.React
           is the whole screen: the bar, the sample line, the foot and the bottom bar
           step aside, and the conversation's own header takes the top. */}
       <ScrollHeader
-        className="chrome-material sticky top-0 z-30 border-b border-transparent bg-white transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden"
-        elevated="border-sand-100 shadow-[0_1px_10px_rgba(31,41,36,0.05)]"
+        className="tenant-toolbar chrome-material sticky top-0 z-30 border-b border-transparent bg-white transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 max-lg:[html[data-phone-chat]_&]:hidden"
+        elevated="is-scrolled"
       >
         <div className="mx-auto flex h-(--bar-h) w-full max-w-6xl items-center gap-3 px-safe-4 pt-(--safe-top) sm:px-safe-6">
           <Link href="/locataire" aria-label="Morada">

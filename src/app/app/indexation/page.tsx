@@ -212,7 +212,7 @@ export default async function IndexationPage() {
               <LagReminder leaseId={lagLease.id} message={fmt(d.indexation.lagMessage, lagFacts)} writable={writable} labels={indexationLabels} />
               <Link
                 href="/app/banque"
-                className="inline-flex items-center rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 max-sm:min-h-10"
+                className="inline-flex items-center hig-tinted rounded-full px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-brand-700 max-sm:min-h-10"
               >
                 {d.indexation.lagView}
               </Link>

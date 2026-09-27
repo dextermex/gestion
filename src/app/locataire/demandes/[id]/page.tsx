@@ -89,7 +89,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
         <p className="text-sm text-ink-soft">{d.tenant.msgSub}</p>
         <Link
           href={`/locataire/messages?demande=${encodeURIComponent(request.id)}`}
-          className="tactile mt-3 inline-block rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+          className="tactile mt-3 inline-block rounded-full bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-800"
         >
           {d.tenant.reqInChat}
         </Link>
