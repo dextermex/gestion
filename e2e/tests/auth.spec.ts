@@ -63,6 +63,7 @@ test("Safari-style autofill (values without input events) still signs in", async
   await page.goto("/connexion");
   await autofill(page, { "#signup-email": alice.email });
   await page.locator("form button[type=submit]").click();
+  await page.locator("#login-password").waitFor();
   await autofill(page, { "#login-password": PASSWORD });
   await page.locator("form button[type=submit]").click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 60_000 });
