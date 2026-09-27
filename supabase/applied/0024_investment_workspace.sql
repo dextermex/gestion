@@ -15,6 +15,7 @@ alter table gestion.acquisition_projects add constraint acquisition_projects_sta
 alter table gestion.acquisition_projects drop constraint if exists acquisition_projects_financing_status_check;
 alter table gestion.acquisition_projects add constraint acquisition_projects_financing_status_check check(financing_status in ('research','submitted','pending','offer_received','accepted','refused','cash'));
 create or replace function gestion.investment_touch_updated_at() returns trigger language plpgsql set search_path='' as $$ begin new.updated_at=now(); return new; end $$;
+revoke all on function gestion.investment_touch_updated_at() from public, anon;
 drop trigger if exists investment_loans_updated_at on gestion.investment_loans;
 create trigger investment_loans_updated_at before update on gestion.investment_loans for each row execute function gestion.investment_touch_updated_at();
 drop trigger if exists acquisition_projects_updated_at on gestion.acquisition_projects;
