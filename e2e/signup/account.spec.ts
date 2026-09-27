@@ -1,7 +1,9 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { createClient, type Session } from "@supabase/supabase-js";
 
-const APP = "http://127.0.0.1:4321";
+// NextURL normalizes loopback addresses to localhost. Use the browser's same
+// canonical origin so the real CSRF check remains enabled throughout this test.
+const APP = "http://localhost:4321";
 const MAIL = "http://127.0.0.1:54324";
 const API = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";

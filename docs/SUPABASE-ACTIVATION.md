@@ -65,11 +65,33 @@ mobile inbox after saving them; a browser preview is not an inbox rendering test
 
 ## 3. Use a Morada sender
 
-Open the **SMTP Settings** tab under Authentication → Emails. Configure your
-existing mail provider's host, port, username and password. Enter credentials
-directly in Supabase, not in Git or chat. Choose sender name **Morada** and a
-verified Morada sender, for example `accounts@morada.lu` once that address/domain
-is authorized with your provider.
+Use **Morada <accounts@notify.morada.lu>** for account verification, sign-in and
+password recovery. The user requested a dedicated sending subdomain; reserve it
+for transactional account mail and keep marketing campaigns on a separate sender.
+This separates mail streams and helps protect the main domain's reputation, but
+does not guarantee complete reputation isolation or inbox placement.
+
+No email provider is configured yet. The proposed provider is Resend. Add
+`notify.morada.lu` as the sending domain there, then copy its exact verification
+records to Cloudflare (the authoritative DNS provider for `morada.lu`). Enable
+sending only; do not alter the root domain's inbound MX records or enable inbound
+mail unless a separate requirement calls for it.
+
+After Resend shows the subdomain as verified, open **SMTP Settings** under
+Authentication → Emails and configure:
+
+| Setting | Value |
+|---|---|
+| Sender email | `accounts@notify.morada.lu` |
+| Sender name | `Morada` |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | A Resend sending API key restricted to this domain |
+
+The user must create and enter credentials directly in the provider/Supabase
+dashboards, not in Git or chat. The sender subdomain is not an application host;
+confirmation redirects remain `https://app.morada.lu/inscription`.
 
 Complete the provider's exact SPF, DKIM and DMARC DNS instructions; preserve
 existing DNS records and do not create a second SPF policy at the same name.
@@ -137,14 +159,19 @@ Verified in the signed-in production dashboard on 2026-09-27:
   `https://app.morada.lu`. The six exact callback entries in step 1 were added;
   the allowlist had previously been empty. No existing entry was removed.
 - **Vercel application URL:** `NEXT_PUBLIC_APP_URL=https://app.morada.lu`
-  was saved as a Production config variable on `morada-gestion`. It takes
-  effect on the next production deployment.
+  was saved as a Production config variable on `morada-gestion` and deployed.
 - **Email delivery:** custom SMTP is disabled. Supabase currently uses its
   default templates and requires SMTP setup (or a paid plan) to edit them.
   The branded templates are committed but are **not installed** in hosted Auth.
-- **Phone:** disabled, with no Twilio account, auth token or message-service
-  configuration filled in. Existing settings are six digits, phone confirmation
-  enabled and a 60-second expiry. These settings were inspected, not changed.
+- **Phone:** still disabled in Supabase. Twilio Verify is selected in the open
+  setup panel, but credential entry and saving remain with the user. The actual
+  Twilio service named Morada has SMS enabled, six-digit codes, custom-code
+  generation off and Fraud Guard on. Twilio's service list says sending to any
+  recipient requires an upgraded account and an approved Primary Compliance
+  Profile. These account requirements must be completed before public signup.
+- **Sender:** the user selected a separate sending subdomain. The intended
+  address is `accounts@notify.morada.lu`; it is not activated. Resend account
+  setup, domain verification, SMTP and branded-template installation remain.
 - **Google, Apple and Manual Linking:** disabled. Email confirmation remains on;
   anonymous sign-in remains off. No provider secrets or permissions were changed.
 - **Deployment configuration:** the `morada-gestion` project had an install
@@ -152,8 +179,10 @@ Verified in the signed-in production dashboard on 2026-09-27:
   This removed the signup branch's new dependency declaration and caused
   `Can't resolve 'libphonenumber-js/min'`. The project now uses `npm ci`, also
   pinned in `vercel.json`, so each build installs its own lockfile. Code is
-  pushed on `codex/signup-funnel` in PR #3; production activation remains gated
-  on the provider setup above.
+  deployed to `app.morada.lu/inscription` through merged PR #3; production phone
+  activation remains gated on the provider setup above. Existing marketing links
+  to `/connexion?onglet=inscription` will redirect into the new funnel when the
+  phone flag and Turnstile public key are enabled.
 
 Real SMS, OAuth and inbox delivery remain unverified. No production rows or
 database schemas were changed. The phone and social UI flags remain gated until
@@ -162,4 +191,6 @@ provider setup and end-to-end checks are complete.
 References: [redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls),
 [email templates](https://supabase.com/docs/guides/auth/auth-email-templates),
 [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp),
+[Resend SMTP](https://resend.com/docs/send-with-supabase-smtp),
+[sending subdomains](https://resend.com/docs/knowledge-base/is-it-better-to-send-emails-from-a-subdomain-or-the-root-domain),
 [OAuth Server](https://supabase.com/docs/guides/auth/oauth-server).
