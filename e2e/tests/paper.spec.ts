@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { PASSWORD, createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextUntil, signIn, signOutFromShell, signUp } from "./helpers";
+import { createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextUntil, signIn, signOutFromShell, signUp, createAccountFromInvitation } from "./helpers";
 
 /**
  * The paper trail, on the real database and the real bucket. Nothing is
@@ -382,12 +382,7 @@ test("the tenant reads where to pay and opens the contract and the receipt of th
   ({ token } = await inviteTenant(page, propertyId));
   await signOutFromShell(page);
   await page.goto(`/invitation/${token}`);
-  await page.getByRole("link", { name: "Créer mon compte" }).click();
-  await expect(page.locator("#signup-email")).toHaveValue(tenant.email);
-  await page.locator("#signup-first-name").fill(tenant.first);
-  await page.locator("#signup-last-name").fill(tenant.last);
-  await page.locator("#signup-password").fill(PASSWORD);
-  await page.locator("#signup-form button[type=submit]").click();
+  await createAccountFromInvitation(page, tenant, token);
   await page.waitForURL(/\/locataire/, { timeout: 90_000 });
 
   await page.goto("/locataire/paiements");

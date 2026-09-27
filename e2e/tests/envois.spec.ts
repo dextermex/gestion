@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { PASSWORD, createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, signIn, signOutFromShell, signUp } from "./helpers";
+import { createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, signIn, signOutFromShell, signUp, createAccountFromInvitation } from "./helpers";
 
 /**
  * Delivery, on the real database. This deployment has no mail key, and the
@@ -99,12 +99,7 @@ test("the desk's word warns the tenant until the workspace turns it off; the ten
   ({ token } = await inviteTenant(page, propertyId));
   await signOutFromShell(page);
   await page.goto(`/invitation/${token}`);
-  await page.getByRole("link", { name: "Créer mon compte" }).click();
-  await expect(page.locator("#signup-email")).toHaveValue(tenant.email);
-  await page.locator("#signup-first-name").fill(tenant.first);
-  await page.locator("#signup-last-name").fill(tenant.last);
-  await page.locator("#signup-password").fill(PASSWORD);
-  await page.locator("#signup-form button[type=submit]").click();
+  await createAccountFromInvitation(page, tenant, token);
   await page.waitForURL(/\/locataire/, { timeout: 90_000 });
   expect((await page.request.post("/api/locataire/messages", { data: { body: "Merci, une question sur les charges." } })).ok()).toBe(true);
   const request = await page.request.post("/api/locataire/demandes", { data: { kind: "technical", title: "Fuite sous l'évier", description: "Depuis ce matin.", severity: "priority", category: "plumbing" } });

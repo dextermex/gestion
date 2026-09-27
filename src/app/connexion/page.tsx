@@ -2,45 +2,39 @@ import SignupFunnel from "@/components/signup/SignupFunnel";
 import "../inscription/signup.css";
 import { redirect } from "next/navigation";
 import { safeSignupNext } from "@/lib/signup/model";
-import { phoneSignupEntryEnabled } from "@/lib/signup/rollout";
-import WelcomeAuth from "@/components/gestion/WelcomeAuth";
-import { getI18n } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n";
+import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { getSession } from "@/lib/supabase/server";
 
-export const metadata = { title: "Morada Gestion", robots: { index: false, follow: false } };
+export const metadata = { title: "Morada · Sign in", robots: { index: false, follow: false } };
 
-export default async function WelcomePage({
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/**
+ * The sign-in door: email and password, phone code, Google and Apple where
+ * configured, and the password-recovery return (`?mode=reset`). Account
+ * creation lives at /inscription only; every older signup link
+ * (`?onglet=inscription`, from morada.lu CTAs, invitations and old emails)
+ * is sent there with its destination, language, invited address and
+ * placement tag intact.
+ */
+export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; onglet?: string; email?: string; legacy?: string }>;
+  searchParams: Promise<{ next?: string; onglet?: string; email?: string; lang?: string; mode?: string; ref?: string }>;
 }) {
-  const { locale, d } = await getI18n();
   const params = await searchParams;
+  const locale = LOCALES.includes(params.lang as Locale) ? params.lang as Locale : await getLocale();
+  const email = typeof params.email === "string" && EMAIL.test(params.email) ? params.email.slice(0, 160) : "";
   const next = safeSignupNext(params.next);
-  // Until the entry flag is on, this page stays the email door the marketing
-  // links have always reached; /inscription is only reachable by its own URL.
-  const phoneEnabled = phoneSignupEntryEnabled();
-  // A visitor the cookie already identifies is told so and chooses: carry on
-  // with that account, or leave it to sign in or sign up with another. The
-  // door never bounces anyone past itself, so a second account can always be
-  // opened from here, whatever the browser remembers.
-  const session = await getSession();
-  // An invitation link lands here with the sign-up tab open and the invited
-  // address filled in: the account is created for that address, nothing else.
-  const email = typeof params.email === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(params.email) ? params.email.slice(0, 160) : "";
-  const newSignup = phoneEnabled && params.legacy !== "1" && !email;
-  if (newSignup && params.onglet === "inscription") redirect("/inscription?lang=" + locale + "&next=" + encodeURIComponent(next));
-  if (newSignup) return <SignupFunnel locale={locale} next={next} signedIn={!!session} loginMode />;
-  return (
-    <WelcomeAuth
-      newSignup={newSignup}
-      phoneEnabled={phoneEnabled}
-      d={d}
-      next={next}
-      locale={locale}
-      initialTab={params.onglet === "inscription" ? "signup" : "signin"}
-      initialEmail={email}
-      signedInAs={session?.email ?? null}
-    />
-  );
+  if (params.onglet === "inscription") {
+    const target = new URLSearchParams({ lang: locale });
+    if (params.next) target.set("next", next);
+    if (email) target.set("email", email);
+    if (typeof params.ref === "string" && /^[\w-]{1,40}$/.test(params.ref)) target.set("ref", params.ref);
+    redirect("/inscription?" + target.toString());
+  }
+  const recovery = params.mode === "reset";
+  const session = recovery ? null : await getSession();
+  return <SignupFunnel locale={locale} next={next} signedIn={!!session} loginMode phoneLogin={params.mode === "phone"} initialEmail={email} recovery={recovery} />;
 }

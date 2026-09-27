@@ -19,9 +19,9 @@ let leaseId = "";
 
 test("the door's fields keep the caret", async ({ page }) => {
   await page.goto("/connexion");
-  await typeAndKeepFocus(page, "#signin-email", "marie.kohl@example.lu");
-  await page.getByRole("tab", { name: "Créer un compte" }).click();
-  await typeAndKeepFocus(page, "#signup-first-name", "Marie");
+  await typeAndKeepFocus(page, "#signup-email", "marie.kohl@example.lu");
+  await page.goto("/inscription");
+  await typeAndKeepFocus(page, "#signup-phone", "621 123 456");
 });
 
 test("the property and tenant wizards keep the caret", async ({ page }) => {

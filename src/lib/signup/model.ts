@@ -16,7 +16,7 @@ export const profileInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("complete"), preferences: preferenceSchema }),
 ]);
 
-export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "name" | "email" | "properties" | "challenge" | "involvement" | "welcome" | "existing";
+export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "name" | "email" | "properties" | "challenge" | "involvement" | "welcome" | "existing" | "reset";
 
 /** Navigation only. These preferences never confer permissions or tenant access. */
 export function safeSignupNext(raw: string | null | undefined, role: SignupRole = "landlord"): string {

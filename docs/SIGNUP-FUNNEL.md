@@ -15,17 +15,23 @@ Keep the funnel on **https://app.morada.lu/inscription**. A separate
 without improving the customer journey. Gestion already owns the destination,
 the shared Morada session cookie and the workspace provisioner.
 
-After activation, signed-out visits to the app root and ordinary
-`/connexion?onglet=inscription` links open the new funnel. The marketing
-agent can point “Start for free” directly at `/inscription?lang=en`
-(also `fr`, `de`, `lu`). Invitation links with an invited email keep the
-existing invitation registration route.
+`/inscription` is the only account-creation page. `/connexion` is the only
+sign-in page and renders the same design in login mode: email and password
+(with “Forgot password?” in place), phone code, and Google or Apple where
+configured. The retired “Bienvenue sur Morada Gestion” page (`WelcomeAuth`)
+is deleted; nothing renders it as a fallback.
 
-`/connexion` retains email/password login and recovery and gains phone login.
-`/inscription?mode=phone` sends codes with `shouldCreateUser: false`.
-`/connexion?onglet=inscription&legacy=1` retains email registration.
-No hosted settings, database migrations or production deployment are part of
-this change.
+- `/connexion?onglet=inscription…` (older morada.lu CTAs, invitations and
+  emails) redirects server-side to `/inscription`, keeping `next`, `lang`, an
+  invited `email` and the `ref` placement tag.
+- The marketing site links “Start for free” to `https://app.morada.lu/inscription`.
+- Invitations open `/inscription?next=/invitation/…&email=…`; the invited
+  address is prefilled at the email step and still confirmed by Auth.
+- Password recovery emails return to `/connexion?mode=reset` (allow-listed as
+  `https://app.morada.lu/connexion?**`), where the new design asks for a new
+  password.
+- The app root sends a signed-out visitor to `/connexion`.
+- `/inscription?mode=phone` sends codes with `shouldCreateUser: false`.
 
 ## Journey
 
@@ -96,12 +102,8 @@ Before enabling:
    environments. Keep secure email confirmation enabled.
 5. Set `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1` alongside the site key and rebuild.
    These are build-time public variables. No service-role key is needed.
-   This makes `/inscription` work when opened directly; it does not yet send
-   anyone there. `PHONE_SIGNUP_ENTRY_ENABLED` (server-side, default off) opens
-   the public doors: `/connexion` and the marketing site's
-   `/connexion?onglet=inscription&ref=…` links, the root `/` redirect and the
-   phone-login link. Set it to `1` and redeploy only after a real production
-   signup has succeeded end to end (`src/lib/signup/rollout.ts`).
+   Without them the funnel shows “Sign-up is temporarily unavailable” rather
+   than an email form.
 6. In an isolated staging project, test an actual SMS, an incorrect and expired
    code, resend, an existing phone account, a duplicate email, email confirmation,
    recovery, logout/re-entry, and both app handoffs before production rollout.
@@ -188,8 +190,22 @@ Continue, Google, Apple, phone login and a create-account link. The email path
 retains the existing password authentication and recovery. Phone-created accounts
 can sign in by phone or their linked provider; no password is invented for them.
 `/inscription?mode=phone` sends an SMS with `shouldCreateUser: false`.
-When the phone rollout is enabled, `/connexion` uses the new login layout.
-Legacy email registration, invitations and recovery retain `?legacy=1`.
+`/connexion` renders this same login layout; `?legacy=1` no longer exists.
+
+### Diagnosing a failed code request
+
+The funnel names each Auth failure (`src/lib/signup/errors.ts`) and logs one
+console line, `[morada-signup] <stage> failed { code, status }`, never the
+number, address or provider message. The same request appears in Supabase
+(Logs, Auth) with the provider's reason. Common causes:
+
+| Console code | Supabase log | Fix |
+|---|---|---|
+| `sms_send_failed` + Twilio 21212 “Invalid From Number … VA…” | Phone provider set to **Twilio** with the Verify Service SID in the sender field | Authentication, Sign In / Providers, Phone: choose **Twilio Verify**, then Account SID, Auth Token, Verify Service SID (`VA…`) |
+| `sms_send_failed` + Twilio 20003 | Wrong Account SID or Auth Token | Re-enter both (rotate the token if exposed) |
+| `phone_provider_disabled` | Phone provider off | Enable Phone |
+| `captcha_failed` | Turnstile secret missing or wrong | Attack Protection: Turnstile secret for the `Morada signup` widget |
+| `over_sms_send_rate_limit` | Rate limit | Wait, or raise the SMS limit in Auth rate limits |
 
 ### Social provider activation (not performed)
 
