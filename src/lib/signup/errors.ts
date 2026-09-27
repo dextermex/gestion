@@ -38,6 +38,9 @@ export function signupErrorKey(stage: SignupStage, failure: Failure): SignupMess
     case "email_exists": return "emailExists";
     case "session_expired": case "phone_required": return "sessionExpired";
     case "save_failed": return "saveFailed";
+    case "email_unconfirmed": return "emailUnconfirmed";
+    case "password_required": return "passwordRequired";
+    case "details_required": return "sessionExpired";
     default: return "unavailable";
   }
 }

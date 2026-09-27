@@ -6,7 +6,7 @@ import SignupFunnel from "@/components/signup/SignupFunnel";
 
 const auth = vi.hoisted(() => ({
   getUser: vi.fn(), signInWithOtp: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), linkIdentity: vi.fn(), signInWithOAuth: vi.fn(), signInWithPassword: vi.fn(),
-  resetPasswordForEmail: vi.fn(), updateUser: vi.fn(),
+  resetPasswordForEmail: vi.fn(), updateUser: vi.fn(), resend: vi.fn(),
 }));
 vi.mock("@/lib/supabase/browser", () => ({ getSupabase: () => ({ auth }) }));
 vi.mock("next/image", () => ({ default: () => null }));
@@ -268,4 +268,53 @@ it("an invitation's address is prefilled and survives the phone verification", a
   auth.getUser.mockResolvedValue({ data: { user: { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", user_metadata: { morada_signup: { version: 1, stage: "email", role: "tenant" } } } }, error: null });
   await act(async () => root.render(<SignupFunnel locale="en" signedIn initialEmail="tenant@example.test" next="/invitation/abc" />));
   expect(host.querySelector<HTMLInputElement>("#signup-email")?.value).toBe("tenant@example.test");
+});
+it("after the email the funnel asks for the emailed code, then a password, then the landlord questions", async () => {
+  const phoneUser = { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", new_email: "", email_confirmed_at: undefined,
+    user_metadata: { first_name: "Alex", last_name: "Example", morada_signup: { version: 1, role: "landlord", stage: "email" } } };
+  auth.getUser.mockResolvedValue({ data: { user: phoneUser }, error: null });
+  const calls: Record<string, unknown>[] = [];
+  const answers: Record<string, unknown> = { email: { ok: true, emailPending: true }, email_confirmed: { ok: true }, password: { ok: true, stage: "tailor" } };
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+    const body = JSON.parse(init.body); calls.push(body);
+    return { ok: true, status: 200, json: async () => answers[body.action] };
+  }));
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn />));
+  expect(host.querySelector("h1")?.textContent).toBe("Add your email");
+  host.querySelector<HTMLInputElement>("#signup-email")!.value = "alex@example.test";
+  await act(async () => { host.querySelector<HTMLInputElement>("#signup-email")!.dispatchEvent(new Event("input", { bubbles: true })); });
+  await submit();
+  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
+  auth.verifyOtp.mockResolvedValueOnce({ data: { user: null }, error: { code: "otp_expired", status: 403 } });
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  host.querySelector<HTMLInputElement>("#email-code")!.value = "111111";
+  await submit();
+  expect(auth.verifyOtp).toHaveBeenCalledWith({ email: "alex@example.test", token: "111111", type: "email_change" });
+  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  auth.verifyOtp.mockResolvedValueOnce({ data: { user: {} }, error: null });
+  host.querySelector<HTMLInputElement>("#email-code")!.value = "123456";
+  await submit();
+  expect(host.querySelector("h1")?.textContent).toBe("Create your password");
+  expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
+  host.querySelector<HTMLInputElement>("#create-password")!.value = "long-enough-1";
+  host.querySelector<HTMLInputElement>("#confirm-password")!.value = "long-enough-2";
+  await submit();
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("The two passwords don’t match.");
+  host.querySelector<HTMLInputElement>("#confirm-password")!.value = "long-enough-1";
+  await submit();
+  expect(calls.map((call) => call.action)).toEqual(["email", "email_confirmed", "password"]);
+  expect(calls[2]).toEqual({ action: "password", password: "long-enough-1" });
+  expect(host.querySelector("h1")?.textContent).toBe("How many properties\ndo you manage?");
+  vi.unstubAllGlobals();
+});
+it("an account finished before this change resumes at the email code, and a phone login does not skip it", async () => {
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign, protocol: "http:" });
+  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", new_email: "alex@example.test",
+    user_metadata: { morada_signup: { version: 1, role: "landlord", stage: "complete" } } } }, error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn loginMode />));
+  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  expect(assign).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
 });

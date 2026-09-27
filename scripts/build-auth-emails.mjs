@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 // No external images, tracking, web fonts, JavaScript or client-specific effects.
 const copy = {
   fr: {
+    code: "Votre code de confirmation",
     lang: "fr", eyebrow: "VOTRE COMPTE MORADA", footer: "Vos locations, simplement.",
     ignore: "Vous n’êtes pas à l’origine de cette demande ? Ignorez cet e-mail. Ne partagez pas ce lien.",
     fallback: "Le bouton ne fonctionne pas ? Ouvrez ce lien dans votre navigateur :",
@@ -14,6 +15,7 @@ const copy = {
     magic_link: ["Votre lien de connexion Morada", "Heureux de vous retrouver.", "Utilisez ce lien personnel pour vous connecter à Morada.", "Me connecter"],
   },
   en: {
+    code: "Your confirmation code",
     lang: "en", eyebrow: "YOUR MORADA ACCOUNT", footer: "Renting, made simple.",
     ignore: "Didn’t request this? You can ignore this email. Keep this link to yourself.",
     fallback: "Button not working? Open this link in your browser:",
@@ -23,6 +25,7 @@ const copy = {
     magic_link: ["Your Morada sign-in link", "Welcome back.", "Use this personal link to sign in to Morada.", "Sign in to Morada"],
   },
   de: {
+    code: "Ihr Bestätigungscode",
     lang: "de", eyebrow: "IHR MORADA-KONTO", footer: "Vermieten, einfach gemacht.",
     ignore: "Sie haben dies nicht angefordert? Ignorieren Sie diese E-Mail. Teilen Sie diesen Link nicht.",
     fallback: "Der Button funktioniert nicht? Öffnen Sie diesen Link im Browser:",
@@ -32,6 +35,7 @@ const copy = {
     magic_link: ["Ihr Morada-Anmeldelink", "Willkommen zurück.", "Melden Sie sich über diesen persönlichen Link bei Morada an.", "Bei Morada anmelden"],
   },
   lu: {
+    code: "Äre Bestätegungscode",
     lang: "lb", eyebrow: "ÄRE MORADA-KONT", footer: "Verlounen, einfach gemaach.",
     ignore: "Dir hutt dat net ugefrot? Ignoréiert dës E-Mail. Deelt dëse Link net mat aneren.",
     fallback: "De Knäppchen funktionéiert net? Maacht dëse Link an Ärem Browser op:",
@@ -71,7 +75,9 @@ function render(kind, preview = false) {
 <p style="margin:0 0 22px;color:#596b6c;font-size:11px;font-weight:700;letter-spacing:1.8px;">${t(c => c.eyebrow)}</p>
 <h1 style="margin:0 0 18px;color:#173d42;font-size:32px;line-height:1.18;font-weight:700;letter-spacing:-1px;">${t(c => c[kind][1])}</h1>
 <p style="margin:0 0 30px;color:#526467;font-size:16px;line-height:1.7;">${t(c => c[kind][2])}</p>
-<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td align="center" bgcolor="#10505c" style="border-radius:28px;mso-padding-alt:18px 26px;"><a href="${link}" style="display:inline-block;padding:18px 26px;font-size:16px;line-height:20px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:28px;">${t(c => c[kind][3])}</a></td></tr></table>
+${kind === "email_change" ? `<p style="margin:0 0 8px;color:#596b6c;font-size:13px;font-weight:700;">${t(c => c.code)}</p>
+<p data-code style="margin:0 0 30px;color:#173d42;font-size:34px;line-height:1.2;font-weight:700;letter-spacing:8px;font-family:'Courier New',Courier,monospace;">${preview ? "123456" : "{{ .Token }}"}</p>
+` : ""}<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td align="center" bgcolor="#10505c" style="border-radius:28px;mso-padding-alt:18px 26px;"><a href="${link}" style="display:inline-block;padding:18px 26px;font-size:16px;line-height:20px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:28px;">${t(c => c[kind][3])}</a></td></tr></table>
 <p style="margin:30px 0 0;color:#697577;font-size:13px;line-height:1.6;">${t(c => c.ignore)}</p>
 </td></tr>
 <tr><td style="padding:26px 8px 0;"><p style="margin:0 0 8px;color:#5d6f70;font-size:12px;line-height:1.6;">${t(c => c.fallback)}</p><a href="${link}" style="color:#10505c;font-size:12px;line-height:1.6;word-break:break-all;overflow-wrap:anywhere;">${link}</a></td></tr>

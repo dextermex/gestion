@@ -23,4 +23,11 @@ auth_token = "local-only-not-a-secret"`)
   .replace('double_confirm_changes = false\nenable_confirmations = false', 'double_confirm_changes = true\nenable_confirmations = true')
   .replace('"http://localhost:4321/**"]', '"http://localhost:4321/**", "https://app.morada.lu/inscription"]');
 if (config === source || !config.includes('[auth.sms.test_otp]')) throw new Error("Signup fixture was not applied");
-writeFileSync(path, config);
+// The hosted email-change template (link and six-digit code), so the suite
+// reads the same code a person does. Paths resolve from the e2e workdir.
+const templated = config + `
+[auth.email.template.email_change]
+subject = "Confirm your Morada email address"
+content_path = "../supabase/templates/email_change.html"
+`;
+writeFileSync(path, templated);

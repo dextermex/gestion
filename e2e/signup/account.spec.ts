@@ -43,7 +43,7 @@ async function phoneAccount(phone: string) {
   return { db, session: verified.data.session! };
 }
 
-async function confirmEmail(request: APIRequestContext, email: string) {
+async function latestMessage(request: APIRequestContext, email: string) {
   let messageId = "";
   await expect.poll(async () => {
     const response = await request.get(MAIL + "/api/v1/search", { params: { query: "to:" + email } });
@@ -52,7 +52,19 @@ async function confirmEmail(request: APIRequestContext, email: string) {
     messageId = body.messages?.[0]?.ID ?? "";
     return messageId;
   }).not.toBe("");
-  const message = await (await request.get(MAIL + "/api/v1/message/" + messageId)).json();
+  return (await request.get(MAIL + "/api/v1/message/" + messageId)).json();
+}
+
+/** The six-digit code the email-change template shows beside its link. */
+async function emailCode(request: APIRequestContext, email: string) {
+  const message = await latestMessage(request, email);
+  const code = String(message.HTML).match(/data-code[^>]*>\s*(\d{6})\s*</)?.[1];
+  expect(code, "the email carries a six-digit code").toMatch(/^\d{6}$/);
+  return code!;
+}
+
+async function confirmEmail(request: APIRequestContext, email: string) {
+  const message = await latestMessage(request, email);
   const links = String(message.HTML).match(/https?:[^"<>\s]+/g) ?? [];
   const link = links.map((value) => new URL(value.replaceAll("&amp;", "&"))).find((url) => url.pathname === "/auth/v1/verify");
   expect(link).toBeDefined();
@@ -66,7 +78,7 @@ async function confirmEmail(request: APIRequestContext, email: string) {
   expect(destination.hash).not.toContain("error");
 }
 
-test("phone signup persists one identity, confirms its email and provisions a private landlord workspace", async ({ request }) => {
+test("phone signup persists one identity, confirms its email by code, sets a password and provisions a private landlord workspace", async ({ request }) => {
   const anonymous = await request.post("/api/signup/profile", { headers: { origin: APP }, data: { action: "complete", preferences } });
   expect(anonymous.status()).toBe(401);
   const { db, session } = await phoneAccount("+12025550101");
@@ -86,11 +98,25 @@ test("phone signup persists one identity, confirms its email and provisions a pr
   const registered = await save(request, session, { action: "email", email });
   expect(registered.status()).toBe(200);
   expect(await registered.json()).toEqual({ ok: true, emailPending: true });
-  await confirmEmail(request, email);
+  // No password before the email is confirmed, no finish before the password.
+  expect((await save(request, session, { action: "password", password: "Signup-Passw0rd" })).status()).toBe(409);
+  expect((await save(request, session, { action: "email_confirmed" })).status()).toBe(409);
+  const wrongCode = await db.auth.verifyOtp({ email, token: "000000", type: "email_change" });
+  expect(wrongCode.error).not.toBeNull();
+  const confirmedByCode = await db.auth.verifyOtp({ email, token: await emailCode(request, email), type: "email_change" });
+  expect(confirmedByCode.error).toBeNull();
   const user = await db.auth.getUser();
   expect(user.data.user?.id).toBe(id);
   expect(user.data.user?.email).toBe(email);
   expect(user.data.user?.email_confirmed_at).toBeTruthy();
+  expect((await save(request, session, { action: "email_confirmed" })).status()).toBe(200);
+  expect(await (await save(request, session, { action: "complete", preferences })).json()).toEqual({ error: "password_required" });
+  const passwordSet = await save(request, session, { action: "password", password: "Signup-Passw0rd" });
+  expect(await passwordSet.json()).toEqual({ ok: true, stage: "tailor" });
+  // The same account now signs in with its email and password.
+  const byPassword = await client().auth.signInWithPassword({ email, password: "Signup-Passw0rd" });
+  expect(byPassword.error).toBeNull();
+  expect(byPassword.data.user?.id).toBe(id);
   expect((await save(request, session, { action: "complete", preferences })).status()).toBe(200);
   const completed = (await db.auth.getUser()).data.user;
   expect(completed?.user_metadata.morada_signup).toMatchObject({ role: "landlord", stage: "complete", preferences });
@@ -111,9 +137,12 @@ test("tenant signup saves its own profile and opens without creating a landlord 
   expect((await save(request, session, { action: "details", firstName: "Signup", lastName: "Tenant", role: "tenant", locale: "fr" })).status()).toBe(200);
   const email = `tenant.${Date.now()}@signup.morada.test`;
   expect((await save(request, session, { action: "email", email })).status()).toBe(200);
+  // The link in the same email works as well as the code.
   await confirmEmail(request, email);
-  expect((await save(request, session, { action: "complete", preferences })).status()).toBe(200);
+  expect((await save(request, session, { action: "email_confirmed" })).status()).toBe(200);
+  expect(await (await save(request, session, { action: "password", password: "Tenant-Passw0rd" })).json()).toEqual({ ok: true, stage: "complete" });
   expect((await db.auth.getUser()).data.user?.user_metadata.morada_signup).toMatchObject({ role: "tenant", stage: "complete", preferences: null });
+  expect((await client().auth.signInWithPassword({ email, password: "Tenant-Passw0rd" })).error).toBeNull();
   const tenant = await request.get("/locataire", { headers: sessionHeaders(session) });
   expect(tenant.status()).toBe(200);
   expect(new URL(tenant.url()).pathname).toBe("/locataire");
