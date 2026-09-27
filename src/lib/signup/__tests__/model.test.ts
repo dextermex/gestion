@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { countriesFor, normalizePhone } from "../phone";
-import { EMPTY_PREFERENCES, profileInput, safeSignupNext } from "../model";
+import { EMPTY_PREFERENCES, profileInput, resumeStep, safeSignupNext } from "../model";
 
 describe("phone entry", () => {
   it("pins neighbouring countries first, without duplicates", () => {
@@ -40,5 +40,28 @@ describe("signup navigation and input", () => {
     expect(profileInput.safeParse({ action: "complete", preferences: EMPTY_PREFERENCES }).success).toBe(true);
     expect(profileInput.safeParse({ action: "details", role: "admin", firstName: "A", lastName: "B", locale: "en" }).success).toBe(false);
     expect(profileInput.safeParse({ action: "email", email: "broken" }).success).toBe(false);
+  });
+});
+
+describe("resumeStep", () => {
+  const phone = { phone_confirmed_at: "2026-09-27", email: "", email_confirmed_at: undefined as string | undefined, new_email: undefined as string | undefined };
+  const at = (stage: string, extra: Record<string, unknown> = {}, user: Partial<typeof phone> = {}) =>
+    resumeStep({ ...phone, ...user, user_metadata: { morada_signup: { version: 1, role: "landlord", stage, ...extra } } });
+  it("follows the order phone, role, email, email code, password, tailoring", () => {
+    expect(resumeStep({ ...phone, phone_confirmed_at: undefined, user_metadata: { morada_signup: { version: 1, stage: "role" } } })).toBe("phone");
+    expect(at("role")).toBe("role");
+    expect(at("email")).toBe("email");
+    expect(at("email_code", {}, { new_email: "a@b.lu" })).toBe("email-code");
+    expect(at("email_code")).toBe("email");
+    expect(at("password", {}, { email: "a@b.lu", email_confirmed_at: "x" })).toBe("create-password");
+    expect(at("tailor", { password_set_at: "x" }, { email: "a@b.lu", email_confirmed_at: "x" })).toBe("properties");
+    expect(at("complete", { password_set_at: "x" }, { email: "a@b.lu", email_confirmed_at: "x" })).toBe("existing");
+  });
+  it("sends an account finished without a confirmed email or a password back to them", () => {
+    expect(at("complete", {}, { new_email: "a@b.lu" })).toBe("email-code");
+    expect(at("complete", {}, { email: "a@b.lu", email_confirmed_at: "x" })).toBe("create-password");
+  });
+  it("leaves accounts from the email registration alone", () => {
+    expect(resumeStep({ ...phone, user_metadata: {} })).toBe("existing");
   });
 });

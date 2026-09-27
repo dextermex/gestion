@@ -43,13 +43,37 @@ is deleted; nothing renders it as a fallback.
    cooldown are provided.
 3. Landlord or tenant.
 4. First and last name.
-5. Email, added to the same authenticated phone account. Confirmation is sent;
-   the UI distinguishes a pending email from a confirmed one.
-6. Landlords can answer three optional questions: portfolio size, main challenge
-   and time spent. “Skip for now” remains visible above the choices. Tenants
-   bypass these questions.
-7. Welcome and handoff to `/app` or `/locataire`. A tenant still needs an actual
+5. Email, added to the same authenticated phone account (`email_change`).
+6. Email code. The email carries a six-digit code and a link; either confirms
+   it (`verifyOtp({ email, token, type: "email_change" })`). The page also
+   polls Auth every 5 seconds, so a link clicked on another device moves it
+   on. Resend has a 60-second cooldown; the address can be corrected.
+7. Password (required, at least 8 characters, typed twice). Set only after the
+   email is confirmed, so every finished account signs in with email and
+   password on `/connexion`; phone login stays available.
+8. Landlords answer three optional questions: portfolio size, main challenge
+   and time spent. “Skip for now” remains visible. Tenants finish at step 7.
+9. Welcome and handoff to `/app` or `/locataire`. A tenant still needs an actual
    invitation to access a tenancy. Choosing a role grants no access.
+
+### Stages (server-side, `/api/signup/profile`)
+
+`user_metadata.morada_signup.stage` records the last step the server accepted:
+`role` → `email` → `email_code` → `password` → `tailor` (landlords) →
+`complete`. The server refuses `email_confirmed`, `password` and `complete`
+(409 `email_unconfirmed`) until Auth reports the email confirmed, and refuses
+`complete` without `password_set_at` (`password_required`). The password is
+sent once, over HTTPS, to Supabase Auth, which stores only its bcrypt hash;
+it is never logged or kept. `resumeStep()` (`src/lib/signup/model.ts`) sends
+any signed-in account, including one finished before this order existed, to
+its first missing step, and a sign-in does not skip it.
+
+### Hosted template (manual)
+
+The six-digit code needs the regenerated `supabase/templates/email_change.html`
+(`node scripts/build-auth-emails.mjs`) pasted into Supabase: Authentication,
+Emails, Templates, “Change email address”. Until then the email holds the
+link only, which the page still detects.
 
 There are no extra “you completed a step” interstitials. Saved account stages
 resume after a refresh; unsaved text and optional answers are kept during

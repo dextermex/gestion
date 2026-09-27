@@ -8,7 +8,7 @@ import GestionLogo from "@/components/gestion/GestionLogo";
 import { getSupabase } from "@/lib/supabase/browser";
 import { fmt, htmlLang, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
 import { signupCopy, type SignupCopy } from "@/lib/i18n/signup";
-import { EMPTY_PREFERENCES, safeSignupNext, type Preferences, type SignupRole, type SignupStep } from "@/lib/signup/model";
+import { EMPTY_PREFERENCES, emailConfirmed, resumeStep, safeSignupNext, type Preferences, type SignupRole, type SignupStep } from "@/lib/signup/model";
 import { normalizePhone } from "@/lib/signup/phone";
 import { MORADA_URL } from "@/lib/constants";
 import { AUTH_APP_URL } from "@/lib/auth/redirects";
@@ -82,6 +82,8 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   const [phoneInput, setPhoneInput] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const confirming = useRef(false);
   const [role, setRole] = useState<SignupRole | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -120,9 +122,9 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   // Signing in (password, phone code, email link) opens the space directly
   // when the profile is complete; an unfinished signup resumes where it stopped.
   const land = useCallback((user: User) => {
-    const meta = user.user_metadata?.morada_signup;
-    if (!meta || meta.stage === "complete") { window.location.assign(safeSignupNext(next, meta?.role === "tenant" ? "tenant" : "landlord")); return true; }
-    return false;
+    if (resumeStep(user) !== "existing") return false;
+    window.location.assign(safeSignupNext(next, user.user_metadata?.morada_signup?.role === "tenant" ? "tenant" : "landlord"));
+    return true;
   }, [next]);
 
   const restoreUser = useCallback((user: User) => {
@@ -135,9 +137,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     setEmailPending(!!user.new_email);
     setEmailVerified(confirmedEmail(user));
     setRole(meta?.role === "tenant" ? "tenant" : meta?.role === "landlord" ? "landlord" : null);
-    if (!meta || meta.stage === "complete") { go("existing"); return; }
-    if (!user.phone_confirmed_at) { go("phone"); return; }
-    go(meta.stage === "tailor" ? (meta.role === "tenant" ? "email" : "properties") : meta.stage === "email" ? "email" : "role");
+    go(resumeStep(user));
   }, [go, initialEmail]);
 
   useEffect(() => {
@@ -252,6 +252,40 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     if (resend) setStatus(c.resent); else go("verify");
   };
 
+  // The code, or the link clicked on any device: Auth marks the address
+  // confirmed, the server records the stage, the password step follows.
+  const emailConfirmedNow = async () => {
+    if (confirming.current) return;
+    confirming.current = true;
+    try {
+      if (await save({ action: "email_confirmed" })) { setEmailPending(false); setEmailVerified(true); go("create-password"); }
+    } finally { confirming.current = false; }
+  };
+  const emailConfirmedRef = useRef(emailConfirmedNow);
+  emailConfirmedRef.current = emailConfirmedNow;
+
+  useEffect(() => {
+    if (step !== "email-code" || preview) return;
+    const started = Date.now();
+    const check = async () => {
+      if (document.visibilityState !== "visible" || lock.current || Date.now() - started > 30 * 60 * 1000) return;
+      const { data } = await getSupabase().auth.getUser().catch(() => ({ data: { user: null } }));
+      if (data.user && emailConfirmed(data.user)) await emailConfirmedRef.current();
+    };
+    const interval = setInterval(() => { void check(); }, 5000);
+    document.addEventListener("visibilitychange", check);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", check); };
+  }, [step, preview]);
+
+  const resendEmail = () => void run(async () => {
+    if (Date.now() < retryAt) return;
+    if (!preview) {
+      const result = await getSupabase().auth.resend({ type: "email_change", email });
+      if (result.error) { setError(errorMessage("send", result.error, c)); return; }
+    }
+    setRetryAt(Date.now() + 60000); setRemaining(60); setStatus(c.emailResent);
+  });
+
   const finish = async (answers = preferences) => {
     if (await save({ action: "complete", preferences: answers })) go("welcome");
   };
@@ -337,7 +371,24 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         const result = await save({ action: "email", email: value });
         if (!result) return;
         setEmailPending(result.emailPending === true);
-        if (role === "tenant") await finish(); else go("properties");
+        setEmailCode(""); setRetryAt(Date.now() + 60000); setRemaining(60);
+        go(result.emailPending === true ? "email-code" : "create-password");
+      } else if (step === "email-code") {
+        const token = String(data.get("email-code") ?? "").replace(/\s/g, "");
+        if (!/^\d{6}$/.test(token)) { invalid(c.invalidCode, "email-code"); return; }
+        if (!preview) {
+          const result = await getSupabase().auth.verifyOtp({ email, token, type: "email_change" });
+          if (result.error) { invalid(errorMessage("verify", result.error, c), "email-code"); return; }
+        }
+        await emailConfirmedNow();
+      } else if (step === "create-password") {
+        const password = String(data.get("new-password") ?? "");
+        const repeat = String(data.get("confirm-password") ?? "");
+        if (password.length < 8) { invalid(c.weakPassword, "create-password"); return; }
+        if (password !== repeat) { invalid(c.passwordMismatch, "confirm-password"); return; }
+        const result = await save({ action: "password", password });
+        if (!result) return;
+        if (result.stage === "complete" || role === "tenant") go("welcome"); else go("properties");
       } else if (step === "properties") {
         if (!preferences.properties) { invalid(c.selectOption); return; } go("challenge");
       } else if (step === "challenge") {
@@ -350,8 +401,9 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
 
   const back = () => {
     if (busy) return;
-    const previous: Partial<Record<SignupStep, SignupStep>> = { password: "login", verify: "phone", name: "role", email: "name", properties: "email", challenge: "properties", involvement: "challenge" };
-    if (previous[step]) { setCode(""); go(previous[step]!, true); }
+    // Once the email is confirmed and the password set, there is no way back into them.
+    const previous: Partial<Record<SignupStep, SignupStep>> = { password: "login", verify: "phone", name: "role", email: "name", "email-code": "email", challenge: "properties", involvement: "challenge" };
+    if (previous[step]) { setCode(""); setEmailCode(""); go(previous[step]!, true); }
   };
 
   const useOtherAccount = () => void run(async () => {
@@ -382,20 +434,22 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     if (preview) { setPreviewDone(true); return; }
     window.location.assign(safeSignupNext(next, role ?? "landlord"));
   };
-  const stage = ["phone", "verify"].includes(step) ? 0 : ["role", "name", "email", "existing"].includes(step) ? 1 : 2;
+  const stage = ["phone", "verify"].includes(step) ? 0 : ["role", "name", "email", "email-code", "create-password", "existing"].includes(step) ? 1 : 2;
   const tailoring = ["properties", "challenge", "involvement"].includes(step);
-  const canBack = ["password", "verify", "name", "email", "properties", "challenge", "involvement"].includes(step);
+  const canBack = ["password", "verify", "name", "email", "email-code", "challenge", "involvement"].includes(step);
   const titles: Record<SignupStep, string> = {
     login: c.loginTitle, password: c.passwordTitle, phone: loginMode ? c.login : c.secure, verify: c.codeTitle, role: c.roleTitle, name: c.nameTitle, email: c.emailTitle,
+    "email-code": c.emailCodeTitle, "create-password": c.createPasswordTitle,
     properties: c.propertiesTitle, challenge: c.challengeTitle, involvement: c.involvementTitle,
     welcome: fmt(c.welcomeTitle, { name: firstName || "Morada" }), existing: c.existingTitle, reset: c.resetTitle,
   };
   const intros: Record<SignupStep, string> = {
     login: c.loginIntro, password: email, phone: c.phoneIntro, verify: c.codeIntro, role: c.roleIntro, name: c.nameIntro, email: c.emailIntro,
+    "email-code": c.emailCodeIntro, "create-password": fmt(c.createPasswordIntro, { email }),
     properties: c.propertiesIntro, challenge: c.challengeIntro, involvement: c.involvementIntro,
     welcome: role === "tenant" ? c.tenantWelcome : c.welcomeIntro, existing: fmt(c.existingIntro, { account }), reset: c.resetIntro,
   };
-  const buttonText = step === "verify" ? c.verify : step === "involvement" ? c.finish : step === "reset" ? c.savePassword : c.continue;
+  const buttonText = step === "verify" ? c.verify : step === "email-code" ? c.verifyEmail : step === "involvement" ? c.finish : step === "reset" ? c.savePassword : c.continue;
   const baseUrl = preview ? "/inscription/apercu" : "/inscription";
   const routeParams = "lang=" + locale + (next ? "&next=" + encodeURIComponent(safeSignupNext(next, role ?? "landlord")) : "");
   const loginUrl = baseUrl + "?mode=login&" + routeParams;
@@ -419,7 +473,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
           {step === "welcome" && <div className="signup-complete-icon"><Icon name="check" /></div>}
           {step === "role" && <p className="signup-verified"><Icon name="check" />{c.verified}</p>}
           <h1 id="signup-title" ref={title} tabIndex={-1} className="font-display font-bold">{titles[step]}</h1>
-          <p className="signup-intro">{intros[step]}{step === "verify" && <><br /><strong dir="ltr">{phone}</strong><button type="button" className="signup-inline-link" onClick={() => go("phone", true)} disabled={busy}>{c.editNumber}</button></>}</p>
+          <p className="signup-intro">{intros[step]}{step === "verify" && <><br /><strong dir="ltr">{phone}</strong><button type="button" className="signup-inline-link" onClick={() => go("phone", true)} disabled={busy}>{c.editNumber}</button></>}{step === "email-code" && <><br /><strong>{email}</strong><button type="button" className="signup-inline-link" onClick={() => go("email", true)} disabled={busy}>{c.changeEmail}</button></>}</p>
 
           {step === "existing" ? <div className="signup-actions">
             <button type="button" className="signup-primary" onClick={openSpace} disabled={busy}>{c.useAccount}</button>
@@ -459,6 +513,20 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
                 </div>
                 {preview && <p className="signup-preview-security">{c.previewCode}</p>}
               </>}
+              {step === "email-code" && <>
+                <div className="signup-otp" data-error={!!error || undefined}>
+                  <label className="sr-only" htmlFor="email-code">{c.code}</label>
+                  <input id="email-code" name="email-code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))} aria-invalid={!!error || undefined} aria-describedby={error ? "signup-error" : "email-code-hint"} />
+                  <div className="signup-otp-slots" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} data-current={index === emailCode.length}>{emailCode[index] ?? ""}</span>)}</div>
+                </div>
+                <p id="email-code-hint" className="signup-helper">{c.emailCodeHint}</p>
+                {preview && <p className="signup-preview-security">{c.previewCode}</p>}
+              </>}
+              {step === "create-password" && <div className="signup-fields-stack">
+                <input type="hidden" name="email" autoComplete="username" value={email} />
+                <FloatingField id="create-password" name="new-password" label={c.password} type="password" autoComplete="new-password" minLength={8} maxLength={72} required error={!!error} />
+                <FloatingField id="confirm-password" name="confirm-password" label={c.confirmPassword} type="password" autoComplete="new-password" minLength={8} maxLength={72} required error={!!error} />
+              </div>}
               {step === "role" && <Choices name="role" labels={[c.landlord, c.tenant]} values={["landlord", "tenant"]} descriptions={[c.landlordBody, c.tenantBody]} icons={["home", "key"]} selected={role} onSelect={(value) => { setRole(value as SignupRole); setError(""); }} />}
               {step === "name" && <div className="signup-fields-stack">
                 <FloatingField id="signup-first" name="given-name" label={c.firstName} autoComplete="given-name" defaultValue={firstName} onChange={(event) => setFirstName(event.target.value)} maxLength={60} required error={!!error} />
@@ -486,6 +554,10 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
               <p className="signup-login">{loginMode ? <><a href={loginUrl}>{c.emailLogin}</a><br />{c.noAccount} <a href={baseUrl + "?" + routeParams}>{c.createAccount}</a></> : <>{c.haveAccount} <a href={loginUrl}>{c.login}</a></>}</p>
               {!loginMode && <p className="signup-terms">{c.termsPrefix} <a href={MORADA_URL + "/" + locale + "/legal#conditions"} target="_blank" rel="noreferrer">{c.terms}</a> {c.and} <a href={MORADA_URL + "/" + locale + "/legal#confidentialite"} target="_blank" rel="noreferrer">{c.privacy}</a>.</p>}
             </>}
+            {step === "email-code" && <div className="signup-resend">
+              <span>{c.noCode}</span>
+              <button type="button" className="signup-text-button" disabled={busy || remaining > 0} onClick={resendEmail}>{remaining > 0 ? fmt(c.resendIn, { seconds: remaining }) : c.resendEmail}</button>
+            </div>}
             {step === "verify" && <div className="signup-resend">
               <span>{c.noCode}</span>
               <button type="button" className="signup-text-button" disabled={busy || remaining > 0 || (!preview && !captcha)} onClick={() => void run(() => sendCode(phone, true))}>{remaining > 0 ? fmt(c.resendIn, { seconds: remaining }) : c.resend}</button>

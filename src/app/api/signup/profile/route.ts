@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { updateSignupUser } from "@/lib/signup/update-user";
-import { profileInput } from "@/lib/signup/model";
+import { emailConfirmed, profileInput } from "@/lib/signup/model";
 
 export async function POST(request: NextRequest) {
   if (request.headers.get("origin") !== request.nextUrl.origin) {
@@ -41,19 +41,48 @@ export async function POST(request: NextRequest) {
     }
     if (body.action === "email") {
       const email = body.email.toLowerCase();
-      if (user.email !== email && user.new_email !== email) {
+      const already = emailConfirmed(user) && user.email === email;
+      if (!already && user.new_email !== email) {
         const changed = await updateSignupUser(session.accessToken, { email });
         if (changed.error) {
           const code = changed.error.code;
           return NextResponse.json({ error: code === "email_exists" || code === "user_already_exists" ? "email_exists" : code === "over_email_send_rate_limit" || code === "over_request_rate_limit" ? "rate_limited" : "save_failed" }, { status: 400 });
         }
       }
-      const saved = await updateSignupUser(session.accessToken, { data: { morada_signup: { ...prior, stage: "tailor" } } });
+      // An address confirmed through a linked Google/Apple identity skips the code.
+      const saved = await updateSignupUser(session.accessToken, { data: { morada_signup: { ...prior, stage: already ? "password" : "email_code" } } });
       if (saved.error) return NextResponse.json({ error: "save_failed" }, { status: 502 });
-      return NextResponse.json({ ok: true, emailPending: user.email !== email || !user.email_confirmed_at });
+      return NextResponse.json({ ok: true, emailPending: !already });
     }
 
-    if (!user.email && !user.new_email) return NextResponse.json({ error: "email_required" }, { status: 400 });
+    // Auth, not the client, says whether the code or the link was accepted.
+    if (!emailConfirmed(user)) return NextResponse.json({ error: "email_unconfirmed" }, { status: 409 });
+
+    if (body.action === "email_confirmed") {
+      if (!["complete", "tailor", "password"].includes(prior.stage)) {
+        const saved = await updateSignupUser(session.accessToken, { data: { morada_signup: { ...prior, stage: "password" } } });
+        if (saved.error) return NextResponse.json({ error: "save_failed" }, { status: 502 });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "password") {
+      // Tenants have no tailoring questions; accounts finished before
+      // passwords existed stay finished.
+      const finished = prior.stage === "complete" || prior.role === "tenant";
+      const saved = await updateSignupUser(session.accessToken, {
+        password: body.password,
+        data: { morada_signup: { ...prior, stage: finished ? "complete" : "tailor", password_set_at: new Date().toISOString(),
+          ...(finished && !prior.completed_at ? { completed_at: new Date().toISOString(), preferences: null } : {}) } },
+      });
+      if (saved.error) {
+        const code = saved.error.code;
+        return NextResponse.json({ error: ["weak_password", "same_password"].includes(code) ? code : code === "reauthentication_needed" ? "session_expired" : "save_failed" }, { status: code === "reauthentication_needed" ? 401 : 400 });
+      }
+      return NextResponse.json({ ok: true, stage: finished ? "complete" : "tailor" });
+    }
+
+    if (!prior.password_set_at) return NextResponse.json({ error: "password_required" }, { status: 400 });
     const saved = await updateSignupUser(session.accessToken, { data: { morada_signup: {
       ...prior, stage: "complete", completed_at: new Date().toISOString(),
       preferences: prior.role === "landlord" ? body.preferences : null,

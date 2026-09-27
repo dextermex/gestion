@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 // Applied only to the generated CI checkout. Never a hosted Auth setting.
 const path = new URL("../supabase/config.toml", import.meta.url);
@@ -23,4 +23,15 @@ auth_token = "local-only-not-a-secret"`)
   .replace('double_confirm_changes = false\nenable_confirmations = false', 'double_confirm_changes = true\nenable_confirmations = true')
   .replace('"http://localhost:4321/**"]', '"http://localhost:4321/**", "https://app.morada.lu/inscription"]');
 if (config === source || !config.includes('[auth.sms.test_otp]')) throw new Error("Signup fixture was not applied");
-writeFileSync(path, config);
+// The hosted email-change template (link and six-digit code), so the suite
+// reads the same code a person does. The CLI only reads templates inside the
+// e2e project root, so the generated checkout gets a copy.
+const templates = new URL("../supabase/templates/", import.meta.url);
+mkdirSync(templates, { recursive: true });
+copyFileSync(new URL("../../supabase/templates/email_change.html", import.meta.url), new URL("email_change.html", templates));
+const templated = config + `
+[auth.email.template.email_change]
+subject = "Confirm your Morada email address"
+content_path = "./supabase/templates/email_change.html"
+`;
+writeFileSync(path, templated);
