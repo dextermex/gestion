@@ -11,10 +11,12 @@ Open [Authentication → URL Configuration](https://supabase.com/dashboard/proje
 - Set **Site URL** to `https://app.morada.lu`. This is the default when a request
   has no accepted redirect. Do not leave it at `http://localhost:3000`.
 - Add `https://app.morada.lu/inscription` and
-  `https://app.morada.lu/inscription**` to Redirect URLs. The second entry covers
+  `https://app.morada.lu/inscription?**` to Redirect URLs. The second entry covers
   the locale, OAuth intent and sanitized invitation query parameters on this path.
-- Add `https://app.morada.lu/connexion**` for legacy confirmations and invitations.
-- Retain `https://morada.lu/auth/reset` for the existing password reset screen,
+- Add `https://app.morada.lu/connexion` and `https://app.morada.lu/connexion?**`
+  for legacy confirmations and invitations.
+- Retain `https://morada.lu/auth/reset` and `https://www.morada.lu/auth/reset`
+  for the existing password reset screen,
   as well as existing legitimate marketing and Pro callbacks. The reset screen
   is owned by the main site; this branch does not invent an app reset endpoint.
 - Use explicit hosts. Do not add a wildcard covering arbitrary Vercel tenants.
@@ -33,6 +35,9 @@ simulated design preview and never sends SMS or creates accounts.
 ## 2. Install the branded emails
 
 Open [Authentication → Email Templates](https://supabase.com/dashboard/project/lgmoocvumiuqjcqnrlej/auth/templates).
+The current Free-project dashboard requires custom SMTP before template editing
+is available. Configure the existing email provider in step 3 first; a plan
+upgrade is not required if custom SMTP is used.
 Copy the corresponding HTML body from this repository:
 
 | Supabase template | Body |
@@ -126,11 +131,26 @@ localhost links: request a new message after saving settings.
 
 ## Activation status
 
-Prepared in the signup branch on 2026-09-27. The connected Supabase tool can read
-the database, but offers no Auth configuration mutation. The browser dashboard
-requested sign-in. No hosted Auth settings, templates or provider secrets have
-been changed by this branch. Phone/Google/Apple were disabled at the last public
-settings check; real SMS, OAuth and inbox delivery remain unverified.
+Verified in the signed-in production dashboard on 2026-09-27:
+
+- **Saved:** Site URL changed from `http://localhost:3000` to
+  `https://app.morada.lu`. The six exact callback entries in step 1 were added;
+  the allowlist had previously been empty. No existing entry was removed.
+- **Email delivery:** custom SMTP is disabled. Supabase currently uses its
+  default templates and requires SMTP setup (or a paid plan) to edit them.
+  The branded templates are committed but are **not installed** in hosted Auth.
+- **Phone:** disabled, with no Twilio account, auth token or message-service
+  configuration filled in. Existing settings are six digits, phone confirmation
+  enabled and a 60-second expiry. These settings were inspected, not changed.
+- **Google, Apple and Manual Linking:** disabled. Email confirmation remains on;
+  anonymous sign-in remains off. No provider secrets or permissions were changed.
+- **Deployment:** code is pushed on `codex/signup-funnel` in PR #3. One Vercel
+  preview succeeded and the `morada-gestion` preview failed. Its build logs
+  require a Vercel dashboard session; no production release is claimed.
+
+Real SMS, OAuth and inbox delivery remain unverified. No production rows or
+database schemas were changed. The phone and social UI flags remain gated until
+provider setup and end-to-end checks are complete.
 
 References: [redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls),
 [email templates](https://supabase.com/docs/guides/auth/auth-email-templates),
