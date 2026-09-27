@@ -136,6 +136,9 @@ Verified in the signed-in production dashboard on 2026-09-27:
 - **Saved:** Site URL changed from `http://localhost:3000` to
   `https://app.morada.lu`. The six exact callback entries in step 1 were added;
   the allowlist had previously been empty. No existing entry was removed.
+- **Vercel application URL:** `NEXT_PUBLIC_APP_URL=https://app.morada.lu`
+  was saved as a Production config variable on `morada-gestion`. It takes
+  effect on the next production deployment.
 - **Email delivery:** custom SMTP is disabled. Supabase currently uses its
   default templates and requires SMTP setup (or a paid plan) to edit them.
   The branded templates are committed but are **not installed** in hosted Auth.
@@ -144,9 +147,13 @@ Verified in the signed-in production dashboard on 2026-09-27:
   enabled and a 60-second expiry. These settings were inspected, not changed.
 - **Google, Apple and Manual Linking:** disabled. Email confirmation remains on;
   anonymous sign-in remains off. No provider secrets or permissions were changed.
-- **Deployment:** code is pushed on `codex/signup-funnel` in PR #3. One Vercel
-  preview succeeded and the `morada-gestion` preview failed. Its build logs
-  require a Vercel dashboard session; no production release is claimed.
+- **Deployment configuration:** the `morada-gestion` project had an install
+  override that cloned the production branch over the selected Git commit.
+  This removed the signup branch's new dependency declaration and caused
+  `Can't resolve 'libphonenumber-js/min'`. The project now uses `npm ci`, also
+  pinned in `vercel.json`, so each build installs its own lockfile. Code is
+  pushed on `codex/signup-funnel` in PR #3; production activation remains gated
+  on the provider setup above.
 
 Real SMS, OAuth and inbox delivery remain unverified. No production rows or
 database schemas were changed. The phone and social UI flags remain gated until
