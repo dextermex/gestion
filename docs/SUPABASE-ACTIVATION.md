@@ -120,7 +120,10 @@ is provisioned and verified; it can involve a paid add-on.
    `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Confirm that the shared marketing/Pro Auth
    clients send CAPTCHA tokens before enabling this project-wide setting.
 3. Enable phone signup in Vercel with `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1`, then
-   rebuild after a real SMS/confirmation test in staging.
+   rebuild after a real SMS/confirmation test in staging. Keep
+   `PHONE_SIGNUP_ENTRY_ENABLED=0` until a real signup on `/inscription` succeeds
+   in production, then set it to `1` and redeploy to route `/connexion` and the
+   morada.lu CTAs into the funnel.
 4. Configure **Google** and **Apple** in Auth Providers. Register
    `https://lgmoocvumiuqjcqnrlej.supabase.co/auth/v1/callback` as their provider
    callback. Use Google Web OAuth credentials and an Apple Services ID plus

@@ -2,6 +2,7 @@ import SignupFunnel from "@/components/signup/SignupFunnel";
 import "../inscription/signup.css";
 import { redirect } from "next/navigation";
 import { safeSignupNext } from "@/lib/signup/model";
+import { phoneSignupEntryEnabled } from "@/lib/signup/rollout";
 import WelcomeAuth from "@/components/gestion/WelcomeAuth";
 import { getI18n } from "@/lib/i18n";
 import { getSession } from "@/lib/supabase/server";
@@ -16,7 +17,9 @@ export default async function WelcomePage({
   const { locale, d } = await getI18n();
   const params = await searchParams;
   const next = safeSignupNext(params.next);
-  const phoneEnabled = process.env.NEXT_PUBLIC_PHONE_SIGNUP_ENABLED === "1" && !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  // Until the entry flag is on, this page stays the email door the marketing
+  // links have always reached; /inscription is only reachable by its own URL.
+  const phoneEnabled = phoneSignupEntryEnabled();
   // A visitor the cookie already identifies is told so and chooses: carry on
   // with that account, or leave it to sign in or sign up with another. The
   // door never bounces anyone past itself, so a second account can always be

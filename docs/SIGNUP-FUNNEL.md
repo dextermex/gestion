@@ -96,6 +96,12 @@ Before enabling:
    environments. Keep secure email confirmation enabled.
 5. Set `NEXT_PUBLIC_PHONE_SIGNUP_ENABLED=1` alongside the site key and rebuild.
    These are build-time public variables. No service-role key is needed.
+   This makes `/inscription` work when opened directly; it does not yet send
+   anyone there. `PHONE_SIGNUP_ENTRY_ENABLED` (server-side, default off) opens
+   the public doors: `/connexion` and the marketing site's
+   `/connexion?onglet=inscription&ref=…` links, the root `/` redirect and the
+   phone-login link. Set it to `1` and redeploy only after a real production
+   signup has succeeded end to end (`src/lib/signup/rollout.ts`).
 6. In an isolated staging project, test an actual SMS, an incorrect and expired
    code, resend, an existing phone account, a duplicate email, email confirmation,
    recovery, logout/re-entry, and both app handoffs before production rollout.

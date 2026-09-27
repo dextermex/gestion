@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/supabase/server";
+import { phoneSignupEntryEnabled } from "@/lib/signup/rollout";
 
-/** Activate the new entry only after SMS and CAPTCHA are configured. */
+/** Open the new entry only once SMS, CAPTCHA and a live signup are proven. */
 export default async function Home() {
-  const signupReady = process.env.NEXT_PUBLIC_PHONE_SIGNUP_ENABLED === "1" && !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-  redirect((await getSession()) ? "/app" : signupReady ? "/inscription" : "/connexion");
+  redirect((await getSession()) ? "/app" : phoneSignupEntryEnabled() ? "/inscription" : "/connexion");
 }
