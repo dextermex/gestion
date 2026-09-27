@@ -166,9 +166,15 @@ Verified in the signed-in production dashboard on 2026-09-27:
 - **Phone:** still disabled in Supabase. Twilio Verify is selected in the open
   setup panel, but credential entry and saving remain with the user. The actual
   Twilio service named Morada has SMS enabled, six-digit codes, custom-code
-  generation off and Fraud Guard on. Twilio's service list says sending to any
-  recipient requires an upgraded account and an approved Primary Compliance
-  Profile. These account requirements must be completed before public signup.
+  generation off and Fraud Guard on. Billing was separately verified as already
+  pay-as-you-go, with auto-recharge enabled: no account upgrade is needed. The
+  user reports that their business profile is approved. The legacy Trust Hub
+  customer-profile screen still shows Draft, whereas Verify links to a newer
+  Compliance Profile console requiring a separate sign-in. Do not treat the
+  legacy label or the generic Verify banner as proof that the account needs an
+  upgrade or another profile. The concrete current blocker is Supabase Phone:
+  its provider is disabled and credentials remain empty. Verify actual SMS
+  delivery once the user saves them.
 - **Sender:** the user selected a separate sending subdomain. The intended
   address is `accounts@notify.morada.lu`; it is not activated. Resend account
   setup, domain verification, SMTP and branded-template installation remain.
