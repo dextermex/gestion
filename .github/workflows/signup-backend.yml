@@ -1,0 +1,41 @@
+name: Signup backend
+on: [push, pull_request]
+concurrency:
+  group: signup-backend-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  signup:
+    name: Phone account, email confirmation and workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Prepare the isolated database and local OTP fixtures
+        run: |
+          node e2e/db/prepare.mjs
+          node e2e/db/prepare-signup.mjs
+      - name: Start the isolated backend
+        run: supabase start --workdir e2e -x studio,edge-runtime,logflare,vector,postgres-meta,imgproxy,supavisor
+      - name: Point the app at the disposable backend
+        run: |
+          eval "$(supabase status --workdir e2e -o env)"
+          echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_APP_URL=https://app.morada.lu" >> "$GITHUB_ENV"
+      - run: npm run build
+      - name: Verify account creation, persisted profile, delivered confirmation and entry
+        run: npx playwright test -c e2e/signup.config.ts
+      - name: Stop the disposable backend
+        if: always()
+        run: supabase stop --workdir e2e --no-backup
