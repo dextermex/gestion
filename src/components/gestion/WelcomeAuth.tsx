@@ -6,12 +6,15 @@ import GestionLogo from "@/components/gestion/GestionLogo";
 import { readField, signInOutcome, signUpOutcome, type SignInOutcome, type SignUpOutcome } from "@/lib/auth/outcomes";
 import { getSupabase, signOutEverywhere } from "@/lib/supabase/browser";
 import { MORADA_URL } from "@/lib/constants";
+import { AUTH_APP_URL } from "@/lib/auth/redirects";
 import { fmt, type Locale } from "@/lib/i18n/config";
+import Turnstile from "@/components/signup/Turnstile";
+import { useAuthChallenge } from "@/components/signup/useAuthChallenge";
+import { signupCopy } from "@/lib/i18n/signup";
 import type { Dict } from "@/lib/i18n/fr";
 
 /**
- * The single door into Morada Gestion: what the product is and how to get in,
- * on one page. Both actions run against the Morada account system (the same
+ * Email/password sign-in, legacy registration and invitation acceptance. Both actions run against the Morada account system (the same
  * `auth.users`, the same sign-up shape as morada.lu: first/last name in the
  * user metadata, e-mail confirmation), so there is no second account system
  * and no page between here and the existing dashboard.
@@ -38,10 +41,14 @@ export default function WelcomeAuth({
   initialTab = "signin",
   initialEmail = "",
   signedInAs = null,
+  newSignup = false,
+  phoneEnabled = false,
 }: {
   d: Dict;
   next: string;
   locale: Locale;
+  newSignup?: boolean;
+  phoneEnabled?: boolean;
   initialTab?: Tab;
   initialEmail?: string;
   /** The account the server verified in the cookie, if any. */
@@ -69,6 +76,7 @@ export default function WelcomeAuth({
   }, [next]);
 
   const pick = (t: Tab) => {
+    if (t === "signup" && newSignup) { window.location.assign("/inscription?lang=" + locale + "&next=" + encodeURIComponent(next)); return; }
     if (t === tab) return;
     setTab(t);
     setHandedEmail("");
@@ -178,8 +186,10 @@ export default function WelcomeAuth({
                   ))}
                 </div>
 
+                {phoneEnabled && tab === "signin" && <a className="mt-5 flex min-h-14 items-center justify-center rounded-xl border border-brand-600 px-4 text-sm font-semibold text-brand-700" href={"/inscription?mode=login&lang=" + locale + "&next=" + encodeURIComponent(next)}>{signupCopy[locale].phoneLogin}</a>}
+
                 {tab === "signin" ? (
-                  <SignInForm key={`signin-${generation}`} d={d} next={next} initialEmail={handedEmail} />
+                  <SignInForm key={`signin-${generation}`} d={d} next={next} initialEmail={handedEmail} locale={locale} />
                 ) : (
                   <SignUpForm key={`signup-${generation}`} d={d} next={next} locale={locale} initialEmail={handedEmail} onExists={handToSignIn} />
                 )}
@@ -200,7 +210,8 @@ export default function WelcomeAuth({
 
 /* ------------------------------- Se connecter ------------------------------- */
 
-function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialEmail: string }) {
+function SignInForm({ d, next, initialEmail, locale }: { d: Dict; next: string; initialEmail: string; locale: Locale }) {
+  const challenge = useAuthChallenge();
   const [state, setState] = useState<"idle" | "working" | Exclude<SignInOutcome, "ok">>("idle");
   const [forgot, setForgot] = useState<"idle" | "sending" | "sent" | "needEmail" | "failed">("idle");
   const [resend, setResend] = useState<"idle" | "sending" | "sent" | "failed">("idle");
@@ -218,10 +229,11 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
       setState("invalid");
       return;
     }
+    if (challenge.blocked) return;
     setState("working");
     setResend("idle");
     try {
-      const { error } = await getSupabase().auth.signInWithPassword({ email, password });
+      const { error } = await getSupabase().auth.signInWithPassword({ email, password, options: { captchaToken: challenge.token || undefined } });
       const outcome = signInOutcome(error);
       if (outcome === "ok") {
         window.location.assign(next);
@@ -230,7 +242,7 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
       setState(outcome);
     } catch {
       setState("down");
-    }
+    } finally { challenge.consume(); }
   };
 
   const sendReset = async () => {
@@ -239,30 +251,32 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
       setForgot("needEmail");
       return;
     }
+    if (challenge.blocked) return;
     setForgot("sending");
     try {
-      const { error } = await getSupabase().auth.resetPasswordForEmail(email, { redirectTo: `${MORADA_URL}/auth/reset` });
+      const { error } = await getSupabase().auth.resetPasswordForEmail(email, { redirectTo: `${MORADA_URL}/auth/reset`, captchaToken: challenge.token || undefined });
       setForgot(error ? "failed" : "sent");
     } catch {
       setForgot("failed");
-    }
+    } finally { challenge.consume(); }
   };
 
   // The confirmation link again, for an account that never opened its first one.
   const resendConfirmation = async () => {
     const email = emailInField();
     if (email === "") return;
+    if (challenge.blocked) return;
     setResend("sending");
     try {
       const { error } = await getSupabase().auth.resend({
         type: "signup",
         email,
-        options: { emailRedirectTo: `${window.location.origin}/connexion?next=${encodeURIComponent(next)}` },
+        options: { emailRedirectTo: `${AUTH_APP_URL}/connexion?next=${encodeURIComponent(next)}`, captchaToken: challenge.token || undefined },
       });
       setResend(error ? "failed" : "sent");
     } catch {
       setResend("failed");
-    }
+    } finally { challenge.consume(); }
   };
 
   const message: Record<Exclude<SignInOutcome, "ok">, string> = {
@@ -304,7 +318,7 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
               ) : resend === "failed" ? (
                 <span className="font-semibold text-amber-800">{d.auth.resendFailed}</span>
               ) : (
-                <button type="button" onClick={resendConfirmation} disabled={resend === "sending"} className="font-semibold text-brand-700 hover:underline disabled:opacity-60 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+                <button type="button" onClick={resendConfirmation} disabled={resend === "sending" || challenge.blocked} className="font-semibold text-brand-700 hover:underline disabled:opacity-60 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                   {resend === "sending" ? d.auth.resendSending : d.auth.resend}
                 </button>
               )}
@@ -312,14 +326,15 @@ function SignInForm({ d, next, initialEmail }: { d: Dict; next: string; initialE
           )}
         </div>
       )}
-      <Button type="submit" className="w-full" disabled={state === "working"}>
+      {challenge.required && <Turnstile key={challenge.generation} siteKey={challenge.siteKey} onToken={challenge.setToken} copy={signupCopy[locale]} locale={locale} />}
+      <Button type="submit" className="w-full" disabled={state === "working" || challenge.blocked}>
         {state === "working" ? d.auth.working : d.auth.accessSpace}
       </Button>
       <div className="text-center">
         <button
           type="button"
           onClick={sendReset}
-          disabled={forgot === "sending"}
+          disabled={forgot === "sending" || challenge.blocked}
           className="text-xs font-semibold text-ink-soft hover:text-brand-700 disabled:opacity-60 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center max-sm:px-2"
         >
           {forgot === "sending" ? d.auth.forgotSending : d.auth.forgot}
@@ -357,6 +372,7 @@ function SignUpForm({
 }) {
   const [state, setState] = useState<"idle" | "working" | Exclude<SignUpOutcome, "session">>("idle");
   const [existingEmail, setExistingEmail] = useState("");
+  const challenge = useAuthChallenge();
 
   const signUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -373,6 +389,7 @@ function SignUpForm({
       setState("weak_password");
       return;
     }
+    if (challenge.blocked) return;
     setState("working");
     try {
       // Mirrors morada.lu's registration exactly, metadata keys included, so
@@ -382,8 +399,9 @@ function SignUpForm({
         email,
         password,
         options: {
+          captchaToken: challenge.token || undefined,
           data: { first_name: first, last_name: last, phone: "", preferred_language: locale },
-          emailRedirectTo: `${window.location.origin}/connexion?next=${encodeURIComponent(next)}`,
+          emailRedirectTo: `${AUTH_APP_URL}/connexion?next=${encodeURIComponent(next)}`,
         },
       });
       const outcome = signUpOutcome(answer, error);
@@ -395,7 +413,7 @@ function SignUpForm({
       setState(outcome);
     } catch {
       setState("down");
-    }
+    } finally { challenge.consume(); }
   };
 
   if (state === "confirm") {
@@ -451,7 +469,8 @@ function SignUpForm({
           )}
         </div>
       )}
-      <Button type="submit" className="w-full" disabled={state === "working"}>
+      {challenge.required && <Turnstile key={challenge.generation} siteKey={challenge.siteKey} onToken={challenge.setToken} copy={signupCopy[locale]} locale={locale} />}
+      <Button type="submit" className="w-full" disabled={state === "working" || challenge.blocked}>
         {state === "working" ? d.auth.signupWorking : d.auth.signupSubmit}
       </Button>
     </form>
