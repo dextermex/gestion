@@ -42,7 +42,7 @@ test("a wrong password says so, in words", async ({ page }) => {
   await page.locator("form button[type=submit]").click();
   await page.locator("#login-password").fill("not-her-password");
   await page.locator("form button[type=submit]").click();
-  await expect(page.getByRole("alert")).toContainText("incorrect");
+  await expect(page.locator("#signup-error")).toContainText("incorrect");
   await expect(page).toHaveURL(/\/connexion/);
 });
 
