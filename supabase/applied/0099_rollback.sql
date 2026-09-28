@@ -19,3 +19,17 @@
 -- ===========================================================================
 
 drop schema if exists gestion cascade;
+
+-- ---------------------------------------------------------------------------
+-- 0024 · crédits immobiliers et projets d'achat
+--
+-- Le `drop schema` ci-dessus couvre aussi 0024 : ses deux tables, leurs
+-- policies, index et déclencheurs, et sa fonction vivent tous dans `gestion`.
+--
+-- Pour retirer 0024 seule en gardant le reste de la gestion, exécuter à la
+-- main, dans cet ordre (supprime les crédits et projets d'achat saisis) :
+--
+--   drop table if exists gestion.investment_loans;
+--   drop table if exists gestion.acquisition_projects;
+--   drop function if exists gestion.investment_touch_updated_at();
+-- ---------------------------------------------------------------------------

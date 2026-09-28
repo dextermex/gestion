@@ -1,3 +1,29 @@
+-- 0024 · Crédits immobiliers et projets d'achat
+-- Appliquée en production le 2026-09-28 (voir APPLIQUE.md). Rejouée
+-- automatiquement sur la base jetable des tests de bout en bout.
+--
+-- Tout est additif :
+--
+-- 1. gestion.investment_loans : un crédit par bien (ou lot), solde enregistré,
+--    taux, durée restante, assurance. Donnée de financement, jamais une preuve
+--    de paiement.
+--
+-- 2. gestion.acquisition_projects : un projet d'achat et ses jalons (visite,
+--    financement, compromis, rendez-vous notarial, acte, remise des clés),
+--    étape et statut de financement contrôlés.
+--
+-- Chaque table est sous RLS sur le motif gestion.can (lecture
+-- gestion.finance.view, insertion et mise à jour gestion.finance.edit), accordée
+-- à authenticated seulement, sans suppression ni accès anon. Le déclencheur
+-- updated_at sert la concurrence optimiste de l'API ; sa fonction n'est
+-- exécutable par aucun rôle de l'API, anon ni authenticated (l'audit RLS le
+-- vérifie pour anon), ce qui n'empêche pas le déclencheur de s'exécuter.
+--
+-- Réversible :
+--   drop table gestion.investment_loans;
+--   drop table gestion.acquisition_projects;
+--   drop function gestion.investment_touch_updated_at();
+
 create table if not exists gestion.investment_loans (
  id uuid primary key default gen_random_uuid(), org_id uuid not null references public.agencies(id) on delete cascade,
  property_id uuid not null references gestion.properties(id) on delete cascade, unit_id uuid references gestion.units(id) on delete set null,
