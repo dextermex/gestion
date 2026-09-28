@@ -59,6 +59,8 @@ export const en: Dict = {
   },
 
   nav: {
+    mortgages: "Mortgages",
+    acquisitions: "Purchase projects",
     home: "Home",
     patrimoine: "Portfolio",
     relations: "Relations",

@@ -308,3 +308,35 @@ non touchée. Le repli est noté en tête du fichier. Côté serveur, l'envoi r�
 `RESEND_API_KEY` et `MORADA_MAIL_FROM` dans les variables d'environnement Vercel
 (aucune des deux n'est posée en production à ce jour) ; sans elles, chaque e-mail est
 composé et consigné avec le statut « non configuré », et Réglages le dit.
+
+## 0024 · 2026-09-28 · crédits immobiliers et projets d'achat
+
+`0024_investment_workspace.sql` (migration `0024_investment_workspace`, version
+20260928003631), appliquée le 2026-09-28 avec l'accord explicite du propriétaire,
+après validation par CI sur le commit fd6e932 de la PR #6 (base à jour, schéma
+complet rejoué localement, audit RLS, suite de bout en bout et parcours
+d'inscription au vert). Le texte appliqué est identique octet pour octet au
+fichier de ce commit ; seul l'en-tête commenté a été ajouté depuis.
+
+Audit avant application : projet ACTIVE_HEALTHY, PostgreSQL 17.6 ; 64 tables dans
+`gestion` ; `gestion.investment_loans`, `gestion.acquisition_projects` et
+`gestion.investment_touch_updated_at()` absentes ; dépendances présentes
+(`public.agencies`, `gestion.properties`, `gestion.units`, `gestion.can`).
+
+Tout est additif : deux tables sous RLS sur le motif gestion.can (lecture
+`gestion.finance.view`, insertion et mise à jour `gestion.finance.edit`), un index
+`org_id` sur chacune, les contraintes d'étape et de statut de financement, un
+déclencheur `updated_at` par table. Aucune table existante supprimée, renommée ni
+réécrite ; rien dans `public` ; `g_can` non touchée.
+
+Vérifié après application : 66 tables dans `gestion` ; RLS active sur les deux
+tables ; six policies, toutes pour `authenticated`, conformes au fichier ; droits
+`authenticated` limités à SELECT, INSERT, UPDATE, aucun droit pour `anon` ni
+suppression ; les deux déclencheurs actifs ; la fonction du déclencheur à
+`search_path` fixé, sans security definer, non exécutable par `anon` ni
+`authenticated` ; tables vides. Conseiller de sécurité : aucun des 120 constats ne
+porte sur les nouveaux objets. Conseiller de performance : quatre notes INFO,
+attendues (index `org_id` encore inutilisés sur des tables vides ; `property_id` et
+`unit_id` sans index couvrant, comme les 155 autres clés étrangères signalées).
+
+Le repli ciblé est noté en tête du fichier et dans `0099_rollback.sql`.

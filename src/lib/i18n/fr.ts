@@ -63,6 +63,8 @@ export const fr = {
   },
 
   nav: {
+    mortgages: "Crédits immobiliers",
+    acquisitions: "Projets d’achat",
     home: "Accueil",
     patrimoine: "Patrimoine",
     relations: "Relations",

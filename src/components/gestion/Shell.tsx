@@ -104,6 +104,7 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
     {
       href: "/app/loyers",
       label: d.nav.finances,
+      also: ["/app/financement"],
       icon: "euro",
       badge: badges.review || undefined,
       children: [
@@ -111,6 +112,8 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
         { href: "/app/finance", label: d.hubs.expenses },
         { href: "/app/banque", label: d.hubs.banking, badge: badges.review || undefined },
         { href: "/app/charges", label: d.hubs.statements },
+        { href: "/app/emprunts", label: d.nav.mortgages },
+        { href: "/app/acquisitions", label: d.nav.acquisitions },
       ],
     },
     {
