@@ -1,8 +1,12 @@
-import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import Link from "next/link";
+import { Badge, Card, EmptyState, PageHeader } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
 import { CollapsiblePanel, LegalNote } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import BankImport from "@/components/gestion/BankImport";
-import BankWorkspace, { type LeaseOption, type ReviewRow, type TxRow } from "@/components/gestion/BankWorkspace";
+import BankWorkspace, { type WorkspaceLabels, type TxRow } from "@/components/gestion/BankWorkspace";
+import { isBankView } from "@/lib/banking/views";
+import type { LeaseOption, ReviewRow } from "@/components/gestion/ReviewQueue";
 import SaltEdgeConnect from "@/components/gestion/SaltEdgeConnect";
 import SyncBank from "@/components/gestion/SyncBank";
 import { connectLabels, syncLabels } from "@/lib/banking/labels";
@@ -35,14 +39,15 @@ async function readDemoSnapshot(): Promise<DemoSnapshot | null> {
 }
 
 /**
- * Banking: an accounts rail on the left, the transactions workspace on the
- * right. A real account with no bank connection gets the honest empty rail,
- * never a sample balance.
+ * Banking. The balance leads, with the two figures that say how the
+ * reconciliation is doing beside it; then the decisions waiting on the
+ * manager, then every operation. A real account with no bank connection
+ * gets one honest empty state, never a sample balance.
  */
 export default async function BanquePage({
   searchParams,
 }: {
-  searchParams: Promise<{ connexion?: string }>;
+  searchParams: Promise<{ connexion?: string; vue?: string }>;
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
@@ -109,7 +114,7 @@ export default async function BanquePage({
       .filter(([leaseId, score]) => score >= 0.25 && liveLeases.some((l) => l.id === leaseId))
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
-      .map(([leaseId, score]) => ({ leaseId, label: fmt(d.banque.reviewCandidate, { lease: leaseLabel(leaseId), score: formatPct(Math.round(score * 100), locale) }) }));
+      .map(([leaseId, score]) => ({ leaseId, score, label: fmt(d.banque.reviewCandidate, { lease: leaseLabel(leaseId), score: formatPct(Math.round(score * 100), locale) }) }));
   };
 
   // A real account and a sample cabinet read the same seam: the rows
@@ -130,8 +135,8 @@ export default async function BanquePage({
     return {
       id: t.id,
       status,
-      counterparty: t.counterpartyName ?? "—",
-      remittance: t.remittanceInfo ?? "—",
+      counterparty: t.counterpartyName ?? d.common.none,
+      remittance: t.remittanceInfo ?? d.common.none,
       explain: t.matchExplain ?? "",
       amountLabel: euros(t.amount, locale),
       negative: t.amount < 0,
@@ -159,6 +164,58 @@ export default async function BanquePage({
       };
     });
 
+  // The overview figures, all derived: the balances the bank reports, the
+  // share of credits the engine placed on its own, the money still waiting
+  // for a decision.
+  const totalBalanceCents = accounts.reduce((sum, b) => sum + b.balanceCents, 0);
+  const lastBookedAt = BANK_TXS.reduce<string | null>((latest, t) => (latest === null || t.bookedAt > latest ? t.bookedAt : latest), null);
+  const reviewCents = BANK_TXS.filter((t) => statusOf(t) === "review" && t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+  const balanceSub = [
+    accounts.length === 1 ? d.banque.balanceOne : fmt(d.banque.balanceMany, { n: accounts.length }),
+    lastBookedAt ? fmt(d.banque.lastOperation, { date: formatDate(lastBookedAt, locale) }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const initialView = isBankView(params.vue) ? params.vue : "all";
+
+  const workspaceLabels: WorkspaceLabels = {
+    views: { all: d.banque.viewAll, review: d.banque.viewReview, auto: d.banque.viewAuto, ignored: d.banque.viewIgnored },
+    search: d.banque.searchPlaceholder,
+    period: d.banque.periodLabel,
+    periods: { all: d.banque.periodAll, "1m": d.banque.period1m, "3m": d.banque.period3m, "6m": d.banque.period6m },
+    reset: d.common.resetFilters,
+    reviewTitle: d.banque.reviewTitle,
+    reviewCount: d.dash.todoCount,
+    reviewLegal: d.banque.reviewLegal,
+    opsTitle: d.banque.opsTitle,
+    emptyTitle: d.banque.emptyTitle,
+    emptyBody: d.banque.emptyNoAccount,
+    filteredTitle: d.banque.filteredTitle,
+    filteredBody: d.banque.filteredBody,
+    colOperation: d.banque.colCounterparty,
+    colDate: d.banque.colDate,
+    colStatus: d.banque.colStatus,
+    colAmount: d.banque.colAmount,
+    countShown: d.banque.countShown,
+    review: {
+      assign: d.banque.reviewAssign,
+      pick: d.banque.reviewPick,
+      suggested: d.banque.reviewSuggested,
+      others: d.banque.reviewOthers,
+      bind: d.banque.reviewBind,
+      match: d.banque.reviewMatch,
+      ignore: d.banque.reviewIgnore,
+      matched: d.banque.reviewMatched,
+      matchedWith: d.banque.reviewMatchedWith,
+      boundNote: d.banque.reviewBoundNote,
+      ignored: d.banque.reviewIgnored,
+      reopen: d.banque.reviewReopen,
+      failed: d.banque.reviewFailed,
+      already: d.banque.reviewAlready,
+      noLeases: d.banque.reviewNoLeases,
+    },
+  };
+
   const cascade: Array<[string, string]> = [
     [d.banque.cascade0, d.banque.cascade0Body],
     [d.banque.cascade1, d.banque.cascade1Body],
@@ -166,58 +223,51 @@ export default async function BanquePage({
     [d.banque.cascade3, d.banque.cascade3Body],
   ];
 
+  const nothingYet = accounts.length === 0 && rows.length === 0;
+
   return (
     <div>
       <PageHeader
         title={d.banque.title}
         subtitle={d.banque.subtitle}
         actions={
-          <>
-            {accounts.length > 0 &&
-              (real ? (
-                <SyncBank
-                  label={d.banque.retrieve}
-                  labels={syncLabels(d)}
-                />
-              ) : (
-                <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
-              ))}
-            {importCta}
-            {connectCta}
-          </>
+          nothingYet ? undefined : (
+            <>
+              {accounts.length > 0 &&
+                (real ? (
+                  <SyncBank label={d.banque.retrieve} labels={syncLabels(d)} />
+                ) : (
+                  <DemoAction label={d.banque.retrieve} doneMessage={d.banque.retrieveDone} variant="secondary" />
+                ))}
+              {importCta}
+              {connectCta}
+            </>
+          )
         }
       />
 
       {real && params.connexion === "retour" && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <p role="status" className="text-sm font-semibold text-emerald-800">
-            {d.banque.connectReturned}
-          </p>
-          <SyncBank
-            auto
-            label={d.banque.retrieve}
-            labels={syncLabels(d)}
-          />
+        <div className="crm-bank-notice">
+          <p role="status">{d.banque.connectReturned}</p>
+          <SyncBank auto label={d.banque.retrieve} labels={syncLabels(d)} />
         </div>
       )}
 
       {!real && params.connexion === "demo" && (
-        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3" data-demo-return>
-          <p role="status" className="text-sm font-semibold text-emerald-800">
-            {d.banque.connectDemoReturned}
-          </p>
+        <div className="crm-bank-notice is-stacked" data-demo-return>
+          <p role="status">{d.banque.connectDemoReturned}</p>
           {demoRead && demoRead.accounts.length > 0 && (
             <>
-              <p className="mt-1 text-xs leading-relaxed text-emerald-900">
+              <p className="crm-bank-notice-sub">
                 {fmt(d.banque.connectDemoRead, { provider: demoRead.provider, accounts: demoRead.accounts.length, operations: demoOps })}
               </p>
-              <ul className="mt-2 flex flex-wrap gap-2">
+              <ul className="crm-bank-notice-list">
                 {demoRead.accounts.map((a) => (
-                  <li key={a.id} className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs text-ink">
+                  <li key={a.id}>
                     <span className="font-semibold">{a.name}</span>
-                    {a.iban && <span className="ml-1.5 tabular-nums text-ink-soft">{a.iban}</span>}
-                    <span className="ml-1.5 font-display font-bold tabular-nums">{money(a.balance, a.currency)}</span>
-                    <span className="ml-1.5 text-ink-soft">· {fmt(d.banque.connectDemoAccountOps, { n: a.transactions })}</span>
+                    {a.iban && <span className="tabular-nums text-ink-soft">{a.iban}</span>}
+                    <span className="font-semibold tabular-nums">{money(a.balance, a.currency)}</span>
+                    <span className="text-ink-soft">{fmt(d.banque.connectDemoAccountOps, { n: a.transactions })}</span>
                   </li>
                 ))}
               </ul>
@@ -226,130 +276,141 @@ export default async function BanquePage({
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[290px_minmax(0,1fr)]">
-        {/* ------------------------------ accounts rail ------------------------------ */}
-        <div className="space-y-4 lg:sticky lg:top-20">
-          <Card className="p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-              {d.banque.accountsTitle}
-            </p>
-
-            {accounts.length === 0 ? (
-              <div className="py-6 text-center">
-                <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-sand-100 text-ink-soft">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 10 12 4l9 6M5 10v8m4.5-8v8m5-8v8M19 10v8M3 20h18" />
-                  </svg>
+      {nothingYet ? (
+        <EmptyState
+          icon="bank"
+          title={d.banque.noAccountTitle}
+          body={d.banque.connectBody}
+          action={
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {connectCta}
+              {importCta}
+            </div>
+          }
+        />
+      ) : (
+        <>
+          <section className="crm-bank-overview" aria-label={d.banque.accountsTitle}>
+            {/* The balance leads: the total the bank reports, then each account under it. */}
+            <Card className="crm-metric crm-bank-hero">
+              <div className="crm-metric-top">
+                <span>{d.banque.balanceTitle}</span>
+                <span className="crm-symbol">
+                  <Icon name="bank" size={22} />
                 </span>
-                <p className="mt-3 text-sm font-semibold text-ink">{d.banque.noAccountTitle}</p>
-                <p className="mx-auto mt-1.5 max-w-[220px] text-xs leading-relaxed text-ink-soft">
-                  {d.banque.connectBody}
-                </p>
-                <div className="mt-4 flex flex-col items-center gap-2">
-                  {connectCta}
-                  {importCta}
-                </div>
               </div>
-            ) : (
-              <>
-                <ul className="mt-3 space-y-3">
-                  {accounts.map((b) => (
-                    <li key={b.id} className="rounded-xl border border-sand-200 p-3">
-                      <p className="truncate text-xs font-semibold text-ink" title={b.label}>
-                        {b.label}
-                      </p>
-                      <p className="mt-0.5 truncate text-[11px] tabular-nums text-ink-soft">{b.iban}</p>
-                      <p className="mt-1.5 font-display text-lg font-bold tracking-tight tabular-nums text-ink">
-                        {euros(b.balanceCents, locale)}
-                      </p>
-                      {b.consentExpiresAt ? (
-                        <p
-                          className={
-                            "mt-0.5 text-[11px] leading-snug " +
-                            (diffDays(TODAY, b.consentExpiresAt) <= 21
-                              ? "font-semibold text-amber-700"
-                              : "text-ink-soft")
-                          }
-                        >
-                          {fmt(d.banque.consentExpires, {
-                            date: formatDate(b.consentExpiresAt, locale),
-                            days: diffDays(TODAY, b.consentExpiresAt),
-                          })}
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 text-[11px] text-ink-soft">{d.banque.accountCamt}</p>
-                      )}
+              <p className="crm-metric-value">{euros(totalBalanceCents, locale)}</p>
+              <p className="crm-metric-sub">{balanceSub}</p>
+              {accounts.length > 0 && (
+                <ul className="crm-bank-accounts">
+                  {accounts.map((b) => {
+                    const days = b.consentExpiresAt ? diffDays(TODAY, b.consentExpiresAt) : null;
+                    return (
+                      <li key={b.id}>
+                        <div className="min-w-0">
+                          <p className="crm-bank-account-name">{b.label}</p>
+                          <p className="crm-bank-account-iban">{b.iban}</p>
+                          {b.consentExpiresAt && days !== null ? (
+                            <p className={"crm-bank-account-note" + (days <= 21 ? " is-warning" : "")}>
+                              {fmt(d.banque.consentExpires, { date: formatDate(b.consentExpiresAt, locale), days })}
+                            </p>
+                          ) : (
+                            <p className="crm-bank-account-note">{d.banque.accountImported}</p>
+                          )}
+                        </div>
+                        <span className="crm-bank-account-balance">{euros(b.balanceCents, locale)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+
+            {autoRate !== null && (
+              <Card className="crm-metric">
+                <div className="crm-metric-top">
+                  <span>{d.banque.kpiAuto}</span>
+                  <span className="crm-symbol">
+                    <Icon name="check" size={22} />
+                  </span>
+                </div>
+                <p className="crm-metric-value">{formatPct(autoRate, locale)}</p>
+                <p className="crm-metric-sub">{fmt(d.banque.kpiAutoBody, { auto: autoCount, total: inCount })}</p>
+                <div className="crm-metric-progress">
+                  <div className="crm-metric-track" aria-hidden>
+                    <span style={{ width: `${autoRate}%` }} />
+                  </div>
+                </div>
+                <Link href="/app/banque?vue=auto" className="crm-metric-action">
+                  {d.banque.kpiAutoAction}
+                  <Icon name="chevron-right" size={15} />
+                </Link>
+              </Card>
+            )}
+
+            <Card className={"crm-metric" + (review.length > 0 ? " crm-metric-attention" : "")}>
+              <div className="crm-metric-top">
+                <span>{d.banque.kpiReview}</span>
+                <span className="crm-symbol">
+                  <Icon name={review.length > 0 ? "alert" : "check"} size={22} />
+                </span>
+              </div>
+              <p className="crm-metric-value">{review.length}</p>
+              <p className="crm-metric-sub">{review.length > 0 ? fmt(d.banque.kpiReviewBody, { amount: euros(reviewCents, locale) }) : d.banque.kpiReviewNone}</p>
+              {review.length > 0 && (
+                <a href="#a-verifier" className="crm-metric-action">
+                  {d.banque.kpiReviewAction}
+                  <Icon name="chevron-right" size={15} />
+                </a>
+              )}
+            </Card>
+          </section>
+
+          {/* Keyed on the view so a link to `?vue=auto` lands on that filter even when the page stays mounted. */}
+          <BankWorkspace key={initialView} labels={workspaceLabels} rows={rows} review={review} leases={leaseOptions} todayISO={TODAY} sample={!real} sampleNote={sampleNote} initialView={initialView} />
+
+          {/* How the engine decides: reference material, folded by default so the
+              screen ends where the work ends. */}
+          {rows.length > 0 && (
+            <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+              <CollapsiblePanel title={d.banque.cascadeTitle}>
+                <ol className="space-y-4 text-sm">
+                  {cascade.map(([title, body], i) => (
+                    <li key={title} className="flex gap-3">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">{i}</span>
+                      <div>
+                        <p className="font-semibold text-ink">{title}</p>
+                        <p className="mt-0.5 text-sm leading-relaxed text-ink-soft">{body}</p>
+                      </div>
                     </li>
                   ))}
+                </ol>
+              </CollapsiblePanel>
+
+              <CollapsiblePanel title={d.banque.vopTitle}>
+                <ul className="divide-y divide-sand-100">
+                  {BANK_ACCOUNTS.map((b) => {
+                    const check = vopNameCheck(b.holderNameVerbatim, b.holderNameVerbatim);
+                    return (
+                      <li key={b.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold tabular-nums text-ink">{b.iban}</p>
+                          <p className="truncate text-sm text-ink-soft">{fmt(d.banque.vopChecked, { name: b.holderNameVerbatim })}</p>
+                        </div>
+                        <Badge className={check.ok ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}>{check.ok ? d.banque.vopOk : d.banque.vopMismatch}</Badge>
+                      </li>
+                    );
+                  })}
+                  <li className="flex items-center justify-between gap-3 py-3">
+                    <p className="min-w-0 text-sm leading-relaxed text-ink-soft">{d.banque.vopExample}</p>
+                    <Badge className="bg-red-100 text-red-700">{d.banque.vopMismatch}</Badge>
+                  </li>
                 </ul>
-
-                {autoRate !== null && (
-                  <div className="mt-3 flex items-baseline justify-between rounded-xl bg-sand-50 px-3 py-2.5">
-                    <span className="text-[11px] font-semibold text-ink-soft">{d.banque.kpiAuto}</span>
-                    <span
-                      className={
-                        "font-display text-base font-bold tabular-nums " +
-                        (autoRate >= 90 ? "text-emerald-700" : "text-amber-700")
-                      }
-                    >
-                      {formatPct(autoRate, locale)}
-                    </span>
-                  </div>
-                )}
-
-              </>
-            )}
-          </Card>
-        </div>
-
-        {/* ---------------------------- transactions workspace ---------------------------- */}
-        <BankWorkspace d={d} rows={rows} review={review} leases={leaseOptions} todayISO={TODAY} sample={!real} sampleNote={sampleNote} />
-      </div>
-
-      {/* How the engine decides — reference material, folded by default so the
-          screen ends where the work ends. */}
-      {rows.length > 0 && (
-        <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-          <CollapsiblePanel title={d.banque.cascadeTitle}>
-            <ol className="space-y-3 text-sm">
-              {cascade.map(([title, body], i) => (
-                <li key={title} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">
-                    {i}
-                  </span>
-                  <div>
-                    <p className="font-semibold text-ink">{title}</p>
-                    <p className="text-xs leading-relaxed text-ink-soft">{body}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </CollapsiblePanel>
-
-          <CollapsiblePanel title={d.banque.vopTitle}>
-            {BANK_ACCOUNTS.map((b) => {
-              const check = vopNameCheck(b.holderNameVerbatim, b.holderNameVerbatim);
-              return (
-                <div key={b.id} className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-sand-200 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold tabular-nums text-ink">{b.iban}</p>
-                    <p className="truncate text-xs text-ink-soft">
-                      {fmt(d.banque.vopChecked, { name: b.holderNameVerbatim })}
-                    </p>
-                  </div>
-                  <Badge className={check.ok ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}>
-                    {check.ok ? d.banque.vopOk : d.banque.vopMismatch}
-                  </Badge>
-                </div>
-              );
-            })}
-            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50/40 p-3">
-              <p className="min-w-0 text-xs leading-relaxed text-ink-soft">{d.banque.vopExample}</p>
-              <Badge className="bg-red-100 text-red-700">{d.banque.vopMismatch}</Badge>
+                <LegalNote>{d.banque.vopLegal}</LegalNote>
+              </CollapsiblePanel>
             </div>
-            <LegalNote>{d.banque.vopLegal}</LegalNote>
-          </CollapsiblePanel>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

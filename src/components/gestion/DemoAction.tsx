@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/pro/ui";
 
 /**
  * A demo-honest action button: on click it performs its visual state change
@@ -27,16 +28,8 @@ export function DemoAction({
     );
   }
   return (
-    <button
-      onClick={() => setDone(true)}
-      className={
-        (variant === "primary"
-          ? "tactile inline-flex items-center rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 max-sm:min-h-10"
-          : "tactile inline-flex items-center rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 max-sm:min-h-10") +
-        (className ? ` ${className}` : "")
-      }
-    >
+    <Button variant={variant} onClick={() => setDone(true)} className={className}>
       {label}
-    </button>
+    </Button>
   );
 }

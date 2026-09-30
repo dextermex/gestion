@@ -123,8 +123,14 @@ test("the review queue's decision becomes a payment, and the payer's IBAN a bind
   await foldGettingStarted(page);
   const row = page.locator("[data-operation]").filter({ hasText: "CNAP" });
   await expect(row).toBeVisible();
-  // The tenancy is offered; the IBAN will be remembered.
-  await expect(row.getByRole("combobox")).toHaveValue(/.+/);
+  // The queue starts on nothing it cannot vouch for: the manager names the
+  // tenancy, and asks for the payer's IBAN to be remembered for it.
+  const lease = row.getByRole("combobox");
+  const tenancy = (await lease.locator("option").filter({ hasText: tenant.last }).first().getAttribute("value")) ?? "";
+  expect(tenancy, "the tenancy is offered").not.toBe("");
+  await lease.selectOption(tenancy);
+  await expect(lease).toHaveValue(tenancy);
+  await row.getByRole("checkbox").check();
   await expect(row.getByRole("checkbox")).toBeChecked();
   const patched = page.waitForResponse((r) => r.url().includes("/api/banque/operations/") && r.request().method() === "PATCH");
   await row.getByRole("button", { name: "Rapprocher", exact: true }).click();

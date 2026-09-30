@@ -1,19 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Card, EmptyState } from "@/components/pro/ui";
+import { Badge, EmptyState, Select } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { ReviewQueue, type LeaseOption, type ReviewLabels, type ReviewRow } from "@/components/gestion/ReviewQueue";
-import { DemoAction } from "@/components/gestion/DemoAction";
 import type { BankTxStatus, Meta } from "@/lib/types";
+import { BANK_VIEWS, type BankView } from "@/lib/banking/views";
 import { fmt } from "@/lib/i18n/config";
-import type { Dict } from "@/lib/i18n/fr";
 
 /**
- * The transactions workspace: status pills with counts, free-text search, a
- * period filter and honest empty states, over rows the server has already
- * formatted. Everything here is presentation; amounts, dates and match
- * verdicts arrive precomputed.
+ * The operations workspace: the review queue first (the decisions waiting on
+ * the manager), then every operation behind one segmented filter, a search
+ * and a period. Everything here is presentation; amounts, dates and match
+ * verdicts arrive precomputed and already translated.
  */
 
 export interface TxRow {
@@ -32,8 +32,30 @@ export interface TxRow {
 
 export type { LeaseOption, ReviewRow } from "@/components/gestion/ReviewQueue";
 
-type View = "all" | "review" | "auto" | "ignored";
+type View = BankView;
 type Period = "all" | "1m" | "3m" | "6m";
+
+export interface WorkspaceLabels {
+  views: Record<View, string>;
+  search: string;
+  period: string;
+  periods: Record<Period, string>;
+  reset: string;
+  reviewTitle: string;
+  reviewCount: string;
+  reviewLegal: string;
+  opsTitle: string;
+  emptyTitle: string;
+  emptyBody: string;
+  filteredTitle: string;
+  filteredBody: string;
+  colOperation: string;
+  colDate: string;
+  colStatus: string;
+  colAmount: string;
+  countShown: string;
+  review: ReviewLabels;
+}
 
 function monthsBack(todayISO: string, months: number): string {
   const [y, m, day] = todayISO.split("-").map(Number);
@@ -44,41 +66,28 @@ function monthsBack(todayISO: string, months: number): string {
 }
 
 export default function BankWorkspace({
-  d,
+  labels,
   rows,
   review,
   leases,
   todayISO,
   sample,
   sampleNote,
+  initialView = "all",
 }: {
-  d: Dict;
+  labels: WorkspaceLabels;
   rows: TxRow[];
   review: ReviewRow[];
   /** The live leases a reviewed operation can be assigned to. */
   leases: LeaseOption[];
   todayISO: string;
-  /** Demo-only affordances (the one-click auto-assign) render on sample data only; decisions are played, not written. */
+  /** On sample data decisions are played, not written. */
   sample?: boolean;
   sampleNote?: string | null;
+  /** The filter the page opened on (`?vue=`), so a link can land on one view. */
+  initialView?: View;
 }) {
-  const reviewLabels: ReviewLabels = {
-    assign: d.banque.reviewAssign,
-    suggested: d.banque.reviewSuggested,
-    others: d.banque.reviewOthers,
-    bind: d.banque.reviewBind,
-    match: d.banque.reviewMatch,
-    ignore: d.banque.reviewIgnore,
-    matched: d.banque.reviewMatched,
-    matchedWith: d.banque.reviewMatchedWith,
-    boundNote: d.banque.reviewBoundNote,
-    ignored: d.banque.reviewIgnored,
-    reopen: d.banque.reviewReopen,
-    failed: d.banque.reviewFailed,
-    already: d.banque.reviewAlready,
-    noLeases: d.banque.reviewNoLeases,
-  };
-  const [view, setView] = useState<View>("all");
+  const [view, setView] = useState<View>(initialView);
   const [q, setQ] = useState("");
   const [period, setPeriod] = useState<Period>("all");
 
@@ -91,13 +100,6 @@ export default function BankWorkspace({
     }),
     [rows],
   );
-
-  const views: Array<{ id: View; label: string }> = [
-    { id: "all", label: d.banque.viewAll },
-    { id: "review", label: d.banque.viewReview },
-    { id: "auto", label: d.banque.viewAuto },
-    { id: "ignored", label: d.banque.viewIgnored },
-  ];
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -120,138 +122,119 @@ export default function BankWorkspace({
   };
 
   return (
-    <div className="min-w-0">
-      {/* Status tiles with live counts (the immocloud banking grammar):
-          count above, view below, selection as a border, never a fill. */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {views.map((v) => (
-          <button
-            key={v.id}
-            onClick={() => setView(v.id)}
-            aria-pressed={view === v.id}
-            className={
-              "tactile rounded-2xl border bg-white p-3.5 text-left shadow-sm transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 " +
-              (view === v.id
-                ? "border-brand-400 ring-1 ring-brand-200"
-                : "border-sand-200 hover:border-brand-200 hover:shadow-md")
-            }
-          >
-            <p className="font-display text-xl font-bold tabular-nums text-ink">{counts[v.id]}</p>
-            <p className="mt-0.5 text-xs font-semibold text-ink-soft">{v.label}</p>
-          </button>
-        ))}
-      </div>
-
-      {/* Search + period + reset, then the one action on the right */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1 basis-56">
-          <svg
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path strokeLinecap="round" d="m20 20-3.2-3.2" />
-          </svg>
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={d.banque.searchPlaceholder}
-            aria-label={d.banque.searchPlaceholder}
-            className="w-full rounded-xl border border-sand-200 bg-white py-2 pl-9 pr-3 text-sm text-ink max-sm:min-h-11 max-sm:text-base placeholder:text-ink-soft/70 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value as Period)}
-          aria-label={d.banque.periodLabel}
-          className="rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm font-medium text-ink-soft max-sm:min-h-11 max-sm:text-base focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
-        >
-          <option value="all">{d.banque.periodAll}</option>
-          <option value="1m">{d.banque.period1m}</option>
-          <option value="3m">{d.banque.period3m}</option>
-          <option value="6m">{d.banque.period6m}</option>
-        </select>
-        {isFiltering && (
-          <button onClick={reset} className="inline-flex min-h-9 items-center text-sm font-semibold text-brand-700 hover:underline">
-            {d.common.resetFilters}
-          </button>
-        )}
-        {sample && (
-          <div className="ml-auto">
-            <DemoAction label={d.banque.autoAssign} doneMessage={d.banque.autoAssignDone} variant="secondary" />
-          </div>
-        )}
-      </div>
-
-      {/* The actionable suggestions live at the top of "all" and "review" */}
+    <div className="crm-bank-main">
+      {/* The decisions waiting on the manager come first, under "all" and "to check". */}
       {review.length > 0 && (view === "all" || view === "review") && (
-        <Panel title={d.banque.reviewTitle} className="mt-4">
-          <ReviewQueue rows={review} leases={leases} labels={reviewLabels} writable={!sample} sampleNote={sampleNote ?? null} />
-          <LegalNote>{d.banque.reviewLegal}</LegalNote>
-        </Panel>
+        <section id="a-verifier" className="scroll-mt-24">
+          <Panel title={labels.reviewTitle} action={<Badge className="bg-brand-50 text-brand-700">{fmt(labels.reviewCount, { n: review.length })}</Badge>}>
+            {sample && sampleNote && <p className="-mt-2 mb-4 text-sm text-ink-soft">{sampleNote}</p>}
+            <ReviewQueue rows={review} leases={leases} labels={labels.review} writable={!sample} />
+            <LegalNote>{labels.reviewLegal}</LegalNote>
+          </Panel>
+        </section>
       )}
 
-      <div className="mt-4">
-        {rows.length === 0 ? (
-          <EmptyState title={d.banque.emptyTitle} body={d.banque.emptyNoAccount} />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            title={d.banque.filteredTitle}
-            body={d.banque.filteredBody}
-            action={
-              <button onClick={reset} className="inline-flex min-h-9 items-center text-sm font-semibold text-brand-700 hover:underline">
-                {d.common.resetFilters}
-              </button>
-            }
-          />
-        ) : (
-          <Card className="overflow-hidden">
-            <div className="table-scroll">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
-                    <th className="px-4 py-2.5 font-semibold">{d.banque.colCounterparty}</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">{d.banque.colAmount}</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">{d.banque.colDate}</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">{d.banque.colTier}</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">{d.banque.colStatus}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((t) => (
-                    <tr key={t.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50">
-                      <td className="max-w-md px-4 py-3">
-                        <p className="font-semibold text-ink">{t.counterparty}</p>
-                        <p className="truncate text-xs text-ink-soft" title={t.explain}>
-                          « {t.remittance} »
-                        </p>
-                      </td>
-                      <td className={"px-3 py-3 text-right tabular-nums " + (t.negative ? "text-ink-soft" : "text-ink")}>
-                        {t.amountLabel}
-                      </td>
-                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{t.dateLabel}</td>
-                      <td className="px-3 py-3 text-right">
-                        {t.tier ? <MetaBadge meta={t.tier} /> : <span className="text-xs text-ink-soft">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <MetaBadge meta={t.statusMeta} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <Panel
+        title={labels.opsTitle}
+        action={
+          rows.length > 0 ? (
+            <div className="crm-segmented" role="group" aria-label={labels.opsTitle}>
+              {BANK_VIEWS.map((v) => (
+                <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}>
+                  {labels.views[v]}
+                  <span>{counts[v]}</span>
+                </button>
+              ))}
             </div>
-            <p className="border-t border-sand-100 bg-sand-50/40 px-4 py-2 text-right text-[11px] tabular-nums text-ink-soft">
-              {fmt(d.banque.countShown, { shown: filtered.length, total: rows.length })}
-            </p>
-          </Card>
+          ) : undefined
+        }
+      >
+        {rows.length === 0 ? (
+          <EmptyState icon="bank" title={labels.emptyTitle} body={labels.emptyBody} />
+        ) : (
+          <>
+            <div className="crm-bank-toolbar">
+              <div className="crm-bank-search">
+                <Icon name="search" size={16} />
+                <input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={labels.search}
+                  aria-label={labels.search}
+                  enterKeyHint="search"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="ui-field crm-filter w-full rounded-full border border-sand-300 bg-white py-2 pl-10 pr-4 text-sm text-ink placeholder:text-ink-soft max-sm:min-h-11 max-sm:text-base focus:outline-none"
+                />
+              </div>
+              <Select value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label={labels.period} className="crm-filter crm-bank-period">
+                {(Object.keys(labels.periods) as Period[]).map((p) => (
+                  <option key={p} value={p}>
+                    {labels.periods[p]}
+                  </option>
+                ))}
+              </Select>
+              {isFiltering && (
+                <button type="button" onClick={reset} className="inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline">
+                  {labels.reset}
+                </button>
+              )}
+            </div>
+
+            {filtered.length === 0 ? (
+              <EmptyState
+                title={labels.filteredTitle}
+                body={labels.filteredBody}
+                action={
+                  <button type="button" onClick={reset} className="inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline">
+                    {labels.reset}
+                  </button>
+                }
+              />
+            ) : (
+              <>
+                <div className="table-scroll crm-bank-table">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-sand-100 text-left text-ink-soft">
+                        <th className="px-4 py-2.5 font-semibold">{labels.colOperation}</th>
+                        <th className="px-3 py-2.5 font-semibold max-sm:hidden">{labels.colDate}</th>
+                        <th className="px-3 py-2.5 font-semibold max-sm:hidden">{labels.colStatus}</th>
+                        <th className="px-4 py-2.5 text-right font-semibold">{labels.colAmount}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((t) => (
+                        <tr key={t.id} className="border-b border-sand-100 last:border-0">
+                          <td className="max-w-lg px-4 py-3">
+                            <p className="font-semibold text-ink">{t.counterparty}</p>
+                            <p className="mt-0.5 text-xs leading-relaxed text-ink-soft" title={t.explain || undefined}>
+                              {t.remittance}
+                              <span className="sm:hidden"> · {t.dateLabel}</span>
+                            </p>
+                            <div className="mt-2 sm:hidden">
+                              <MetaBadge meta={t.statusMeta} />
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 tabular-nums text-ink-soft max-sm:hidden">{t.dateLabel}</td>
+                          <td className="px-3 py-3 max-sm:hidden">
+                            <MetaBadge meta={t.statusMeta} />
+                            {t.tier && <span className="mt-1 block text-xs text-ink-soft">{t.tier.label}</span>}
+                          </td>
+                          <td className={"whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums " + (t.negative ? "text-ink-soft" : "text-ink")}>{t.amountLabel}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="crm-bank-count">{fmt(labels.countShown, { shown: filtered.length, total: rows.length })}</p>
+              </>
+            )}
+          </>
         )}
-      </div>
+      </Panel>
     </div>
   );
 }
