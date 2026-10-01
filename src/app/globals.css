@@ -1037,12 +1037,12 @@ button:not(:disabled),
 .crm-segmented button[aria-pressed="true"] { background: #fff; color: var(--color-ink); box-shadow: 0 1px 2px rgb(23 43 52 / .1), 0 0 0 1px rgb(23 43 52 / .04); }
 .crm-segmented button span { font-weight: 500; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
 .crm-segmented button[aria-pressed="true"] span { color: var(--color-brand-700); }
-.crm-bank-toolbar, .crm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1rem; }
-.crm-bank-search, .crm-toolbar-search { position: relative; flex: 1 1 14rem; min-width: 0; }
-.crm-bank-search > svg, .crm-toolbar-search > svg { position: absolute; left: 1.1rem; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--color-ink-soft); }
+.crm-bank-toolbar, .crm-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.crm-bank-search, .crm-filters-search { position: relative; flex: 1 1 14rem; min-width: 0; }
+.crm-bank-search > svg, .crm-filters-search > svg { position: absolute; left: 1.1rem; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--color-ink-soft); }
 /* Room for the magnifier, whatever padding the field system gives the control. */
-.crm-shell .crm-bank-search .ui-field, .crm-shell .crm-toolbar-search .ui-field { padding-left: 2.75rem; }
-.crm-shell .crm-bank-period, .crm-shell .crm-toolbar-select { width: auto; border-radius: 999px; padding-right: 2.25rem; }
+.crm-shell .crm-bank-search .ui-field, .crm-shell .crm-filters-search .ui-field { padding-left: 2.75rem; }
+.crm-shell .crm-bank-period, .crm-shell .crm-filters-select { width: auto; border-radius: 999px; padding-right: 2.25rem; }
 .crm-shell .crm-bank-table { border-radius: 1rem; }
 .crm-bank-count { margin-top: .75rem; text-align: right; font-size: .75rem; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
 .crm-review { list-style: none; margin: 0; padding: 0; }
@@ -1076,8 +1076,8 @@ button:not(:disabled),
   .crm-review-row .crm-symbol { width: 2.5rem; height: 2.5rem; }
   .crm-review-decision { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   .crm-review-actions > * { flex: 1; }
-  .crm-bank-toolbar, .crm-toolbar { gap: .5rem; }
-  .crm-bank-search, .crm-toolbar-search { flex-basis: 100%; }
+  .crm-bank-toolbar, .crm-filters { gap: .5rem; }
+  .crm-bank-search, .crm-filters-search { flex-basis: 100%; }
 }
 
 /* Documents, in the same system: the register leads (what it holds, how

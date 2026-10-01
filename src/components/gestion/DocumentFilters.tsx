@@ -37,14 +37,14 @@ export default function DocumentFilters({ group, q, purge, labels }: { group: st
 
   return (
     <form
-      className="crm-toolbar"
+      className="crm-filters"
       role="search"
       onSubmit={(e) => {
         e.preventDefault();
         go({});
       }}
     >
-      <div className="crm-toolbar-search">
+      <div className="crm-filters-search">
         <Icon name="search" size={16} />
         <input
           type="search"
@@ -60,7 +60,7 @@ export default function DocumentFilters({ group, q, purge, labels }: { group: st
           className="ui-field crm-filter w-full rounded-full border border-sand-300 bg-white py-2 pl-10 pr-4 text-sm text-ink placeholder:text-ink-soft max-sm:min-h-11 max-sm:text-base focus:outline-none"
         />
       </div>
-      <Select value={group} onChange={(e) => go({ group: e.target.value })} aria-label={labels.group} className="crm-filter crm-toolbar-select">
+      <Select value={group} onChange={(e) => go({ group: e.target.value })} aria-label={labels.group} className="crm-filter crm-filters-select">
         <option value="">{labels.all}</option>
         {labels.groups.map((g) => (
           <option key={g.value} value={g.value}>
