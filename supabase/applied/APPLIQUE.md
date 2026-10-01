@@ -324,6 +324,18 @@ fichier. Côté serveur, la lecture elle-même demande `ANTHROPIC_API_KEY` dans 
 variables d'environnement Vercel (non posée en production à ce jour) ; sans elle, le
 dialogue d'ajout fonctionne sans proposition.
 
+## 0026 · proposée, NON appliquée · un parking comme bien
+
+`0026_properties_parking.sql` n'est pas appliquée en production : elle attend une
+approbation explicite. Elle est rejouée sur la base jetable de CI, où l'audit RLS la
+vérifie. Elle recrée la contrainte `properties_type_check` de `gestion.properties` avec la
+valeur `parking` en plus (un emplacement, un box ou un garage loué seul, que l'assistant
+« Nouveau bien » propose désormais comme catégorie, avec un lot de genre parking que
+`gestion.units` accepte depuis 0003). Aucune ligne existante touchée, aucune policy
+modifiée ; rien dans `public` ; `g_can` non touchée. Tant qu'elle n'est pas appliquée,
+`POST /api/biens/create` répond 503 `schema_outdated` pour ce type, jamais une erreur de
+saisie. Le repli est noté en tête du fichier.
+
 ## 0024 · 2026-09-28 · crédits immobiliers et projets d'achat
 
 `0024_investment_workspace.sql` (migration `0024_investment_workspace`, version

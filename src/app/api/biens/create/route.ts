@@ -18,6 +18,8 @@ const TYPES = {
   house: { type: "house", copro: false, unitKind: "dwelling" },
   building: { type: "apartment_building", copro: false, unitKind: null },
   commercial: { type: "commercial", copro: false, unitKind: "commercial" },
+  // A parking space, a box or a garage let on its own: one lot of kind parking, usually in a copropriété.
+  parking: { type: "parking", copro: true, unitKind: "parking" },
   other: { type: "other", copro: false, unitKind: "dwelling" },
 } as const;
 
@@ -82,6 +84,8 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
+  // A database that predates 0026 refuses the parking type (a check violation): say the schema is behind, not that the input is wrong.
+  if (propErr?.code === "23514" && shape.type === "parking") return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
   if (propErr || !property) return dbError("property insert", propErr);
 
   // The lots. A single-home property gets exactly one, named after itself so

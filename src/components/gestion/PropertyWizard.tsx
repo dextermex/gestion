@@ -24,7 +24,7 @@ import type { Dict } from "@/lib/i18n/fr";
  * and nothing is stored.
  */
 
-type PropertyType = "apartment" | "house" | "building" | "commercial" | "other";
+type PropertyType = "apartment" | "house" | "building" | "commercial" | "parking" | "other";
 
 const TYPE_ICONS: Record<PropertyType, React.ReactNode> = {
   apartment: (
@@ -45,6 +45,12 @@ const TYPE_ICONS: Record<PropertyType, React.ReactNode> = {
         strokeLinejoin="round"
         d="M3 21h18M5 21V5.5A1.5 1.5 0 0 1 6.5 4h6A1.5 1.5 0 0 1 14 5.5V21M14 9h4.5A1.5 1.5 0 0 1 20 10.5V21M8 8h3M8 12h3M8 16h3M17 13h.01M17 17h.01"
       />
+    </svg>
+  ),
+  parking: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-8 w-8" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 17V7h3.75a3 3 0 0 1 0 6H9.5" />
     </svg>
   ),
   commercial: (
@@ -256,6 +262,7 @@ export default function PropertyWizard({
     { id: "house", title: d.biens.wizTypeHouse, body: d.biens.wizTypeHouseBody },
     { id: "building", title: d.biens.wizTypeBuilding, body: d.biens.wizTypeBuildingBody },
     { id: "commercial", title: d.biens.wizTypeCommercial, body: d.biens.wizTypeCommercialBody },
+    { id: "parking", title: d.biens.wizTypeParking, body: d.biens.wizTypeParkingBody },
     { id: "other", title: d.biens.wizTypeOther, body: d.biens.wizTypeOtherBody },
   ];
 
