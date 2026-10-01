@@ -1020,6 +1020,7 @@ export const DOCUMENTS: DemoDocument[] = [
   { id: "d-7", name: "CDD · SCI Beaulieu (RBE, registre associés, UBO).pdf", klass: "id_document", retentionClass: "aml_5y_from_end", retentionUntil: null, sealed: false, relatedLabel: "SCI Beaulieu", sizeKb: 1_240, createdAt: "2026-02-10", hasFile: false },
   { id: "d-8", name: "Décompte syndic 2025 · Résidence Beaulieu (AG approuvé).pdf", klass: "decompte", retentionClass: "accounting_10y", retentionUntil: "2036-05-30", sealed: false, relatedLabel: "Résidence Beaulieu", sizeKb: 1_860, createdAt: "2026-05-30", hasFile: false },
   { id: "d-9", name: "Dossier candidature T. Schmit (non retenu).zip", klass: "other", retentionClass: "applicant_3m", retentionUntil: "2026-10-30", sealed: false, relatedLabel: "Local RDC Kirchberg", sizeKb: 3_100, createdAt: "2026-07-30", hasFile: false },
+  { id: "d-10", name: "Bail commercial Local RDC Kirchberg · Schmit (à signer).pdf", klass: "lease", kind: "lease_contract", sha256: "5d4c3b2a19f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a3928170605f", retentionClass: "accounting_10y", retentionUntil: "2036-10-01", sealed: true, relatedLabel: "Local RDC Kirchberg", sizeKb: 910, createdAt: "2026-08-20", hasFile: false },
 ];
 
 // ─── The paper trail: the lessor as the documents print it, the templates the
@@ -1102,6 +1103,8 @@ export interface DemoGenerated {
 export const GENERATED: DemoGenerated[] = [
   { documentId: "d-1", kind: "lease_contract", sourceId: "l-3b", lang: "fr", version: "2026-09-26.1", generatedAt: "2023-03-20", name: "Bail Apt 3B · Muller (signé AES).pdf", sha256: "3b1f0c7e9a2d4e6f8b0a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f" },
   { documentId: "d-2", kind: "edl_report", sourceId: "edl-1", lang: "fr", version: "2026-09-26.1", generatedAt: "2026-01-30", name: "EDL entrée Studio RDC (scellé, manifeste SHA-256).pdf", sha256: "9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b" },
+  // The draft commercial lease has its contract produced and sealed: the next step is the signature.
+  { documentId: "d-10", kind: "lease_contract", sourceId: "l-krdc", lang: "fr", version: "2026-09-26.1", generatedAt: "2026-08-20", name: "Bail commercial Local RDC Kirchberg · Schmit (à signer).pdf", sha256: "5d4c3b2a19f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a3928170605f" },
 ];
 
 /** The latest document of a kind produced for a record, or null. */

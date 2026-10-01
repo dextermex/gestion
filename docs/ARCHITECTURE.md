@@ -495,6 +495,16 @@ through `gestion.my_payment_instructions()` and nothing else of the settings. Th
 journal (`gestion.audit_log`, fed by `gestion.audit_row()` triggers on the tables with
 legal effect) records every write with its actor; Réglages shows it.
 
+### Signature: a seam, not yet a provider
+
+Modèles & contrats shows the signature funnel from the rows it has (a dossier until the
+lease is activated, a contract produced and sealed here, signed once the lease runs on
+it) and reads which provider the deployment is connected to through
+`src/lib/signature/provider.ts` (DocuSign's four JWT-grant variables, or Yousign's key;
+server only). Nothing is connected yet: a real account sees the funnel and the words
+"non connectée", a sample cabinet plays the sending. Sending an envelope, following the
+signatories and sealing the signed contract back into the register come with the keys.
+
 ### Delivery: an outbox, one sender, notifications both ways
 
 Every e-mail the application composes is a row of `gestion.deliveries` (0023): its kind

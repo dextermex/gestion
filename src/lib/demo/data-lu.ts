@@ -381,6 +381,7 @@ export const DOCUMENTS: DemoDocument[] = overlay(fr.DOCUMENTS, {
   "d-7": { name: "CDD · SCI Uelzecht (RBE, Associés-Register, UBO).pdf", relatedLabel: "SCI Uelzecht" },
   "d-8": { name: "Décompte Syndic 2025 · Residenz Uelzecht (AG approuvéiert).pdf", relatedLabel: "Residenz Uelzecht" },
   "d-9": { name: "Kandidatur-Dossier T. Schmit (net zréckbehalen).zip", relatedLabel: "Lokal Rez Nordstad" },
+  "d-10": { name: "Bail commercial Lokal Rez Nordstad · Schmit (z'ënnerschreiwen).pdf", relatedLabel: "Lokal Rez Nordstad" },
 });
 
 // ─── Tenant portal invitations ──────────────────────────────────────────────
@@ -441,6 +442,7 @@ export const LESSOR: DemoLessor = {
 export const TEMPLATES: DemoTemplate[] = fr.TEMPLATES;
 const GENERATED_NAMES: Record<string, string> = {
   "d-1": "Bail Apt 3B · Weis (ënnerschriwwen AES).pdf",
+  "d-10": "Bail commercial Lokal Rez Nordstad · Schmit (z'ënnerschreiwen).pdf",
   "d-2": "EDL Entrée Studio RDC (verséigelt, SHA-256-Manifest).pdf",
 };
 export const GENERATED: DemoGenerated[] = fr.GENERATED.map((g) => ({ ...g, name: GENERATED_NAMES[g.documentId] ?? g.name }));

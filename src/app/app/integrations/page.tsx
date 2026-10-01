@@ -8,6 +8,8 @@ import { saltEdgeConfigured } from "@/lib/banking/saltedge";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { MORADA_URL, PRO_URL } from "@/lib/constants";
+import { signatureProvider, signatureProviderLabel } from "@/lib/signature/provider";
+import Link from "next/link";
 
 /**
  * Intégrations: the connections this workspace actually has. Only what is
@@ -19,6 +21,7 @@ export default async function IntegrationsPage() {
   const real = datasetId === "real";
   const configured = saltEdgeConfigured();
   const linked = BANK_ACCOUNTS;
+  const signature = signatureProvider();
 
   return (
     <div>
@@ -56,6 +59,27 @@ export default async function IntegrationsPage() {
               <DemoAction label={`+ ${d.banque.connectAccount}`} doneMessage={d.banque.connectDone} />
             )}
           </div>
+        </Card>
+
+        {/* The signature seam: which provider the deployment carries, and what the register does meanwhile. */}
+        <Card className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-bold text-ink">{d.integrations.signatureName}</h2>
+              <p className="mt-1 text-sm leading-relaxed text-ink-soft">{d.integrations.signatureBody}</p>
+            </div>
+            {signature.configured ? (
+              <Badge className="bg-emerald-100 text-emerald-800">{d.integrations.connected}</Badge>
+            ) : (
+              <Badge className="bg-sand-100 text-ink-soft">{d.integrations.notConnected}</Badge>
+            )}
+          </div>
+          <p className="mt-3 text-sm text-ink">
+            {signature.provider ? fmt(d.contrats.signatureOn, { provider: signatureProviderLabel(signature.provider) }) : d.integrations.signatureOffBody}
+          </p>
+          <Link href="/app/contrats" className="mt-4 inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline">
+            {d.contrats.registryTitle}
+          </Link>
         </Card>
 
         <Card className="p-5">
