@@ -495,6 +495,28 @@ through `gestion.my_payment_instructions()` and nothing else of the settings. Th
 journal (`gestion.audit_log`, fed by `gestion.audit_row()` triggers on the tables with
 legal effect) records every write with its actor; Réglages shows it.
 
+### The fiscal pack: one owner, one exercise, only the real estate let
+
+Fiscalité prepares one owner's exercise at a time (`src/lib/fiscal/pack.ts`,
+`selectFiscal` and `prepareOwnerYear`): the modèle 190/210 statement of every property
+let (`buildTaxPack` over the dataset's `FISCAL_YEARS`, the receipts and expenses of the
+year), the taxpayer's amortisation plan (`planTaxpayerYear` over `TAXPAYER_PORTFOLIOS`),
+the summary the screen leads with (`ownerYearSummary`), and the pieces to attach
+(`attachmentsFor`, from what the pack deducts), each joined to the register: a piece of
+the right class related to the property or its owners, naming the year when the class is
+yearly, is "au coffre"; what the cabinet produces itself is "fourni par le cabinet"; the
+rest is to ask the owner for. The engines name sections, lines and warnings by stable
+codes that `src/lib/fiscal/labels.ts` translates. The last closed year leads; the running
+year is selectable and marked provisional. The page stops at the net rental income per
+category: no other income, no estimate of tax due. The same prepared exercise feeds the
+downloads (`GET /api/fiscalite/pack`): the pack as a PDF through the one renderer
+(`composeFiscalPack`, a `DocumentModel` of kind `fiscal_pack`, watermarked on a sample
+cabinet), the lines of every statement and one property's form fields as CSV
+(`src/lib/fiscal/csv.ts`: byte-order mark, semicolons, decimal commas). A download is a
+read: a sample cabinet gets real files from its dataset, a real account reads under its
+own token. Real accounts carry no fiscal years yet and see an honest empty state until
+the acquisitions register exists.
+
 ### Signature: a seam, not yet a provider
 
 Modèles & contrats shows the signature funnel from the rows it has (a dossier until the

@@ -1198,3 +1198,66 @@ button:not(:disabled),
   .crm-funnel li + li::before { left: 50%; top: -.55rem; transform: translateX(-50%) rotate(135deg); }
   .crm-funnel-count { font-size: 1.5rem; }
 }
+
+/* Fiscalité: one owner and one exercise at a time. The net rental income
+   leads, the year's amortisation and the pieces still to gather beside it;
+   then one ledger per property (sections, lines, subtotals, the net), the
+   taxpayer's amortisation plan, the checklist, the downloads. */
+.crm-fiscal-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.crm-shell .crm-fiscal-owner { width: auto; min-width: 14rem; border-radius: 999px; padding-right: 2.25rem; }
+.crm-fiscal-years { display: inline-flex; gap: .125rem; padding: .1875rem; border-radius: 999px; background: var(--color-sand-100); }
+.crm-fiscal-years a { display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 .875rem; border-radius: 999px; white-space: nowrap; font-size: .8125rem; font-weight: 550; color: var(--color-ink-soft); transition: background 150ms, color 150ms, box-shadow 150ms; }
+.crm-fiscal-years a:hover { color: var(--color-ink); }
+.crm-fiscal-years a[aria-current] { background: #fff; color: var(--color-ink); box-shadow: 0 1px 2px rgb(23 43 52 / .1), 0 0 0 1px rgb(23 43 52 / .04); }
+.crm-metric-loss .crm-metric-value { color: #9b411f; }
+.crm-metric-loss .crm-symbol { color: #a24724; background: #fff0e7; }
+.crm-fiscal-note { margin-top: 1rem; font-size: .875rem; line-height: 1.6; color: var(--color-ink-soft); }
+.crm-ledger { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+.crm-ledger td { padding: .55rem 0; border-bottom: 1px solid var(--color-sand-100); vertical-align: top; }
+.crm-ledger td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.crm-ledger .is-section td { padding-top: 1rem; font-weight: 600; border-bottom-color: var(--color-sand-200); }
+.crm-ledger .is-section td:last-child { font-weight: 600; }
+.crm-ledger .is-line td { padding-left: 1.25rem; font-size: .875rem; color: var(--color-ink-soft); border-bottom-color: transparent; }
+.crm-ledger .is-line td:last-child { color: var(--color-ink-soft); }
+.crm-ledger .is-subtotal td { padding-top: .9rem; font-weight: 600; border-top: 1px solid var(--color-sand-200); border-bottom: 0; }
+.crm-ledger .is-net td { padding-top: .9rem; padding-bottom: .25rem; font-size: 1.0625rem; font-weight: 650; border-top: 2px solid var(--color-ink); border-bottom: 0; }
+.crm-ledger .is-net td:last-child { font-size: 1.125rem; letter-spacing: -.02em; }
+.crm-ledger .is-net.is-loss td:last-child { color: #9b411f; }
+.crm-ledger .is-share td { font-size: .875rem; color: var(--color-ink-soft); border-bottom: 0; }
+.crm-ledger .is-share td:last-child { font-weight: 600; color: var(--color-ink); }
+.crm-ledger-meta { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin-bottom: .5rem; font-size: .8125rem; color: var(--color-ink-soft); }
+.crm-ledger-tools { display: flex; gap: .25rem; }
+.crm-ledger-tools a { display: inline-flex; min-height: 2.25rem; align-items: center; padding: 0 .75rem; border-radius: 999px; border: 1px solid var(--color-sand-200); background: #fff; font-size: .8125rem; font-weight: 600; color: var(--color-brand-700); }
+.crm-ledger-tools a:hover { border-color: var(--color-brand-300); }
+.crm-fiscal-warnings { display: grid; gap: .5rem; margin-top: 1rem; }
+.crm-fiscal-warnings p { display: flex; gap: .6rem; align-items: flex-start; font-size: .875rem; line-height: 1.55; color: var(--color-ink-soft); }
+.crm-fiscal-warnings p svg { flex-shrink: 0; margin-top: .15rem; color: #a24724; }
+.crm-plan-foot { display: grid; gap: .35rem; margin-top: 1rem; font-size: .875rem; line-height: 1.55; color: var(--color-ink-soft); }
+.crm-plan-sub { margin-top: .2rem; font-size: .8125rem; line-height: 1.5; color: var(--color-ink-soft); }
+.crm-check { list-style: none; margin: 0; padding: 0; }
+.crm-check li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem 1rem; padding: .75rem 0; border-bottom: 1px solid var(--color-sand-100); }
+.crm-check li:last-child { border-bottom: 0; }
+.crm-check-name { font-size: .9375rem; font-weight: 550; }
+.crm-check-sub { margin-top: .15rem; font-size: .8125rem; color: var(--color-ink-soft); }
+.crm-check-state { display: inline-flex; align-items: center; gap: .4rem; min-height: 1.85rem; padding: 0 .7rem; border-radius: 999px; font-size: .75rem; font-weight: 600; background: var(--color-sand-100); color: var(--color-ink-soft); white-space: nowrap; }
+.crm-check-state.is-vault { background: var(--color-emerald-100); color: var(--color-emerald-800); }
+.crm-check-state.is-ask { background: #fff0e7; color: #9b411f; }
+.crm-downloads { list-style: none; margin: 0; padding: 0; }
+.crm-downloads li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .875rem 0; border-bottom: 1px solid var(--color-sand-100); }
+.crm-downloads li:last-child { border-bottom: 0; }
+.crm-downloads-name { font-size: .9375rem; font-weight: 550; overflow-wrap: anywhere; }
+.crm-downloads-sub { margin-top: .15rem; font-size: .8125rem; line-height: 1.5; color: var(--color-ink-soft); }
+.crm-downloads a.crm-download { flex-shrink: 0; display: inline-flex; align-items: center; gap: .4rem; min-height: 2.5rem; padding: 0 1rem; border-radius: 999px; border: 1px solid var(--color-sand-200); background: #fff; font-size: .875rem; font-weight: 600; color: var(--color-ink); }
+.crm-downloads a.crm-download:hover { border-color: var(--color-brand-300); color: var(--color-brand-700); }
+.crm-shell .crm-fiscal-table { border-radius: 1rem; }
+.crm-how { display: grid; gap: 1rem; margin: 0; }
+.crm-how dt { font-size: .9375rem; font-weight: 600; }
+.crm-how dd { margin: .3rem 0 0; font-size: .875rem; line-height: 1.6; color: var(--color-ink-soft); }
+@media (width < 40rem) {
+  .crm-fiscal-controls { align-items: stretch; }
+  .crm-shell .crm-fiscal-owner { width: 100%; }
+  .crm-fiscal-years { display: flex; }
+  .crm-fiscal-years a { flex: 1; justify-content: center; }
+  .crm-check li { grid-template-columns: minmax(0, 1fr); }
+  .crm-downloads li { flex-direction: column; align-items: flex-start; }
+}

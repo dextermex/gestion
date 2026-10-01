@@ -78,6 +78,8 @@ export function buildEmptyData(org: Org): DemoData {
     CONVERSATIONS: [],
     LAMBERT_PORTFOLIO: [],
     SCI_BEAULIEU_PORTFOLIO: [],
+    TAXPAYER_PORTFOLIOS: {},
+    FISCAL_YEARS: [],
     SYNDIC_DECOMPTE_2025: {
       propertyId: "",
       year: new Date().getFullYear(),

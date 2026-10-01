@@ -80,6 +80,9 @@ export interface TaxPackInput {
 export interface FlatDeductionComparison {
   eligible: boolean;
   ineligibleReason: string | null;
+  /** Years between the building's completion and the tax year, and the minimum the forfait asks. */
+  buildingAge: number;
+  minAge: number;
   flatAmount: Cents;
   /** What the flat deduction replaces (maintenance, other frais, amortisation…). */
   itemisedReplaceable: Cents;
@@ -89,11 +92,29 @@ export interface FlatDeductionComparison {
   savings: Cents;
 }
 
+/** A line the engine names itself: the screens translate from the code, never from the label. */
+export type LineCode = "building" | "energy" | "spread" | "impot_foncier" | "management_fees" | "insurance" | "permanent_charges";
+
+export interface Model190Line {
+  label: string;
+  amount: Cents;
+  /** Absent on a line that carries the taxpayer's own wording (an expense as entered). */
+  code?: LineCode;
+  vars?: Record<string, number>;
+}
+
 export interface Model190Section {
   code: string;
   label: string;
   amount: Cents;
-  lines: Array<{ label: string; amount: Cents }>;
+  lines: Model190Line[];
+}
+
+export type TaxWarningCode = "spread_clamped" | "large_repairs_spreadable" | "interest_certificate";
+
+export interface TaxWarning {
+  code: TaxWarningCode;
+  vars: Record<string, number>;
 }
 
 export interface TaxPack {
@@ -121,22 +142,28 @@ export interface TaxPack {
     priorInstalments: Cents;
   };
   flatComparison: FlatDeductionComparison;
+  /** The deductions retained (the forfait or the itemised frais, plus what is always deductible). */
+  deductionsTotal: Cents;
   netResult: Cents;
   socialExemptionApplied: Cents;
   ownerShareNet: Cents;
   nonResidentExport: {
     note: string;
+    noteCode: "non_resident_assessment";
     grossRents: Cents;
     deductibleExpensesExclAmort: Cents;
     debtInterest: Cents;
     luxembourgOnlyAmortisation: Cents;
   } | null;
   warnings: string[];
+  /** The same warnings as stable codes, for the screens and the pack. */
+  warningCodes: TaxWarning[];
 }
 
 export function buildTaxPack(input: TaxPackInput): TaxPack {
   const jan1 = `${input.taxYear}-01-01` as ISODate;
   const warnings: string[] = [];
+  const warningCodes: TaxWarning[] = [];
 
   const sum = (cat: RentReceipt["category"]) =>
     input.receipts.filter((r) => r.category === cat).reduce((a, r) => a + r.amount, 0);
@@ -178,6 +205,7 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
     electedSpreadYears = Math.min(Math.max(input.electedSpreadYears, minY), maxY);
     if (electedSpreadYears !== input.electedSpreadYears) {
       warnings.push(`Spread election clamped to the legal ${minY}–${maxY} year range.`);
+      warningCodes.push({ code: "spread_clamped", vars: { min: minY, max: maxY } });
     }
     deductedThisYear = Math.round(maintenanceTotal / electedSpreadYears);
     carryForward = maintenanceTotal - deductedThisYear;
@@ -185,6 +213,7 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
     warnings.push(
       `Repairs (${(maintenanceTotal / 100).toFixed(0)} €) exceed ${thresholdPct}% of annual rent — the 2–5 year spreading election (form §B1) is available.`,
     );
+    warningCodes.push({ code: "large_repairs_spreadable", vars: { amount: maintenanceTotal, pct: thresholdPct } });
   }
 
   // §B2 — instalments from prior-year spreads landing this year.
@@ -215,6 +244,8 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
       lines: input.priorSpreads.map((c) => ({
         label: `Étalement ${c.originYear} (${c.spreadYears} ans)`,
         amount: Math.round(c.totalAmount / c.spreadYears),
+        code: "spread" as const,
+        vars: { year: c.originYear, years: c.spreadYears },
       })),
     },
     {
@@ -226,9 +257,11 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
             {
               label: `${input.amortisation.regime.ratePct}% — ${input.amortisation.regime.note}`,
               amount: input.amortisation.buildingAmount,
+              code: "building" as const,
+              vars: { rate: input.amortisation.regime.ratePct },
             },
             ...(input.amortisation.energy.applicable || input.amortisation.energy.amount > 0
-              ? [{ label: input.amortisation.energy.note, amount: input.amortisation.energy.amount }]
+              ? [{ label: input.amortisation.energy.note, amount: input.amortisation.energy.amount, code: "energy" as const, vars: { rate: input.amortisation.energy.ratePct } }]
               : []),
           ]
         : [],
@@ -240,10 +273,10 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
       label: "Impôt foncier, frais de gérance, charges permanentes, assurances",
       amount: impotFoncier + managementFees + insurance + permanentCharges,
       lines: [
-        { label: "Impôt foncier", amount: impotFoncier },
-        { label: "Frais de gérance", amount: managementFees },
-        { label: "Assurances", amount: insurance },
-        { label: "Charges permanentes non refacturées", amount: permanentCharges },
+        { label: "Impôt foncier", amount: impotFoncier, code: "impot_foncier" as const },
+        { label: "Frais de gérance", amount: managementFees, code: "management_fees" as const },
+        { label: "Assurances", amount: insurance, code: "insurance" as const },
+        { label: "Charges permanentes non refacturées", amount: permanentCharges, code: "permanent_charges" as const },
       ],
     },
   ];
@@ -269,6 +302,8 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
     ineligibleReason: flatEligible
       ? null
       : `Building completed ${buildingAge} year(s) before the tax year — the flat deduction requires ≥ ${minAge} years.`,
+    buildingAge,
+    minAge,
     flatAmount,
     itemisedReplaceable,
     alwaysDeductible,
@@ -289,6 +324,7 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
 
   if (debtInterest > 0) {
     warnings.push("Debt interest deducted — attach the bank certificat d'intérêts to the return.");
+    warningCodes.push({ code: "interest_certificate", vars: { amount: debtInterest } });
   }
 
   const nonResidentExport =
@@ -298,6 +334,7 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
             "No Luxembourg withholding on rent — taxation by assessment (modèle 100, due 31.12 of year N+1). " +
             "Residence state relieves by exemption-with-progression (BE, DE) or Luxembourg-tax credit (FR, 2018 treaty). " +
             "Luxembourg amortisation is reported separately: do NOT carry it into the residence-state return.",
+          noteCode: "non_resident_assessment" as const,
           grossRents: totalTaxable,
           deductibleExpensesExclAmort:
             deductedThisYear + priorInstalments + otherFrais + insurance + permanentCharges + impotFoncier + managementFees,
@@ -331,10 +368,84 @@ export function buildTaxPack(input: TaxPackInput): TaxPack {
       priorInstalments,
     },
     flatComparison,
+    deductionsTotal: chosenDeductions,
     netResult,
     socialExemptionApplied,
     ownerShareNet: Math.round(netResult * input.ownerShare),
     nonResidentExport,
     warnings,
+    warningCodes,
   };
+}
+
+// ─── The owner's year, and what to attach ───────────────────────────────────
+
+/** One owner's exercise over every property let: the figures the screen leads with. */
+export interface OwnerYearSummary {
+  properties: number;
+  grossRents: Cents;
+  deductions: Cents;
+  /** The §C amounts, whether the forfait replaced them or not. */
+  amortisation: Cents;
+  socialExemption: Cents;
+  netResult: Cents;
+  ownerShareNet: Cents;
+}
+
+export function ownerYearSummary(packs: readonly TaxPack[]): OwnerYearSummary {
+  const sum = (pick: (p: TaxPack) => Cents) => packs.reduce((a, p) => a + pick(p), 0);
+  return {
+    properties: packs.length,
+    grossRents: sum((p) => p.grossRents.totalTaxable),
+    deductions: sum((p) => p.deductionsTotal),
+    amortisation: sum((p) => p.sections.find((s) => s.code === "C")?.amount ?? 0),
+    socialExemption: sum((p) => p.socialExemptionApplied),
+    netResult: sum((p) => p.netResult),
+    ownerShareNet: sum((p) => p.ownerShareNet),
+  };
+}
+
+export type AttachmentCode =
+  | "rent_ledger"
+  | "repair_invoices"
+  | "interest_certificate"
+  | "impot_foncier_bulletin"
+  | "management_fee_statement"
+  | "insurance_notice"
+  | "klimabonus_decision"
+  | "deed_and_costs";
+
+export interface Attachment {
+  code: AttachmentCode;
+  /** Who holds the piece: the cabinet (it produced or received it) or the owner. */
+  providedBy: "cabinet" | "owner";
+  /** The register class a matching piece would carry, when one can be looked for. */
+  documentClass: string | null;
+  amount: Cents | null;
+}
+
+/**
+ * The pieces the return needs for one property, from what the pack
+ * deducts: a certificate for every interest deducted, the bulletin for the
+ * impôt foncier, the invoices behind the repairs, the Klimabonus decision
+ * behind an energy rate, the deed behind every amortisation, and the two
+ * the cabinet always produces (the rent ledger, its own fee statement).
+ */
+export function attachmentsFor(pack: TaxPack, amortisation: YearAmortisation | null): Attachment[] {
+  const section = (code: string) => pack.sections.find((s) => s.code === code);
+  const line = (code: string, lineCode: LineCode) => section(code)?.lines.find((l) => l.code === lineCode)?.amount ?? 0;
+  const out: Attachment[] = [{ code: "rent_ledger", providedBy: "cabinet", documentClass: null, amount: pack.grossRents.totalTaxable }];
+  const repairs = (section("A")?.amount ?? 0) + (section("B2")?.amount ?? 0);
+  if (repairs > 0) out.push({ code: "repair_invoices", providedBy: "cabinet", documentClass: "invoice", amount: repairs });
+  const interest = section("E")?.amount ?? 0;
+  if (interest > 0) out.push({ code: "interest_certificate", providedBy: "owner", documentClass: "tax", amount: interest });
+  const impot = line("F", "impot_foncier");
+  if (impot > 0) out.push({ code: "impot_foncier_bulletin", providedBy: "owner", documentClass: "tax", amount: impot });
+  const fees = line("F", "management_fees");
+  if (fees > 0) out.push({ code: "management_fee_statement", providedBy: "cabinet", documentClass: null, amount: fees });
+  const insurance = line("F", "insurance");
+  if (insurance > 0) out.push({ code: "insurance_notice", providedBy: "owner", documentClass: "insurance", amount: insurance });
+  if (amortisation?.energy.applicable) out.push({ code: "klimabonus_decision", providedBy: "owner", documentClass: "subsidy", amount: amortisation.energy.amount });
+  if (amortisation) out.push({ code: "deed_and_costs", providedBy: "owner", documentClass: "deed", amount: null });
+  return out;
 }

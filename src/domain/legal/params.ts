@@ -91,6 +91,8 @@ const CURRENT_VALUE_TYPES = {
   "tax.large_repairs_spread_max_years": 0 as number,
   "tax.social_rental_exemption_pct": 0 as number,
   "tax.top_marginal_rate_pct": 0 as number,
+  "tax.model100_filing_deadline_month": 0 as number,
+  "tax.model100_filing_deadline_day": 0 as number,
 
   // ── VAT ──
   "vat.standard_rate_pct": 0 as number,
@@ -214,6 +216,8 @@ export const LEGAL_PARAMS: LegalParam<number>[] = [
   P("tax.large_repairs_spread_max_years", 5, "verified", "spread over 2–5 years"),
   P("tax.social_rental_exemption_pct", 90, "verified", "gestion locative sociale — 90% exempt since 2024", "2024-01-01"),
   P("tax.top_marginal_rate_pct", 45.78, "verified", "incl. solidarity surcharge (PwC)"),
+  P("tax.model100_filing_deadline_month", 12, "verified", "guichet.lu — déclaration pour l'impôt sur le revenu : 31 décembre de l'année qui suit l'année d'imposition (depuis l'année d'imposition 2022)", "2023-01-01"),
+  P("tax.model100_filing_deadline_day", 31, "verified", "guichet.lu — déclaration pour l'impôt sur le revenu : 31 décembre de l'année qui suit l'année d'imposition (depuis l'année d'imposition 2022)", "2023-01-01"),
 
   // VAT — loi TVA 12.2.1979
   P("vat.standard_rate_pct", 17, "verified", "standard rate (16% only in calendar 2023)", "2024-01-01"),

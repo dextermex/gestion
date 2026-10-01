@@ -112,6 +112,7 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
         { href: "/app/finance", label: d.hubs.expenses },
         { href: "/app/banque", label: d.hubs.banking, badge: badges.review || undefined },
         { href: "/app/charges", label: d.hubs.statements },
+        { href: "/app/fiscalite", label: d.hubs.reports },
         { href: "/app/emprunts", label: d.nav.mortgages },
         { href: "/app/acquisitions", label: d.nav.acquisitions },
       ],
@@ -132,7 +133,6 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
       children: [
         { href: "/app/conformite", label: d.hubs.compliance },
         ...(cabinet ? [{ href: "/app/aml", label: d.hubs.aml }] : []),
-        { href: "/app/fiscalite", label: d.hubs.reports },
       ],
     },
     {

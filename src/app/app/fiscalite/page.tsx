@@ -1,325 +1,451 @@
-import { Badge, PageHeader, EmptyState } from "@/components/pro/ui";
-import { LegalNote, Panel } from "@/components/gestion/bits";
+import { Fragment } from "react";
+import Link from "next/link";
+import { Card, EmptyState, PageHeader } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
+import { CollapsiblePanel, Panel } from "@/components/gestion/bits";
+import FiscalControls from "@/components/gestion/FiscalControls";
 import { getDemo } from "@/lib/demo";
-import { euros, eurosWhole } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { amortReasonText, energyReasonText } from "@/lib/i18n/engine";
-import { planTaxpayerYear, type YearAmortisation } from "@/domain/fiscal/amortisation";
-import { buildTaxPack } from "@/domain/fiscal/taxpack";
+import { euros, eurosWhole, formatDate } from "@/lib/types";
 import { getParamValue } from "@/domain/legal/params";
-import { cents } from "@/domain/money";
+import { selectFiscal, type FiscalOwnerYear } from "@/lib/fiscal/pack";
+import { attachmentLabel, filingDeadline, flatText, lineLabel, regimeLabel, sectionLabel, warningText } from "@/lib/fiscal/labels";
 
-export default async function FiscalitePage() {
+type Params = { proprietaire?: string; exercice?: string };
+
+/**
+ * Fiscalité: one owner and one exercise at a time, only the real estate
+ * let. The net rental income leads, the year's amortisation and the
+ * pieces still to gather beside it; then one ledger per property (the
+ * modèle 190/210 statement the engine builds), the taxpayer's
+ * amortisation plan, the residence-state annex when it applies, the
+ * checklist, the downloads, every owner for the exercise, and how the
+ * engine decides, folded. No other income, no estimate of tax due.
+ */
+export default async function FiscalitePage({ searchParams }: { searchParams: Promise<Params> }) {
+  const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { LAMBERT_PORTFOLIO, SCI_BEAULIEU_PORTFOLIO, contactById, propertyById } = await getDemo();
+  const data = await getDemo();
+  const selection = selectFiscal(data, { ownerId: params.proprietaire, taxYear: Number(params.exercice) || undefined });
+  const money = (c: number) => euros(c, locale);
 
-  // A real account with nothing in it: say so rather than reach for a
-  // showcase record that no longer exists.
-  if (LAMBERT_PORTFOLIO.length === 0)
+  if (!selection.current || selection.ownerId === null || selection.taxYear === null) {
     return (
       <div>
-        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.reports })} body={d.common.emptyBody} />
+        <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.subtitle} />
+        <EmptyState icon="euro" title={d.fiscalite.emptyTitle} body={d.fiscalite.emptyBody} />
       </div>
     );
-  const lambertName = contactById("c-lambert").name;
-  const faberName = contactById("c-faber").name;
+  }
 
-  // Taxpayer-level amortisation plans — the max-2-buildings rule in action.
-  const lambertPlan = planTaxpayerYear(LAMBERT_PORTFOLIO, 2026, { jointlyTaxed: false });
-  const faberPlan = planTaxpayerYear(SCI_BEAULIEU_PORTFOLIO, 2026, { jointlyTaxed: true });
-
-  // Modèle 190/210 pack for Bureaux Kirchberg (Sophie Lambert, non-resident).
-  const kirchbergAmort = lambertPlan.rows.find((r) => r.propertyId === "p-kirchberg")!;
-  const completedOn = "2015-11-01";
-  const taxYear = 2026;
-  const pack = buildTaxPack({
-    taxYear,
-    propertyLabel: "Bureaux Kirchberg — Plateau 1er",
-    cadastralRef: "Luxembourg / Section EiB / n° 501/2231",
-    buildingCompletedOn: completedOn,
-    monthsLet: 12,
-    vacancyMonths: 0,
-    receipts: Array.from({ length: 12 }, (_, i) => ({
-      period: `2026-${String(i + 1).padStart(2, "0")}`,
-      category: "dwelling" as const,
-      amount: cents(6800),
-    })),
-    expenses: [
-      { date: "2026-03-10", bucket: "maintenance_repairs", label: "Reprise étanchéité terrasse", amount: cents(9_400), rechargedToTenant: false },
-      { date: "2026-01-15", bucket: "debt_interest", label: "Intérêts prêt BGL (certificat)", amount: cents(31_200), rechargedToTenant: false },
-      { date: "2026-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(1_450), rechargedToTenant: false },
-      { date: "2026-12-31", bucket: "management_fees", label: "Honoraires Cabinet Reuter", amount: cents(3_260), rechargedToTenant: false },
-      { date: "2026-06-30", bucket: "insurance", label: "Assurance propriétaire", amount: cents(2_050), rechargedToTenant: false },
-    ],
-    electedSpreadYears: null,
-    priorSpreads: [],
-    amortisation: kirchbergAmort.result,
-    ownerShare: 1,
-    ownerResidency: "non_resident",
-    socialRentalManagement: false,
-  });
-  const hasDebtInterest = pack.sections.some((s) => s.code === "E" && s.amount > 0);
-
-  const regimeLabel: Record<string, string> = {
-    normal_2: d.fiscalite.regimeNormal,
-    accelerated_4: d.fiscalite.regimeAccel,
-    grandfathered_6: d.fiscalite.regimeGrand,
-    vefa2024_6: d.fiscalite.regimeVefa,
-    energy_renovation: d.fiscalite.regimeEnergy,
-  };
-  const vefaCap = eurosWhole(getParamValue("amort.vefa2024_base_cap_eur_per_year", "2026-01-01") * 100, locale);
-
-  // Localized engine explanations — always from the stable reason codes.
-  const regimeNote = (r: YearAmortisation) =>
-    amortReasonText(d, r.regime.reason, { cap: vefaCap });
-  const energyNote = (r: YearAmortisation) =>
-    energyReasonText(d, r.energy.reason, { rate: r.energy.ratePct, years: r.energy.yearsRemaining });
+  const owner = selection.current;
+  const year = owner.year.taxYear;
+  const jan1 = `${year}-01-01`;
+  const maxSlots = getParamValue("amort.accelerated_max_buildings_per_taxpayer", jan1);
+  const abattementCap = getParamValue("amort.abattement_special_cap_eur_per_taxpayer", jan1) * 100 * (owner.year.jointlyTaxed ? 2 : 1);
+  const vefaCap = eurosWhole(getParamValue("amort.vefa2024_base_cap_eur_per_year", jan1) * 100, locale);
+  const runningFrom = Number(data.TODAY.slice(0, 4));
+  const packHref = (o: FiscalOwnerYear, format: "pdf" | "csv", propertyId?: string) =>
+    `/api/fiscalite/pack?proprietaire=${encodeURIComponent(o.ownerId)}&exercice=${o.year.taxYear}&format=${format}${propertyId ? `&bien=${encodeURIComponent(propertyId)}` : ""}`;
+  const loss = owner.summary.ownerShareNet < 0;
+  const nr = owner.statements.map((s) => s.pack.nonResidentExport).filter((x): x is NonNullable<typeof x> => x !== null);
+  const sumNr = (pick: (x: (typeof nr)[number]) => number) => nr.reduce((a, x) => a + pick(x), 0);
+  const stateLabel = { vault: d.fiscalite.stateVault, cabinet: d.fiscalite.stateCabinet, ask: d.fiscalite.stateAsk };
+  const labelOfProperty = (propertyId: string) => owner.plan.rows.find((r) => r.propertyId === propertyId)?.label ?? propertyId;
 
   return (
     <div>
-      <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.subtitle} />
+      <PageHeader
+        title={d.fiscalite.title}
+        subtitle={d.fiscalite.subtitle}
+        actions={
+          <a href={packHref(owner, "pdf")} className="ui-button inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 max-sm:min-h-11">
+            <Icon name="documents" size={16} />
+            {d.fiscalite.downloadPdf}
+          </a>
+        }
+      />
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-        <Panel title={fmt(d.fiscalite.lambertTitle, { owner: lambertName })}>
-          <div className="table-scroll">
+      <div className="mb-5">
+        <FiscalControls
+          owners={selection.owners}
+          ownerId={selection.ownerId}
+          years={selection.years}
+          taxYear={year}
+          runningFrom={runningFrom}
+          labels={{ owner: d.fiscalite.ownerLabel, year: d.fiscalite.yearLabel, running: d.fiscalite.yearRunning }}
+        />
+      </div>
+
+      <section className="crm-lead" aria-label={fmt(d.fiscalite.heroTitle, { year })}>
+        <Card className={"crm-metric crm-lead-hero" + (loss ? " crm-metric-loss" : "")}>
+          <div className="crm-metric-top">
+            <span>{fmt(d.fiscalite.heroTitle, { year })}</span>
+            <span className="crm-symbol">
+              <Icon name="euro" size={22} />
+            </span>
+          </div>
+          <p className="crm-metric-value">{money(owner.summary.ownerShareNet)}</p>
+          <p className="crm-metric-sub">{fmt(d.fiscalite.heroSub, { gross: money(owner.summary.grossRents), deductions: money(owner.summary.deductions) })}</p>
+          {loss && <p className="crm-fiscal-note">{d.fiscalite.heroLoss}</p>}
+          <p className="crm-fiscal-note">
+            {owner.ownerName} · {owner.year.residency === "non_resident" ? fmt(d.fiscalite.pdfNonResident, { country: owner.year.residenceCountry ?? "" }) : d.fiscalite.pdfResident}
+            {owner.year.jointlyTaxed ? ` · ${d.fiscalite.jointLabel}` : ""}
+          </p>
+          <p className="crm-fiscal-note">{fmt(d.fiscalite.heroDeadline, { date: formatDate(filingDeadline(year), locale) })}</p>
+        </Card>
+
+        <Card className="crm-metric">
+          <div className="crm-metric-top">
+            <span>{fmt(d.fiscalite.amortTitle, { year })}</span>
+            <span className="crm-symbol">
+              <Icon name="properties" size={22} />
+            </span>
+          </div>
+          <p className="crm-metric-value">{money(owner.plan.totalAmortisation)}</p>
+          <p className="crm-metric-sub">{fmt(d.fiscalite.amortSub, { used: owner.plan.acceleratedSlotsUsed, max: maxSlots, abattement: money(owner.plan.totalAbattement) })}</p>
+          <a href="#plan" className="crm-metric-action">
+            {d.fiscalite.planTitle}
+            <Icon name="chevron-right" size={15} />
+          </a>
+        </Card>
+
+        <Card className={"crm-metric" + (owner.missing > 0 ? " crm-metric-attention" : "")}>
+          <div className="crm-metric-top">
+            <span>{d.fiscalite.piecesTitle}</span>
+            <span className="crm-symbol">
+              <Icon name={owner.missing > 0 ? "alert" : "check"} size={22} />
+            </span>
+          </div>
+          <p className="crm-metric-value">{owner.missing}</p>
+          <p className="crm-metric-sub">{owner.missing > 0 ? d.fiscalite.piecesSub : d.fiscalite.piecesNone}</p>
+          <a href="#pieces" className="crm-metric-action">
+            {d.fiscalite.piecesAction}
+            <Icon name="chevron-right" size={15} />
+          </a>
+        </Card>
+      </section>
+
+      {owner.statements.map(({ property, pack }) => {
+        const flat = pack.flatComparison.eligible && pack.flatComparison.recommendation === "flat";
+        const replaced = new Set(["A", "B2", "C", "D"]);
+        return (
+          <Panel
+            key={property.id}
+            title={fmt(d.fiscalite.statementTitle, { property: property.name })}
+            className="mb-5"
+            action={
+              <div className="crm-ledger-tools">
+                <a href={packHref(owner, "csv", property.id)}>{d.fiscalite.exportCsv}</a>
+                <a href={packHref(owner, "pdf")}>{d.fiscalite.exportPdf}</a>
+              </div>
+            }
+          >
+            <p className="crm-ledger-meta">
+              <span>{fmt(d.fiscalite.monthsLet, { n: pack.monthsLet })}</span>
+              {pack.vacancyMonths > 0 && <span>{fmt(d.fiscalite.vacancy, { n: pack.vacancyMonths })}</span>}
+              <span>{property.cadastralRef}</span>
+            </p>
+            <table className="crm-ledger">
+              <tbody>
+                <tr className="is-section">
+                  <td>{d.fiscalite.grossRents}</td>
+                  <td>{money(pack.grossRents.totalTaxable)}</td>
+                </tr>
+                {pack.grossRents.dwelling > 0 && (
+                  <tr className="is-line">
+                    <td>{d.fiscalite.rentDwelling}</td>
+                    <td>{money(pack.grossRents.dwelling)}</td>
+                  </tr>
+                )}
+                {pack.grossRents.garageParking > 0 && (
+                  <tr className="is-line">
+                    <td>{d.fiscalite.rentGarage}</td>
+                    <td>{money(pack.grossRents.garageParking)}</td>
+                  </tr>
+                )}
+                {pack.grossRents.furnitureSupplement > 0 && (
+                  <tr className="is-line">
+                    <td>{d.fiscalite.rentFurniture}</td>
+                    <td>{money(pack.grossRents.furnitureSupplement)}</td>
+                  </tr>
+                )}
+                {pack.grossRents.retainedDeposits > 0 && (
+                  <tr className="is-line">
+                    <td>{d.fiscalite.rentRetained}</td>
+                    <td>{money(pack.grossRents.retainedDeposits)}</td>
+                  </tr>
+                )}
+                {pack.sections.map((s) => (
+                  <Fragment key={s.code}>
+                    <tr className={"is-section" + (flat && replaced.has(s.code) ? " is-replaced" : "")}>
+                      <td>{sectionLabel(d, s.code)}</td>
+                      <td>{money(s.amount)}</td>
+                    </tr>
+                    {s.lines
+                      .filter((l) => l.amount > 0)
+                      .map((l, i) => (
+                        <tr key={i} className="is-line">
+                          <td>{lineLabel(d, l)}</td>
+                          <td>{money(l.amount)}</td>
+                        </tr>
+                      ))}
+                  </Fragment>
+                ))}
+                <tr className="is-subtotal">
+                  <td>{d.fiscalite.totalDeductions}</td>
+                  <td>{money(pack.deductionsTotal)}</td>
+                </tr>
+                {pack.socialExemptionApplied > 0 && (
+                  <tr className="is-line">
+                    <td>{d.fiscalite.socialExemption}</td>
+                    <td>{money(-pack.socialExemptionApplied)}</td>
+                  </tr>
+                )}
+                <tr className={"is-net" + (pack.netResult < 0 ? " is-loss" : "")}>
+                  <td>{d.fiscalite.netResult}</td>
+                  <td>{money(pack.netResult)}</td>
+                </tr>
+                {pack.ownerShareNet !== pack.netResult && (
+                  <tr className="is-share">
+                    <td>{fmt(d.fiscalite.ownerShare, { pct: Math.round((pack.ownerShareNet / (pack.netResult || 1)) * 100) })}</td>
+                    <td>{money(pack.ownerShareNet)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div className="crm-fiscal-warnings">
+              <p>
+                <Icon name="percent" size={16} />
+                <span>
+                  {flatText(d, pack, locale)} {d.fiscalite.flatNote}
+                </span>
+              </p>
+              {pack.warningCodes.map((w) => (
+                <p key={w.code}>
+                  <Icon name="alert" size={16} />
+                  <span>{warningText(d, w, locale)}</span>
+                </p>
+              ))}
+            </div>
+          </Panel>
+        );
+      })}
+
+      <section id="plan" className="scroll-mt-24">
+        <Panel title={d.fiscalite.planTitle} className="mb-5">
+          <div className="table-scroll crm-fiscal-table">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
+                <tr className="border-b border-sand-100 text-left text-ink-soft">
                   <th className="px-3 py-2.5 font-semibold">{d.fiscalite.colProperty}</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">{d.fiscalite.colRegime}</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">{d.fiscalite.colBase}</th>
+                  <th className="px-3 py-2.5 font-semibold">{d.fiscalite.colRegime}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-md:hidden">{d.fiscalite.colBase}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-sm:hidden">{d.fiscalite.colRate}</th>
                   <th className="px-3 py-2.5 text-right font-semibold">{d.fiscalite.colAnnuity}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-md:hidden">{d.fiscalite.colShare}</th>
                 </tr>
               </thead>
               <tbody>
-                {lambertPlan.rows.map((r) => (
-                  <tr key={r.propertyId} className="border-b border-sand-50 align-top last:border-0">
-                    <td className="px-3 py-2.5">
-                      <p className="font-semibold text-ink">{r.label}</p>
-                      <p className="text-[11px] leading-snug text-ink-soft">{regimeNote(r.result)}</p>
-                      {r.result.energy.applicable && (
-                        <p className="text-[11px] leading-snug text-emerald-700">{energyNote(r.result)}</p>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <Badge
-                        className={
-                          r.result.regime.regime === "vefa2024_6"
-                            ? "bg-violet-100 text-violet-800"
-                            : r.result.regime.regime === "accelerated_4"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-sand-100 text-ink-soft"
-                        }
-                      >
-                        {regimeLabel[r.result.regime.regime]}
-                        {r.result.energy.applicable ? ` + ${r.result.energy.ratePct} %` : ""}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-soft">
-                      {eurosWhole(r.result.regime.cappedBase, locale)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-ink">
-                      {euros(r.result.totalAmount, locale)}
-                    </td>
-                  </tr>
+                {owner.plan.rows.map((r) => (
+                  <Fragment key={r.propertyId}>
+                    <tr className="border-b border-sand-100 align-top">
+                      <td className="px-3 py-3">
+                        <p className="font-semibold text-ink">{r.label}</p>
+                        <p className="crm-plan-sub">{amortReasonText(d, r.result.regime.reason, { cap: vefaCap })}</p>
+                      </td>
+                      <td className="px-3 py-3 font-medium text-ink">{regimeLabel(d, r.result.regime.regime)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-md:hidden">{money(r.result.regime.cappedBase)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{r.result.regime.ratePct} %</td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink">{money(r.result.buildingAmount)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink max-md:hidden">{money(r.taxpayerShareAmount)}</td>
+                    </tr>
+                    {r.result.energy.applicable && (
+                      <tr className="border-b border-sand-100 align-top">
+                        <td className="px-3 py-3 pl-8">
+                          <p className="font-medium text-ink">{fmt(d.fiscalite.lineEnergy, { rate: r.result.energy.ratePct })}</p>
+                          <p className="crm-plan-sub">{energyReasonText(d, r.result.energy.reason, { rate: r.result.energy.ratePct, years: r.result.energy.yearsRemaining })}</p>
+                        </td>
+                        <td className="px-3 py-3 text-ink-soft">{d.fiscalite.regimeEnergy}</td>
+                        <td className="px-3 py-3 max-md:hidden" />
+                        <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{r.result.energy.ratePct} %</td>
+                        <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink">{money(r.result.energy.amount)}</td>
+                        <td className="px-3 py-3 max-md:hidden" />
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
-                <tr className="bg-sand-50/60">
-                  <td className="px-3 py-2.5 font-bold text-ink" colSpan={3}>
+                <tr>
+                  <td className="px-3 py-3 font-semibold text-ink" colSpan={4}>
                     {d.fiscalite.totalAmort}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-display font-bold tabular-nums text-ink">
-                    {euros(lambertPlan.totalAmortisation, locale)}
+                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink" colSpan={2}>
+                    {money(owner.plan.totalAmortisation)}
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <LegalNote>
-            {fmt(d.fiscalite.lambertLegal, {
-              p1: LAMBERT_PORTFOLIO[0].label,
-              p2: LAMBERT_PORTFOLIO[1].label,
-            })}
-          </LegalNote>
-        </Panel>
-
-        <Panel title={fmt(d.fiscalite.faberTitle, { owner: faberName })}>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge className="bg-emerald-100 text-emerald-800">
-              {fmt(d.fiscalite.slotsUsed, { used: faberPlan.acceleratedSlotsUsed })}
-            </Badge>
-            {faberPlan.slotWaitlist.length > 0 && (
-              <Badge className="bg-amber-100 text-amber-800">
-                {fmt(d.fiscalite.slotsWaitlist, { n: faberPlan.slotWaitlist.length })}
-              </Badge>
-            )}
-            <Badge className="bg-sand-100 text-ink-soft">{d.fiscalite.jointBadge}</Badge>
+          <div className="crm-plan-foot">
+            <p>{fmt(d.fiscalite.slotsLine, { used: owner.plan.acceleratedSlotsUsed, max: maxSlots })}</p>
+            {owner.plan.slotWaitlist.map((id) => (
+              <p key={id}>{fmt(d.fiscalite.slotsWaitlist, { property: labelOfProperty(id) })}</p>
+            ))}
+            <p>{fmt(d.fiscalite.abattementLine, { amount: money(owner.plan.totalAbattement), cap: money(abattementCap) })}</p>
+            {owner.year.jointlyTaxed && <p>{d.fiscalite.jointLabel}</p>}
           </div>
-          <ul className="space-y-2.5">
-            {faberPlan.rows.map((r) => (
-              <li key={r.propertyId} className="rounded-xl border border-sand-200 px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="min-w-0 truncate text-sm font-semibold text-ink">{r.label}</p>
-                  <Badge
-                    className={
-                      r.result.regime.regime === "accelerated_4"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-sand-100 text-ink-soft"
-                    }
-                  >
-                    {regimeLabel[r.result.regime.regime]}
-                  </Badge>
+        </Panel>
+      </section>
+
+      {nr.length > 0 && (
+        <Panel title={fmt(d.fiscalite.nrTitle, { country: owner.year.residenceCountry ?? "" })} className="mb-5">
+          <table className="crm-ledger">
+            <tbody>
+              <tr className="is-section">
+                <td>{d.fiscalite.nrGross}</td>
+                <td>{money(sumNr((x) => x.grossRents))}</td>
+              </tr>
+              <tr className="is-section">
+                <td>{d.fiscalite.nrExpenses}</td>
+                <td>{money(sumNr((x) => x.deductibleExpensesExclAmort))}</td>
+              </tr>
+              <tr className="is-section">
+                <td>{d.fiscalite.nrInterest}</td>
+                <td>{money(sumNr((x) => x.debtInterest))}</td>
+              </tr>
+              <tr className="is-subtotal">
+                <td>{d.fiscalite.nrAmort}</td>
+                <td>{money(sumNr((x) => x.luxembourgOnlyAmortisation))}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="crm-fiscal-note">{d.fiscalite.howNr}</p>
+        </Panel>
+      )}
+
+      <section id="pieces" className="scroll-mt-24">
+        <Panel title={d.fiscalite.checklistTitle} className="mb-5">
+          <ul className="crm-check">
+            {owner.attachments.map((a) => (
+              <li key={`${a.propertyId}:${a.code}`}>
+                <div className="min-w-0">
+                  <p className="crm-check-name">{attachmentLabel(d, a.code)}</p>
+                  <p className="crm-check-sub">
+                    {a.propertyName}
+                    {a.amount !== null ? ` · ${money(a.amount)}` : ""}
+                    {a.state === "vault" && a.documentName ? ` · ${a.documentName}` : ""}
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-ink-soft">{regimeNote(r.result)}</p>
-                <div className="mt-1.5 flex items-center justify-between text-xs">
-                  <span className="text-ink-soft">
-                    {fmt(d.fiscalite.taxpayerShare, {
-                      pct: Math.round((r.taxpayerShareAmount / (r.result.totalAmount || 1)) * 100),
-                    })}
-                  </span>
-                  <span className="font-semibold tabular-nums text-ink">{euros(r.taxpayerShareAmount, locale)}</span>
-                </div>
+                <span className={"crm-check-state is-" + a.state}>
+                  <Icon name={a.state === "ask" ? "alert" : "check"} size={14} />
+                  {stateLabel[a.state]}
+                </span>
               </li>
             ))}
           </ul>
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-50 px-4 py-3">
-            <p className="text-sm font-semibold text-brand-800">{d.fiscalite.abattementLine}</p>
-            <p className="font-display text-lg font-bold tabular-nums text-brand-800">
-              {euros(faberPlan.totalAbattement, locale)}
-            </p>
-          </div>
-          <LegalNote>{d.fiscalite.faberLegal}</LegalNote>
         </Panel>
-      </div>
+      </section>
 
-      <Panel title={fmt(d.fiscalite.packTitle, { property: propertyById("p-kirchberg").name, owner: lambertName })} className="mt-5">
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-sand-50 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                  {d.fiscalite.grossRents}
-                </p>
-                <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
-                  {euros(pack.grossRents.totalTaxable, locale)}
-                </p>
-                <p className="text-[11px] text-ink-soft">{fmt(d.fiscalite.monthsLet, { n: pack.monthsLet })}</p>
-              </div>
-              <div className="rounded-xl bg-sand-50 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                  {d.fiscalite.fraisObtention}
-                </p>
-                <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
-                  {euros(pack.grossRents.totalTaxable - pack.netResult, locale)}
-                </p>
-                <p className="text-[11px] text-ink-soft">{d.fiscalite.itemised}</p>
-              </div>
-              <div className="rounded-xl bg-sand-50 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                  {d.fiscalite.netIncome}
-                </p>
-                <p className="mt-0.5 font-display text-lg font-bold tabular-nums text-ink">
-                  {euros(pack.netResult, locale)}
-                </p>
-                <p className="text-[11px] text-ink-soft">{d.fiscalite.netCarried}</p>
-              </div>
+      <Panel title={d.fiscalite.downloadsTitle} className="mb-5">
+        <ul className="crm-downloads">
+          <li>
+            <div className="min-w-0">
+              <p className="crm-downloads-name">{fmt(d.fiscalite.dlPack, { year, owner: owner.ownerName })}</p>
+              <p className="crm-downloads-sub">{d.fiscalite.dlPackBody}</p>
             </div>
-
-            <div className="table-scroll">
-              <table className="mt-4 w-full text-sm">
-                <tbody>
-                  {pack.sections.map((s) => (
-                    <tr key={s.code} className="border-b border-sand-50 last:border-0">
-                      <td className="py-2 pr-3">
-                        <span className="mr-2 inline-flex h-6 w-8 items-center justify-center rounded-md bg-brand-50 text-xs font-bold text-brand-700">
-                          §{s.code}
-                        </span>
-                        <span className="text-ink">{s.label}</span>
-                      </td>
-                      <td className="py-2 text-right font-semibold tabular-nums text-ink">{euros(s.amount, locale)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <a className="crm-download" href={packHref(owner, "pdf")}>
+              <Icon name="documents" size={16} />
+              {d.fiscalite.download}
+            </a>
+          </li>
+          <li>
+            <div className="min-w-0">
+              <p className="crm-downloads-name">{fmt(d.fiscalite.dlLines, { year, owner: owner.ownerName })}</p>
+              <p className="crm-downloads-sub">{d.fiscalite.dlLinesBody}</p>
             </div>
-
-            {hasDebtInterest && (
-              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                {d.fiscalite.warnInterestCert}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <div className="rounded-2xl border border-sand-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{d.fiscalite.flatTitle}</p>
-              {pack.flatComparison.eligible ? (
-                <>
-                  <p className="mt-1.5 text-sm text-ink">
-                    {fmt(d.fiscalite.flatVs, {
-                      flat: euros(pack.flatComparison.flatAmount, locale),
-                      itemised: euros(pack.flatComparison.itemisedReplaceable, locale),
-                    })}
-                  </p>
-                  <Badge
-                    className={
-                      "mt-2 " +
-                      (pack.flatComparison.recommendation === "itemise"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-sky-100 text-sky-800")
-                    }
-                  >
-                    {pack.flatComparison.recommendation === "itemise"
-                      ? fmt(d.fiscalite.flatRecoItemise, { savings: euros(pack.flatComparison.savings, locale) })
-                      : fmt(d.fiscalite.flatRecoFlat, { savings: euros(pack.flatComparison.savings, locale) })}
-                  </Badge>
-                </>
-              ) : (
-                <p className="mt-1.5 text-xs text-ink-soft">
-                  {fmt(d.legal.flatIneligible, {
-                    age: taxYear - Number(completedOn.slice(0, 4)),
-                    min: getParamValue("tax.flat_deduction_min_building_age_years", "2026-01-01"),
-                  })}
-                </p>
-              )}
-              <p className="mt-2 text-[11px] leading-relaxed text-ink-soft">{d.fiscalite.flatNote}</p>
-            </div>
-
-            {pack.nonResidentExport && (
-              <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-violet-800">{d.fiscalite.nrTitle}</p>
-                <ul className="mt-2 space-y-1 text-xs text-ink">
-                  <li className="flex justify-between">
-                    <span>{d.fiscalite.nrGross}</span>
-                    <span className="font-semibold tabular-nums">
-                      {euros(pack.nonResidentExport.grossRents, locale)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between">
-                    <span>{d.fiscalite.nrExpenses}</span>
-                    <span className="font-semibold tabular-nums">
-                      {euros(pack.nonResidentExport.deductibleExpensesExclAmort, locale)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between">
-                    <span>{d.fiscalite.nrInterest}</span>
-                    <span className="font-semibold tabular-nums">
-                      {euros(pack.nonResidentExport.debtInterest, locale)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between text-violet-800">
-                    <span>{d.fiscalite.nrAmort}</span>
-                    <span className="font-semibold tabular-nums">
-                      {euros(pack.nonResidentExport.luxembourgOnlyAmortisation, locale)}
-                    </span>
-                  </li>
-                </ul>
-                <p className="mt-2 text-[11px] leading-relaxed text-violet-800">{d.fiscalite.nrNote}</p>
+            <a className="crm-download" href={packHref(owner, "csv")}>
+              <Icon name="documents" size={16} />
+              {d.fiscalite.download}
+            </a>
+          </li>
+          {owner.statements.map(({ property }) => (
+            <li key={property.id}>
+              <div className="min-w-0">
+                <p className="crm-downloads-name">{fmt(d.fiscalite.dlForm, { year, property: property.name })}</p>
+                <p className="crm-downloads-sub">{d.fiscalite.dlFormBody}</p>
               </div>
-            )}
-          </div>
-        </div>
+              <a className="crm-download" href={packHref(owner, "csv", property.id)}>
+                <Icon name="documents" size={16} />
+                {d.fiscalite.download}
+              </a>
+            </li>
+          ))}
+        </ul>
       </Panel>
+
+      {selection.all.length > 1 && (
+        <Panel title={d.fiscalite.allOwnersTitle} className="mb-5">
+          <div className="table-scroll crm-fiscal-table">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-sand-100 text-left text-ink-soft">
+                  <th className="px-3 py-2.5 font-semibold">{d.fiscalite.colOwner}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-sm:hidden">{d.fiscalite.colProperties}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-md:hidden">{d.fiscalite.colGross}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-md:hidden">{d.fiscalite.colDeductions}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-sm:hidden">{d.fiscalite.colAmort}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">{d.fiscalite.colNet}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-sm:hidden">{d.fiscalite.colMissing}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selection.all.map((o) => (
+                  <tr key={o.ownerId} className="border-b border-sand-100 last:border-0" aria-current={o.ownerId === owner.ownerId ? "true" : undefined}>
+                    <td className="px-3 py-3">
+                      <Link href={`/app/fiscalite?proprietaire=${encodeURIComponent(o.ownerId)}&exercice=${year}`} className="font-semibold text-ink hover:text-brand-700 hover:underline">
+                        {o.ownerName}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{o.summary.properties}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-md:hidden">{money(o.summary.grossRents)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-md:hidden">{money(o.summary.deductions)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{money(o.plan.totalAmortisation)}</td>
+                    <td className={"px-3 py-3 text-right font-semibold tabular-nums " + (o.summary.ownerShareNet < 0 ? "text-[#9b411f]" : "text-ink")}>{money(o.summary.ownerShareNet)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{o.missing}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+
+      <CollapsiblePanel title={d.fiscalite.howTitle}>
+        <dl className="crm-how">
+          <div>
+            <dt>{d.fiscalite.howAmortTitle}</dt>
+            <dd>{d.fiscalite.howAmort}</dd>
+          </div>
+          <div>
+            <dt>{d.fiscalite.howTaxpayerTitle}</dt>
+            <dd>{d.fiscalite.howTaxpayer}</dd>
+          </div>
+          <div>
+            <dt>{d.fiscalite.howForfaitTitle}</dt>
+            <dd>{d.fiscalite.howForfait}</dd>
+          </div>
+          <div>
+            <dt>{d.fiscalite.howNrTitle}</dt>
+            <dd>{d.fiscalite.howNr}</dd>
+          </div>
+          <div>
+            <dt>{d.fiscalite.howScopeTitle}</dt>
+            <dd>{d.fiscalite.howScope}</dd>
+          </div>
+        </dl>
+      </CollapsiblePanel>
     </div>
   );
 }

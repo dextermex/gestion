@@ -29,7 +29,8 @@ export interface Section {
 }
 
 export interface DocumentModel {
-  kind: DocumentKind;
+  /** One of the produced kinds, or the fiscal pack, which the same renderer draws. */
+  kind: DocumentKind | "fiscal_pack";
   lang: Locale;
   version: string;
   title: string;

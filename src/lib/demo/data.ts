@@ -8,7 +8,8 @@
 import { cents } from "@/domain/money";
 import { leaseRF } from "@/domain/banking/rf";
 import type { CapitalComponent } from "@/domain/indexation/engine";
-import type { AcquisitionFacts } from "@/domain/fiscal/amortisation";
+import type { AcquisitionFacts, TaxpayerProperty } from "@/domain/fiscal/amortisation";
+import type { ExpenseEntry, RentReceipt, RepairSpreadCarry } from "@/domain/fiscal/taxpack";
 import type { BankTransaction, IbanBinding, OpenInvoice } from "@/domain/banking/matching";
 import type { WorkOrderStatus } from "@/lib/types";
 import { periodFromSyndic, type DemoChargePeriod } from "./charges-seed";
@@ -949,6 +950,239 @@ export const SCI_BEAULIEU_PORTFOLIO: Array<{ propertyId: string; label: string; 
       energyWorksCost: 0, energyWorksCompletedOn: null, klimabonusReceived: 0,
       vefa2024Eligible: false,
     },
+  },
+];
+
+/** Which portfolio each taxpayer's amortisation plan runs over. */
+export const TAXPAYER_PORTFOLIOS: Record<string, TaxpayerProperty[]> = {
+  "c-lambert": LAMBERT_PORTFOLIO,
+  "c-faber": SCI_BEAULIEU_PORTFOLIO,
+};
+
+// ─── The fiscal years: what each owner's properties took in and paid out,
+// the inputs of the modèle 190/210 statements. One closed year (to file
+// by the end of the next) and the running year, provisional. ──────────────
+
+export interface DemoFiscalExpense extends ExpenseEntry {
+  id: string;
+}
+
+export interface DemoFiscalStatement {
+  propertyId: string;
+  monthsLet: number;
+  vacancyMonths: number;
+  receipts: RentReceipt[];
+  expenses: DemoFiscalExpense[];
+  electedSpreadYears: number | null;
+  priorSpreads: RepairSpreadCarry[];
+  /** The owner's share of this property's result, 0 to 1. */
+  ownerShare: number;
+  socialRentalManagement: boolean;
+}
+
+export interface DemoFiscalYear {
+  id: string;
+  ownerContactId: string;
+  taxYear: number;
+  jointlyTaxed: boolean;
+  residency: "resident" | "non_resident";
+  /** ISO country code of the residence state, for a non-resident. */
+  residenceCountry: string | null;
+  statements: DemoFiscalStatement[];
+}
+
+/** Twelve, or fewer, monthly receipts of one category. */
+function monthlyReceipts(year: number, amount: number, category: RentReceipt["category"] = "dwelling", from = 1, to = 12): RentReceipt[] {
+  return Array.from({ length: to - from + 1 }, (_, i) => ({ period: `${year}-${String(from + i).padStart(2, "0")}`, category, amount: cents(amount) }));
+}
+
+export const FISCAL_YEARS: DemoFiscalYear[] = [
+  {
+    id: "fy-lambert-2025",
+    ownerContactId: "c-lambert",
+    taxYear: 2025,
+    jointlyTaxed: false,
+    residency: "non_resident",
+    residenceCountry: "BE",
+    statements: [
+      {
+        propertyId: "p-kirchberg",
+        monthsLet: 12,
+        vacancyMonths: 0,
+        receipts: monthlyReceipts(2025, 6_800),
+        expenses: [
+          { id: "fx-lk25-2", date: "2025-01-15", bucket: "debt_interest", label: "Intérêts prêt BGL (certificat)", amount: cents(5_400), rechargedToTenant: false },
+          { id: "fx-lk25-3", date: "2025-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(1_450), rechargedToTenant: false },
+          { id: "fx-lk25-4", date: "2025-12-31", bucket: "management_fees", label: "Honoraires de gérance", amount: cents(4_896), rechargedToTenant: false },
+          { id: "fx-lk25-5", date: "2025-06-30", bucket: "insurance", label: "Assurance propriétaire non occupant", amount: cents(2_050), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 1,
+        socialRentalManagement: false,
+      },
+      {
+        propertyId: "p-gare",
+        monthsLet: 12,
+        vacancyMonths: 0,
+        receipts: monthlyReceipts(2025, 1_300),
+        expenses: [
+          { id: "fx-lg25-1", date: "2025-01-15", bucket: "debt_interest", label: "Intérêts prêt BCEE (certificat)", amount: cents(11_640), rechargedToTenant: false },
+          { id: "fx-lg25-2", date: "2025-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(210), rechargedToTenant: false },
+          { id: "fx-lg25-3", date: "2025-12-31", bucket: "management_fees", label: "Honoraires de gérance", amount: cents(936), rechargedToTenant: false },
+          { id: "fx-lg25-4", date: "2025-09-30", bucket: "permanent_charges", label: "Charges de copropriété non récupérables", amount: cents(1_120), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 1,
+        socialRentalManagement: false,
+      },
+    ],
+  },
+  {
+    id: "fy-lambert-2026",
+    ownerContactId: "c-lambert",
+    taxYear: 2026,
+    jointlyTaxed: false,
+    residency: "non_resident",
+    residenceCountry: "BE",
+    statements: [
+      {
+        propertyId: "p-kirchberg",
+        monthsLet: 8,
+        vacancyMonths: 0,
+        receipts: monthlyReceipts(2026, 6_800, "dwelling", 1, 8),
+        expenses: [
+          { id: "fx-lk25-1", date: "2026-03-10", bucket: "maintenance_repairs", label: "Reprise étanchéité terrasse", amount: cents(9_400), rechargedToTenant: false },
+          { id: "fx-lk26-1", date: "2026-01-15", bucket: "debt_interest", label: "Intérêts prêt BGL (certificat)", amount: cents(3_300), rechargedToTenant: false },
+          { id: "fx-lk26-2", date: "2026-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(1_450), rechargedToTenant: false },
+          { id: "fx-lk26-3", date: "2026-06-30", bucket: "insurance", label: "Assurance propriétaire non occupant", amount: cents(2_050), rechargedToTenant: false },
+          { id: "fx-lk26-4", date: "2026-08-31", bucket: "management_fees", label: "Honoraires de gérance, janvier à août", amount: cents(3_264), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 1,
+        socialRentalManagement: false,
+      },
+      {
+        propertyId: "p-gare",
+        monthsLet: 5,
+        vacancyMonths: 3,
+        receipts: monthlyReceipts(2026, 1_300, "dwelling", 1, 5),
+        expenses: [
+          { id: "fx-lg26-1", date: "2026-01-15", bucket: "debt_interest", label: "Intérêts prêt BCEE (certificat)", amount: cents(11_210), rechargedToTenant: false },
+          { id: "fx-lg26-2", date: "2026-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(210), rechargedToTenant: false },
+          { id: "fx-lg26-3", date: "2026-07-02", bucket: "maintenance_repairs", label: "Remise en peinture entre deux locataires", amount: cents(2_860), rechargedToTenant: false },
+          { id: "fx-lg26-4", date: "2026-08-31", bucket: "management_fees", label: "Honoraires de gérance, janvier à août", amount: cents(390), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 1,
+        socialRentalManagement: false,
+      },
+    ],
+  },
+  {
+    id: "fy-faber-2025",
+    ownerContactId: "c-faber",
+    taxYear: 2025,
+    jointlyTaxed: true,
+    residency: "resident",
+    residenceCountry: null,
+    statements: [
+      {
+        propertyId: "p-beaulieu",
+        monthsLet: 12,
+        vacancyMonths: 0,
+        receipts: [
+          ...monthlyReceipts(2025, 1_450),
+          ...monthlyReceipts(2025, 1_450),
+          ...monthlyReceipts(2025, 2_150),
+          ...monthlyReceipts(2025, 1_980, "dwelling", 9, 12),
+          ...monthlyReceipts(2025, 1_120, "dwelling", 1, 10),
+          ...monthlyReceipts(2025, 120, "garage_parking"),
+        ],
+        expenses: [
+          { id: "fx-fb25-1", date: "2025-04-18", bucket: "maintenance_repairs", label: "Remplacement chaudière collective, part SCI", amount: cents(18_600), rechargedToTenant: false },
+          { id: "fx-fb25-2", date: "2025-10-06", bucket: "maintenance_repairs", label: "Peinture cage d'escalier", amount: cents(4_310), rechargedToTenant: false },
+          { id: "fx-fb25-3", date: "2025-01-15", bucket: "debt_interest", label: "Intérêts prêt BCEE (certificat)", amount: cents(27_300), rechargedToTenant: false },
+          { id: "fx-fb25-4", date: "2025-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(1_980), rechargedToTenant: false },
+          { id: "fx-fb25-5", date: "2025-12-31", bucket: "management_fees", label: "Honoraires de gérance", amount: cents(6_264), rechargedToTenant: false },
+          { id: "fx-fb25-6", date: "2025-06-30", bucket: "insurance", label: "Assurance immeuble, part propriétaire", amount: cents(3_140), rechargedToTenant: false },
+          { id: "fx-fb25-7", date: "2025-11-30", bucket: "permanent_charges", label: "Charges de copropriété non récupérables", amount: cents(2_760), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 0.6,
+        socialRentalManagement: false,
+      },
+      {
+        propertyId: "p-bertrange",
+        monthsLet: 12,
+        vacancyMonths: 0,
+        receipts: monthlyReceipts(2025, 3_000),
+        expenses: [
+          { id: "fx-fm25-1", date: "2025-01-15", bucket: "debt_interest", label: "Intérêts prêt ING (certificat)", amount: cents(14_900), rechargedToTenant: false },
+          { id: "fx-fm25-2", date: "2025-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(640), rechargedToTenant: false },
+          { id: "fx-fm25-3", date: "2025-12-31", bucket: "management_fees", label: "Honoraires de gérance", amount: cents(2_160), rechargedToTenant: false },
+          { id: "fx-fm25-4", date: "2025-06-30", bucket: "insurance", label: "Assurance habitation, part propriétaire", amount: cents(980), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 0.5,
+        socialRentalManagement: false,
+      },
+    ],
+  },
+  {
+    id: "fy-faber-2026",
+    ownerContactId: "c-faber",
+    taxYear: 2026,
+    jointlyTaxed: true,
+    residency: "resident",
+    residenceCountry: null,
+    statements: [
+      {
+        propertyId: "p-beaulieu",
+        monthsLet: 8,
+        vacancyMonths: 0,
+        receipts: [
+          ...monthlyReceipts(2026, 1_450, "dwelling", 1, 3),
+          ...monthlyReceipts(2026, 1_520, "dwelling", 4, 8),
+          ...monthlyReceipts(2026, 1_450, "dwelling", 1, 8),
+          ...monthlyReceipts(2026, 2_150, "dwelling", 1, 8),
+          ...monthlyReceipts(2026, 1_980, "dwelling", 1, 8),
+          ...monthlyReceipts(2026, 1_180, "dwelling", 2, 8),
+          ...monthlyReceipts(2026, 120, "garage_parking", 1, 8),
+        ],
+        expenses: [
+          { id: "fx-fb26-1", date: "2026-08-08", bucket: "maintenance_repairs", label: "Entretien chaudière, Krier", amount: cents(1_240), rechargedToTenant: false },
+          { id: "fx-fb26-2", date: "2026-01-15", bucket: "debt_interest", label: "Intérêts prêt BCEE (certificat)", amount: cents(26_400), rechargedToTenant: false },
+          { id: "fx-fb26-3", date: "2026-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(1_980), rechargedToTenant: false },
+          { id: "fx-fb26-4", date: "2026-08-31", bucket: "management_fees", label: "Honoraires de gérance, janvier à août", amount: cents(4_392), rechargedToTenant: false },
+          { id: "fx-fb26-5", date: "2026-06-30", bucket: "insurance", label: "Assurance immeuble, part propriétaire", amount: cents(3_140), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 0.6,
+        socialRentalManagement: false,
+      },
+      {
+        propertyId: "p-bertrange",
+        monthsLet: 8,
+        vacancyMonths: 0,
+        receipts: monthlyReceipts(2026, 3_000, "dwelling", 1, 8),
+        expenses: [
+          { id: "fx-fm26-1", date: "2026-01-15", bucket: "debt_interest", label: "Intérêts prêt ING (certificat)", amount: cents(14_300), rechargedToTenant: false },
+          { id: "fx-fm26-2", date: "2026-02-01", bucket: "impot_foncier", label: "Impôt foncier", amount: cents(640), rechargedToTenant: false },
+          { id: "fx-fm26-3", date: "2026-08-31", bucket: "management_fees", label: "Honoraires de gérance, janvier à août", amount: cents(1_440), rechargedToTenant: false },
+        ],
+        electedSpreadYears: null,
+        priorSpreads: [],
+        ownerShare: 0.5,
+        socialRentalManagement: false,
+      },
+    ],
   },
 ];
 

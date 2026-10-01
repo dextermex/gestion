@@ -10,7 +10,8 @@
 
 import * as fr from "./data";
 import { periodFromSyndic } from "./charges-seed";
-import type { DemoAuditEntry, DemoBankTx, DemoDelivery, DemoBill, DemoContact, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DemoAuditEntry, DemoBankTx, DemoDelivery, DemoBill, DemoContact, DemoFiscalYear, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { TaxpayerProperty } from "@/domain/fiscal/amortisation";
 import type { DocumentKind } from "@/lib/documents/kinds";
 import type { OpenInvoice } from "@/domain/banking/matching";
 
@@ -344,6 +345,56 @@ export const SCI_BEAULIEU_PORTFOLIO = fr.SCI_BEAULIEU_PORTFOLIO.map((x) => ({
       : x.propertyId === "p-bertrange"
         ? "Haus Miersch (Part Marie-Josée Kieffer 50 %)"
         : "Appartement Iechternach (ausserhalb vum Mandat, vun der Proprietärin deklaréiert)",
+}));
+
+export const TAXPAYER_PORTFOLIOS: Record<string, TaxpayerProperty[]> = {
+  "c-lambert": LAMBERT_PORTFOLIO,
+  "c-faber": SCI_BEAULIEU_PORTFOLIO,
+};
+
+/** The expense lines as the Lëtzebuergesch cabinet wrote them; ids, dates and figures identical. */
+const FISCAL_EXPENSE_LABELS: Record<string, string> = {
+  "fx-lk25-1": "Terrassendichtung erneiert",
+  "fx-lk25-2": "Zënse Prêt BGL (Certificat)",
+  "fx-lk25-3": "Impôt foncier",
+  "fx-lk25-4": "Gérancehonorairen",
+  "fx-lk25-5": "Assurance Proprietär net Bewunner",
+  "fx-lg25-1": "Zënse Prêt BCEE (Certificat)",
+  "fx-lg25-2": "Impôt foncier",
+  "fx-lg25-3": "Gérancehonorairen",
+  "fx-lg25-4": "Net recuperéierbar Copropriétéits-Chargen",
+  "fx-lk26-1": "Zënse Prêt BGL (Certificat)",
+  "fx-lk26-2": "Impôt foncier",
+  "fx-lk26-3": "Assurance Proprietär net Bewunner",
+  "fx-lk26-4": "Gérancehonorairen, Januar bis August",
+  "fx-lg26-1": "Zënse Prêt BCEE (Certificat)",
+  "fx-lg26-2": "Impôt foncier",
+  "fx-lg26-3": "Nei gemoolt tëscht zwee Locatairen",
+  "fx-lg26-4": "Gérancehonorairen, Januar bis August",
+  "fx-fb25-1": "Kollektiv Heizung ersat, Deel SCI",
+  "fx-fb25-2": "Trapenhaus gemoolt",
+  "fx-fb25-3": "Zënse Prêt BCEE (Certificat)",
+  "fx-fb25-4": "Impôt foncier",
+  "fx-fb25-5": "Gérancehonorairen",
+  "fx-fb25-6": "Assurance Gebai, Deel Proprietär",
+  "fx-fb25-7": "Net recuperéierbar Copropriétéits-Chargen",
+  "fx-fm25-1": "Zënse Prêt ING (Certificat)",
+  "fx-fm25-2": "Impôt foncier",
+  "fx-fm25-3": "Gérancehonorairen",
+  "fx-fm25-4": "Assurance Wunneng, Deel Proprietär",
+  "fx-fb26-1": "Heizungsentretien, Kirsch",
+  "fx-fb26-2": "Zënse Prêt BCEE (Certificat)",
+  "fx-fb26-3": "Impôt foncier",
+  "fx-fb26-4": "Gérancehonorairen, Januar bis August",
+  "fx-fb26-5": "Assurance Gebai, Deel Proprietär",
+  "fx-fm26-1": "Zënse Prêt ING (Certificat)",
+  "fx-fm26-2": "Impôt foncier",
+  "fx-fm26-3": "Gérancehonorairen, Januar bis August",
+};
+
+export const FISCAL_YEARS: DemoFiscalYear[] = fr.FISCAL_YEARS.map((year) => ({
+  ...year,
+  statements: year.statements.map((st) => ({ ...st, expenses: st.expenses.map((e) => ({ ...e, label: FISCAL_EXPENSE_LABELS[e.id] ?? e.label })) })),
 }));
 
 // ─── Charges / décompte showcase ────────────────────────────────────────────
