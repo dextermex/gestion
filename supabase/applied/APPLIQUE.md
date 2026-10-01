@@ -309,6 +309,21 @@ non touchée. Le repli est noté en tête du fichier. Côté serveur, l'envoi r�
 (aucune des deux n'est posée en production à ce jour) ; sans elles, chaque e-mail est
 composé et consigné avec le statut « non configuré », et Réglages le dit.
 
+## 0025 · proposée, NON appliquée · la lecture des pièces
+
+`0025_documents_lecture.sql` n'est pas appliquée en production : elle attend une
+approbation explicite. Elle est rejouée sur la base jetable de CI, où l'audit RLS la
+vérifie. Tout est additif : six colonnes facultatives sur `gestion.documents`
+(`document_date`, `amount_cents`, `summary`, `parties`, `reference`, `recognised_at`),
+où l'application rangera ce que la lecture d'une pièce a relevé et que la personne a
+confirmé à l'ajout. Aucune policy ne change, aucune valeur n'est écrite ; le code qui
+remplit ces colonnes attend l'application (le dialogue d'ajout montre déjà les points
+clés relevés, sans les conserver). Aucune table existante supprimée, renommée ni
+réécrite ; rien dans `public` ; `g_can` non touchée. Le repli est noté en tête du
+fichier. Côté serveur, la lecture elle-même demande `ANTHROPIC_API_KEY` dans les
+variables d'environnement Vercel (non posée en production à ce jour) ; sans elle, le
+dialogue d'ajout fonctionne sans proposition.
+
 ## 0024 · 2026-09-28 · crédits immobiliers et projets d'achat
 
 `0024_investment_workspace.sql` (migration `0024_investment_workspace`, version

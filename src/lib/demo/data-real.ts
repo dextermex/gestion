@@ -24,6 +24,7 @@ import type {
 } from "./data";
 import { buildEmptyData, type Org } from "./data-empty";
 import { pageBounds, pageInfo, windowStart, DEFAULT_MONTHS_BACK, DEFAULT_PAGE_SIZE, type PageRequest, type ReadScope } from "./scope";
+import { purgeHorizon, summariseDocuments, type DocumentSummary } from "@/lib/documents/summary";
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
 import type { DemoAuditEntry, DemoDelivery, DemoGenerated, DemoLessor, DemoTemplate } from "./data";
@@ -47,6 +48,8 @@ interface Narrow {
   is(column: string, value: unknown): Narrow;
   in(column: string, values: unknown[]): Narrow;
   gte(column: string, value: unknown): Narrow;
+  lte(column: string, value: unknown): Narrow;
+  ilike(column: string, pattern: string): Narrow;
   or(filters: string): Narrow;
   order(column: string, opts?: { ascending?: boolean }): Narrow;
   range(from: number, to: number): Narrow;
@@ -123,6 +126,16 @@ export async function buildRealDataFrom(
   const shell = Boolean(scope.shell);
   const none = (): Promise<Row[]> => Promise.resolve([]);
   const docPage = scope.documents ?? { page: 1, size: DEFAULT_PAGE_SIZE };
+  // The register's page is narrowed on the server: a shelf, the words of a
+  // search (each anywhere in the name), the purge horizon.
+  const docFilter = scope.documentFilter ?? {};
+  const narrowDocuments = (b: Narrow): Narrow => {
+    let query = b;
+    if (docFilter.classes) query = query.in("class", [...docFilter.classes]);
+    for (const word of docFilter.words ?? []) query = query.ilike("name", `%${word}%`);
+    if (docFilter.purgeSoon) query = query.lte("retention_until", purgeHorizon(today));
+    return query;
+  };
 
   // One filtered read per table. A failed read degrades to an empty
   // collection (logged), never to sample data. Tables carrying
@@ -143,12 +156,22 @@ export async function buildRealDataFrom(
     return (data as unknown as Row[]) ?? [];
   };
   /** One page of a register, newest first, with the count its footer shows. */
-  const page = async (table: string, select: string, order: string, req: PageRequest): Promise<{ rows: Row[]; total: number }> => {
+  const page = async (table: string, select: string, order: string, req: PageRequest, apply?: (b: Narrow) => Narrow): Promise<{ rows: Row[]; total: number }> => {
     const { from: lo, to: hi } = pageBounds(req);
     const base = g.from(table).select(select, { count: "exact" }).eq("org_id", oid) as unknown as Narrow;
-    const { data, error, count } = await base.order(order, { ascending: false }).range(lo, hi);
+    const { data, error, count } = await (apply ? apply(base) : base).order(order, { ascending: false }).range(lo, hi);
     if (error) {
       console.error(`gestion page read failed (${table}):`, error.code, error.message);
+      return { rows: [], total: 0 };
+    }
+    return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
+  };
+  /** The whole register's class, seal and clocks, one light row per piece, and its exact count. */
+  const readDocumentFacts = async (): Promise<{ rows: Row[]; total: number }> => {
+    const base = g.from("documents").select("class,sealed,retention_until,created_at", { count: "exact" }).eq("org_id", oid) as unknown as Narrow;
+    const { data, error, count } = await base.order("created_at", { ascending: false }).range(0, CAP - 1);
+    if (error) {
+      console.error("gestion documents summary read failed:", error.code, error.message);
       return { rows: [], total: 0 };
     }
     return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
@@ -162,7 +185,7 @@ export async function buildRealDataFrom(
   };
 
   // ── A. The portfolio: read whole, it is what a cabinet manages. On a sheet, the one property. ──
-  const [propertyRows, unitRows, contactRows, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, settingsRows, validationRows, documentPage] = await Promise.all([
+  const [propertyRows, unitRows, contactRows, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, settingsRows, validationRows, documentPage, documentFacts] = await Promise.all([
     q("properties", "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url", (b) => (propertyScoped ? b.eq("id", propertyScoped) : b).order("created_at")),
     q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url", (b) => (propertyScoped ? b.eq("property_id", propertyScoped) : b).order("created_at")),
     q("contacts", "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes,user_id"),
@@ -176,7 +199,9 @@ export async function buildRealDataFrom(
     q("conversation_heads", "conversation_id,unread,last_message_id,last_sender_kind,last_sender_contact_id,last_sender_user_id,last_body,last_sent_at,last_read_at,last_ticket_id"),
     q("workspace_settings", "*"),
     q("template_validations", "kind,lang,version,validated_at"),
-    scoped || shell ? Promise.resolve({ rows: [] as Row[], total: 0 }) : page("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,sha256,created_at", "created_at", docPage),
+    scoped || shell ? Promise.resolve({ rows: [] as Row[], total: 0 }) : page("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,sha256,created_at", "created_at", docPage, narrowDocuments),
+    // The register at a glance: four light columns of every piece (capped), with the exact count beside them.
+    scoped || shell ? Promise.resolve({ rows: [] as Row[], total: 0 }) : readDocumentFacts(),
   ]);
   const unitIds = unitRows.map((u) => s(u.id));
 
@@ -801,6 +826,13 @@ export async function buildRealDataFrom(
     kind: kindByDocument.get(s(doc.id)) ?? null,
     sha256: s(doc.sha256) || null,
   }));
+  const DOCUMENT_SUMMARY: DocumentSummary = summariseDocuments(
+    documentFacts.rows.map((doc) => ({ klass: s(doc.class), sealed: b(doc.sealed), retentionUntil: doc.retention_until ? day(doc.retention_until) : null, createdAt: day(doc.created_at) })),
+    today,
+    documentFacts.total,
+  );
+  // The pieces the application produced are known from their own table, whatever the cap.
+  DOCUMENT_SUMMARY.generated = kindByDocument.size;
 
   const INSURANCES: DemoInsurance[] = insuranceRows.map((i) => ({
     id: s(i.id),
@@ -946,6 +978,7 @@ export async function buildRealDataFrom(
     INSURANCES,
     INVITES,
     PAGING: { documents: pageInfo(docPage, scoped ? DOCUMENTS.length : documentPage.total) },
+    DOCUMENT_SUMMARY,
     LESSOR,
     TEMPLATES,
     GENERATED,

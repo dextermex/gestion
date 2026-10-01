@@ -1,39 +1,20 @@
-import { Badge, Card, PageHeader } from "@/components/pro/ui";
-import { LegalNote, Pagination, Panel } from "@/components/gestion/bits";
+import Link from "next/link";
+import { Card, EmptyState, PageHeader } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
+import { CollapsiblePanel, LegalNote, Pagination, Panel } from "@/components/gestion/bits";
 import DocumentUpload from "@/components/gestion/DocumentUpload";
+import DocumentList, { type DocumentRow } from "@/components/gestion/DocumentList";
+import DocumentFilters from "@/components/gestion/DocumentFilters";
 import { getDemo, isSampleData } from "@/lib/demo";
-import { pageRequest } from "@/lib/demo/scope";
+import { pageRequest, type DocumentFilter } from "@/lib/demo/scope";
+import { DOCUMENT_GROUPS, DOCUMENT_GROUP_KEYS, isDocumentGroup, type DocumentGroup } from "@/lib/gestion/documents-rules";
+import { filterDocuments, searchWords } from "@/lib/documents/summary";
+import { recognitionConfigured } from "@/lib/documents/recognition";
+import { shortSha, sizeLabel } from "@/lib/documents/labels";
 import { formatDate } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
-import { INTL_LOCALE, fmt, type Locale } from "@/lib/i18n/config";
+import { fmt, plural } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
-import { shortSha } from "@/lib/documents/labels";
-
-const CLASS_COLORS: Record<string, string> = {
-  lease: "bg-brand-100 text-brand-800",
-  edl: "bg-sky-100 text-sky-800",
-  invoice: "bg-amber-100 text-amber-800",
-  deed: "bg-violet-100 text-violet-800",
-  tax: "bg-emerald-100 text-emerald-800",
-  registered_letter: "bg-accent-50 text-accent-700",
-  id_document: "bg-violet-100 text-violet-800",
-  decompte: "bg-sky-100 text-sky-800",
-  receipt: "bg-amber-100 text-amber-800",
-  insurance: "bg-sky-100 text-sky-800",
-  loan: "bg-violet-100 text-violet-800",
-  subsidy: "bg-emerald-100 text-emerald-800",
-  bank_statement: "bg-sand-100 text-ink-soft",
-  photo: "bg-sand-100 text-ink-soft",
-  other: "bg-sand-100 text-ink-soft",
-};
-
-const RETENTION_COLORS: Record<string, string> = {
-  accounting_10y: "bg-sand-100 text-ink-soft",
-  aml_5y_from_end: "bg-violet-100 text-violet-800",
-  applicant_3m: "bg-red-100 text-red-700",
-  gdpr_minimised: "bg-sand-100 text-ink-soft",
-  permanent: "bg-emerald-100 text-emerald-800",
-};
 
 function classLabels(d: Dict): Record<string, string> {
   return {
@@ -65,24 +46,88 @@ function retentionLabels(d: Dict): Record<string, string> {
   };
 }
 
-function sizeLabel(kb: number, locale: Locale): string {
-  const units = locale === "fr" || locale === "lu" ? (["Ko", "Mo"] as const) : (["KB", "MB"] as const);
-  return kb >= 1024
-    ? `${(kb / 1024).toLocaleString(INTL_LOCALE[locale], { maximumFractionDigits: 1 })} ${units[1]}`
-    : `${kb.toLocaleString(INTL_LOCALE[locale])} ${units[0]}`;
+function groupLabels(d: Dict): Record<DocumentGroup, string> {
+  return {
+    tenancy: d.documents.grpTenancy,
+    money: d.documents.grpMoney,
+    letters: d.documents.grpLetters,
+    statements: d.documents.grpStatements,
+    title: d.documents.grpTitle,
+    tax: d.documents.grpTax,
+    kyc: d.documents.grpKyc,
+    insurance: d.documents.grpInsurance,
+    other: d.documents.grpOther,
+  };
 }
 
-export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ page?: string; taille?: string }> }) {
+type Params = { page?: string; taille?: string; groupe?: string; q?: string; vue?: string };
+
+/**
+ * The register. What it holds leads (how many pieces, how many sealed,
+ * the shelves), the clocks about to run out sit beside it, then the
+ * pieces themselves behind a shelf and a search, one page at a time. A
+ * row opens its sheet; the name opens the file. A real account's page is
+ * narrowed on the server; a sample cabinet, read whole, is narrowed here.
+ */
+export default async function DocumentsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  // The register is read a page at a time: the address names the page.
-  const { DOCUMENTS, ORG, PAGING, PROPERTIES } = await getDemo({ documents: pageRequest(params) });
+  const group: DocumentGroup | null = isDocumentGroup(params.groupe) ? params.groupe : null;
+  const query = (params.q ?? "").trim().slice(0, 120);
+  const words = searchWords(query);
+  const purge = params.vue === "purge";
+  const filter: DocumentFilter = { classes: group ? DOCUMENT_GROUPS[group] : undefined, words, purgeSoon: purge };
+  const data = await getDemo({ documents: pageRequest(params), documentFilter: filter });
   const sample = await isSampleData();
+  const { ORG, PROPERTIES, TODAY, DOCUMENT_SUMMARY: summary } = data;
+  const documents = sample ? filterDocuments(data.DOCUMENTS, filter, TODAY) : data.DOCUMENTS;
+  const paging = sample ? { page: 1, pages: 1, total: documents.length } : data.PAGING.documents;
   const cls = classLabels(d);
   const ret = retentionLabels(d);
+  const grp = groupLabels(d);
   const kindLabels = d.documents.kindLabels as Record<string, string>;
-  const paging = PAGING.documents;
-  const hrefFor = (page: number) => `/app/documents?page=${page}${params.taille ? `&taille=${encodeURIComponent(params.taille)}` : ""}`;
+  const filtering = group !== null || words.length > 0 || purge;
+
+  const hrefFor = (page: number) => {
+    const p = new URLSearchParams();
+    p.set("page", String(page));
+    if (params.taille) p.set("taille", params.taille);
+    if (group) p.set("groupe", group);
+    if (query) p.set("q", query);
+    if (purge) p.set("vue", "purge");
+    return `/app/documents?${p.toString()}`;
+  };
+
+  const rows: DocumentRow[] = documents.map((doc) => ({
+    id: doc.id,
+    name: doc.name,
+    sealed: doc.sealed,
+    hasFile: doc.hasFile,
+    classLabel: cls[doc.klass] ?? cls.other,
+    kindLabel: doc.kind ? (kindLabels[doc.kind] ?? doc.kind) : null,
+    relatedLabel: doc.relatedLabel,
+    addedLabel: formatDate(doc.createdAt, locale),
+    sizeLabel: sizeLabel(doc.sizeKb, locale),
+    retentionLabel: ret[doc.retentionClass] ?? doc.retentionClass,
+    retentionUntilLabel: doc.retentionUntil ? fmt(d.documents.until, { date: formatDate(doc.retentionUntil, locale) }) : null,
+    sha256: doc.sha256 ?? null,
+    shortSha: doc.sha256 ? shortSha(doc.sha256) : null,
+    fileHref: doc.hasFile ? `/api/documents/${encodeURIComponent(doc.id)}/fichier` : null,
+  }));
+
+  const shelves = DOCUMENT_GROUP_KEYS.filter((g) => summary.byGroup[g] > 0);
+  const registerSub = [
+    plural(locale, summary.sealed, d.documents.sealedOne, d.documents.sealedMany),
+    summary.unfiled > 0 ? fmt(d.documents.unfiled, { n: summary.unfiled }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const listTitle = purge ? d.documents.purgeView : group ? grp[group] : d.documents.listTitle;
+  const resetLink = (
+    <Link href="/app/documents" className="inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline">
+      {d.common.resetFilters}
+    </Link>
+  );
 
   return (
     <div>
@@ -96,103 +141,142 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
             writable={!sample}
             sampleNote={sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null}
             labels={{ ...d.documents, close: d.common.close }}
+            recognition={recognitionConfigured()}
+            locale={locale}
           />
         }
       />
 
-      <Card className="overflow-hidden">
-        <div className="table-scroll">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
-                <th className="px-4 py-2.5 font-semibold">{d.documents.colDoc}</th>
-                <th className="px-3 py-2.5 font-semibold">{d.documents.colClass}</th>
-                <th className="px-3 py-2.5 font-semibold">{d.documents.colRetention}</th>
-                <th className="px-3 py-2.5 text-right font-semibold">{d.documents.colSize}</th>
-                <th className="px-4 py-2.5 text-right font-semibold">{d.documents.colAdded}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DOCUMENTS.map((doc) => (
-                <tr key={doc.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50">
-                  <td className="max-w-md px-4 py-3">
-                    <p className="flex items-center gap-2 truncate font-semibold text-ink">
-                      {doc.sealed && (
-                        <svg
-                          className="h-3.5 w-3.5 shrink-0 text-brand-600"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          role="img"
-                          aria-label={d.documents.sealedAria}
-                        >
-                          <rect x="5" y="10" width="14" height="10" rx="2" />
-                          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                        </svg>
-                      )}
-                      {doc.hasFile ? (
-                        <a href={`/api/documents/${encodeURIComponent(doc.id)}/fichier`} className="truncate hover:text-brand-700 hover:underline" data-document-file={doc.id}>
-                          {doc.name}
-                        </a>
-                      ) : (
-                        <span className="truncate">{doc.name}</span>
-                      )}
-                    </p>
-                    <p className="truncate text-xs text-ink-soft">
-                      {doc.kind ? `${kindLabels[doc.kind] ?? doc.kind} · ` : ""}
-                      {doc.relatedLabel}
-                      {!sample && !doc.hasFile ? (doc.relatedLabel ? " · " : "") + d.documents.noFile : ""}
-                    </p>
-                    {doc.sealed && doc.sha256 && (
-                      <p className="truncate text-[11px] tabular-nums text-ink-soft" title={doc.sha256} data-document-sha={doc.id}>
-                        {d.documents.fingerprint} {shortSha(doc.sha256)}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <Badge className={CLASS_COLORS[doc.klass] ?? CLASS_COLORS.other}>
-                      {cls[doc.klass] ?? cls.other}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-3">
-                    <Badge className={RETENTION_COLORS[doc.retentionClass]}>{ret[doc.retentionClass]}</Badge>
-                    {doc.retentionUntil && (
-                      <p className="mt-0.5 text-[11px] text-ink-soft">
-                        {fmt(d.documents.until, { date: formatDate(doc.retentionUntil, locale) })}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{sizeLabel(doc.sizeKb, locale)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-soft">{formatDate(doc.createdAt, locale)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {DOCUMENTS.length === 0 && <p className="px-4 py-6 text-sm text-ink-soft">{d.common.none}</p>}
-        <div className="px-4 pb-4">
-          <Pagination
-            page={paging.page}
-            pages={paging.pages}
-            hrefFor={hrefFor}
-            labels={{ prev: d.common.pagePrev, next: d.common.pageNext, pageOf: fmt(d.common.pageOf, { page: paging.page, pages: paging.pages }) }}
-          />
-        </div>
-      </Card>
+      {summary.total === 0 && documents.length === 0 && !filtering ? (
+        <EmptyState icon="documents" title={d.documents.emptyTitle} body={d.documents.emptyBody} />
+      ) : (
+        <>
+          <section className="crm-doc-overview" aria-label={d.documents.registerTitle}>
+            {/* The register leads: how much it holds, how much of it is sealed, and its shelves. */}
+            <Card className="crm-metric crm-doc-hero">
+              <div className="crm-metric-top">
+                <span>{d.documents.registerTitle}</span>
+                <span className="crm-symbol">
+                  <Icon name="documents" size={22} />
+                </span>
+              </div>
+              <p className="crm-metric-value">{summary.total}</p>
+              <p className="crm-metric-sub">{registerSub}</p>
+              {shelves.length > 0 && (
+                <ul className="crm-doc-groups">
+                  {shelves.map((g) => (
+                    <li key={g}>
+                      <Link href={`/app/documents?groupe=${g}`} aria-current={group === g && !purge ? "page" : undefined}>
+                        <span>{grp[g]}</span>
+                        <span>{summary.byGroup[g]}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
 
-      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Panel title={d.documents.clocksTitle}>
-          <p className="text-sm leading-relaxed text-ink-soft">{d.documents.clocksBody}</p>
-        </Panel>
-        <Panel title={d.documents.residencyTitle}>
-          <p className="text-sm leading-relaxed text-ink-soft">{d.documents.residencyBody}</p>
-        </Panel>
-        <Panel title={d.documents.holdTitle}>
-          <p className="text-sm leading-relaxed text-ink-soft">{d.documents.holdBody}</p>
-        </Panel>
-      </div>
-      <LegalNote>{d.documents.legal}</LegalNote>
+            <Card className={"crm-metric" + (summary.purgeDue > 0 ? " crm-metric-attention" : "")}>
+              <div className="crm-metric-top">
+                <span>{d.documents.clocksTitle}</span>
+                <span className="crm-symbol">
+                  <Icon name="clock" size={22} />
+                </span>
+              </div>
+              <p className="crm-metric-value">{summary.purgeDue}</p>
+              <p className="crm-metric-sub">{summary.nextPurge ? fmt(d.documents.purgeNext, { date: formatDate(summary.nextPurge, locale) }) : d.documents.purgeNone}</p>
+              {summary.purgeDue > 0 && (
+                <Link href="/app/documents?vue=purge" className="crm-metric-action">
+                  {d.documents.purgeAction}
+                  <Icon name="chevron-right" size={15} />
+                </Link>
+              )}
+            </Card>
+
+            <Card className="crm-metric">
+              <div className="crm-metric-top">
+                <span>{d.documents.producedTitle}</span>
+                <span className="crm-symbol">
+                  <Icon name="contract" size={22} />
+                </span>
+              </div>
+              <p className="crm-metric-value">{summary.generated}</p>
+              <p className="crm-metric-sub">{d.documents.producedSub}</p>
+            </Card>
+          </section>
+
+          <Panel title={listTitle}>
+            <DocumentFilters
+              group={group ?? ""}
+              q={query}
+              purge={purge}
+              labels={{
+                search: d.documents.search,
+                group: d.documents.filterGroup,
+                all: d.documents.grpAll,
+                reset: d.common.resetFilters,
+                groups: DOCUMENT_GROUP_KEYS.map((g) => ({ value: g, label: grp[g] })),
+              }}
+            />
+            {rows.length === 0 ? (
+              <EmptyState title={d.documents.filteredTitle} body={d.documents.filteredBody} action={resetLink} />
+            ) : (
+              <>
+                <DocumentList
+                  rows={rows}
+                  labels={{
+                    colDoc: d.documents.colDoc,
+                    colClass: d.documents.colClass,
+                    colAdded: d.documents.colAdded,
+                    colSize: d.documents.colSize,
+                    details: d.documents.details,
+                    close: d.common.close,
+                    openFile: d.documents.openFile,
+                    klass: d.documents.klass,
+                    related: d.documents.related,
+                    relatedNone: d.documents.relatedNone,
+                    added: d.documents.sheetAdded,
+                    size: d.documents.colSize,
+                    retention: d.documents.colRetention,
+                    kind: d.documents.sheetKind,
+                    fingerprint: d.documents.fingerprint,
+                    sealed: d.documents.sealedAria,
+                    sealedNote: d.documents.sealedNote,
+                    noFile: sample ? null : d.documents.noFile,
+                  }}
+                />
+                <div className="crm-doc-foot">
+                  <p className="crm-bank-count">{fmt(d.documents.countShown, { shown: rows.length, total: paging.total })}</p>
+                  <Pagination
+                    page={paging.page}
+                    pages={paging.pages}
+                    hrefFor={hrefFor}
+                    labels={{ prev: d.common.pagePrev, next: d.common.pageNext, pageOf: fmt(d.common.pageOf, { page: paging.page, pages: paging.pages }) }}
+                  />
+                </div>
+              </>
+            )}
+          </Panel>
+        </>
+      )}
+
+      <CollapsiblePanel title={d.documents.refTitle} className="mt-5">
+        <div className="crm-doc-reference">
+          <div>
+            <h3>{d.documents.clocksTitle}</h3>
+            <p>{d.documents.clocksBody}</p>
+          </div>
+          <div>
+            <h3>{d.documents.residencyTitle}</h3>
+            <p>{d.documents.residencyBody}</p>
+          </div>
+          <div>
+            <h3>{d.documents.holdTitle}</h3>
+            <p>{d.documents.holdBody}</p>
+          </div>
+        </div>
+        <LegalNote>{d.documents.legal}</LegalNote>
+      </CollapsiblePanel>
     </div>
   );
 }

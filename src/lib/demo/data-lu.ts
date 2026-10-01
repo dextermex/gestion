@@ -424,6 +424,7 @@ export const BILLS: DemoBill[] = overlay(fr.BILLS, {
 });
 
 export const PAGING = fr.PAGING;
+export const DOCUMENT_SUMMARY = fr.DOCUMENT_SUMMARY;
 
 // The paper trail: the Majerus cabinet as its documents print it; the same templates, the same produced pieces.
 export const LESSOR: DemoLessor = {

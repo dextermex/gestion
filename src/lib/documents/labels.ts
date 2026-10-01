@@ -1,6 +1,6 @@
 import type { ExistingDocument, GenerateLabels } from "@/components/gestion/GenerateDocument";
 import type { DemoGenerated } from "@/lib/demo/data";
-import { fmt, type Locale } from "@/lib/i18n/config";
+import { INTL_LOCALE, fmt, type Locale } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { formatDate } from "@/lib/types";
 
@@ -43,4 +43,12 @@ export function existingOf(g: DemoGenerated | null, d: Dict, locale: Locale): Ex
 /** The first characters of a fingerprint: enough to compare by eye, never the proof itself. */
 export function shortSha(sha256: string | null | undefined): string {
   return sha256 ? sha256.slice(0, 12) : "";
+}
+
+/** A file's weight as the register prints it: kilobytes under a megabyte, one decimal above. */
+export function sizeLabel(kb: number, locale: Locale): string {
+  const units = locale === "fr" || locale === "lu" ? (["Ko", "Mo"] as const) : (["KB", "MB"] as const);
+  return kb >= 1024
+    ? `${(kb / 1024).toLocaleString(INTL_LOCALE[locale], { maximumFractionDigits: 1 })} ${units[1]}`
+    : `${kb.toLocaleString(INTL_LOCALE[locale])} ${units[0]}`;
 }

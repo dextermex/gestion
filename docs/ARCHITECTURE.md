@@ -411,6 +411,21 @@ pieces (`ownedDocument` checks that the piece was uploaded for the very line or 
 order before the row points at it); a sample cabinet's documents are references and say
 so on a real account.
 
+The dialog that adds a piece reads it first when the deployment carries
+`ANTHROPIC_API_KEY`: `POST /api/documents/analyser` sends the file once to the Claude API
+with the records it could belong to (`src/lib/documents/recognise.ts`, a structured
+output on the schema of `src/lib/documents/recognition.ts`) and answers a proposal:
+class, clean title, summary, date, amount, parties, reference, related record,
+confidence. The dialog fills the fields the person has not typed and shows the facts
+beside them; nothing is stored until they confirm, and `POST /api/documents` validates
+the class and the record exactly as before. The answer is bounded before a screen sees it
+(`validateRecognition`: an unknown class files as other, a record outside the candidates
+binds to nothing, a date that is not a day and an amount that is not a sane integer are
+dropped). A spreadsheet, an AVIF image or a file past 20 MB is not read; without the key
+the dialog works as it always did, and a signed-out visitor of a sample cabinet gets no
+reading (the route answers 401, the dialog stays quiet). The facts are shown, not kept:
+`0025_documents_lecture.sql` (proposed, not applied) adds the columns for them.
+
 A bill is a `gestion.bills` row (0020): direction, supplier contact, lot and property,
 fiscal bucket as category, subject, number, dates, `amount_cents` the total and
 `vat_cents` derived once from the rate (`src/lib/gestion/bills.ts`, `splitVat`),
@@ -429,8 +444,11 @@ still in the queue. A tenancy's sheet (`{ leaseId }`) reads its whole past; a pr
 (`{ propertyId }`) its lots, their tenancies, requests, pieces and books; Messages
 (`{ conversationId }`) one conversation in full (the one named, else the most recent), the
 others through the `conversation_heads` view (last message, unread count) and read in
-full when opened; Documents (`{ documents: { page, size } }`) one page of the register with
-its count. Inventories count their items and photos through `edl_session_counts`. Both
+full when opened; Documents (`{ documents: { page, size }, documentFilter }`) one page of
+the register narrowed by shelf (`DOCUMENT_GROUPS`), by the words of a search and by the
+purge horizon, with its count, plus one light read of the whole register (class, seal,
+clocks and date of every piece, capped at 2000 rows beside the exact count) from which
+`summariseDocuments` draws the screen's lead figures. Inventories count their items and photos through `edl_session_counts`. Both
 views run as the caller (`security_invoker`). On a production project where 0020 is not
 applied yet the previews are empty and there are no bills, the bill routes answer 503
 `schema_outdated`, and nothing else changes.

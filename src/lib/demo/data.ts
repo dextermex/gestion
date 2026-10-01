@@ -15,6 +15,7 @@ import { periodFromSyndic, type DemoChargePeriod } from "./charges-seed";
 import type { BillCategory } from "@/lib/gestion/bills";
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
+import { summariseDocuments, type DocumentSummary } from "@/lib/documents/summary";
 import type { PageInfo } from "./scope";
 import type { InviteRow } from "@/lib/portal/types";
 import type {
@@ -1247,3 +1248,6 @@ export const ARREARS_ACTIONS: DemoArrearsAction[] = [
 export const PAGING: { documents: PageInfo } = {
   documents: { page: 1, size: 50, total: DOCUMENTS.length, pages: 1 },
 };
+
+/** What the register says about itself at a glance (the Documents screen's lead figures). */
+export const DOCUMENT_SUMMARY: DocumentSummary = summariseDocuments(DOCUMENTS, TODAY);

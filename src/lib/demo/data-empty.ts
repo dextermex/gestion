@@ -15,6 +15,7 @@ import type { DemoData } from "./index";
 import * as reference from "./data";
 import { DOCUMENT_KINDS } from "@/lib/documents/kinds";
 import { availableLanguages, templateVersion } from "@/lib/documents/wording";
+import { summariseDocuments } from "@/lib/documents/summary";
 
 export type Org = typeof reference.ORG;
 
@@ -53,8 +54,9 @@ export function buildEmptyData(org: Org): DemoData {
   const UNITS: DemoData["UNITS"] = [];
   const LEASES: DemoData["LEASES"] = [];
 
+  const today = isoToday();
   return {
-    TODAY: isoToday(),
+    TODAY: today,
     ORG: org,
     CONTACTS,
     PROPERTIES,
@@ -95,6 +97,7 @@ export function buildEmptyData(org: Org): DemoData {
     DELIVERIES: [],
     INVITES: [],
     PAGING: { documents: { page: 1, size: 50, total: 0, pages: 1 } },
+    DOCUMENT_SUMMARY: summariseDocuments([], today),
 
     // The dataset's lookup helpers, closed over the empty collections above.
     // A page can only obtain an id from a collection, so with nothing to

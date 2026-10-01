@@ -20,6 +20,7 @@
     "e2e:morada:sync": "node e2e/db/sync-morada-schema.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
     "@fontsource-variable/inter": "^5.2.8",
     "@react-pdf/renderer": "^4.9.0",

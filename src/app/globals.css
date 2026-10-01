@@ -1037,12 +1037,12 @@ button:not(:disabled),
 .crm-segmented button[aria-pressed="true"] { background: #fff; color: var(--color-ink); box-shadow: 0 1px 2px rgb(23 43 52 / .1), 0 0 0 1px rgb(23 43 52 / .04); }
 .crm-segmented button span { font-weight: 500; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
 .crm-segmented button[aria-pressed="true"] span { color: var(--color-brand-700); }
-.crm-bank-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1rem; }
-.crm-bank-search { position: relative; flex: 1 1 14rem; min-width: 0; }
-.crm-bank-search > svg { position: absolute; left: 1.1rem; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--color-ink-soft); }
+.crm-bank-toolbar, .crm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.crm-bank-search, .crm-toolbar-search { position: relative; flex: 1 1 14rem; min-width: 0; }
+.crm-bank-search > svg, .crm-toolbar-search > svg { position: absolute; left: 1.1rem; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--color-ink-soft); }
 /* Room for the magnifier, whatever padding the field system gives the control. */
-.crm-shell .crm-bank-search .ui-field { padding-left: 2.75rem; }
-.crm-shell .crm-bank-period { width: auto; border-radius: 999px; padding-right: 2.25rem; }
+.crm-shell .crm-bank-search .ui-field, .crm-shell .crm-toolbar-search .ui-field { padding-left: 2.75rem; }
+.crm-shell .crm-bank-period, .crm-shell .crm-toolbar-select { width: auto; border-radius: 999px; padding-right: 2.25rem; }
 .crm-shell .crm-bank-table { border-radius: 1rem; }
 .crm-bank-count { margin-top: .75rem; text-align: right; font-size: .75rem; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
 .crm-review { list-style: none; margin: 0; padding: 0; }
@@ -1076,6 +1076,79 @@ button:not(:disabled),
   .crm-review-row .crm-symbol { width: 2.5rem; height: 2.5rem; }
   .crm-review-decision { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   .crm-review-actions > * { flex: 1; }
-  .crm-bank-toolbar { gap: .5rem; }
-  .crm-bank-search { flex-basis: 100%; }
+  .crm-bank-toolbar, .crm-toolbar { gap: .5rem; }
+  .crm-bank-search, .crm-toolbar-search { flex-basis: 100%; }
+}
+
+/* Documents, in the same system: the register leads (what it holds, how
+   much of it is sealed, its shelves), the clocks about to run out beside
+   it, then the pieces behind a shelf and a search. A row opens its sheet;
+   the dialog reads a dropped file before it is named. */
+.crm-doc-overview { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
+.crm-doc-hero { grid-row: 1 / span 2; }
+.crm-doc-groups { list-style: none; margin: 1.5rem 0 0; padding: 0; border-top: 1px solid var(--color-sand-100); }
+.crm-doc-groups a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 2.75rem; padding: .25rem 0; border-bottom: 1px solid var(--color-sand-100); font-size: .9375rem; font-weight: 550; color: var(--color-ink); }
+.crm-doc-groups li:last-child a { border-bottom: 0; }
+.crm-doc-groups a span:last-child { font-weight: 500; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
+.crm-doc-groups a:hover span:first-child, .crm-doc-groups a[aria-current] span { color: var(--color-brand-700); }
+.crm-shell .crm-doc-table { border-radius: 1rem; }
+.crm-doc-row { cursor: pointer; transition: background 120ms; }
+.crm-doc-row:hover { background: rgb(246 249 252 / .8); }
+.crm-doc-cell { display: flex; align-items: flex-start; gap: .875rem; min-width: 0; }
+.crm-doc-icon { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border-radius: .75rem; background: #edf4f9; color: #35617b; }
+.crm-doc-icon.is-sealed { background: var(--color-brand-50); color: var(--color-brand-700); }
+.crm-doc-name { font-size: .9375rem; font-weight: 550; line-height: 1.45; overflow-wrap: anywhere; }
+.crm-doc-name a:hover { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; }
+.crm-doc-sub { margin-top: .2rem; font-size: .8125rem; line-height: 1.5; color: var(--color-ink-soft); overflow-wrap: anywhere; }
+.crm-doc-more { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; color: var(--color-ink-soft); transition: background 120ms, color 120ms; }
+.crm-doc-more:hover { background: var(--color-sand-100); color: var(--color-ink); }
+.crm-doc-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .75rem; }
+.crm-doc-foot .crm-bank-count { margin-top: 0; }
+.crm-doc-foot [data-pagination] { margin-left: auto; }
+.crm-doc-sheet-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--color-sand-100); }
+.crm-doc-sheet-class { font-size: .9375rem; font-weight: 550; }
+.crm-doc-sheet-sealed { margin-top: .15rem; font-size: .8125rem; font-weight: 550; color: var(--color-brand-700); }
+.crm-doc-sheet dl { display: grid; grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr); gap: .75rem 1rem; margin: 0; font-size: .9375rem; line-height: 1.5; }
+.crm-doc-sheet dt { color: var(--color-ink-soft); }
+.crm-doc-sheet dd { margin: 0; font-weight: 550; overflow-wrap: anywhere; }
+.crm-doc-sheet-sha { font-size: .8125rem; font-variant-numeric: tabular-nums; word-break: break-all; }
+.crm-doc-sheet-note { margin-top: 1.25rem; font-size: .875rem; line-height: 1.6; color: var(--color-ink-soft); }
+.crm-doc-sheet-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; }
+.crm-doc-reference { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin-bottom: .5rem; }
+.crm-doc-reference h3 { font-size: .9375rem; font-weight: 600; margin-bottom: .4rem; }
+.crm-doc-reference p { font-size: .875rem; line-height: 1.6; color: var(--color-ink-soft); }
+/* The dialog: a drop zone, the file once chosen, the reader's status, the three fields, the facts it found. */
+.crm-drop-zone { display: flex; width: 100%; flex-direction: column; align-items: center; gap: .5rem; padding: 1.75rem 1rem; border: 1.5px dashed #7b909e; border-radius: 1.25rem; background: #f6f9fc; text-align: center; transition: border-color 150ms, background 150ms; }
+.crm-drop-zone:hover, .crm-drop-zone.is-over { border-color: var(--color-brand-600); background: var(--color-brand-50); }
+.crm-drop-zone:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
+.crm-drop-zone .crm-symbol { margin-bottom: .25rem; }
+.crm-drop-title { font-size: .9375rem; font-weight: 550; }
+.crm-drop-hint { font-size: .8125rem; color: var(--color-ink-soft); }
+.crm-drop-button { display: inline-flex; align-items: center; min-height: 2.5rem; margin-top: .5rem; padding: 0 1rem; border: 1px solid var(--color-sand-300); border-radius: 999px; background: #fff; font-size: .875rem; font-weight: 600; color: var(--color-ink); }
+.crm-drop-file { display: flex; align-items: center; gap: .875rem; padding: .875rem 1rem; border: 1px solid var(--color-sand-200); border-radius: 1.25rem; background: #fff; }
+.crm-drop-name { font-size: .9375rem; font-weight: 550; overflow-wrap: anywhere; }
+.crm-drop-meta { margin-top: .1rem; font-size: .8125rem; color: var(--color-ink-soft); }
+.crm-drop-remove { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; flex-shrink: 0; border-radius: .75rem; color: var(--color-ink-soft); }
+.crm-drop-remove:hover { background: var(--color-sand-100); color: var(--color-ink); }
+.crm-reading { display: flex; align-items: flex-start; gap: .6rem; margin-top: .875rem; font-size: .875rem; line-height: 1.5; color: var(--color-ink-soft); }
+.crm-reading svg { flex-shrink: 0; margin-top: .15rem; }
+.crm-reading.is-done { color: var(--color-emerald-800); font-weight: 550; }
+.crm-doc-fields { display: grid; gap: 1.25rem; margin-top: 1.5rem; }
+.crm-doc-facts { margin-top: 1.25rem; padding: 1rem 1.25rem; border: 1px solid var(--color-sand-100); border-radius: 1.25rem; background: #f6f9fc; }
+.crm-doc-facts-title { margin-bottom: .75rem; font-size: .75rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--color-ink-soft); }
+.crm-doc-facts dl { display: grid; grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr); gap: .5rem 1rem; margin: 0; font-size: .875rem; line-height: 1.5; }
+.crm-doc-facts dt { color: var(--color-ink-soft); }
+.crm-doc-facts dd { margin: 0; font-weight: 550; overflow-wrap: anywhere; }
+@media (width < 64rem) {
+  .crm-doc-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .crm-doc-hero { grid-row: auto; grid-column: 1 / -1; }
+  .crm-doc-reference { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+}
+@media (width < 40rem) {
+  .crm-doc-overview { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+  .crm-doc-sheet dl, .crm-doc-facts dl { grid-template-columns: minmax(0, 1fr); gap: .15rem 0; }
+  .crm-doc-sheet dt, .crm-doc-facts dt { margin-top: .6rem; font-size: .8125rem; }
+  .crm-doc-sheet dt:first-child, .crm-doc-facts dt:first-child { margin-top: 0; }
+  .crm-doc-cell { gap: .75rem; }
+  .crm-doc-foot [data-pagination] { margin-left: 0; width: 100%; }
 }

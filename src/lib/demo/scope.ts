@@ -31,8 +31,20 @@ export interface ReadScope {
   /** How far back the history tables reach (rent periods, bank operations, tickets, readings). */
   monthsBack?: number;
   documents?: PageRequest;
+  /** What the register's page is narrowed to; every piece when absent. */
+  documentFilter?: DocumentFilter;
   /** The journal's last entries (the settings screen only). */
   audit?: boolean;
+}
+
+/** How the register is narrowed: a shelf, the words of a search, the purge horizon. */
+export interface DocumentFilter {
+  /** The classes wanted; every class when absent. */
+  classes?: readonly string[];
+  /** Words of the name, each matched anywhere, case-insensitively. */
+  words?: readonly string[];
+  /** Only the pieces whose retention ends within the horizon. */
+  purgeSoon?: boolean;
 }
 
 export const DEFAULT_MONTHS_BACK = 24;

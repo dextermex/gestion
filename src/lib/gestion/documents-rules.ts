@@ -50,3 +50,37 @@ export function documentName(raw: string, fallback: string): string {
   const name = raw.trim().replace(/[\u0000-\u001f]/g, "").slice(0, 160);
   return name || fallback;
 }
+
+/**
+ * The register's shelves: the classes grouped the way a manager looks for a
+ * piece. A filter names a shelf; the summary counts by shelf.
+ */
+export const DOCUMENT_GROUPS = {
+  tenancy: ["lease", "edl"],
+  money: ["invoice", "receipt"],
+  letters: ["registered_letter"],
+  statements: ["decompte", "bank_statement"],
+  title: ["deed", "loan", "subsidy"],
+  tax: ["tax"],
+  kyc: ["id_document"],
+  insurance: ["insurance"],
+  other: ["photo", "other"],
+} as const satisfies Record<string, readonly DocumentClass[]>;
+export type DocumentGroup = keyof typeof DOCUMENT_GROUPS;
+export const DOCUMENT_GROUP_KEYS = Object.keys(DOCUMENT_GROUPS) as DocumentGroup[];
+
+export function isDocumentGroup(v: unknown): v is DocumentGroup {
+  return typeof v === "string" && v in DOCUMENT_GROUPS;
+}
+
+/** The shelf a class sits on; an unknown class sits with the other pieces. */
+export function groupOf(klass: string): DocumentGroup {
+  for (const group of DOCUMENT_GROUP_KEYS) {
+    if ((DOCUMENT_GROUPS[group] as readonly string[]).includes(klass)) return group;
+  }
+  return "other";
+}
+
+/** The types the reader can look at: PDF and the raster images the model takes (no AVIF, no spreadsheet). */
+export const RECOGNISABLE_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+export const MAX_RECOGNITION_BYTES = 20 * 1024 * 1024;
