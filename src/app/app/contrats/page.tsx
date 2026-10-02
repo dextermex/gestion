@@ -3,11 +3,15 @@ import { Card, EmptyState, PageHeader } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { CollapsiblePanel, LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
+import SignatureCancel from "@/components/gestion/SignatureCancel";
+import SignatureSend, { type SendSigner } from "@/components/gestion/SignatureSend";
+import SignatureSync from "@/components/gestion/SignatureSync";
 import { getDemo, isSampleData } from "@/lib/demo";
-import type { DemoLease } from "@/lib/demo/data";
+import type { DemoContact, DemoLease, DemoSignatureEnvelope } from "@/lib/demo/data";
 import { DOCUMENT_KINDS } from "@/lib/documents/kinds";
 import { availableLanguages } from "@/lib/documents/wording";
 import { signatureProvider, signatureProviderLabel } from "@/lib/signature/provider";
+import { isLive, progressOf, signerLocale, splitName } from "@/lib/signature/envelope";
 import { euros, formatDate, leaseStatusMeta, leaseTypeMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { LOCALE_LABELS, fmt, plural } from "@/lib/i18n/config";
@@ -29,19 +33,58 @@ const STATUS_ORDER: Record<DemoLease["status"], number> = { draft: 0, notice: 1,
  */
 export default async function ContratsPage() {
   const { locale, d } = await getI18n();
-  const { LEASES, TEMPLATES, TODAY, generatedFor, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { CONTACTS, LEASES, LESSOR, TEMPLATES, TODAY, envelopeFor, generatedFor, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const signature = signatureProvider();
+  const canSend = !sample && signature.configured;
+  const contactIndex = new Map(CONTACTS.map((c: DemoContact) => [c.id, c]));
   const statusMeta = leaseStatusMeta(d);
   const typeMeta = leaseTypeMeta(d);
   const kindLabels = d.documents.kindLabels as Record<string, string>;
 
   const contractOf = (l: DemoLease) => generatedFor("lease_contract", l.id);
+  const sendingOf = (l: DemoLease): DemoSignatureEnvelope | null => envelopeFor(l.id);
+  const signedHere = (l: DemoLease) => sendingOf(l)?.status === "done";
   const drafts = LEASES.filter((l) => l.status === "draft");
   const running = LEASES.filter((l) => l.status === "active" || l.status === "notice");
   const produced = LEASES.filter((l) => contractOf(l) !== null);
-  const toSign = drafts.filter((l) => contractOf(l) !== null);
-  const signed = produced.filter((l) => l.status !== "draft");
+  const toSign = drafts.filter((l) => contractOf(l) !== null && !signedHere(l));
+  const signed = LEASES.filter((l) => signedHere(l) || (contractOf(l) !== null && l.status !== "draft"));
+  const ongoing = LEASES.map(sendingOf).filter((e): e is DemoSignatureEnvelope => e !== null && e.status === "ongoing");
+
+  // Who signs a dossier's contract, as the send dialog opens with them: the tenants, then whoever signs for the lessor.
+  const signersOf = (l: DemoLease): SendSigner[] =>
+    l.tenantContactIds.map((id) => {
+      const c = contactIndex.get(id);
+      const person = c && c.kind === "natural" ? splitName(c.name) : { firstName: "", lastName: "" };
+      return { contactId: id, ...person, email: c?.email ?? "", phone: c?.phone ?? "", locale: signerLocale(c?.language) };
+    });
+  const lessorSigner: SendSigner = { contactId: null, ...splitName(LESSOR.signatoryName || LESSOR.legalName), email: LESSOR.email, phone: "", locale: signerLocale(LESSOR.documentLang) };
+
+  // Where a sending stands, in one line; who has signed, under it.
+  const sendingState = (e: DemoSignatureEnvelope): string => {
+    const p = progressOf(e.signers);
+    switch (e.status) {
+      case "done":
+        return fmt(d.contrats.sigDone, { date: formatDate((e.completedAt ?? e.sentAt ?? TODAY).slice(0, 10), locale) });
+      case "declined":
+        return d.contrats.sigDeclined;
+      case "expired":
+        return d.contrats.sigExpired;
+      case "canceled":
+        return d.contrats.sigCanceled;
+      case "failed":
+        return d.contrats.sigFailed;
+      default:
+        return fmt(d.contrats.sigOngoing, { signed: p.signed, total: p.total });
+    }
+  };
+  const signerLine = (s: DemoSignatureEnvelope["signers"][number]): string =>
+    s.status === "signed" && s.signedAt
+      ? fmt(d.contrats.sigSignerSigned, { name: s.name, date: formatDate(s.signedAt.slice(0, 10), locale) })
+      : s.status === "declined"
+        ? fmt(d.contrats.sigSignerDeclined, { name: s.name })
+        : fmt(d.contrats.sigSignerWaiting, { name: s.name });
   const missing = running.filter((l) => contractOf(l) === null);
   const rows = [...LEASES].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (a.startDate < b.startDate ? 1 : -1));
 
@@ -99,7 +142,11 @@ export default async function ContratsPage() {
   );
   const issueVars = { months: badDraftMonths, max: getParamValue("residential.deposit_max_months", TODAY), date: d.common.none };
 
-  const signatureNote = sample ? d.contrats.signatureDemo : signature.provider ? fmt(d.contrats.signatureOn, { provider: signatureProviderLabel(signature.provider) }) : d.contrats.signatureOff;
+  const signatureNote = sample
+    ? d.contrats.signatureDemo
+    : signature.provider
+      ? fmt(signature.env === "sandbox" ? d.contrats.signatureSandbox : d.contrats.signatureOn, { provider: signatureProviderLabel(signature.provider) })
+      : d.contrats.signatureOff;
   const signatureOn = sample || signature.configured;
   const heroSub = [plural(locale, drafts.length, d.contrats.draftsOne, d.contrats.draftsMany), plural(locale, produced.length, d.contrats.producedOne, d.contrats.producedMany)].join(" · ");
   const tplState = (state: "validated" | "outdated" | "pending", validatedOn: string | null) =>
@@ -108,6 +155,7 @@ export default async function ContratsPage() {
   return (
     <div>
       <PageHeader title={d.contrats.title} subtitle={d.contrats.subtitle} />
+      {canSend && ongoing.length > 0 && <SignatureSync envelopeIds={ongoing.map((e) => e.id)} />}
 
       <section className="crm-lead" aria-label={d.contrats.heroTitle}>
         <Card className="crm-metric crm-lead-hero">
@@ -190,12 +238,14 @@ export default async function ContratsPage() {
                   <th className="px-3 py-2.5 font-semibold max-md:hidden">{d.contrats.colType}</th>
                   <th className="px-3 py-2.5 font-semibold">{d.contrats.colStatus}</th>
                   <th className="px-3 py-2.5 font-semibold max-sm:hidden">{d.contrats.colContract}</th>
-                  {sample && <th className="px-3 py-2.5" aria-hidden />}
+                  {(sample || canSend) && <th className="px-3 py-2.5" aria-hidden />}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((l) => {
                   const contract = contractOf(l);
+                  const sending = sendingOf(l);
+                  const live = sending !== null && isLive(sending.status);
                   return (
                     <tr key={l.id} className="border-b border-sand-100 align-top last:border-0" data-contract={l.id}>
                       <td className="px-4 py-3">
@@ -207,7 +257,9 @@ export default async function ContratsPage() {
                           {d.common.perMonth} · {formatDate(l.startDate, locale)}
                         </p>
                         <div className="mt-2 sm:hidden">
-                          {contract ? (
+                          {sending ? (
+                            <p className="crm-contract-state">{sendingState(sending)}</p>
+                          ) : contract ? (
                             <p className="crm-contract-state">{fmt(d.contrats.contractProduced, { date: formatDate(contract.generatedAt, locale) })}</p>
                           ) : (
                             <p className="crm-contract-state">{l.status === "draft" ? d.contrats.contractDraft : d.contrats.contractOutside}</p>
@@ -221,7 +273,29 @@ export default async function ContratsPage() {
                         <MetaBadge meta={statusMeta[l.status]} />
                       </td>
                       <td className="px-3 py-3 max-sm:hidden">
-                        {contract ? (
+                        {sending ? (
+                          <div className="crm-sign-state" data-signature-state={sending.status}>
+                            <p className="crm-contract-state">
+                              {sendingState(sending)}
+                              {sending.providerEnv === "sandbox" && <span className="crm-sign-test">{d.contrats.sigSandbox}</span>}
+                              {sending.status === "done" && sending.signedDocumentId && !sample && (
+                                <>
+                                  {" · "}
+                                  <a href={`/api/documents/${encodeURIComponent(sending.signedDocumentId)}/fichier`}>{d.contrats.sigOpenSigned}</a>
+                                </>
+                              )}
+                            </p>
+                            {(sending.status === "ongoing" || sending.status === "declined") && (
+                              <ul className="crm-sign-signers">
+                                {sending.signers.map((s) => (
+                                  <li key={s.position} className={"is-" + s.status}>
+                                    {signerLine(s)}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ) : contract ? (
                           <p className="crm-contract-state">
                             {fmt(d.contrats.contractProduced, { date: formatDate(contract.generatedAt, locale) })}
                             {!sample && (
@@ -247,7 +321,16 @@ export default async function ContratsPage() {
                       </td>
                       {sample && (
                         <td className="px-3 py-2 text-right">
-                          {contract && l.status === "draft" && <DemoAction label={d.contrats.send} doneMessage={d.contrats.sentDemo} variant="secondary" />}
+                          {contract && l.status === "draft" && !live && <DemoAction label={d.contrats.send} doneMessage={d.contrats.sentDemo} variant="secondary" />}
+                          {sending?.status === "ongoing" && <DemoAction label={d.contrats.sigCancel} doneMessage={d.contrats.sigCanceledDemo} variant="secondary" />}
+                        </td>
+                      )}
+                      {canSend && (
+                        <td className="px-3 py-2 text-right">
+                          {l.status === "draft" && !live && (
+                            <SignatureSend d={d} locale={locale} leaseId={l.id} tenants={signersOf(l)} lessor={lessorSigner} levels={signature.levels} sandbox={signature.env === "sandbox"} />
+                          )}
+                          {sending?.status === "ongoing" && <SignatureCancel d={d} envelopeId={sending.id} />}
                         </td>
                       )}
                     </tr>

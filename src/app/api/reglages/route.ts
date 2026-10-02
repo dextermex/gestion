@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
-import { parseSettingsInput } from "@/lib/documents/settings-rules";
+import { LESSOR_IDENTITY_COLUMNS, parseSettingsInput } from "@/lib/documents/settings-rules";
 
 /**
  * The lessor's identity and payment instructions: one row per workspace,
@@ -33,15 +33,35 @@ export async function PATCH(req: NextRequest) {
     updated_at: new Date().toISOString(),
     updated_by: userId,
   };
+  // The lessor as a lease contract names them: columns of migration 0028.
+  const identity = {
+    lessor_kind: parsed.lessorKind,
+    lessor_civility: parsed.lessorCivility,
+    lessor_birth_date: parsed.lessorBirthDate || null,
+    lessor_birth_place: parsed.lessorBirthPlace,
+    lessor_nationality: parsed.lessorNationality,
+    lessor_legal_form: parsed.lessorLegalForm,
+    lessor_rcs_number: parsed.lessorRcsNumber,
+    signatory_role: parsed.signatoryRole,
+  };
   const { data: existing, error: readErr } = await g.from("workspace_settings").select("org_id").eq("org_id", org.id).maybeSingle();
   if (readErr) return dbError("settings read", readErr);
-  if (existing) {
-    const { data, error } = await g.from("workspace_settings").update(row).eq("org_id", org.id).select("org_id");
-    if (error) return dbError("settings update", error);
-    if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  } else {
-    const { error } = await g.from("workspace_settings").insert({ org_id: org.id, ...row });
-    if (error) return dbError("settings insert", error);
+  const write = async (values: Record<string, unknown>) => {
+    if (existing) {
+      const { data, error } = await g.from("workspace_settings").update(values).eq("org_id", org.id).select("org_id");
+      return { error, missing: !error && !data?.length };
+    }
+    const { error } = await g.from("workspace_settings").insert({ org_id: org.id, ...values });
+    return { error, missing: false };
+  };
+  let saved = await write({ ...row, ...identity });
+  // A base without migration 0028 keeps everything else: the identity waits, and the answer says so.
+  let identityPending = false;
+  if (saved.error && (saved.error.code === "PGRST204" || saved.error.code === "42703") && LESSOR_IDENTITY_COLUMNS.some((c) => (saved.error?.message ?? "").includes(c))) {
+    identityPending = true;
+    saved = await write(row);
   }
-  return NextResponse.json({ ok: true });
+  if (saved.error) return dbError(existing ? "settings update" : "settings insert", saved.error);
+  if (saved.missing) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  return NextResponse.json(identityPending ? { ok: true, identity: "pending" } : { ok: true });
 }

@@ -28,6 +28,8 @@ type Result = { data: unknown; error: DbError | null; count?: number | null };
 const n = (v: unknown): number => (typeof v === "number" ? v : 0);
 
 const DEFAULTS: Record<string, () => Row> = {
+  signature_envelopes: () => ({ status: "draft", provider_request_id: null, signed_document_id: null, sent_at: null, completed_at: null, last_synced_at: null, failure: null, expires_on: null }),
+  signature_signers: () => ({ status: "pending", provider_signer_id: null, signed_at: null, audit_document_id: null, contact_id: null, phone: null }),
   bills: () => ({ direction: "expense", supplier_contact_id: null, property_id: null, unit_id: null, doc_no: "", doc_date: null, due_on: null, paid_on: null, cashflow: true, vat_rate_pct: 17, vat_cents: 0, document_id: null, created_by: null }),
   properties: () => ({ archived_at: null, is_copropriete: false, smoke_detectors_confirmed: false, photo_url: null }),
   units: () => ({ archived_at: null, furnished: false, kind: "dwelling", floor: null, area_sqm: 0, rooms: 0, bedrooms: null, photo_url: null }),
@@ -43,6 +45,16 @@ const DEFAULTS: Record<string, () => Row> = {
     iban: null,
     bank_holder_name: null,
     notes: null,
+    nationality: null,
+    address: {},
+    rcs_number: null,
+    // 0028: the identity a contract names.
+    civility: null,
+    birth_date: null,
+    birth_place: null,
+    legal_form: null,
+    representative_name: null,
+    representative_role: null,
   }),
   contact_roles: () => ({ ended_on: null }),
   leases: () => ({
@@ -84,7 +96,33 @@ const DEFAULTS: Record<string, () => Row> = {
   work_orders: () => ({ status: "offered", artisan_contact_id: null }),
   conversations: () => ({ last_message_at: null }),
   messages: () => ({ sender_contact_id: null, read_at: null, ticket_id: null }),
-  workspace_settings: () => ({ legal_name: "", signatory_name: "", address_street: "", address_number: "", postal_code: "", city: "", country: "LU", email: "", phone: "", iban: "", bic: "", holder_name: "", document_lang: "fr", notify_tenant_messages: true, notify_manager_messages: true, updated_by: null }),
+  workspace_settings: () => ({
+    legal_name: "",
+    signatory_name: "",
+    address_street: "",
+    address_number: "",
+    postal_code: "",
+    city: "",
+    country: "LU",
+    email: "",
+    phone: "",
+    iban: "",
+    bic: "",
+    holder_name: "",
+    document_lang: "fr",
+    notify_tenant_messages: true,
+    notify_manager_messages: true,
+    updated_by: null,
+    // 0028: the lessor as a contract names it.
+    lessor_kind: "",
+    lessor_civility: "",
+    lessor_birth_date: null,
+    lessor_birth_place: "",
+    lessor_nationality: "",
+    lessor_legal_form: "",
+    lessor_rcs_number: "",
+    signatory_role: "",
+  }),
   deliveries: () => ({ channel: "email", lease_id: null, document_id: null, recipient_contact_id: null, lang: "fr", provider: null, provider_message_id: null, created_by: null, created_at: new Date().toISOString(), sent_at: null }),
   template_validations: () => ({ validated_by: null, validated_at: new Date().toISOString() }),
   generated_documents: () => ({ generated_by: null, generated_at: new Date().toISOString() }),
@@ -111,6 +149,8 @@ const UNIQUE: Record<string, string[][]> = {
   workspace_settings: [["org_id"]],
   template_validations: [["org_id", "kind", "lang"]],
   generated_documents: [["document_id"]],
+  signature_envelopes: [["provider", "provider_request_id"]],
+  signature_signers: [["envelope_id", "position"]],
 };
 
 const CHECKS: Record<string, (row: Row) => string | null> = {
@@ -458,6 +498,8 @@ export class FakeDb {
   /** The unique indexes, checked on every insert and update. */
   uniqueConflictOf(table: string, row: Row): DbError | null {
     for (const key of UNIQUE[table] ?? []) {
+      // As in SQL, a key with a null part never collides.
+      if (key.some((k) => row[k] === null || row[k] === undefined)) continue;
       const clash = this.table(table).some((r) => r !== row && key.every((k) => r[k] === row[k]));
       if (clash) return { code: "23505", message: `duplicate key value violates unique constraint on ${key.join(",")}` };
     }
@@ -465,6 +507,11 @@ export class FakeDb {
     if (table === "conversations" && row.scope_type === "lease" && row.scope_id != null) {
       const clash = this.table(table).some((r) => r !== row && r.scope_type === "lease" && r.scope_id === row.scope_id);
       if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "conversations_lease_one"' };
+    }
+    // signature_envelopes_live_idx (0027): one sending still out per lease.
+    if (table === "signature_envelopes" && (row.status === "draft" || row.status === "ongoing")) {
+      const clash = this.table(table).some((r) => r !== row && r.lease_id === row.lease_id && (r.status === "draft" || r.status === "ongoing"));
+      if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "signature_envelopes_live_idx"' };
     }
     // contacts_email_active_key (0002): one live contact per e-mail and workspace.
     if (table === "contacts" && row.email != null && row.archived_at == null) {

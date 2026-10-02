@@ -1172,6 +1172,21 @@ button:not(:disabled),
 .crm-contract-state { font-size: .875rem; font-weight: 550; line-height: 1.45; }
 .crm-contract-state a, .crm-contract-link { display: inline-flex; min-height: 1.75rem; align-items: center; font-size: .8125rem; font-weight: 600; color: var(--color-brand-700); }
 .crm-contract-state a:hover, .crm-contract-link:hover { text-decoration: underline; text-underline-offset: .2rem; }
+/* A contract out for signature: where it stands, then who has signed, one
+   person a line, signed in green, waiting in amber, declined in red. A
+   sending made in the provider's test environment says so. */
+.crm-sign-state { display: grid; gap: .375rem; }
+.crm-sign-test { display: inline-flex; align-items: center; margin-left: .5rem; min-height: 1.35rem; padding: 0 .5rem; border-radius: 999px; background: var(--color-amber-100); color: var(--color-amber-800); font-size: .6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: middle; }
+.crm-sign-signers { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; }
+.crm-sign-signers li { display: flex; align-items: center; gap: .5rem; font-size: .8125rem; line-height: 1.45; color: var(--color-ink-soft); overflow-wrap: anywhere; }
+.crm-sign-signers li::before { content: ""; flex-shrink: 0; width: .5rem; height: .5rem; border-radius: 999px; background: var(--color-amber-500, #d99a1e); }
+.crm-sign-signers li.is-signed::before { background: var(--color-emerald-600, #0f8a5f); }
+.crm-sign-signers li.is-declined::before, .crm-sign-signers li.is-error::before { background: #c2412d; }
+.crm-sign-signers li.is-signed { color: var(--color-ink); }
+.crm-sign-legend { margin-bottom: .25rem; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-ink-soft); }
+.crm-sign-fields { padding: 1rem; border-radius: 1rem; background: var(--color-sand-50, #f6f9fb); border: 1px solid var(--color-sand-100); }
+.crm-sign-issue { margin-top: .625rem; font-size: .8125rem; font-weight: 600; color: #b42318; }
+.crm-sign-note { font-size: .8125rem; line-height: 1.55; color: var(--color-ink-soft); }
 .crm-tpl { list-style: none; margin: 0; padding: 0; }
 .crm-tpl li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .875rem 0; border-bottom: 1px solid var(--color-sand-100); }
 .crm-tpl li:first-child { padding-top: .25rem; }

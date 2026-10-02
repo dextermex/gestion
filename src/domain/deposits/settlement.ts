@@ -77,6 +77,7 @@ export function computeSettlement(input: SettlementInput): SettlementResult {
   const d = input.asOf;
   const justificationMonths = getParamValue("residential.deposit_justification_window_months", d);
   const firstTrancheMonths = getParamValue("residential.deposit_first_tranche_months_after_keys", d);
+  const firstTrancheSharePct = getParamValue("residential.deposit_first_tranche_share_pct", d);
   const balanceMonths = getParamValue("residential.deposit_balance_months_after_decompte", d);
   const penaltyPct = getParamValue("residential.deposit_penalty_pct_of_monthly_rent_per_month", d);
 
@@ -128,9 +129,10 @@ export function computeSettlement(input: SettlementInput): SettlementResult {
   const netToTenant = Math.max(0, input.depositAmount - totalRetained);
 
   const firstTrancheDueAt = addMonths(input.keyHandoverDate, firstTrancheMonths);
-  // Statute: 50% of the deposit within 1 month of key handover (retentions
-  // permitting), balance after the décompte.
-  const firstTrancheAmount = Math.min(Math.round(input.depositAmount / 2), netToTenant);
+  // Statute: a share of the deposit (half, from the registry) within the
+  // first-tranche window after key handover (retentions permitting), the
+  // balance after the décompte.
+  const firstTrancheAmount = Math.min(Math.round((input.depositAmount * firstTrancheSharePct) / 100), netToTenant);
   const balanceAmount = netToTenant - Math.min(firstTrancheAmount, netToTenant);
   const balanceDueAt = input.decompteIssuedAt ? addMonths(input.decompteIssuedAt, balanceMonths) : null;
 

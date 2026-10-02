@@ -17,6 +17,46 @@
  * Les valeurs entre accolades sont remplies par le composeur.
  */
 import type { DocumentKind } from "../kinds";
+import { frenchCardinal, frenchLongDate, frResidentialContract } from "./fr-contract";
+
+/** One numbered article of a contract: its heading, its paragraphs, then its list. */
+export interface ContractArticle {
+  heading: string;
+  paragraphs: string[];
+  items?: string[];
+}
+
+/**
+ * A contract written as the parties sign it: who they are, the articles,
+ * where and when it is made. `fixed` holds the template's own sentences the
+ * composer chooses between; `variants` the sentences written for the cases
+ * the template did not cover, each quoted in the notes for validation.
+ */
+export interface ContractWording {
+  /** The language's own spacing rules, applied to every line the contract prints. */
+  typeset: (text: string) => string;
+  heading: string;
+  subheading: string;
+  between: string;
+  lessorLead: string;
+  tenantLead: string;
+  lessorRole: string;
+  tenantRole: string;
+  natural: { lessor: string; tenant: string };
+  civility: Record<"m" | "f" | "x", { title: string; born: string }>;
+  preamble: string[];
+  agreed: string;
+  articles: ContractArticle[];
+  figures: Record<string, string>;
+  madeAt: string;
+  handwritten: string;
+  signatureLessor: string;
+  signatureTenant: string;
+  fixed: Record<string, string>;
+  variants: Record<string, string>;
+  legalForms: Record<string, string>;
+  countries: Record<string, string>;
+}
 
 export interface KindWording {
   version: string;
@@ -30,10 +70,16 @@ export interface KindWording {
   notes: string;
   /** The legal parameters the wording relies on, by registry key. */
   legalParams: string[];
+  /** A residential lease written out in full: the contract the parties sign. */
+  contract?: ContractWording;
 }
 
 export interface Wording {
   lang: "fr";
+  /** A whole number in words ("trois"), for the figures a contract spells out. */
+  cardinal: (n: number) => string;
+  /** A date as a contract writes it ("1er octobre 2026"). */
+  longDate: (iso: string) => string;
   common: {
     dateLine: string;
     referenceLabel: string;
@@ -65,6 +111,8 @@ export interface Wording {
 
 export const fr: Wording = {
   lang: "fr",
+  cardinal: frenchCardinal,
+  longDate: frenchLongDate,
   common: {
     dateLine: "{city}, le {date}",
     referenceLabel: "Référence",
@@ -301,7 +349,7 @@ export const fr: Wording = {
       ],
     },
     lease_contract: {
-      version: "2026-09-26.1",
+      version: "2026-10-02.1",
       labels: {
         designation: "Désignation : {unit}, {address}{details}.",
         floor: "étage {floor}",
@@ -340,8 +388,32 @@ export const fr: Wording = {
       ],
       closing: ["Fait en autant d'exemplaires que de parties, chacune reconnaissant avoir reçu le sien."],
       signatureLabel: "Le bailleur",
-      notes: "Le modèle reprend les mentions que le dossier de location a validées (parties, désignation, date de début, durée, loyer, régime des charges, garantie, déclaration du capital investi). Il ne contient aucune clause générale : les conditions particulières restent à joindre par le bailleur. Signature manuscrite ou électronique hors application.",
-      legalParams: ["residential.deposit_max_months"],
+      notes: [
+        "Bail d'habitation : le contrat remis par le bailleur le 2 octobre 2026, repris mot pour mot (parties, articles 1 à 15, signatures).",
+        "Chaque blanc est rempli depuis l'espace : le bailleur depuis Réglages (personne physique ou société), chaque locataire depuis sa fiche (personne physique ou société), le logement depuis le bien et le lot (adresse, référence cadastrale, pièces, copropriété), les montants, les dates et la garantie depuis le bail, le compte bancaire depuis Réglages ; chaque chiffre légal vient du registre des paramètres.",
+        "Tant qu'une donnée manque, le contrat n'est pas produit et la réponse nomme la partie et le champ à compléter.",
+        `Phrases écrites par Morada, absentes du modèle, validées avec lui : ${Object.values(frResidentialContract.variants).map((v) => `« ${v} »`).join(" ; ")}.`,
+        "Pour une signature électronique, la phrase sur la mention manuscrite « Lu et approuvé » est retirée ; la date imprimée est celle de la production du contrat, chaque signature gardant sa propre date au journal de preuve du prestataire.",
+        "Un bail commercial garde le modèle court précédent : parties, désignation, durée, loyer, garantie et capital investi, sans conditions générales.",
+      ].join(" "),
+      legalParams: [
+        "residential.notice_tenant_months",
+        "residential.notice_landlord_personal_need_months",
+        "residential.notice_landlord_months",
+        "residential.rent_ceiling_pct_of_capital",
+        "residential.rent_adjustment_min_interval_months",
+        "residential.rent_adjustment_max_step_pct",
+        "residential.deposit_max_months",
+        "residential.deposit_first_tranche_share_pct",
+        "residential.deposit_first_tranche_months_after_keys",
+        "residential.deposit_balance_months_after_decompte",
+        "residential.deposit_decompte_request_months_after_end",
+        "residential.deposit_penalty_pct_of_monthly_rent_per_month",
+        "compliance.commune_arrival_declaration_days",
+        "compliance.cpe_validity_years",
+        "commercial.deposit_max_months",
+      ],
+      contract: frResidentialContract,
     },
     housing_certificate: {
       version: "2026-09-26.1",

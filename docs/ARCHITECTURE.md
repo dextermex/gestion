@@ -495,6 +495,37 @@ through `gestion.my_payment_instructions()` and nothing else of the settings. Th
 journal (`gestion.audit_log`, fed by `gestion.audit_row()` triggers on the tables with
 legal effect) records every write with its actor; Réglages shows it.
 
+### The residential contract: the lessor's own text, every blank from a row
+
+A residential lease's contract is the template the lessor handed over on 2 October 2026,
+word for word (`src/lib/documents/wording/fr-contract.ts`; the text itself is kept as a
+test fixture, `contract-verbatim.test.ts` composes the case it describes and compares it
+line by line, blanks as wildcards). Its blanks are values: the lessor from Réglages, a
+person or a company (`lessor_kind` and the identity columns of 0028), each tenant from
+their contact, a person or a company (civility, birth, nationality, current address; or
+legal form, RCS number, representative, seat), the dwelling from the property and the lot
+(address, parcel, rooms, co-ownership), the figures from the lease, the account from
+Réglages with the bank named from its BIC. Every statutory figure the text quotes
+(notices, the 5 % ceiling, the two-year step and its 10 %, the two-month guarantee, the
+restitution delays and the 10 % penalty, the eight days at the commune) comes from the
+registry and is spelled the way the template spells it (`figures`, `frenchCardinal`).
+The cases the template did not write out (a company on either side, a neutral civility,
+a house or another dwelling, an open term, furnished, no co-ownership, a flat charge or
+none, the other forms of guarantee, none) are the `variants`, each quoted in the
+template's notes so validating the version validates them too. `contract-parties.ts`
+reads the parties and lists what each still lacks; `assemble.ts` adds the dwelling's
+parcel, energy certificate (and its validity, `compliance.cpe_validity_years`) and smoke
+detectors, and refuses with `contract_incomplete` and the whole list, which the document
+control and the signature dialog turn into one sentence saying where each field is
+filled in. Produced to be signed electronically, the handwritten "Lu et approuvé"
+sentence is left out and every signer keeps an anchor; on paper, each tenant gets a line
+to sign on. A commercial lease keeps the short generic wording.
+
+The renderer carries the reading measure on the body rather than on the page: a line
+height on the page made react-pdf drop the fixed footer, so no document printed its
+template version or page numbers until 2 October 2026 (`signing-anchors.test.ts` now
+asserts both).
+
 ### The fiscal pack: one owner, one exercise, only the real estate let
 
 Fiscalité prepares one owner's exercise at a time (`src/lib/fiscal/pack.ts`,
@@ -517,15 +548,46 @@ read: a sample cabinet gets real files from its dataset, a real account reads un
 own token. Real accounts carry no fiscal years yet and see an honest empty state until
 the acquisitions register exists.
 
-### Signature: a seam, not yet a provider
+### Signature: Youtrust, read back rather than called back
 
-Modèles & contrats shows the signature funnel from the rows it has (a dossier until the
-lease is activated, a contract produced and sealed here, signed once the lease runs on
-it) and reads which provider the deployment is connected to through
-`src/lib/signature/provider.ts` (DocuSign's four JWT-grant variables, or Yousign's key;
-server only). Nothing is connected yet: a real account sees the funnel and the words
-"non connectée", a sample cabinet plays the sending. Sending an envelope, following the
-signatories and sealing the signed contract back into the register come with the keys.
+Modèles & contrats sends a dossier's contract to be signed through Youtrust (Yousign
+until July 2026, API v3), wired in `src/lib/signature/`. `provider.ts` reads the server
+variables (`YOUSIGN_API_KEY`; `YOUSIGN_ENV`, the sandbox unless set to `production`, so
+nothing is binding or billed by accident; `YOUSIGN_LEVELS`, the eIDAS levels the account
+carries). `envelope.ts` holds the provider-neutral rules: the order (every tenant as the
+contract names them, then the lessor last), the level and how each person proves it is
+them (an SMS code when a mobile is known, an e-mail code otherwise; the advanced level
+needs the mobile; the qualified level sends no code mode, the provider identifies the
+signer), the checks before anything leaves, and the usage a sending puts on the ledger.
+`youtrust.ts` is the API reduced to what a lease needs and never throws: create the
+request, upload the contract with `parse_anchors` (refused when fewer anchors are found
+than signers), add the signers in order, activate (Youtrust e-mails each signer when their
+turn comes and reminds them every two days, three times); read the request back, the
+signing time per signer, the signed PDF and the merged audit trail; cancel. A failed step
+deletes the draft it created.
+
+`service.ts` does the work under the caller's own session. Sending requires a dossier
+(a draft lease), no sending still out (`signature_envelopes_live_idx`, one live sending per
+lease, and a draft older than ten minutes is taken for an interrupted request) and signers
+that are exactly the tenants the contract names. The contract is produced afresh from the
+validated template with one Smart Anchor per signer (`{{sN|signature|138|60}}`, drawn
+invisibly over each person's own signature line, always after a word: a line that opens
+with punctuation is drawn as two runs, which a parser may not read whole; the test in
+`signing-anchors.test.ts` decodes the PDF and holds that). Then the sending and its
+signers are recorded, sent, and its usage written to `gestion.usage_charges` (insert only)
+at the provider's cost plus 20 % (`src/lib/billing/prices.ts`).
+
+There is no webhook: the database opens nothing without a session (the RLS audit) and the
+application holds no service key, so nothing could write what a callback says. The state
+is read back instead: Modèles & contrats asks `POST /api/signature/actualiser` for its open
+sendings when it is shown, each read at most once a minute, ten at most a pass, the pass
+stopping as soon as the provider rate-limits. Signatures are recorded as they come with
+the time the provider gives; once every signer has signed, the signed PDF and the merged
+audit trail are sealed in the register beside the lease (`· signé`, `Journal de preuve`),
+the sending is closed and the lease's `signed_at` set. A file that does not come back
+leaves the sending open, to be read again, nothing half-written. `POST /api/signature/
+annuler` cancels a sending still out. Migration 0027 holds the tables; the sample cabinet
+plays a sending under way and one completed.
 
 ### Delivery: an outbox, one sender, notifications both ways
 

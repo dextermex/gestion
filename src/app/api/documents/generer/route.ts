@@ -29,5 +29,7 @@ export async function POST(req: NextRequest) {
     if (result.error === "template_error") return NextResponse.json(result, { status: 500 });
     return NextResponse.json(result, { status: 409 });
   }
-  return NextResponse.json(result, { status: result.existing ? 200 : 201 });
+  // The register's answer only: never the PDF bytes nor the parties a fresh production carries.
+  const { documentId, name, sha256, sizeBytes, existing } = result;
+  return NextResponse.json({ documentId, name, sha256, sizeBytes, existing }, { status: existing ? 200 : 201 });
 }

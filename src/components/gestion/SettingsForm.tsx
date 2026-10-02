@@ -33,7 +33,30 @@ export interface SettingsLabels {
   invalidIban: string;
   invalidBic: string;
   invalidEmail: string;
+  invalidBirthDate: string;
   failed: string;
+  /** The lessor as a lease contract names them. */
+  identityTitle: string;
+  identityBody: string;
+  identityPending: string;
+  fieldLessorKind: string;
+  kindNatural: string;
+  kindLegal: string;
+  choose: string;
+  fieldCivility: string;
+  civilityM: string;
+  civilityF: string;
+  civilityX: string;
+  fieldBirthDate: string;
+  fieldBirthPlace: string;
+  fieldNationality: string;
+  nationalityHint: string;
+  fieldLegalForm: string;
+  legalForms: Record<string, string>;
+  fieldRcs: string;
+  rcsHint: string;
+  fieldSignatoryRole: string;
+  signatoryRoleHint: string;
 }
 
 const BACK = "/app/reglages";
@@ -69,6 +92,14 @@ export default function SettingsForm({
     documentLang: initial.documentLang,
     notifyTenantMessages: initial.notifyTenantMessages,
     notifyManagerMessages: initial.notifyManagerMessages,
+    lessorKind: initial.lessorKind,
+    lessorCivility: initial.civility,
+    lessorBirthDate: initial.birthDate,
+    lessorBirthPlace: initial.birthPlace,
+    lessorNationality: initial.nationality,
+    lessorLegalForm: initial.legalForm,
+    lessorRcsNumber: initial.rcsNumber,
+    signatoryRole: initial.signatoryRole,
   });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -88,11 +119,12 @@ export default function SettingsForm({
       const res = await callJson("/api/reglages", "PATCH", form, BACK);
       if (!res) return;
       if (res.ok) {
-        setNote(labels.saved);
+        setNote(res.payload.identity === "pending" ? labels.identityPending : labels.saved);
         router.refresh();
       } else {
         const problem = String(res.payload.problem ?? "");
-        setError(problem === "legalName" ? labels.invalidName : problem === "iban" ? labels.invalidIban : problem === "bic" ? labels.invalidBic : problem === "email" ? labels.invalidEmail : labels.failed);
+        const known: Record<string, string> = { legalName: labels.invalidName, iban: labels.invalidIban, bic: labels.invalidBic, email: labels.invalidEmail, birthDate: labels.invalidBirthDate };
+        setError(known[problem] ?? labels.failed);
       }
     } catch {
       setError(labels.failed);
@@ -159,6 +191,60 @@ export default function SettingsForm({
           </Select>
         </Field>
       </div>
+      {initial.identityReady && (
+        <fieldset className="space-y-3 border-t border-sand-100 pt-4" data-lessor-identity>
+          <legend className="text-sm font-semibold text-ink">{labels.identityTitle}</legend>
+          <p className="text-xs leading-relaxed text-ink-soft">{labels.identityBody}</p>
+          <Field label={labels.fieldLessorKind}>
+            <Select value={form.lessorKind} onChange={set("lessorKind")} disabled={busy}>
+              <option value="">{labels.choose}</option>
+              <option value="natural">{labels.kindNatural}</option>
+              <option value="legal">{labels.kindLegal}</option>
+            </Select>
+          </Field>
+          {form.lessorKind === "natural" && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={labels.fieldCivility}>
+                <Select value={form.lessorCivility} onChange={set("lessorCivility")} disabled={busy}>
+                  <option value="">{labels.choose}</option>
+                  <option value="m">{labels.civilityM}</option>
+                  <option value="f">{labels.civilityF}</option>
+                  <option value="x">{labels.civilityX}</option>
+                </Select>
+              </Field>
+              <Field label={labels.fieldBirthDate}>
+                <Input type="date" value={form.lessorBirthDate} onChange={set("lessorBirthDate")} disabled={busy} />
+              </Field>
+              <Field label={labels.fieldBirthPlace}>
+                <Input value={form.lessorBirthPlace} maxLength={120} onChange={set("lessorBirthPlace")} disabled={busy} />
+              </Field>
+              <Field label={labels.fieldNationality} hint={labels.nationalityHint}>
+                <Input value={form.lessorNationality} maxLength={80} onChange={set("lessorNationality")} disabled={busy} />
+              </Field>
+            </div>
+          )}
+          {form.lessorKind === "legal" && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={labels.fieldLegalForm}>
+                <Select value={form.lessorLegalForm} onChange={set("lessorLegalForm")} disabled={busy}>
+                  <option value="">{labels.choose}</option>
+                  {Object.entries(labels.legalForms).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={labels.fieldRcs} hint={labels.rcsHint}>
+                <Input value={form.lessorRcsNumber} maxLength={40} onChange={set("lessorRcsNumber")} disabled={busy} />
+              </Field>
+              <Field label={labels.fieldSignatoryRole} hint={labels.signatoryRoleHint}>
+                <Input value={form.signatoryRole} maxLength={80} onChange={set("signatoryRole")} disabled={busy} />
+              </Field>
+            </div>
+          )}
+        </fieldset>
+      )}
       <div className="space-y-2 pt-1">
         <label className="flex items-start gap-2.5">
           <input

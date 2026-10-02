@@ -16,6 +16,7 @@ import { previewInput } from "@/lib/documents/preview";
 import { renderPdf } from "@/lib/documents/render";
 import { templateVersion } from "@/lib/documents/wording";
 import { FakeDb, type Row } from "@/lib/__tests__/helpers/fake-postgrest";
+import { completeContractFacts, LESSOR_COMPANY } from "@/lib/__tests__/helpers/contract-identity";
 
 /**
  * A document, start to finish, on one database: refused until the
@@ -194,14 +195,58 @@ describe("documents produced from the rows", () => {
     expect(a.input.data).toMatchObject({ totalCents: Number(period.total_cents), allocations: [{ on: today, cents: Number(period.total_cents) }] });
   });
 
-  it("produces the contract and the housing certificate from the lease's own rows, and nothing from another workspace's id", async () => {
+  it("refuses the contract until every party and the dwelling are named in full, saying what is missing where", async () => {
     validateAll(db);
     db.insertRow("workspace_settings", SETTINGS);
+    const tenantId = String(db.table("lease_parties").find((p) => p.lease_id === leaseId)?.contact_id);
+    const propertyId = String(db.table("properties")[0].id);
+    expect(await generateDocument(ctx, storage.client, { kind: "lease_contract", sourceId: leaseId, today })).toEqual({
+      error: "contract_incomplete",
+      missing: [
+        { subject: "lessor", id: ORG, name: "Cabinet Test s.à r.l.", fields: ["kind"] },
+        { subject: "tenant", id: tenantId, name: "Anna Weber", fields: ["civility", "birth_date", "birth_place", "nationality", "address"] },
+        { subject: "property", id: propertyId, name: "Maison Weber", fields: ["cadastral", "energy_class", "smoke_detectors"] },
+      ],
+    });
+    // A company that has said what it is, but not yet who signs for it.
+    Object.assign(db.table("workspace_settings")[0], { ...LESSOR_COMPANY, signatory_role: "" });
+    completeContractFacts(db, leaseId);
+    expect(await generateDocument(ctx, storage.client, { kind: "lease_contract", sourceId: leaseId, today })).toEqual({
+      error: "contract_incomplete",
+      missing: [{ subject: "lessor", id: ORG, name: "Cabinet Test s.à r.l.", fields: ["representative_role"] }],
+    });
+    // An energy certificate past its validity is not one the lessor can hand over.
+    Object.assign(db.table("workspace_settings")[0], LESSOR_COMPANY);
+    Object.assign(db.table("properties")[0], { cpe_issued_on: "2010-03-01" });
+    expect(await generateDocument(ctx, storage.client, { kind: "lease_contract", sourceId: leaseId, today })).toMatchObject({
+      error: "contract_incomplete",
+      missing: [{ subject: "property", fields: ["cpe"] }],
+    });
+    expect(db.table("documents")).toHaveLength(0);
+  });
+
+  it("produces the contract and the housing certificate from the lease's own rows, and nothing from another workspace's id", async () => {
+    validateAll(db);
+    db.insertRow("workspace_settings", { ...SETTINGS, ...LESSOR_COMPANY });
+    completeContractFacts(db, leaseId);
     const contract = generated(await generateDocument(ctx, storage.client, { kind: "lease_contract", sourceId: leaseId, today }));
     expect(db.table("documents").find((d) => d.id === contract.documentId)).toMatchObject({ class: "lease", sealed: true, related_type: "lease", related_id: leaseId });
-    expect(contract.name).toContain("Maison");
+    expect(contract.name).toBe(`Contrat de bail à usage d'habitation · Maison · ${today}.pdf`);
     const a = assembled(await assemble(ctx, "lease_contract", leaseId, today));
     expect(a.input.data).toMatchObject({ leaseType: "residential", startDate: today, rentCents: 125000, paymentDay: 1, tenants: [{ name: "Anna Weber", email: "anna.weber@example.lu" }], unit: { label: "Maison", areaSqm: 120, rooms: 5 } });
+    // The parties and the dwelling as the contract names them.
+    expect(a.input.data).toMatchObject({
+      contract: {
+        lessor: { kind: "legal", name: "Cabinet Test s.à r.l.", legalForm: "sarl", seat: { line: "24, Rue de Bonnevoie", locality: "L-1260 Luxembourg", country: "LU" }, rcsNumber: "B123456", representative: "Alex Test", representativeRole: "gérant" },
+        tenants: [{ kind: "natural", civility: "f", name: "Anna Weber", birthDate: "1990-05-03", birthPlace: "Luxembourg", nationality: "luxembourgeoise", address: { line: "8, Avenue de la Liberté", locality: "L-1930 Luxembourg", country: "LU" } }],
+        dwelling: "house",
+        premisesAddress: "12, Rue de la Gare, L-8001 Strassen",
+        cadastral: { commune: "Strassen", section: "A", number: "123/4567" },
+        premises: "",
+        copropriete: false,
+        bank: { iban: "LU280019400644750000", name: "Banque et Caisse d'Épargne de l'État, Luxembourg", holder: "Cabinet Test s.à r.l." },
+      },
+    });
     const cert = generated(await generateDocument(ctx, storage.client, { kind: "housing_certificate", sourceId: leaseId, today }));
     expect(cert.existing).toBe(false);
     const c = assembled(await assemble(ctx, "housing_certificate", leaseId, today));

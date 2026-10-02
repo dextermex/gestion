@@ -149,6 +149,12 @@ test("settings: nothing is produced before the templates are validated and the l
   await form.getByLabel("IBAN du compte à payer").fill("LU28 0019 4006 4475 0001");
   await form.getByLabel("BIC", { exact: true }).fill("BCEELULL");
   await form.getByLabel("Titulaire du compte (tel qu'à la banque)").fill("Nora Kremer");
+  // The lessor as the lease contract names her: a person, with her civility, birth and nationality.
+  await form.getByLabel("Le bailleur est").selectOption("natural");
+  await form.getByLabel("Civilité").selectOption("f");
+  await form.getByLabel("Date de naissance").fill("1975-04-12");
+  await form.getByLabel("Lieu de naissance").fill("Esch-sur-Alzette");
+  await form.getByLabel("Nationalité").fill("luxembourgeoise");
   const badIban = page.waitForResponse((r) => r.url().endsWith("/api/reglages") && r.request().method() === "PATCH");
   await form.getByRole("button", { name: "Enregistrer", exact: true }).click();
   expect((await badIban).status(), "a wrong IBAN is refused").toBe(400);
@@ -162,6 +168,8 @@ test("settings: nothing is produced before the templates are validated and the l
   await expect(page.locator("[data-settings-incomplete]")).toHaveCount(0);
   await expect(page.locator("#settings-form").getByLabel("IBAN du compte à payer")).toHaveValue("LU280019400644750000");
   await expect(page.locator("#settings-form").getByLabel("Nom ou raison sociale")).toHaveValue("Nora Kremer");
+  await expect(page.locator("#settings-form").getByLabel("Le bailleur est")).toHaveValue("natural");
+  await expect(page.locator("#settings-form").getByLabel("Lieu de naissance")).toHaveValue("Esch-sur-Alzette");
   // The base's own journal: the settings and the validations, written by this account.
   await expect(page.locator('[data-journal-entry="workspace_settings"]').first()).toBeVisible();
   await expect(page.locator('[data-journal-entry="template_validations"]').first()).toBeVisible();
@@ -302,6 +310,26 @@ test("the lease sheet: the contract and the housing certificate from the lease's
   await signIn(page, owner.email);
   await page.goto(`/app/baux/${leaseId}?onglet=contrat`);
   await foldGettingStarted(page);
+  // The contract names every party and the dwelling in full: until it can, it says what is missing and where.
+  const early = await produce(page, docControl(page, "lease_contract", leaseId));
+  expect(early.status, "no contract while the tenant and the dwelling are not named in full").toBe(409);
+  expect(early.body.error).toBe("contract_incomplete");
+  const refusal = docControl(page, "lease_contract", leaseId).getByRole("alert");
+  await expect(refusal).toContainText("Il manque encore des informations pour établir le contrat");
+  await expect(refusal).toContainText(`${tenant.first} ${tenant.last} (civilité, date de naissance, lieu de naissance, nationalité, adresse)`);
+  await expect(refusal).toContainText("référence cadastrale, classe énergétique (CPE), détecteurs de fumée confirmés");
+  // The tenant as the contract writes him, on his contact; the dwelling's parcel, certificate and detectors on the property.
+  await page.goto(`/app/biens/${propertyId}?onglet=location`);
+  const tenantHref = (await page.getByRole("link", { name: `${tenant.first} ${tenant.last}` }).first().getAttribute("href")) ?? "";
+  const tenantId = tenantHref.split("/").pop() ?? "";
+  expect(tenantId, "the tenant's contact id from the property sheet").not.toBe("");
+  const identity = await page.request.patch(`/api/contacts/${tenantId}`, {
+    data: { civility: "m", birthDate: "1990-05-03", birthPlace: "Luxembourg", nationality: "luxembourgeoise", addressStreet: "Avenue de la Liberté", addressNumber: "8", addressPostal: "1930", addressCity: "Luxembourg", addressCountry: "LU" },
+  });
+  expect(identity.ok(), "the tenant's identity is written").toBe(true);
+  const dwelling = await page.request.patch(`/api/biens/${propertyId}`, { data: { cadastralCommune: "Strassen", cadastralSection: "A", cadastralNumber: "123/4567", energyClass: "C", smokeDetectorsConfirmed: true } });
+  expect(dwelling.ok(), "the dwelling's facts are written").toBe(true);
+  await page.goto(`/app/baux/${leaseId}?onglet=contrat`);
   const contract = await produce(page, docControl(page, "lease_contract", leaseId));
   expect(contract.status, "the contract is produced").toBe(201);
   contractId = contract.body.documentId!;

@@ -4,10 +4,11 @@ import { getParam, type LegalParamKey } from "@/domain/legal/params";
 import { epcPayload } from "./epc";
 import type { DocumentKind } from "./kinds";
 import type {
-  ArrearsData, ChargesStatementData, ComposeInput, DepositSettlementData, DocumentModel, EdlReportData, HousingCertificateData,
-  IndexationNoticeData, LeaseContractData, Lessor, RentNoticeData, RentReceiptData, Section, TableSpec,
+  ArrearsData, ChargesStatementData, ComposeInput, ContractParty, DepositSettlementData, DocumentModel, EdlReportData, HousingCertificateData,
+  IndexationNoticeData, LeaseContractData, Lessor, PartyAddress, RentNoticeData, RentReceiptData, ResidentialContractData, Section, TableSpec,
 } from "./model";
 import { templateFor, wordingFor, type KindWording, type Wording } from "./wording";
+import type { ContractWording } from "./wording/fr";
 
 /**
  * A validated template plus real rows make a document model. Every legal
@@ -41,8 +42,9 @@ export function composeDocument<K extends DocumentKind>(input: ComposeInput<K>):
   };
   const fill = (template: string, vars: Record<string, string | number>) => fmt(template, { ...common, ...vars });
 
-  const base = (extra: { title: string; subject?: string; sections: Section[]; closing?: string[]; signature?: DocumentModel["signature"]; subtitle?: string }): DocumentModel => ({
+  const base = (extra: { title: string; subject?: string; sections: Section[]; closing?: string[]; signature?: DocumentModel["signature"]; subtitle?: string; layout?: DocumentModel["layout"] }): DocumentModel => ({
     kind: input.kind,
+    layout: extra.layout,
     lang,
     version: t.version,
     title: extra.title,
@@ -87,7 +89,7 @@ function senderParty(l: Lessor) {
   return { name: l.legalName, lines: [l.addressLine, l.email, l.phone].filter(Boolean) };
 }
 
-type Base = (extra: { title: string; subject?: string; sections: Section[]; closing?: string[]; signature?: DocumentModel["signature"]; subtitle?: string }) => DocumentModel;
+type Base = (extra: { title: string; subject?: string; sections: Section[]; closing?: string[]; signature?: DocumentModel["signature"]; subtitle?: string; layout?: DocumentModel["layout"] }) => DocumentModel;
 type Fill = (template: string, vars: Record<string, string | number>) => string;
 type Money = (cents: number) => string;
 type Day = (iso: string) => string;
@@ -307,8 +309,14 @@ function settlement(input: ComposeInput<"deposit_settlement">, w: Wording, t: Ki
   return base({ title: t.title, subject: t.subject ? fill(t.subject, vars) : undefined, sections });
 }
 
-function lease(input: ComposeInput<"lease_contract">, w: Wording, t: KindWording, base: Base, fill: Fill, money: Money, date: Day, param: Param): DocumentModel {
+function lease(input: ComposeInput<"lease_contract">, w: Wording, t: KindWording, base: Base, fill: Fill, money: Money, date: Day, param: Param): DocumentModel | ComposeFailure {
   const d: LeaseContractData = input.data;
+  // A residential lease is the contract written out in full; it is never
+  // produced from the short wording, whatever data reaches here.
+  if (d.leaseType === "residential") {
+    if (!t.contract || !d.contract) return { error: "no_template" };
+    return residentialContract(input, w, t, t.contract, d, d.contract, base, fill, money, param);
+  }
   const max = param(d.leaseType === "commercial" ? "commercial.deposit_max_months" : "residential.deposit_max_months");
   const details = [
     d.unit.floor && d.unit.floor !== "—" ? fill(t.labels.floor, { floor: d.unit.floor }) : "",
@@ -352,8 +360,208 @@ function lease(input: ComposeInput<"lease_contract">, w: Wording, t: KindWording
   return base({
     title: fill(t.title, vars),
     sections: [{ paragraphs: t.paragraphs.map((p) => fill(p, vars).trim()).filter((p) => p !== "") }],
-    signature: { label: t.signatureLabel, name: input.lessor.signatoryName || input.lessor.legalName, second: { label: t.labels.tenantSignature, name: input.tenants.join(w.common.tenantsJoin) } },
+    signature: leaseSignature(input, w, t),
   });
+}
+
+/** "24, Rue de Bonnevoie, L-1260 Luxembourg": where a person lives, as the template's blank reads. */
+function livesAt(c: ContractWording, a: PartyAddress): string {
+  return [a.line, a.locality, countryOf(c, a.country)].filter(Boolean).join(", ");
+}
+
+/** "L-1260 Luxembourg, 24, Rue de Bonnevoie": a registered office, as a company is described. */
+function seatAt(c: ContractWording, a: PartyAddress): string {
+  return [a.locality, a.line, countryOf(c, a.country)].filter(Boolean).join(", ");
+}
+
+const countryOf = (c: ContractWording, country: string): string => (!country || country === "LU" ? "" : (c.countries[country] ?? country));
+
+/** A person's title and name, the title left out for a neutral civility. */
+function personOf(c: ContractWording, p: Extract<ContractParty, { kind: "natural" }>): string {
+  return [c.civility[p.civility].title, p.name].filter(Boolean).join(" ");
+}
+
+/** How the contract names a party: the template's sentence for a person, the written one for a company. */
+function partySentence(c: ContractWording, w: Wording, fill: Fill, p: ContractParty, role: "lessor" | "tenant"): string {
+  if (p.kind === "natural") {
+    return fill(c.natural[role], {
+      person: personOf(c, p),
+      born: c.civility[p.civility].born,
+      birthDate: w.longDate(p.birthDate),
+      birthPlace: p.birthPlace,
+      nationality: p.nationality,
+      address: livesAt(c, p.address),
+    });
+  }
+  const form = c.legalForms[p.legalForm] ?? "";
+  return fill(form ? c.variants.legal : c.variants.legalNoForm, {
+    name: p.name,
+    legalForm: form,
+    seat: seatAt(c, p.seat),
+    rcs: p.rcsNumber,
+    representative: p.representative,
+    role: p.representativeRole,
+  });
+}
+
+/** The name a party signs under: "Monsieur Jean Dupont", or the company and who represents it. */
+function signsAs(c: ContractWording, fill: Fill, p: ContractParty): string {
+  return p.kind === "natural" ? personOf(c, p) : fill(c.variants.signatoryLegal, { name: p.name, representative: p.representative });
+}
+
+const decimal = (n: number): string => String(n).replace(".", ",");
+
+/** The lot described from what is recorded of it, when the lease does not describe the rooms itself. */
+function premisesFromLot(g: Record<string, string>, fill: Fill, unit: LeaseContractData["unit"]): string {
+  const count = (n: number, one: string, many: string) => fill(n > 1 ? many : one, { n: decimal(n) });
+  return [
+    unit.label,
+    unit.floor && unit.floor !== "—" ? fill(g.floor, { floor: unit.floor }) : "",
+    unit.areaSqm > 0 ? fill(g.area, { area: decimal(unit.areaSqm) }) : "",
+    unit.rooms > 0 ? count(unit.rooms, g.room, g.rooms) : "",
+    unit.bedrooms ? count(unit.bedrooms, g.bedroom, g.bedrooms) : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * The residential lease as the parties sign it: the template's own text,
+ * article by article, its blanks filled from the rows. Every statutory
+ * figure is read from the registry on the contract's date and printed in
+ * words the way the template prints it; the template's alternatives are
+ * chosen from the facts (a company or a person on each side, fixed or open
+ * term, furnished, co-ownership, charges, guarantee).
+ */
+function residentialContract(
+  input: ComposeInput<"lease_contract">,
+  w: Wording,
+  t: KindWording,
+  c: ContractWording,
+  d: LeaseContractData,
+  k: ResidentialContractData,
+  base: Base,
+  fill: Fill,
+  money: Money,
+  param: Param,
+): DocumentModel {
+  const f = c.fixed;
+  const v = c.variants;
+  const g = c.figures;
+  const words = w.cardinal;
+  const months = (n: number) => fill(g.months, { words: words(n) });
+  const tenantNotice = param("residential.notice_tenant_months").value;
+  const interval = param("residential.rent_adjustment_min_interval_months").value;
+  const share = param("residential.deposit_first_tranche_share_pct").value;
+  const first = param("residential.deposit_first_tranche_months_after_keys").value;
+  const balance = param("residential.deposit_balance_months_after_decompte").value;
+  const request = param("residential.deposit_decompte_request_months_after_end").value;
+  const companyTenant = k.tenants.length > 0 && k.tenants.every((p) => p.kind === "legal");
+  const communeDays = fill(g.days, { words: words(param("compliance.commune_arrival_declaration_days").value) });
+  const forfait = d.chargesRegime === "forfait";
+  const depositForms: Record<string, string> = {
+    bank_guarantee: f.depositBankGuarantee,
+    cash: v.depositCash,
+    third_party_caution: v.depositThirdParty,
+    insurance: v.depositInsurance,
+    state_guarantee: v.depositState,
+  };
+  const hasDeposit = d.depositCents > 0 && Boolean(depositForms[d.depositForm]);
+
+  const vars: Record<string, string> = {
+    dwelling: k.dwelling === "house" ? v.dwellingHouse : k.dwelling === "apartment" ? f.dwellingApartment : v.dwellingOther,
+    premisesAddress: k.premisesAddress,
+    cadastral: fill(g.cadastral, k.cadastral),
+    premises: k.premises || premisesFromLot(g, fill, d.unit),
+    furnished: d.furnished ? v.furnished : f.unfurnished,
+    copropriete: k.copropriete ? f.copropriete : "",
+    destination: companyTenant ? v.destinationCompany : f.destination,
+    communeDeclaration: fill(companyTenant ? v.communeDeclarationCompany : f.communeDeclaration, { communeDays }),
+    duration: d.endDate ? fill(f.durationFixed, { start: w.longDate(d.startDate), end: w.longDate(d.endDate) }) : fill(v.durationOpen, { start: w.longDate(d.startDate) }),
+    fixedTermNotice: d.endDate ? f.fixedTermNotice : "",
+    tenantNotice: fill(g.monthsWithDigits, { words: words(tenantNotice), n: tenantNotice }),
+    personalNeedNotice: months(param("residential.notice_landlord_personal_need_months").value),
+    landlordNotice: months(param("residential.notice_landlord_months").value),
+    rent: money(d.rentCents),
+    furnitureSupplement: d.furnished && d.furnitureSupplementCents > 0 ? fill(v.furnitureSupplement, { supplement: money(d.furnitureSupplementCents) }) : "",
+    paymentDay: d.paymentDay === 1 ? f.firstDay : String(d.paymentDay),
+    iban: k.bank.iban.replace(/\s+/g, "").replace(/(.{4})(?=.)/g, "$1 "),
+    bank: k.bank.name,
+    holder: k.bank.holder,
+    ceilingPct: decimal(param("residential.rent_ceiling_pct_of_capital").value),
+    adjustmentInterval: interval % 12 === 0 ? (interval === 12 ? g.everyYear : fill(g.everyYears, { words: words(interval / 12) })) : fill(g.everyMonths, { words: words(interval) }),
+    adjustmentStepPct: decimal(param("residential.rent_adjustment_max_step_pct").value),
+    chargesAmount: d.chargesCents > 0 ? fill(forfait ? v.chargesForfait : f.chargesAdvances, { charges: money(d.chargesCents) }) : v.chargesNone,
+    chargesStatement: forfait ? "" : f.chargesStatement,
+    deposit: money(d.depositCents),
+    depositMax: months(param("residential.deposit_max_months").value),
+    depositForm: depositForms[d.depositForm] ?? "",
+    firstTrancheShare: share === 50 ? g.half : fill(g.share, { pct: decimal(share) }),
+    firstTrancheDelay: first === 1 ? g.withinOneMonth : fill(g.withinMonths, { words: words(first) }),
+    balanceDelay: balance === 1 ? g.followingMonth : fill(g.followingMonths, { words: words(balance) }),
+    decompteRequestDelay: request === 1 ? g.oneMonth : months(request),
+    penaltyPct: decimal(param("residential.deposit_penalty_pct_of_monthly_rent_per_month").value),
+    cpeHandover: k.copropriete ? f.cpeHandover : v.cpeHandoverNoCopropriete,
+    inventoryAnnex: d.furnished ? v.inventoryAnnex : "",
+    coproprieteAnnex: k.copropriete ? f.coproprieteAnnex : "",
+  };
+  const kept = (list: string[]) => list.map((p) => fill(p, vars)).filter((p) => p.trim() !== "");
+
+  const sections: Section[] = [
+    { heading: c.between },
+    { lead: c.lessorLead, paragraphs: [partySentence(c, w, fill, k.lessor, "lessor"), c.lessorRole] },
+    { lead: c.tenantLead, paragraphs: [...k.tenants.map((p) => partySentence(c, w, fill, p, "tenant")), c.tenantRole] },
+    { paragraphs: c.preamble },
+    { heading: c.agreed },
+  ];
+  for (const article of c.articles) {
+    // Article 7 without a guarantee says so in one sentence, and nothing of restitution.
+    const paragraphs = article.heading.startsWith("7.") && !hasDeposit ? [v.noDeposit] : kept(article.paragraphs);
+    const items = article.items ? kept(article.items) : undefined;
+    sections.push({ heading: article.heading, paragraphs, items: items && items.length > 0 ? items : undefined });
+  }
+
+  // The language's spacing on every printed line: nothing starts a line with a colon or a closing guillemet.
+  const t8 = c.typeset;
+  for (const section of sections) {
+    if (section.heading) section.heading = t8(section.heading);
+    if (section.lead) section.lead = t8(section.lead);
+    if (section.paragraphs) section.paragraphs = section.paragraphs.map(t8);
+    if (section.items) section.items = section.items.map(t8);
+  }
+  const tenantNames = k.tenants.map((p) => signsAs(c, fill, p));
+  const signature: NonNullable<DocumentModel["signature"]> = {
+    label: c.signatureLessor,
+    name: signsAs(c, fill, k.lessor),
+    second: { label: c.signatureTenant, name: tenantNames.join(w.common.tenantsJoin), names: tenantNames },
+  };
+  const anchors = input.signing?.anchors;
+  return base({
+    layout: "contract",
+    title: c.heading,
+    subtitle: c.subheading,
+    sections,
+    // Signed electronically, there is no handwritten mention to precede the signatures.
+    closing: [fill(c.madeAt, { date: w.longDate(input.on) }), ...(anchors ? [] : [c.handwritten])].map(t8),
+    signature:
+      anchors && anchors.length === tenantNames.length + 1
+        ? { ...signature, anchors: { first: anchors[tenantNames.length], second: tenantNames.map((name, i) => ({ name, anchor: anchors[i] })) } }
+        : signature,
+  });
+}
+
+/**
+ * The lease's two signature columns, the template's own labels. Produced to
+ * be signed electronically, each tenant gets a line of their own in the
+ * second column and every signer an anchor: tenants first, as named, then
+ * the lessor, the order the provider is told to collect them in.
+ */
+function leaseSignature(input: ComposeInput<"lease_contract">, w: Wording, t: KindWording): DocumentModel["signature"] {
+  const lessorName = input.lessor.signatoryName || input.lessor.legalName;
+  const signature: NonNullable<DocumentModel["signature"]> = { label: t.signatureLabel, name: lessorName, second: { label: t.labels.tenantSignature, name: input.tenants.join(w.common.tenantsJoin) } };
+  const anchors = input.signing?.anchors;
+  if (!anchors || anchors.length !== input.tenants.length + 1) return signature;
+  return { ...signature, anchors: { first: anchors[input.tenants.length], second: input.tenants.map((name, i) => ({ name, anchor: anchors[i] })) } };
 }
 
 function certificate(input: ComposeInput<"housing_certificate">, t: KindWording, base: Base, fill: Fill, date: Day, param: Param): DocumentModel {
@@ -417,8 +625,9 @@ function edlReport(input: ComposeInput<"edl_report">, w: Wording, t: KindWording
 /** Whether a composed model still carries an unfilled placeholder: the guard the tests and the preview run. */
 export function unfilledPlaceholders(model: DocumentModel): string[] {
   const texts: string[] = [model.title, model.subtitle ?? "", model.subject ?? "", model.dateLine, model.footer, ...(model.closing ?? [])];
+  if (model.signature) texts.push(model.signature.label, model.signature.name, model.signature.second?.label ?? "", model.signature.second?.name ?? "", ...(model.signature.second?.names ?? []));
   for (const s of model.sections) {
-    texts.push(s.heading ?? "", s.note ?? "", ...(s.paragraphs ?? []));
+    texts.push(s.heading ?? "", s.lead ?? "", s.note ?? "", ...(s.paragraphs ?? []), ...(s.items ?? []));
     for (const [k, v] of s.keyValues ?? []) texts.push(k, v);
     if (s.table) {
       texts.push(...s.table.columns.map((c) => c.label), ...s.table.rows.flat(), ...(s.table.total ?? []));

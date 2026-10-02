@@ -5,6 +5,7 @@ import type { OrgContext } from "@/lib/gestion/api";
 import { storeBytes, discardDocument } from "@/lib/gestion/documents";
 import type { Locale } from "@/lib/i18n/config";
 import { assemble, lessorOf, readSettings, type AssembleFailure } from "./assemble";
+import type { MissingItem } from "./contract-parties";
 import { composeDocument, unfilledPlaceholders } from "./compose";
 import { KIND_CLASS, type DocumentKind } from "./kinds";
 import type { DocumentModel } from "./model";
@@ -25,6 +26,10 @@ export interface Generated {
   sha256: string;
   sizeBytes: number;
   existing: boolean;
+  /** Freshly produced: the PDF itself, for a caller that sends it on (a signature). */
+  bytes?: Buffer;
+  /** Freshly produced: the tenants it names, in its order. */
+  parties?: Array<{ id: string; name: string; email: string | null }>;
 }
 
 export type GenerateFailure =
@@ -33,6 +38,7 @@ export type GenerateFailure =
   | { error: "template_not_validated"; lang: Locale; version: string }
   | { error: "settings_incomplete"; missing: string[] }
   | { error: "not_ready"; reason: string }
+  | { error: "contract_incomplete"; missing: MissingItem[] }
   | { error: "template_error"; placeholders: string[] }
   | { error: "storage_failed"; context: string; detail: { code?: string; message?: string } | null };
 
@@ -75,7 +81,15 @@ export async function existingDocument(ctx: OrgContext, kind: DocumentKind, sour
 export async function generateDocument(
   ctx: OrgContext,
   client: SupabaseClient,
-  req: { kind: DocumentKind; sourceId: string; lang?: Locale; force?: boolean; today?: string },
+  req: {
+    kind: DocumentKind;
+    sourceId: string;
+    lang?: Locale;
+    force?: boolean;
+    today?: string;
+    /** A contract produced to be signed electronically: the provider's anchor for the signer at a position (1 = first). */
+    signing?: { anchorFor: (position: number) => string };
+  },
 ): Promise<Generated | GenerateFailure> {
   const today = req.today ?? new Date().toISOString().slice(0, 10);
   const settingsRow = await readSettings(ctx);
@@ -97,7 +111,8 @@ export async function generateDocument(
   if (missing.length > 0) return { error: "settings_incomplete", missing };
 
   const payloadSha256 = createHash("sha256").update(JSON.stringify(assembled.payload)).digest("hex");
-  const model = composeDocument({ ...assembled.input, lang, reference: `${req.kind.replace(/_/g, "-")}-${req.sourceId.slice(0, 8)}` } as Parameters<typeof composeDocument>[0]);
+  const signing = req.signing && req.kind === "lease_contract" ? { anchors: Array.from({ length: assembled.parties.length + 1 }, (_, i) => req.signing!.anchorFor(i + 1)) } : undefined;
+  const model = composeDocument({ ...assembled.input, lang, reference: `${req.kind.replace(/_/g, "-")}-${req.sourceId.slice(0, 8)}`, signing } as Parameters<typeof composeDocument>[0]);
   if ("error" in model) return { error: "no_template", lang };
   const placeholders = unfilledPlaceholders(model as DocumentModel);
   if (placeholders.length > 0) return { error: "template_error", placeholders };
@@ -131,5 +146,5 @@ export async function generateDocument(
     await discardDocument(ctx, client, { id: stored.id, path: stored.path });
     return { error: "storage_failed", context: "generated document insert", detail: genErr };
   }
-  return { documentId: stored.id, name: stored.name, sha256: stored.sha256, sizeBytes: stored.sizeBytes, existing: false };
+  return { documentId: stored.id, name: stored.name, sha256: stored.sha256, sizeBytes: stored.sizeBytes, existing: false, bytes, parties: assembled.parties };
 }

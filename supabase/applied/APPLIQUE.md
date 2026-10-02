@@ -336,6 +336,50 @@ modifiée ; rien dans `public` ; `g_can` non touchée. Tant qu'elle n'est pas ap
 `POST /api/biens/create` répond 503 `schema_outdated` pour ce type, jamais une erreur de
 saisie. Le repli est noté en tête du fichier.
 
+## 0027 · proposée, NON appliquée · la signature électronique
+
+`0027_signatures.sql` n'est pas appliquée en production : elle attend une approbation
+explicite, après 0022 dont elle dépend (`gestion.audit_row()`, et les contrats produits
+qu'un envoi fait signer). Elle est rejouée sur la base jetable de CI, où l'audit RLS la
+vérifie. Tout est additif : trois tables sous RLS sur le motif gestion.can existant.
+`gestion.signature_envelopes` (un envoi en signature chez Youtrust, ex-Yousign : lecture
+`leases.view`, insertion et mise à jour `leases.edit`, aucune suppression ; un seul envoi
+vivant par bail, garanti par un index unique partiel) ; `gestion.signature_signers` (les
+signataires d'un envoi, rattachés par une clé étrangère composite à un envoi du même
+espace ; mêmes droits ; téléphone au format international vérifié par la base) ;
+`gestion.usage_charges` (les prestations facturées à l'usage, en centimes avec le coût du
+prestataire : lecture `finance.view`, insertion `leases.edit`, ni mise à jour ni
+suppression). Les deux premières sont journalisées par `gestion.audit_row()`. Aucune
+fonction `security definer`, rien d'ouvert à `anon` : pas de webhook, l'état d'un envoi se
+relit chez le prestataire sous la session de qui ouvre la page. Aucune table existante
+supprimée, renommée ni réécrite ; rien dans `public` ; `g_can` non touchée. Le repli est
+noté en tête du fichier. Vérifiée en local sur Postgres 16 avec des objets de substitution
+(insertion pour un autre espace refusée, second envoi vivant refusé, signataire rattaché à
+l'envoi d'un autre espace refusé, registre d'usage non modifiable, journal alimenté).
+Côté serveur, l'envoi réel demande `YOUSIGN_API_KEY` dans les variables d'environnement
+Vercel, et `YOUSIGN_ENV=production` pour sortir de l'environnement de test (non posées à
+ce jour).
+
+## 0028 · proposée, NON appliquée · les parties au contrat de bail
+
+`0028_parties_au_contrat.sql` n'est pas appliquée en production : elle attend une
+approbation explicite, après 0022 dont elle dépend (`gestion.workspace_settings`). Elle
+est rejouée sur la base jetable de CI, où `paper.spec.ts` et l'audit RLS la vérifient.
+Tout est additif : des colonnes facultatives, sans réécriture de ligne. Sur
+`gestion.contacts` : `civility` (m, f, x), `birth_date`, `birth_place`, `legal_form`
+(liste fermée des formes luxembourgeoises, `other` pour n'en imprimer aucune),
+`representative_name`, `representative_role`. Sur `gestion.workspace_settings` :
+`lessor_kind` (personne ou société), `lessor_civility`, `lessor_birth_date`,
+`lessor_birth_place`, `lessor_nationality`, `lessor_legal_form`, `lessor_rcs_number`,
+`signatory_role`, vides par défaut. Aucune policy modifiée : les colonnes suivent celles
+de leur table. Aucune table existante supprimée, renommée ni réécrite ; rien dans
+`public` ; `g_can` non touchée. Le repli est noté en tête du fichier. Vérifiée en local
+sur Postgres 16 avec des objets de substitution (lignes existantes intactes, valeurs par
+défaut vides, chaque valeur hors liste refusée par sa contrainte). Tant qu'elle n'est pas
+appliquée, l'éditeur « Identité au contrat » ne s'affiche pas, Réglages enregistre le
+reste sans l'identité au contrat et le dit, et le contrat d'habitation n'est pas produit
+(la réponse nomme les champs qui manquent).
+
 ## 0024 · 2026-09-28 · crédits immobiliers et projets d'achat
 
 `0024_investment_workspace.sql` (migration `0024_investment_workspace`, version

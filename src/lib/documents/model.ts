@@ -21,7 +21,11 @@ export interface TableSpec {
 
 export interface Section {
   heading?: string;
+  /** A short line in bold before the paragraphs ("Le Bailleur :"). */
+  lead?: string;
   paragraphs?: string[];
+  /** A list after the paragraphs, one entry per line. */
+  items?: string[];
   keyValues?: Array<[string, string]>;
   table?: TableSpec;
   note?: string;
@@ -31,6 +35,12 @@ export interface Section {
 export interface DocumentModel {
   /** One of the produced kinds, or the fiscal pack, which the same renderer draws. */
   kind: DocumentKind | "fiscal_pack";
+  /**
+   * A letter (the default) opens on the sender, the recipient and the date;
+   * a contract opens on its title, names its parties in its own text and
+   * closes on where and when it is made.
+   */
+  layout?: "letter" | "contract";
   lang: Locale;
   version: string;
   title: string;
@@ -42,7 +52,20 @@ export interface DocumentModel {
   subject?: string;
   sections: Section[];
   closing?: string[];
-  signature?: { label: string; name: string; second?: { label: string; name: string } };
+  signature?: {
+    label: string;
+    name: string;
+    /** The second column; `names`, when there are several people, gives each a line to sign on. */
+    second?: { label: string; name: string; names?: string[] };
+    /**
+     * For an electronic signature: the signing provider's anchor for the
+     * first column's signer (the lessor), and one line per person of the
+     * second column (each tenant), each with its own anchor. Drawn invisibly
+     * over the line the provider places that person's signature on; the
+     * labels and the wording stay the template's.
+     */
+    anchors?: { first: string; second: Array<{ name: string; anchor: string }> };
+  };
   footer: string;
   /** Printed across the page: a preview with fictitious values, never a stored document. */
   watermark?: string;
@@ -156,6 +179,40 @@ export interface DepositSettlementData {
   penaltyCents: number;
 }
 
+export type Civility = "m" | "f" | "x";
+
+/** An address as a contract prints it: the street line, the postcode and town, the country (ISO). */
+export interface PartyAddress {
+  line: string;
+  locality: string;
+  country: string;
+}
+
+/**
+ * A party to a contract as it is named in it: a person (civility, name,
+ * birth, nationality, where they live) or a company (name, legal form,
+ * registered office, register number, who signs for it).
+ */
+export type ContractParty =
+  | { kind: "natural"; civility: Civility; name: string; birthDate: string; birthPlace: string; nationality: string; address: PartyAddress }
+  | { kind: "legal"; name: string; legalForm: string; seat: PartyAddress; rcsNumber: string; representative: string; representativeRole: string };
+
+/** What a residential contract needs beyond the lease's figures: the parties and the dwelling as named. */
+export interface ResidentialContractData {
+  lessor: ContractParty;
+  /** In the order the lease names them. */
+  tenants: ContractParty[];
+  dwelling: "apartment" | "house" | "other";
+  /** "12, Rue de la Gare, L-8001 Strassen". */
+  premisesAddress: string;
+  /** The parcel as the land register names it. */
+  cadastral: { commune: string; section: string; number: string };
+  /** The rooms and parts of the building let, as the lease describes them; empty to describe the lot from its facts. */
+  premises: string;
+  copropriete: boolean;
+  bank: { iban: string; name: string; holder: string };
+}
+
 export interface LeaseContractData {
   leaseType: string;
   startDate: string;
@@ -176,6 +233,8 @@ export interface LeaseContractData {
   unit: { label: string; floor: string | null; areaSqm: number; rooms: number; bedrooms: number | null };
   energyClass: string | null;
   cadastral: string | null;
+  /** A residential lease: the contract written out in full, its parties named. */
+  contract?: ResidentialContractData;
 }
 
 export interface HousingCertificateData {
@@ -222,4 +281,9 @@ export interface ComposeInput<K extends DocumentKind = DocumentKind> {
   reference: string;
   data: KindData[K];
   watermark?: string;
+  /**
+   * Produced to be signed electronically: one provider anchor per signer,
+   * in signing order, the tenants as named above and then the lessor.
+   */
+  signing?: { anchors: string[] };
 }

@@ -1,4 +1,5 @@
 import { LOCALES, type Locale } from "@/lib/i18n/config";
+import { isCivility, isLegalForm } from "./contract-parties";
 
 /**
  * The lessor's identity and payment instructions as the settings screen
@@ -24,9 +25,30 @@ export interface LessorSettings {
   notifyTenantMessages: boolean;
   /** A tenant's word or request warns the desk by e-mail. */
   notifyManagerMessages: boolean;
+  /** The lessor as a lease contract names them (migration 0028): a person or a company. */
+  lessorKind: "" | "natural" | "legal";
+  lessorCivility: "" | "m" | "f" | "x";
+  lessorBirthDate: string;
+  lessorBirthPlace: string;
+  lessorNationality: string;
+  lessorLegalForm: string;
+  lessorRcsNumber: string;
+  signatoryRole: string;
 }
 
-export type SettingsProblem = "legalName" | "iban" | "bic" | "documentLang" | "email";
+/** The settings columns that arrive with migration 0028. */
+export const LESSOR_IDENTITY_COLUMNS = [
+  "lessor_kind",
+  "lessor_civility",
+  "lessor_birth_date",
+  "lessor_birth_place",
+  "lessor_nationality",
+  "lessor_legal_form",
+  "lessor_rcs_number",
+  "signatory_role",
+] as const;
+
+export type SettingsProblem = "legalName" | "iban" | "bic" | "documentLang" | "email" | "birthDate";
 
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, "").trim().slice(0, max) : "");
 
@@ -55,6 +77,11 @@ export function parseSettingsInput(body: Record<string, unknown>): LessorSetting
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { problem: "email" };
   const documentLang = str(body.documentLang, 2) || "fr";
   if (!(LOCALES as readonly string[]).includes(documentLang)) return { problem: "documentLang" };
+  const lessorBirthDate = str(body.lessorBirthDate, 10);
+  if (lessorBirthDate && (!/^\d{4}-\d{2}-\d{2}$/.test(lessorBirthDate) || lessorBirthDate <= "1900-01-01" || lessorBirthDate > new Date().toISOString().slice(0, 10))) return { problem: "birthDate" };
+  const kind = str(body.lessorKind, 20);
+  const civility = str(body.lessorCivility, 8);
+  const legalForm = str(body.lessorLegalForm, 20);
   return {
     legalName,
     signatoryName: str(body.signatoryName, 160),
@@ -72,6 +99,15 @@ export function parseSettingsInput(body: Record<string, unknown>): LessorSetting
     // Absent from the form, a preference stays on: silence never turns a notification off.
     notifyTenantMessages: body.notifyTenantMessages !== false,
     notifyManagerMessages: body.notifyManagerMessages !== false,
+    // Out of its list, a choice reads as not made yet: the contract then asks for it by name.
+    lessorKind: kind === "natural" || kind === "legal" ? kind : "",
+    lessorCivility: isCivility(civility) ? civility : "",
+    lessorBirthDate,
+    lessorBirthPlace: str(body.lessorBirthPlace, 120),
+    lessorNationality: str(body.lessorNationality, 80),
+    lessorLegalForm: isLegalForm(legalForm) ? legalForm : "",
+    lessorRcsNumber: str(body.lessorRcsNumber, 40),
+    signatoryRole: str(body.signatoryRole, 80),
   };
 }
 

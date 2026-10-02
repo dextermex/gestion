@@ -92,6 +92,23 @@ describe("lessor settings", () => {
     expect(parseSettingsInput({ legalName: "X", documentLang: "xx" })).toEqual({ problem: "documentLang" });
     expect(parseSettingsInput({ legalName: "X" })).toMatchObject({ country: "LU", documentLang: "fr", iban: "" });
   });
+  it("reads the lessor as a contract names them, a choice out of its list reading as not made yet", () => {
+    expect(parseSettingsInput({ legalName: "Nora Kremer", lessorKind: "natural", lessorCivility: "f", lessorBirthDate: "1975-04-12", lessorBirthPlace: " Esch-sur-Alzette ", lessorNationality: "luxembourgeoise" })).toMatchObject({
+      lessorKind: "natural",
+      lessorCivility: "f",
+      lessorBirthDate: "1975-04-12",
+      lessorBirthPlace: "Esch-sur-Alzette",
+      lessorNationality: "luxembourgeoise",
+    });
+    expect(parseSettingsInput({ legalName: "Immo s.à r.l.", lessorKind: "company", lessorCivility: "mr", lessorLegalForm: "gmbh", signatoryRole: "gérant" })).toMatchObject({
+      lessorKind: "",
+      lessorCivility: "",
+      lessorLegalForm: "",
+      signatoryRole: "gérant",
+    });
+    expect(parseSettingsInput({ legalName: "X", lessorBirthDate: "15/03/1985" })).toEqual({ problem: "birthDate" });
+    expect(parseSettingsInput({ legalName: "X", lessorBirthDate: "2999-01-01" })).toEqual({ problem: "birthDate" });
+  });
   it("says what a document still lacks, and prints a Luxembourg address once", () => {
     const s = { legalName: "X", addressStreet: "", postalCode: "", city: "", iban: "", holderName: "" };
     expect(missingForDocuments(s, true)).toEqual(["address", "payment"]);

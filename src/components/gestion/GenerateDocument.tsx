@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/pro/ui";
 import type { DocumentKind } from "@/lib/documents/kinds";
+import { describeMissing, missingOf, type MissingLabels } from "@/lib/documents/missing";
 import { callJson } from "./call";
 
 /**
@@ -29,6 +30,10 @@ export interface GenerateLabels {
   reasonKeysOut: string;
   reasonUnsealed: string;
   reasonNoContent: string;
+  reasonNoTenant: string;
+  reasonAbroad: string;
+  /** A contract that cannot be written yet: what is missing, and where it is filled in. */
+  incomplete: MissingLabels;
   errFailed: string;
   send: string;
   sentTo: string;
@@ -110,8 +115,9 @@ export default function GenerateDocument({
       const missing = Array.isArray(payload.missing) ? (payload.missing as string[]).map((m) => names[m] ?? m) : [];
       return labels.errSettings.replace("{fields}", missing.join(", "));
     }
+    if (code === "contract_incomplete") return describeMissing(missingOf(payload), labels.incomplete);
     if (code === "not_ready") {
-      const reasons: Record<string, string> = { unpaid: labels.reasonUnpaid, keys_out: labels.reasonKeysOut, unsealed: labels.reasonUnsealed, no_content: labels.reasonNoContent };
+      const reasons: Record<string, string> = { unpaid: labels.reasonUnpaid, keys_out: labels.reasonKeysOut, unsealed: labels.reasonUnsealed, no_content: labels.reasonNoContent, no_tenant: labels.reasonNoTenant, abroad: labels.reasonAbroad };
       return labels.errNotReady.replace("{reason}", reasons[String(payload.reason)] ?? String(payload.reason ?? ""));
     }
     return labels.errFailed;

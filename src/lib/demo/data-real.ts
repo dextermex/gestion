@@ -27,7 +27,8 @@ import { pageBounds, pageInfo, windowStart, DEFAULT_MONTHS_BACK, DEFAULT_PAGE_SI
 import { purgeHorizon, summariseDocuments, type DocumentSummary } from "@/lib/documents/summary";
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
-import type { DemoAuditEntry, DemoDelivery, DemoGenerated, DemoLessor, DemoTemplate } from "./data";
+import type { ContactIdentity, DemoAuditEntry, DemoDelivery, DemoGenerated, DemoLessor, DemoSignatureEnvelope, DemoTemplate } from "./data";
+import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -67,6 +68,22 @@ const day = (v: unknown): string => s(v).slice(0, 10);
 export type GestionReader = ReturnType<ReturnType<typeof authedClient>["schema"]>;
 
 /** The guided rental's memory on a draft lease, if the row carries one. */
+/** What a lease contract names of a contact, read from its row once the base carries it. */
+function identityOf(c: Row): ContactIdentity {
+  const a = (c.address && typeof c.address === "object" ? c.address : {}) as Row;
+  return {
+    civility: s(c.civility),
+    birthDate: day(c.birth_date),
+    birthPlace: s(c.birth_place),
+    nationality: s(c.nationality),
+    address: { street: s(a.street), number: s(a.number), postalCode: s(a.postal_code), city: s(a.city), country: s(a.country) || "LU" },
+    legalForm: s(c.legal_form),
+    rcsNumber: s(c.rcs_number),
+    representativeName: s(c.representative_name),
+    representativeRole: s(c.representative_role),
+  };
+}
+
 function dossierOf(details: Row): DemoLease["dossier"] | undefined {
   const raw = details.dossier as Row | undefined;
   if (!raw || typeof raw !== "object") return undefined;
@@ -188,7 +205,8 @@ export async function buildRealDataFrom(
   const [propertyRows, unitRows, contactRows, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, settingsRows, validationRows, documentPage, documentFacts] = await Promise.all([
     q("properties", "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url", (b) => (propertyScoped ? b.eq("id", propertyScoped) : b).order("created_at")),
     q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url", (b) => (propertyScoped ? b.eq("property_id", propertyScoped) : b).order("created_at")),
-    q("contacts", "id,kind,first_name,last_name,legal_name,display_name,email,phone,language,iban,bank_holder_name,notes,user_id"),
+    // Read whole: the identity a contract names (0028) may be newer than the rest, and is simply absent until then.
+    q("contacts", "*"),
     q("contact_roles", "contact_id,role,ended_on"),
     q("bank_accounts", "id,label,iban,bic,holder_name_verbatim,kind,provider,consent_expires_at,balance_cents"),
     shell ? none() : q("iban_bindings", "payer_iban,lease_id"),
@@ -325,6 +343,11 @@ export async function buildRealDataFrom(
     ? await inChunks(periodLetterRows.map((l) => s(l.id)), (ids) => q("generated_documents", "document_id,kind,lang,template_version,source_type,source_id,generated_at", (b) => b.in("source_id", ids).order("generated_at", { ascending: false })))
     : [];
   const allGeneratedRows = [...generatedRows, ...periodLetterGenerated];
+  // What went out to be signed electronically, and who signed (0027; nothing to read until it is applied).
+  const envelopeRows = shell
+    ? []
+    : await q("signature_envelopes", "id,lease_id,document_id,status,level,provider_env,sent_at,completed_at,expires_on,signed_document_id,created_at", (b) => (leaseScoped ? b.eq("lease_id", leaseScoped) : b).order("created_at", { ascending: false }));
+  const signerRows = await inChunks(envelopeRows.map((e) => s(e.id)), (ids) => q("signature_signers", "envelope_id,position,role,contact_id,first_name,last_name,email,status,signed_at,level", (b) => b.in("envelope_id", ids).order("position")));
   const generatedDocRows = await inChunks(
     allGeneratedRows.map((g) => s(g.document_id)),
     (ids) => q("documents", "id,name,sha256,created_at", (b) => b.in("id", ids)),
@@ -355,7 +378,10 @@ export async function buildRealDataFrom(
     bankHolderName: sOr(c.bank_holder_name, undefined),
     notes: sOr(c.notes, undefined),
     portalLinked: typeof c.user_id === "string" && c.user_id !== "",
+    identity: "civility" in c ? identityOf(c) : undefined,
   }));
+  // The base carries the identity columns once 0028 is applied; with no contact yet, nothing is offered anyway.
+  const IDENTITY_READY = contactRows.length === 0 || "civility" in contactRows[0];
   const contactByUser = new Map(contactRows.filter((c) => typeof c.user_id === "string" && c.user_id !== "").map((c) => [s(c.user_id), s(c.id)]));
 
   // ── Properties & units ──
@@ -465,6 +491,7 @@ export async function buildRealDataFrom(
       indexationClause: (l.indexation_clause as DemoLease["indexationClause"]) ?? undefined,
       dossier: dossierOf(details),
       departure: departureOf(details),
+      premises: typeof details.premises === "string" && details.premises.trim() ? details.premises.trim() : undefined,
     };
   });
   const leaseIndex = new Map(LEASES.map((l) => [l.id, l]));
@@ -909,6 +936,16 @@ export async function buildRealDataFrom(
     documentLang: (["fr", "en", "de", "lu"].includes(s(settingsRow?.document_lang)) ? s(settingsRow?.document_lang) : "fr") as DemoLessor["documentLang"],
     notifyTenantMessages: settingsRow?.notify_tenant_messages !== false,
     notifyManagerMessages: settingsRow?.notify_manager_messages !== false,
+    lessorKind: s(settingsRow?.lessor_kind) === "natural" || s(settingsRow?.lessor_kind) === "legal" ? (s(settingsRow?.lessor_kind) as "natural" | "legal") : "",
+    civility: s(settingsRow?.lessor_civility),
+    birthDate: day(settingsRow?.lessor_birth_date),
+    birthPlace: s(settingsRow?.lessor_birth_place),
+    nationality: s(settingsRow?.lessor_nationality),
+    legalForm: s(settingsRow?.lessor_legal_form),
+    rcsNumber: s(settingsRow?.lessor_rcs_number),
+    signatoryRole: s(settingsRow?.signatory_role),
+    // No row yet: the first save tells whether the base carries the columns.
+    identityReady: settingsRow ? "lessor_kind" in settingsRow : true,
     complete: s(settingsRow?.legal_name) !== "" && s(settingsRow?.address_street) !== "" && s(settingsRow?.postal_code) !== "" && s(settingsRow?.city) !== "",
     hasPayment: s(settingsRow?.iban) !== "" && s(settingsRow?.holder_name) !== "",
   };
@@ -932,6 +969,30 @@ export async function buildRealDataFrom(
       name: s(generatedDocIndex.get(s(g.document_id))?.name),
       sha256: s(generatedDocIndex.get(s(g.document_id))?.sha256),
     }));
+  const signersByEnvelope = new Map<string, Row[]>();
+  for (const r of signerRows) signersByEnvelope.set(s(r.envelope_id), [...(signersByEnvelope.get(s(r.envelope_id)) ?? []), r]);
+  const SIGNATURE_ENVELOPES: DemoSignatureEnvelope[] = envelopeRows.map((e) => ({
+    id: s(e.id),
+    leaseId: s(e.lease_id),
+    documentId: s(e.document_id),
+    status: s(e.status) as EnvelopeStatus,
+    level: s(e.level) as SignatureLevel,
+    providerEnv: s(e.provider_env) === "production" ? "production" : "sandbox",
+    sentAt: e.sent_at ? s(e.sent_at) : null,
+    completedAt: e.completed_at ? s(e.completed_at) : null,
+    expiresOn: e.expires_on ? day(e.expires_on) : null,
+    signedDocumentId: e.signed_document_id ? s(e.signed_document_id) : null,
+    signers: (signersByEnvelope.get(s(e.id)) ?? []).map((r) => ({
+      position: Number(r.position) || 0,
+      role: s(r.role) as SignerRole,
+      contactId: r.contact_id ? s(r.contact_id) : null,
+      name: [s(r.first_name), s(r.last_name)].filter(Boolean).join(" "),
+      email: s(r.email),
+      status: s(r.status) as SignerStatus,
+      signedAt: r.signed_at ? s(r.signed_at) : null,
+      level: s(r.level) as SignatureLevel,
+    })),
+  }));
   const DELIVERIES: DemoDelivery[] = deliveryRows.map((r) => ({
     id: s(r.id),
     at: s(r.created_at),
@@ -956,6 +1017,7 @@ export async function buildRealDataFrom(
     ...base,
     TODAY: today,
     CONTACTS,
+    IDENTITY_READY,
     PROPERTIES,
     UNITS,
     LEASES,
@@ -983,6 +1045,9 @@ export async function buildRealDataFrom(
     TEMPLATES,
     GENERATED,
     generatedFor: (kind: DocumentKind, sourceId: string) => GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null,
+    SIGNATURE_ENVELOPES,
+    // Newest first already: the latest sending of a lease's contract.
+    envelopeFor: (leaseId: string) => SIGNATURE_ENVELOPES.find((e) => e.leaseId === leaseId) ?? null,
     AUDIT,
     DELIVERIES,
     contactById: (id: string) => contactIndex.get(id)!,

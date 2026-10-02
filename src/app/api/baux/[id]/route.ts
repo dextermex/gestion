@@ -60,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: lease, error: findErr } = await g
     .from("leases")
-    .select("id,status,rent_cents,charges_cents,payment_day,start_date")
+    .select("id,status,rent_cents,charges_cents,payment_day,start_date,details")
     .eq("org_id", org.id)
     .eq("id", id)
     .maybeSingle();
@@ -103,6 +103,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.charges_regime = body.chargesRegime === "forfait" ? "forfait" : "advances";
   }
   if (has(body, "furnished")) patch.furnished = body.furnished === true;
+  if (has(body, "premises")) {
+    // The rooms and parts let, as the contract describes them: kept with the
+    // lease's other written terms, every other key of `details` untouched.
+    const premises = typeof body.premises === "string" ? body.premises.replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 600) : "";
+    const details = { ...((lease.details as Record<string, unknown> | null) ?? {}) };
+    // Written only when it changed: the rest of `details` (a dossier, a departure) is never rewritten for nothing.
+    if (premises !== (typeof details.premises === "string" ? details.premises : "")) {
+      if (premises) details.premises = premises;
+      else delete details.premises;
+      patch.details = details;
+    }
+  }
   if (has(body, "capitalComponents")) {
     // The capital investi declaration: the components the 5 % ceiling is
     // computed from, year by year. Read once here, kept as the engine's shape.

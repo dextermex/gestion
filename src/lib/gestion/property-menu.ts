@@ -1,7 +1,9 @@
 import "server-only";
 import type { DemoData } from "@/lib/demo";
 import type { PropertyCard } from "@/lib/gestion/portfolio";
-import type { EditTopic, MenuEntry, MenuGroup } from "@/lib/gestion/editors";
+import type { EditField, EditTopic, MenuEntry, MenuGroup } from "@/lib/gestion/editors";
+import type { DemoContact } from "@/lib/demo/data";
+import { LEGAL_FORMS } from "@/lib/documents/contract-parties";
 import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { euros } from "@/lib/types";
@@ -167,6 +169,14 @@ export function propertyMenu(
           })
         : null;
 
+    // What the lease contract names of each tenant, once the base carries it (0028).
+    const identities: MenuEntry[] = demo.IDENTITY_READY
+      ? tenants.map((tenant, i) => {
+          const label = `${d.modify.tenantIdentity} \u00b7 ${tenant.name}`;
+          return { id: `identity-${i}`, label, topic: identityTopic(d, tenant, `identity-${i}`, label) };
+        })
+      : [];
+
     const entries: MenuEntry[] = [
       ...tenants.map((tenant, i) => {
         const label = tenants.length > 1 ? `${d.modify.tenant} \u00b7 ${tenant.name}` : d.modify.tenant;
@@ -187,6 +197,7 @@ export function propertyMenu(
           },
         };
       }),
+      ...identities,
       {
         id: "lease",
         label: d.modify.lease,
@@ -209,7 +220,9 @@ export function propertyMenu(
             },
             { kind: "date", name: "startDate", label: d.location.startDate, value: lease.startDate },
             { kind: "date", name: "endDate", label: d.location.endDate, value: lease.endDate ?? "", hint: d.location.endDateHint },
+            { kind: "textarea", name: "premises", label: d.modify.premises, value: lease.premises ?? "", maxLength: 600, span: 2 },
           ],
+          note: d.modify.premisesHint,
         },
       },
       {
@@ -374,6 +387,81 @@ function addressPart(formatted: string, part: "street" | "number" | "postal"): s
   if (part === "street") return first.replace(/^\d+[A-Za-z]?[,\s]+/, "").trim();
   const m = formatted.match(/\b([A-Z]{1,2}-\d{4,5})\b/);
   return m ? m[1] : "";
+}
+
+/** Where a tenant can live before moving in, or where a company has its seat: the usual countries, named in their own language. */
+const COUNTRIES = [
+  ["LU", "Luxembourg"],
+  ["BE", "Belgique"],
+  ["DE", "Deutschland"],
+  ["FR", "France"],
+  ["NL", "Nederland"],
+  ["PT", "Portugal"],
+  ["IT", "Italia"],
+  ["ES", "España"],
+  ["CH", "Schweiz"],
+  ["AT", "Österreich"],
+  ["PL", "Polska"],
+  ["RO", "România"],
+  ["GR", "Ελλάδα"],
+  ["IE", "Ireland"],
+  ["GB", "United Kingdom"],
+  ["US", "United States"],
+].map(([value, label]) => ({ value, label }));
+
+/**
+ * What the lease contract names of one tenant. A person: civility, birth,
+ * nationality and the address they move from. A company: its name, legal
+ * form, register number, representative and seat. The kind is the first
+ * field; the other kind's fields show once it is saved.
+ */
+function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string): EditTopic {
+  const idn = tenant.identity;
+  const legal = tenant.kind === "legal";
+  const choose = { value: "", label: d.modify.choose };
+  const address: EditField[] = [
+    { kind: "text", name: "addressStreet", label: d.modify.addressStreet, value: idn?.address.street ?? "", maxLength: 160 },
+    { kind: "text", name: "addressNumber", label: d.modify.addressNumber, value: idn?.address.number ?? "", maxLength: 20 },
+    { kind: "text", name: "addressPostal", label: d.modify.addressPostal, value: idn?.address.postalCode ?? "", maxLength: 12 },
+    { kind: "text", name: "addressCity", label: d.modify.addressCity, value: idn?.address.city ?? "", maxLength: 80 },
+    { kind: "select", name: "addressCountry", label: d.modify.addressCountry, value: idn?.address.country || "LU", options: COUNTRIES, span: 2 },
+  ];
+  const kind: EditField = {
+    kind: "select",
+    name: "kind",
+    label: d.modify.identityKind,
+    value: tenant.kind,
+    options: [
+      { value: "natural", label: d.modify.kindNatural },
+      { value: "legal", label: d.modify.kindLegal },
+    ],
+    span: 2,
+  };
+  const fields: EditField[] = legal
+    ? [
+        kind,
+        { kind: "text", name: "legalName", label: d.modify.legalName, value: tenant.name, required: true, maxLength: 160, span: 2 },
+        { kind: "select", name: "legalForm", label: d.modify.legalForm, value: idn?.legalForm ?? "", options: [choose, ...LEGAL_FORMS.map((f) => ({ value: f, label: d.modify.legalForms[f] }))] },
+        { kind: "text", name: "rcsNumber", label: d.modify.rcsNumber, value: idn?.rcsNumber ?? "", hint: d.modify.rcsHint, maxLength: 40 },
+        { kind: "text", name: "representativeName", label: d.modify.representative, value: idn?.representativeName ?? "", maxLength: 160 },
+        { kind: "text", name: "representativeRole", label: d.modify.representativeRole, value: idn?.representativeRole ?? "", hint: d.modify.representativeRoleHint, maxLength: 80 },
+        ...address,
+      ]
+    : [
+        kind,
+        {
+          kind: "select",
+          name: "civility",
+          label: d.modify.civility,
+          value: idn?.civility ?? "",
+          options: [choose, { value: "m", label: d.modify.civilityM }, { value: "f", label: d.modify.civilityF }, { value: "x", label: d.modify.civilityX }],
+        },
+        { kind: "date", name: "birthDate", label: d.modify.birthDate, value: idn?.birthDate ?? "" },
+        { kind: "text", name: "birthPlace", label: d.modify.birthPlace, value: idn?.birthPlace ?? "", maxLength: 120 },
+        { kind: "text", name: "nationality", label: d.modify.nationality, value: idn?.nationality ?? "", hint: d.modify.nationalityHint, maxLength: 80 },
+        ...address,
+      ];
+  return { id, title, endpoint: `/api/contacts/${tenant.id}`, method: "PATCH", fields, note: legal ? d.modify.identityNoteLegal : d.modify.identityNote };
 }
 
 function firstOf(name: string): string {

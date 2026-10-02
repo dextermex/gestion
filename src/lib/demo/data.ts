@@ -19,6 +19,7 @@ import { templateVersion } from "@/lib/documents/wording";
 import { summariseDocuments, type DocumentSummary } from "@/lib/documents/summary";
 import type { PageInfo } from "./scope";
 import type { InviteRow } from "@/lib/portal/types";
+import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
 import type {
   BankTxStatus,
   ContactRole,
@@ -51,6 +52,24 @@ export const ORG = {
 
 // ─── Contacts ───────────────────────────────────────────────────────────────
 
+/**
+ * What a lease contract names of a contact beyond their name: a person's
+ * civility, birth and nationality and where they live, or a company's form,
+ * register number, seat and who represents it. Present once the base
+ * carries these columns (migration 0028).
+ */
+export interface ContactIdentity {
+  civility: string;
+  birthDate: string;
+  birthPlace: string;
+  nationality: string;
+  address: { street: string; number: string; postalCode: string; city: string; country: string };
+  legalForm: string;
+  rcsNumber: string;
+  representativeName: string;
+  representativeRole: string;
+}
+
 export interface DemoContact {
   id: string;
   kind: "natural" | "legal";
@@ -68,7 +87,12 @@ export interface DemoContact {
   notes?: string;
   /** A Morada account is attached to this person: their tenant space is open. */
   portalLinked?: boolean;
+  /** What a lease contract names of them, when the base carries it. */
+  identity?: ContactIdentity;
 }
+
+/** The base carries the identity a contract names (migration 0028): the editors for it are offered. */
+export const IDENTITY_READY: boolean = true;
 
 export const CONTACTS: DemoContact[] = [
   { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
@@ -275,6 +299,8 @@ export interface DemoLease {
   noticeInfo?: { direction: "tenant" | "landlord"; ground: string; arReceivedOn: string; earliestEnd: string };
   /** A draft's memory of the guided rental: steps completed, the payer's name. */
   dossier?: { completed: string[]; step: string; payerName: string | null };
+  /** The rooms and parts let, as the contract describes them; absent to describe the lot from its facts. */
+  premises?: string;
   /** A departure being recorded on a running lease: the step reached and what was entered. */
   departure?: {
     step: number;
@@ -1278,6 +1304,18 @@ export interface DemoLessor {
   notifyTenantMessages: boolean;
   /** A tenant's word or request warns the desk by e-mail. */
   notifyManagerMessages: boolean;
+  /** The lessor in a lease contract: a person or a company, said explicitly ("" until then). */
+  lessorKind: "" | "natural" | "legal";
+  civility: string;
+  birthDate: string;
+  birthPlace: string;
+  nationality: string;
+  legalForm: string;
+  rcsNumber: string;
+  /** The capacity the signatory signs in for a company ("gérant"). */
+  signatoryRole: string;
+  /** The base carries these columns (migration 0028). */
+  identityReady: boolean;
   /** Name and address are there: a document can carry a sender. */
   complete: boolean;
   /** IBAN and holder are there: rent documents can print where to pay. */
@@ -1300,6 +1338,15 @@ export const LESSOR: DemoLessor = {
   documentLang: "fr",
   notifyTenantMessages: true,
   notifyManagerMessages: true,
+  lessorKind: "legal",
+  civility: "",
+  birthDate: "",
+  birthPlace: "",
+  nationality: "",
+  legalForm: "sarl",
+  rcsNumber: "B204517",
+  signatoryRole: "gérant",
+  identityReady: true,
   complete: true,
   hasPayment: true,
 };
@@ -1344,6 +1391,72 @@ export const GENERATED: DemoGenerated[] = [
 /** The latest document of a kind produced for a record, or null. */
 export function generatedFor(kind: DocumentKind, sourceId: string): DemoGenerated | null {
   return GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null;
+}
+
+// ─── Signature: what went out to be signed electronically, and who signed ────
+
+export interface DemoSignatureSigner {
+  position: number;
+  role: SignerRole;
+  /** The tenant's contact; null for the lessor, who signs for the workspace. */
+  contactId: string | null;
+  name: string;
+  email: string;
+  status: SignerStatus;
+  signedAt: string | null;
+  level: SignatureLevel;
+}
+
+export interface DemoSignatureEnvelope {
+  id: string;
+  leaseId: string;
+  /** The contract sent, as produced and sealed in the register. */
+  documentId: string;
+  status: EnvelopeStatus;
+  /** The tenants' level; the lessor signs at the simple level. */
+  level: SignatureLevel;
+  providerEnv: "sandbox" | "production";
+  sentAt: string | null;
+  completedAt: string | null;
+  expiresOn: string | null;
+  /** The signed contract, sealed in the register once every signer has signed. */
+  signedDocumentId: string | null;
+  signers: DemoSignatureSigner[];
+}
+
+const signerOf = (position: number, contactId: string, status: SignerStatus, signedAt: string | null, level: SignatureLevel): DemoSignatureSigner => {
+  const c = CONTACTS.find((x) => x.id === contactId);
+  return { position, role: "tenant", contactId, name: c?.name ?? "", email: c?.email ?? "", status, signedAt, level };
+};
+const lessorSigner = (position: number, status: SignerStatus, signedAt: string | null): DemoSignatureSigner => ({
+  position,
+  role: "lessor",
+  contactId: null,
+  name: LESSOR.signatoryName,
+  email: LESSOR.email,
+  status,
+  signedAt,
+  level: "electronic_signature",
+});
+
+export const SIGNATURE_ENVELOPES: DemoSignatureEnvelope[] = [
+  // The draft commercial lease went out the day after its contract was produced: the tenant signed, the lessor countersigns last.
+  {
+    id: "sig-krdc", leaseId: "l-krdc", documentId: "d-10", status: "ongoing", level: "electronic_signature", providerEnv: "production",
+    sentAt: "2026-08-21", completedAt: null, expiresOn: "2026-09-20", signedDocumentId: null,
+    signers: [signerOf(1, "c-schmit", "signed", "2026-08-22", "electronic_signature"), lessorSigner(2, "notified", null)],
+  },
+  // Apt 3B was signed at the advanced level before the lease began.
+  {
+    id: "sig-3b", leaseId: "l-3b", documentId: "d-1", status: "done", level: "advanced_electronic_signature", providerEnv: "production",
+    sentAt: "2023-03-20", completedAt: "2023-03-21", expiresOn: "2023-04-19", signedDocumentId: "d-1",
+    signers: [signerOf(1, "c-muller", "signed", "2023-03-21", "advanced_electronic_signature"), lessorSigner(2, "signed", "2023-03-21")],
+  },
+];
+
+/** The latest sending of a lease's contract, or null. */
+export function envelopeFor(leaseId: string): DemoSignatureEnvelope | null {
+  return SIGNATURE_ENVELOPES.filter((e) => e.leaseId === leaseId).sort((a, b) => ((a.sentAt ?? "") < (b.sentAt ?? "") ? 1 : -1))[0] ?? null;
 }
 
 export interface DemoAuditEntry {

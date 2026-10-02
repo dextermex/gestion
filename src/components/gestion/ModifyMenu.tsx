@@ -26,6 +26,8 @@ export interface ModifyLabels {
   saved: string;
   failed: string;
   emailTaken: string;
+  /** Fields the database does not carry yet (a migration awaiting approval). */
+  schemaOutdated: string;
   /** Photos editor. */
   photoCurrent: string;
   photoChoose: string;
@@ -213,7 +215,7 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(data.error === "email_taken" ? labels.emailTaken : labels.failed);
+      setError(data.error === "email_taken" ? labels.emailTaken : data.error === "schema_outdated" ? labels.schemaOutdated : labels.failed);
     } catch {
       setError(labels.failed);
     }

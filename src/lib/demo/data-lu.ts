@@ -10,7 +10,7 @@
 
 import * as fr from "./data";
 import { periodFromSyndic } from "./charges-seed";
-import type { DemoAuditEntry, DemoBankTx, DemoDelivery, DemoBill, DemoContact, DemoFiscalYear, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
+import type { DemoAuditEntry, DemoBankTx, DemoDelivery, DemoBill, DemoContact, DemoFiscalYear, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoSignatureEnvelope, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
 import type { TaxpayerProperty } from "@/domain/fiscal/amortisation";
 import type { DocumentKind } from "@/lib/documents/kinds";
 import type { OpenInvoice } from "@/domain/banking/matching";
@@ -479,6 +479,8 @@ export const PAGING = fr.PAGING;
 export const DOCUMENT_SUMMARY = fr.DOCUMENT_SUMMARY;
 
 // The paper trail: the Majerus cabinet as its documents print it; the same templates, the same produced pieces.
+export const IDENTITY_READY: boolean = fr.IDENTITY_READY;
+
 export const LESSOR: DemoLessor = {
   ...fr.LESSOR,
   legalName: "Cabinet Majerus s.à r.l.",
@@ -501,6 +503,18 @@ export function generatedFor(kind: DocumentKind, sourceId: string): DemoGenerate
   return GENERATED.filter((g) => g.kind === kind && g.sourceId === sourceId).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))[0] ?? null;
 }
 export const AUDIT: DemoAuditEntry[] = fr.AUDIT;
+// The same sendings, signed by the Majerus cabinet's people under the same ids and dates.
+export const SIGNATURE_ENVELOPES: DemoSignatureEnvelope[] = fr.SIGNATURE_ENVELOPES.map((e) => ({
+  ...e,
+  signers: e.signers.map((sg) => {
+    const c = sg.contactId ? CONTACTS.find((x) => x.id === sg.contactId) : null;
+    return { ...sg, name: c ? c.name : sg.contactId ? sg.name : LESSOR.signatoryName, email: c ? (c.email ?? sg.email) : sg.contactId ? sg.email : LESSOR.email };
+  }),
+}));
+export function envelopeFor(leaseId: string): DemoSignatureEnvelope | null {
+  return SIGNATURE_ENVELOPES.filter((e) => e.leaseId === leaseId).sort((a, b) => ((a.sentAt ?? "") < (b.sentAt ?? "") ? 1 : -1))[0] ?? null;
+}
+
 
 const DELIVERY_SUBJECTS: Record<string, string> = {
   "dv-1": "Loyerquittung · Apt 3B · Résidence Beaulieu",

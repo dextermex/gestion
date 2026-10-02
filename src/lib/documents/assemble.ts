@@ -4,7 +4,9 @@ import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
 import { loadSettlement } from "@/lib/gestion/deposit-settlement";
 import type { DocumentKind, SourceType } from "./kinds";
 import { KIND_SOURCE } from "./kinds";
-import type { ComposeInput, KindData, Lessor, OpenPeriod, Place } from "./model";
+import { getParamValue } from "@/domain/legal/params";
+import type { ComposeInput, ContractParty, KindData, Lessor, OpenPeriod, Place, ResidentialContractData } from "./model";
+import { bankName, contactParty, dwellingOf, lessorParty, partyAddress, type ContractField, type MissingItem } from "./contract-parties";
 import { postalAddress, type LessorSettings } from "./settings-rules";
 
 /**
@@ -29,11 +31,15 @@ export interface Assembled {
   payload: unknown;
   /** Whether this kind prints payment instructions (and so needs them set). */
   needsPayment: boolean;
+  /** The tenants the document names, in the order it names them. */
+  parties: Array<{ id: string; name: string; email: string | null }>;
 }
 
 export type AssembleFailure =
   | { error: "not_found" }
   | { error: "not_ready"; reason: string }
+  /** A residential contract names its parties and its dwelling in full: what is still missing, party by party. */
+  | { error: "contract_incomplete"; missing: MissingItem[] }
   | { error: "storage_failed"; context: string; detail: { code?: string; message?: string } | null };
 
 export const NEEDS_PAYMENT: Record<DocumentKind, boolean> = {
@@ -67,6 +73,14 @@ export function lessorOf(row: Row | null, fallbackName: string): { lessor: Lesso
     documentLang: (["fr", "en", "de", "lu"].includes(s(row?.document_lang)) ? s(row?.document_lang) : "fr") as LessorSettings["documentLang"],
     notifyTenantMessages: row?.notify_tenant_messages !== false,
     notifyManagerMessages: row?.notify_manager_messages !== false,
+    lessorKind: s(row?.lessor_kind) === "natural" || s(row?.lessor_kind) === "legal" ? (s(row?.lessor_kind) as "natural" | "legal") : "",
+    lessorCivility: (["m", "f", "x"].includes(s(row?.lessor_civility)) ? s(row?.lessor_civility) : "") as LessorSettings["lessorCivility"],
+    lessorBirthDate: day(row?.lessor_birth_date),
+    lessorBirthPlace: s(row?.lessor_birth_place),
+    lessorNationality: s(row?.lessor_nationality),
+    lessorLegalForm: s(row?.lessor_legal_form),
+    lessorRcsNumber: s(row?.lessor_rcs_number),
+    signatoryRole: s(row?.signatory_role),
   };
   return {
     settings,
@@ -117,7 +131,7 @@ async function tenancy(ctx: OrgContext, leaseId: string): Promise<Tenancy | Asse
   if (unitErr) return { error: "storage_failed", context: "unit lookup", detail: unitErr };
   if (!unit) return { error: "not_found" };
   const [{ data: property, error: propErr }, { data: parties, error: partyErr }] = await Promise.all([
-    g.from("properties").select("id,name,address,commune,energy_class,cadastral_commune,cadastral_section,cadastral_number").eq("org_id", org.id).eq("id", s(unit.property_id)).maybeSingle(),
+    g.from("properties").select("id,name,type,address,commune,energy_class,cpe_issued_on,cadastral_commune,cadastral_section,cadastral_number,is_copropriete,smoke_detectors_confirmed").eq("org_id", org.id).eq("id", s(unit.property_id)).maybeSingle(),
     g.from("lease_parties").select("contact_id,role,moved_out_on").eq("org_id", org.id).eq("lease_id", leaseId),
   ]);
   if (propErr) return { error: "storage_failed", context: "property lookup", detail: propErr };
@@ -141,6 +155,70 @@ async function tenancy(ctx: OrgContext, leaseId: string): Promise<Tenancy | Asse
 }
 
 const isFailure = (v: unknown): v is AssembleFailure => typeof v === "object" && v !== null && "error" in v;
+
+/** The ISO day `years` years after `iso`. */
+const addYears = (iso: string, years: number): string => `${String(Number(iso.slice(0, 4)) + years).padStart(4, "0")}${iso.slice(4, 10)}`;
+
+/**
+ * What a residential contract names beyond the lease's figures: the lessor
+ * as the settings describe them, each tenant as their contact describes
+ * them (read whole, so identity columns newer than the rest are simply
+ * absent until the base carries them), the dwelling as the property and
+ * the lot record it, and the account the rent is paid into. Every gap is
+ * collected, party by party, before anything is refused, so one answer
+ * says everything that is left to fill.
+ */
+async function residentialContractOf(ctx: OrgContext, t: Tenancy, settingsRow: Row | null, details: Row, today: string): Promise<ResidentialContractData | AssembleFailure> {
+  const { g, org } = ctx;
+  const missing: MissingItem[] = [];
+
+  const lessor = lessorParty(settingsRow);
+  const iban = s(settingsRow?.iban).replace(/\s+/g, "");
+  const bic = s(settingsRow?.bic);
+  const lessorFields: ContractField[] = [...lessor.missing];
+  if (!iban) lessorFields.push("iban");
+  if (!bic) lessorFields.push("bic");
+  if (lessorFields.length > 0) missing.push({ subject: "lessor", id: org.id, name: s(settingsRow?.legal_name) || org.name, fields: lessorFields });
+
+  const ids = t.tenants.map((x) => x.id);
+  if (ids.length === 0) return { error: "not_ready", reason: "no_tenant" };
+  const { data: rows, error } = await g.from("contacts").select("*").eq("org_id", org.id).in("id", ids);
+  if (error) return { error: "storage_failed", context: "tenant identity lookup", detail: error };
+  const byId = new Map(((rows ?? []) as Row[]).map((r) => [s(r.id), r]));
+  const tenants: ContractParty[] = [];
+  for (const tenant of t.tenants) {
+    const row = byId.get(tenant.id);
+    const read = row ? contactParty(row) : { party: null, missing: ["name"] as ContractField[] };
+    if (read.party) tenants.push(read.party);
+    else missing.push({ subject: "tenant", id: tenant.id, name: tenant.name, fields: read.missing });
+  }
+
+  const p = t.property;
+  const addr = ((p.address && typeof p.address === "object" ? p.address : {}) as Row);
+  const country = s(addr.country).toUpperCase() || "LU";
+  // The template is the Luxembourg law's: a dwelling elsewhere is not let under it.
+  if (country !== "LU") return { error: "not_ready", reason: "abroad" };
+  const place = partyAddress({ street: addr.street, number: addr.number, postalCode: addr.postal_code, city: addr.city || p.commune, country });
+  const propertyFields: ContractField[] = [];
+  if (!s(addr.street) || !s(addr.postal_code) || !(s(addr.city) || s(p.commune))) propertyFields.push("address");
+  if (!s(p.cadastral_commune) || !s(p.cadastral_section) || !s(p.cadastral_number)) propertyFields.push("cadastral");
+  if (!s(p.energy_class)) propertyFields.push("energy_class");
+  else if (s(p.cpe_issued_on) && addYears(day(p.cpe_issued_on), getParamValue("compliance.cpe_validity_years", today)) <= today) propertyFields.push("cpe");
+  if (p.smoke_detectors_confirmed !== true) propertyFields.push("smoke_detectors");
+  if (propertyFields.length > 0) missing.push({ subject: "property", id: s(p.id), name: s(p.name), fields: propertyFields });
+
+  if (missing.length > 0 || !lessor.party) return { error: "contract_incomplete", missing };
+  return {
+    lessor: lessor.party,
+    tenants,
+    dwelling: dwellingOf(s(p.type)),
+    premisesAddress: [place.line, place.locality].filter(Boolean).join(", "),
+    cadastral: { commune: s(p.cadastral_commune), section: s(p.cadastral_section), number: s(p.cadastral_number) },
+    premises: s(details.premises),
+    copropriete: p.is_copropriete === true,
+    bank: { iban, name: bankName(bic), holder: s(settingsRow?.holder_name) || s(settingsRow?.legal_name) },
+  };
+}
 
 async function periodRow(ctx: OrgContext, periodId: string): Promise<{ period: Row; allocated: number; status: string } | AssembleFailure> {
   const { g, org } = ctx;
@@ -179,6 +257,7 @@ export async function assemble(ctx: OrgContext, kind: DocumentKind, sourceId: st
     nameSuffix,
     payload: { kind, leaseId, sourceId, on, lessor, tenants: t.tenants, place: t.place, data },
     needsPayment: NEEDS_PAYMENT[kind],
+    parties: t.tenants,
   });
 
   switch (kind) {
@@ -403,6 +482,11 @@ export async function assemble(ctx: OrgContext, kind: DocumentKind, sourceId: st
         energyClass: s(t.property.energy_class) || null,
         cadastral: cadastral || null,
       };
+      if (data.leaseType === "residential") {
+        const contract = await residentialContractOf(ctx, t, settingsRow, details, today);
+        if (isFailure(contract)) return contract;
+        data.contract = contract;
+      }
       return done(sourceId, t, data, day(t.lease.start_date), today);
     }
     case "edl_report": {
