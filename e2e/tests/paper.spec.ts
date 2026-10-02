@@ -65,7 +65,9 @@ let token = "";
 const arrearsCase = (page: Page, monthIso: string) => page.locator("li").filter({ hasText: "de retard" }).filter({ hasText: monthLabel(monthIso) });
 const docControl = (page: Page, kind: string, sourceId: string) => page.locator(`[data-doc-kind="${kind}"][data-doc-source="${sourceId}"]`);
 
-type Produced = { status: number; body: { documentId?: string; name?: string; sha256?: string; existing?: boolean; error?: string; reason?: string; missing?: string[] } };
+/** What a contract still lacks, as the route names it: the party or the dwelling, its id, the fields. */
+type MissingItem = { subject: "lessor" | "tenant" | "property"; id: string; name: string; fields: string[] };
+type Produced = { status: number; body: { documentId?: string; name?: string; sha256?: string; existing?: boolean; error?: string; reason?: string; missing?: Array<string | MissingItem> } };
 /** Ask the register for a document from its control; what the route answered. */
 async function produce(page: Page, control: Locator, again = false): Promise<Produced> {
   const done = page.waitForResponse((r) => r.url().endsWith("/api/documents/generer") && r.request().method() === "POST");
@@ -318,11 +320,11 @@ test("the lease sheet: the contract and the housing certificate from the lease's
   await expect(refusal).toContainText("Il manque encore des informations pour établir le contrat");
   await expect(refusal).toContainText(`${tenant.first} ${tenant.last} (civilité, date de naissance, lieu de naissance, nationalité, adresse)`);
   await expect(refusal).toContainText("référence cadastrale, classe énergétique (CPE), détecteurs de fumée confirmés");
-  // The tenant as the contract writes him, on his contact; the dwelling's parcel, certificate and detectors on the property.
-  await page.goto(`/app/biens/${propertyId}?onglet=location`);
-  const tenantHref = (await page.getByRole("link", { name: `${tenant.first} ${tenant.last}` }).first().getAttribute("href")) ?? "";
-  const tenantId = tenantHref.split("/").pop() ?? "";
-  expect(tenantId, "the tenant's contact id from the property sheet").not.toBe("");
+  // The refusal names whom it is about: the tenant's contact, to complete as the contract writes him.
+  const missingTenant = (early.body.missing ?? []).find((m): m is MissingItem => typeof m === "object" && m.subject === "tenant");
+  expect(missingTenant, "the refusal names the tenant").toBeTruthy();
+  const tenantId = missingTenant!.id;
+  expect((early.body.missing ?? []).find((m): m is MissingItem => typeof m === "object" && m.subject === "property")?.id, "and the dwelling").toBe(propertyId);
   const identity = await page.request.patch(`/api/contacts/${tenantId}`, {
     data: { civility: "m", birthDate: "1990-05-03", birthPlace: "Luxembourg", nationality: "luxembourgeoise", addressStreet: "Avenue de la Liberté", addressNumber: "8", addressPostal: "1930", addressCity: "Luxembourg", addressCountry: "LU" },
   });
