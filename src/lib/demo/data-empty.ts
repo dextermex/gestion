@@ -60,6 +60,7 @@ export function buildEmptyData(org: Org): DemoData {
     ORG: org,
     CONTACTS,
     IDENTITY_READY: true,
+    SIGNATURE_READY: true,
     PROPERTIES,
     UNITS,
     LEASES,

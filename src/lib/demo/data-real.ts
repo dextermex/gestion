@@ -343,10 +343,22 @@ export async function buildRealDataFrom(
     ? await inChunks(periodLetterRows.map((l) => s(l.id)), (ids) => q("generated_documents", "document_id,kind,lang,template_version,source_type,source_id,generated_at", (b) => b.in("source_id", ids).order("generated_at", { ascending: false })))
     : [];
   const allGeneratedRows = [...generatedRows, ...periodLetterGenerated];
-  // What went out to be signed electronically, and who signed (0027; nothing to read until it is applied).
-  const envelopeRows = shell
+  // What went out to be signed electronically, and who signed (0027). Until the base carries
+  // these tables nothing is read, and nothing is offered for sending either.
+  let SIGNATURE_READY = true;
+  const envelopeRows: Row[] = shell
     ? []
-    : await q("signature_envelopes", "id,lease_id,document_id,status,level,provider_env,sent_at,completed_at,expires_on,signed_document_id,created_at", (b) => (leaseScoped ? b.eq("lease_id", leaseScoped) : b).order("created_at", { ascending: false }));
+    : await (async () => {
+        let b = g.from("signature_envelopes").select("id,lease_id,document_id,status,level,provider_env,sent_at,completed_at,expires_on,signed_document_id,created_at").eq("org_id", oid) as unknown as Narrow;
+        if (leaseScoped) b = b.eq("lease_id", leaseScoped);
+        const { data, error } = await b.order("created_at", { ascending: false }).limit(CAP);
+        if (error) {
+          if (error.code === "PGRST205" || error.code === "42P01") SIGNATURE_READY = false;
+          else console.error("gestion read failed (signature_envelopes):", error.code, error.message);
+          return [];
+        }
+        return (data as unknown as Row[]) ?? [];
+      })();
   const signerRows = await inChunks(envelopeRows.map((e) => s(e.id)), (ids) => q("signature_signers", "envelope_id,position,role,contact_id,first_name,last_name,email,status,signed_at,level", (b) => b.in("envelope_id", ids).order("position")));
   const generatedDocRows = await inChunks(
     allGeneratedRows.map((g) => s(g.document_id)),
@@ -1018,6 +1030,7 @@ export async function buildRealDataFrom(
     TODAY: today,
     CONTACTS,
     IDENTITY_READY,
+    SIGNATURE_READY,
     PROPERTIES,
     UNITS,
     LEASES,

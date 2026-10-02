@@ -192,6 +192,8 @@ function lotRule(rows: Row[], row: Row): DbError | null {
 
 export class FakeDb {
   private tables = new Map<string, Row[]>();
+  /** Tables the base does not carry yet (a migration not applied): every query on them fails as PostgREST says. */
+  readonly absent = new Set<string>();
   private leaseSeq = 0;
 
   constructor(public today: string) {}
@@ -828,6 +830,7 @@ class FakeQuery implements PromiseLike<Result> {
   }
 
   private run(): Result {
+    if (this.db.absent.has(this.table)) return { data: null, error: { code: "PGRST205", message: `Could not find the table 'gestion.${this.table}' in the schema cache` } };
     try {
       switch (this.op) {
         case "select": {

@@ -33,10 +33,11 @@ const STATUS_ORDER: Record<DemoLease["status"], number> = { draft: 0, notice: 1,
  */
 export default async function ContratsPage() {
   const { locale, d } = await getI18n();
-  const { CONTACTS, LEASES, LESSOR, TEMPLATES, TODAY, envelopeFor, generatedFor, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { CONTACTS, LEASES, LESSOR, SIGNATURE_READY, TEMPLATES, TODAY, envelopeFor, generatedFor, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const signature = signatureProvider();
-  const canSend = !sample && signature.configured;
+  // A provider key alone is not enough: the base must carry the sendings (0027) before anything is offered.
+  const canSend = !sample && signature.configured && SIGNATURE_READY;
   const contactIndex = new Map(CONTACTS.map((c: DemoContact) => [c.id, c]));
   const statusMeta = leaseStatusMeta(d);
   const typeMeta = leaseTypeMeta(d);
@@ -144,10 +145,12 @@ export default async function ContratsPage() {
 
   const signatureNote = sample
     ? d.contrats.signatureDemo
-    : signature.provider
-      ? fmt(signature.env === "sandbox" ? d.contrats.signatureSandbox : d.contrats.signatureOn, { provider: signatureProviderLabel(signature.provider) })
-      : d.contrats.signatureOff;
-  const signatureOn = sample || signature.configured;
+    : signature.provider && !SIGNATURE_READY
+      ? d.contrats.errSchema
+      : signature.provider
+        ? fmt(signature.env === "sandbox" ? d.contrats.signatureSandbox : d.contrats.signatureOn, { provider: signatureProviderLabel(signature.provider) })
+        : d.contrats.signatureOff;
+  const signatureOn = sample || canSend;
   const heroSub = [plural(locale, drafts.length, d.contrats.draftsOne, d.contrats.draftsMany), plural(locale, produced.length, d.contrats.producedOne, d.contrats.producedMany)].join(" · ");
   const tplState = (state: "validated" | "outdated" | "pending", validatedOn: string | null) =>
     state === "validated" && validatedOn ? fmt(d.contrats.tplValidated, { date: formatDate(validatedOn, locale) }) : state === "outdated" ? d.contrats.tplOutdated : d.contrats.tplPending;

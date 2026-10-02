@@ -357,8 +357,9 @@ noté en tête du fichier. Vérifiée en local sur Postgres 16 avec des objets d
 (insertion pour un autre espace refusée, second envoi vivant refusé, signataire rattaché à
 l'envoi d'un autre espace refusé, registre d'usage non modifiable, journal alimenté).
 Côté serveur, l'envoi réel demande `YOUSIGN_API_KEY` dans les variables d'environnement
-Vercel, et `YOUSIGN_ENV=production` pour sortir de l'environnement de test (non posées à
-ce jour).
+Vercel, et `YOUSIGN_ENV=production` pour sortir de l'environnement de test. Tant que 0027
+n'est pas appliquée, Modèles & contrats n'offre aucun envoi, même avec la clé posée, et
+dit que la base n'est pas encore prête.
 
 ## 0028 · proposée, NON appliquée · les parties au contrat de bail
 

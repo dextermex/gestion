@@ -94,6 +94,9 @@ export interface DemoContact {
 /** The base carries the identity a contract names (migration 0028): the editors for it are offered. */
 export const IDENTITY_READY: boolean = true;
 
+/** The base carries the signature tables (migration 0027): a contract can be sent to be signed. */
+export const SIGNATURE_READY: boolean = true;
+
 export const CONTACTS: DemoContact[] = [
   { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
   { id: "c-jeanne", kind: "natural", name: "Jeanne Muller", email: "jeanne.muller@gmail.com", phone: "+352 621 654 321", language: "fr", roles: ["tenant"] },

@@ -480,6 +480,7 @@ export const DOCUMENT_SUMMARY = fr.DOCUMENT_SUMMARY;
 
 // The paper trail: the Majerus cabinet as its documents print it; the same templates, the same produced pieces.
 export const IDENTITY_READY: boolean = fr.IDENTITY_READY;
+export const SIGNATURE_READY: boolean = fr.SIGNATURE_READY;
 
 export const LESSOR: DemoLessor = {
   ...fr.LESSOR,
