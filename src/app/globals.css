@@ -1287,6 +1287,12 @@ button:not(:disabled),
 .billing-price { font-size: 2.5rem; line-height: 1; font-weight: 700; letter-spacing: -.03em; color: var(--color-ink); font-variant-numeric: tabular-nums; }
 .billing-total { font-size: 3.25rem; line-height: 1; font-weight: 700; letter-spacing: -.035em; color: var(--color-ink); font-variant-numeric: tabular-nums; }
 .billing-faq summary::-webkit-details-marker { display: none; }
+/* The volume brackets: a bar lit for each one the portfolio reaches, the current one tinted. */
+.billing-tier { position: relative; min-width: 0; overflow: hidden; padding: .8125rem .75rem .625rem; border-radius: .875rem; background: #f5f9fc; color: var(--color-ink-soft); }
+.billing-tier::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: #d7e2e5; }
+.billing-tier[data-reached] { color: var(--color-ink); }
+.billing-tier[data-reached]::before { background: var(--color-brand-600); }
+.billing-tier[data-current] { background: #e7f2f8; }
 .billing-timeline { list-style: none; margin: 0; padding: 0; display: grid; }
 .billing-timeline li { position: relative; display: grid; gap: .1875rem; padding: 0 0 1.375rem 1.875rem; font-size: .875rem; line-height: 1.55; color: var(--color-ink-soft); }
 .billing-timeline li:last-child { padding-bottom: 0; }
@@ -1304,4 +1310,5 @@ button:not(:disabled),
 }
 @media (prefers-contrast: more) {
   .billing-plan { border-color: var(--color-ink); }
+  .billing-tier[data-current] { box-shadow: inset 0 0 0 1px var(--color-ink); }
 }

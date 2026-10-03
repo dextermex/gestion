@@ -101,13 +101,10 @@ export const SIGNATURE_READY: boolean = true;
 export interface DemoBilling {
   /** Days the trial has already run. */
   trialDay: number;
-  plan: "landlord" | "professional";
   rhythm: "quarter" | "year";
-  /** The cabinet's users, for the plan that counts them. */
-  seats: number;
 }
 
-export const BILLING: DemoBilling = { trialDay: 12, plan: "landlord", rhythm: "quarter", seats: 2 };
+export const BILLING: DemoBilling = { trialDay: 12, rhythm: "quarter" };
 
 export const CONTACTS: DemoContact[] = [
   { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },

@@ -18,3 +18,6 @@ export const PRO_URL = `${MORADA_URL}/pro`;
  * tenant should be sent. Preview deployments and local runs set it.
  */
 export const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://app.morada.lu")).replace(/\/+$/, "");
+
+/** Where the team answers: a portfolio beyond the published terms, an agency's own terms (the public site's contact address). */
+export const TEAM_EMAIL = "bonjour@morada.lu";

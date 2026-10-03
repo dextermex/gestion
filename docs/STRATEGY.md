@@ -155,16 +155,21 @@ The design goal is >90% auto-recognition at steady state without touching funds.
 3. **Phase 2 (months 9–24): agencies.** The gestion module rides the athome-pricing resentment into agencies; listing syndication (immotop/nextimmo feeds) and the Morada.lu marketplace link make it a package no German or French tool can match. Per-seat + per-unit pricing; migration service (the real switching cost at pro tier is migration, not licence [V]).
 4. **Phase 3 (18+ months, optional): syndic module** (per-syndicat accounts, AG machinery, appels de fonds — the RGD 1975 rules are specified in §3.4) only when agencies demand it; SDD collection via GoCardless master creditor-ID as a paid add-on once volume justifies the licensing analysis; deposit-alternative insurance partnership (a genuine white space in Luxembourg [V]) through a licensed broker, never direct distribution (CAA intermediation rules [V]).
 
-### 5.2 Pricing architecture (initial hypothesis, to be tested in Phase 0)
+### 5.2 Pricing architecture (launch pricing, a hypothesis until the commercial launch)
 
-| Tier | Target | Price | Includes |
-|---|---|---|---|
-| Free | ≤3 units | €0 | Core lifecycle, tenant portal, manual bank import |
-| Landlord | 4–50 units | €5/unit/mo | Bank sync, reconciliation, indexation engine, tax pack |
-| Professional | 50+ units / agencies | €4/unit/mo + €29/seat | Multi-mandate, owner statements, FAIA export, syndication feeds, API |
-| Add-ons | — | — | QES signatures (per envelope), e-registered mail (per letter), SDD collection (bps), premium EDL (per report) |
+The launch pricing of 27 September 2026, published on morada.lu (dextermex/morada-gestion-web, `src/lib/pricing.ts`) and applied in the app (`src/domain/billing/pricing.ts`, ARCHITECTURE.md "Subscriptions"), replaces the first hypothesis (a free tier up to 3 units, €5/unit/mo, €4/unit/mo + €29/seat):
 
-Unit economics guardrail: at €5/unit/month, a 20-unit landlord pays €1,200/year — against which the product must demonstrably recover more (one avoided deposit-penalty month, one INDEXATION_LAG recovery, one avoided nullified notice). The ROI story is quantified in-product on the dashboard.
+| Rule | Figure |
+|---|---|
+| Trial | 30 days, everything included, no card; replaces the free tier |
+| Price per let unit, per month, by its rent excluding charges | under €1,000: €10 · €1,000 to €1,499: €14 · €1,500 to €1,999: €19 · €2,000 to €2,999: €25 · €3,000 and above: €32 |
+| Volume, graduated like tax brackets | units 1 to 5 full price · 6 to 15: −10 % · 16 to 30: −20 % · 31 to 50: −30 % |
+| Billing | quarterly, or yearly at ten months (two months free); every screen shows the monthly price |
+| Loyalty, at each renewal | second year −5 % · from the third year −10 % |
+| Beyond 50 units, or an agency's own terms | a price built with the team |
+| Add-ons | QES signatures (per envelope), e-registered mail (per letter), SDD collection (bps), premium EDL (per report) |
+
+Unit economics guardrail: a 20-unit landlord with rents of €1,000 to €1,499 pays €252 a month (€2,520 a year on the yearly rhythm), against which the product must demonstrably recover more (one avoided deposit-penalty month, one INDEXATION_LAG recovery, one avoided nullified notice). The ROI story is quantified in-product on the dashboard.
 
 ### 5.3 Risks and counters
 
@@ -175,7 +180,7 @@ Unit economics guardrail: at €5/unit/month, a 20-unit landlord pays €1,200/y
 | Salt Edge/Enable coverage gaps on a key bank (esp. BIL, POST) | High | CAMT.053 always-on; BIL direct developer portal; LUXHUB direct adapter as the nuclear option |
 | Rent-ceiling reform (Observatoire proposal: ±7% corridor; PL 8184 cut to 3.5% [U]) | Medium | All constants are data; reform is a parameter update and a marketing moment ("we updated overnight") |
 | AML scope widens to managers | Medium | Two-tier onboarding already built; flip the default |
-| Slow SaaS adoption by conservative landlords | High | The tenant portal creates pull; the fiduciaire channel (tax pack + FAIA) creates push; free tier removes friction |
+| Slow SaaS adoption by conservative landlords | High | The tenant portal creates pull; the fiduciaire channel (tax pack + FAIA) creates push; the 30-day trial without a card removes friction |
 
 ---
 

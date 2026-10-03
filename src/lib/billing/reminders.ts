@@ -1,12 +1,12 @@
 import "server-only";
 import type Stripe from "stripe";
-import { TRIAL_DAYS, TRIAL_EXTENSION_DAYS, DEFAULT_RHYTHM } from "@/domain/billing/plans";
+import { TRIAL_DAYS, TRIAL_EXTENSION_DAYS, DEFAULT_RHYTHM } from "@/domain/billing/pricing";
 import { DAY, billingState, reminderDue, type Reminder } from "@/domain/billing/trial";
 import { LOCALES, fmt, type Locale } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { escapeHtml, type MailMessage, type MailResult } from "@/lib/mail";
 import { euros, formatDate } from "@/lib/types";
-import { dayOf, periodName, planName } from "./format";
+import { dayOf, periodName } from "./format";
 import { APP, META, factsOf, snapshotOf, type BillingSnapshot } from "./service";
 
 /**
@@ -31,9 +31,7 @@ export function reminderMail(kind: Reminder, snapshot: BillingSnapshot, d: Dict,
   if (state.phase === "trial_card") {
     const sub = snapshot.subscription!;
     subject = fmt(b.mailCardSubject, { date });
-    body = fmt(b.mailCardBody, {
-      date, plan: planName(b, sub.plan ?? snapshot.customer.plan), amount: euros(sub.charged, locale), period: periodName(b, sub.rhythm ?? DEFAULT_RHYTHM),
-    });
+    body = fmt(b.mailCardBody, { date, amount: euros(sub.charged, locale), period: periodName(b, sub.rhythm ?? DEFAULT_RHYTHM) });
   } else if (kind === "ended") {
     subject = b.mailEndedSubject;
     body = b.mailEndedBody;

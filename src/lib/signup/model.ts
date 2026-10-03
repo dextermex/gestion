@@ -18,8 +18,8 @@ export const profileInput = z.discriminatedUnion("action", [
   // Supabase stores only a bcrypt hash; 72 bytes is bcrypt's limit.
   z.object({ action: z.literal("password"), password: z.string().min(8).max(72) }),
   z.object({ action: z.literal("complete"), preferences: preferenceSchema }),
-  // The plan a landlord picks for the free trial: noted for later, nothing is charged or required.
-  z.object({ action: z.literal("plan"), plan: z.enum(["landlord", "professional"]), rhythm: z.enum(["quarter", "year"]) }),
+  // The billing rhythm a landlord picks for after the free trial: noted for later, nothing is charged or required.
+  z.object({ action: z.literal("plan"), rhythm: z.enum(["quarter", "year"]) }),
 ]);
 
 export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "name" | "email" | "email-code" | "create-password" | "properties" | "challenge" | "involvement" | "plan" | "welcome" | "existing" | "reset";

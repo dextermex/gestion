@@ -8,7 +8,7 @@ import { buildSearchIndex } from "@/lib/demo/search";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
-import { billedLots } from "@/domain/billing/plans";
+import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
 
 export const metadata: Metadata = {
@@ -112,8 +112,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     },
     billing: billingSnapshot
       ? shellBillingOf(billingSnapshot, workspace.role, {
-          lots: billedLots(demo.UNITS),
+          lots: portfolioLots(demo.UNITS),
           leases: demo.LEASES.filter((l) => l.status === "active" || l.status === "notice").length,
+          rents: billedRents(demo.UNITS, demo.LEASES),
         })
       : null,
   };

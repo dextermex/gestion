@@ -9,7 +9,7 @@
  * the workspace reads everything and changes nothing until it subscribes.
  * Times are unix seconds, as Stripe gives them.
  */
-import { REMINDER_DAYS, TRIAL_DAYS, TRIAL_EXTENSION_DAYS } from "./plans";
+import { REMINDER_DAYS, TRIAL_DAYS, TRIAL_EXTENSION_DAYS } from "./pricing";
 
 export const DAY = 86_400;
 

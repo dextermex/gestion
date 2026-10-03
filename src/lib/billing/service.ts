@@ -1,6 +1,7 @@
 import "server-only";
 import type Stripe from "stripe";
-import { DEFAULT_PLAN, DEFAULT_RHYTHM, PLANS, PRICES_INCLUDE_VAT, RHYTHM_MONTHS, isPlanId, isRhythm, quote, type PlanId, type Rhythm } from "@/domain/billing/plans";
+import { DEFAULT_RHYTHM, PRICES_INCLUDE_VAT, isRhythm, quote, subscriptionYear, withLoyalty, type Quote, type Rhythm } from "@/domain/billing/pricing";
+import type { Cents } from "@/domain/money";
 import { canExtend, checkoutTrial, extendedEnd, trialEndOf, type BillingFacts, type SubscriptionFacts } from "@/domain/billing/trial";
 import { stripeCode, stripeStatus } from "./stripe";
 
@@ -13,13 +14,18 @@ import { stripeCode, stripeStatus } from "./stripe";
  *    metadata. The trial runs from that customer's creation, a date Stripe
  *    sets and nobody edits: a workspace cannot lengthen its own trial, and
  *    deleting its records changes nothing.
- *  - The plan chosen during the trial sits in the customer's metadata; the
- *    subscription is only created when a card is added, through Checkout,
- *    with the rest of the trial carried over so the first charge falls on
- *    the trial's last day.
- *  - Prices are created from the catalogue the first time they are needed,
- *    under a lookup key that carries the amount: what the screen shows is
- *    what Stripe charges.
+ *  - The rhythm chosen during the trial sits in the customer's metadata;
+ *    the subscription is only created when a card is added, through
+ *    Checkout, with the rest of the trial carried over so the first charge
+ *    falls on the trial's last day.
+ *  - A subscription carries one price: the portfolio's charge, computed
+ *    here from the rents of the lots it bills (src/domain/billing/pricing.ts)
+ *    and handed to Stripe as is, loyalty included, so what the screen shows
+ *    is what Stripe charges. The price follows the portfolio (on a visit,
+ *    after the response) and the loyalty years (the daily run, from the
+ *    charge before loyalty recorded on the subscription).
+ *  - A subscription set up with the team (more than 50 lots, an agency's
+ *    terms) carries no pricing mark and is never repriced here.
  *
  * Every function takes the Stripe client, so tests drive it against a
  * recorded stand-in.
@@ -29,17 +35,21 @@ import { stripeCode, stripeStatus } from "./stripe";
 export const META = {
   app: "morada_app",
   org: "morada_org",
-  plan: "morada_plan",
   rhythm: "morada_rhythm",
   locale: "morada_locale",
   /** An extension's end, in unix seconds. */
   trialEnd: "morada_trial_end",
   /** The reminder e-mails already sent, comma-separated. */
   reminders: "morada_reminders",
-  /** On a price: what it counts, lot or seat. */
-  component: "morada_component",
+  /** On a subscription priced here from the portfolio: PORTFOLIO_PRICING. */
+  pricing: "morada_pricing",
+  /** On such a subscription: the lots counted at its last pricing. */
+  lots: "morada_lots",
+  /** On such a subscription: one charge before loyalty, in cents, at its last pricing. */
+  base: "morada_base",
 } as const;
 export const APP = "gestion";
+export const PORTFOLIO_PRICING = "portfolio";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -50,8 +60,7 @@ export interface CustomerFacts {
   /** The workspace's trial end: creation plus the trial, or the extension's end. */
   trialEnd: number;
   extended: boolean;
-  /** The plan and rhythm chosen during the trial (the defaults until then). */
-  plan: PlanId;
+  /** The rhythm chosen during the trial (the default until then). */
   rhythm: Rhythm;
   locale: string;
   reminders: string[];
@@ -59,14 +68,19 @@ export interface CustomerFacts {
 
 export interface SubscriptionView extends SubscriptionFacts {
   id: string;
-  plan: PlanId | null;
   rhythm: Rhythm | null;
+  /** Priced here from the portfolio; false for terms set up with the team. */
+  managed: boolean;
+  /** The item that carries the price. */
+  itemId: string | null;
+  /** One charge at the current price, in cents. */
+  charged: Cents;
+  /** The lots counted at the last pricing. */
   lots: number;
-  seats: number;
-  lotItemId: string | null;
-  seatItemId: string | null;
-  /** One charge at the current quantities, in cents. */
-  charged: number;
+  /** One charge before loyalty at the last pricing; null when none is recorded. */
+  base: Cents | null;
+  /** The first paid day: the end of the subscription's trial, else its start. */
+  paidFrom: number;
   /** The payment method on file, as its holder recognises it. */
   card: { brand: string; last4: string } | null;
 }
@@ -84,7 +98,6 @@ const CURRENT = ["trialing", "active", "past_due", "incomplete", "unpaid", "paus
 export function customerFacts(customer: Stripe.Customer): CustomerFacts {
   const meta = customer.metadata ?? {};
   const extendedTo = Number(meta[META.trialEnd]) || null;
-  const plan = meta[META.plan];
   const rhythm = meta[META.rhythm];
   return {
     id: customer.id,
@@ -92,7 +105,6 @@ export function customerFacts(customer: Stripe.Customer): CustomerFacts {
     email: customer.email ?? null,
     trialEnd: trialEndOf(customer.created, extendedTo),
     extended: extendedTo !== null,
-    plan: isPlanId(plan) ? plan : DEFAULT_PLAN,
     rhythm: isRhythm(rhythm) ? rhythm : DEFAULT_RHYTHM,
     locale: meta[META.locale] || "fr",
     reminders: (meta[META.reminders] ?? "").split(",").filter(Boolean),
@@ -104,10 +116,11 @@ const rhythmOfPrice = (price: Stripe.Price): Rhythm | null =>
 
 export function subscriptionView(sub: Stripe.Subscription): SubscriptionView {
   const items = sub.items.data;
-  const lotItem = items.find((i) => i.price.metadata?.[META.component] === "lot") ?? items[0] ?? null;
-  const seatItem = items.find((i) => i.price.metadata?.[META.component] === "seat") ?? null;
-  const planMeta = sub.metadata?.[META.plan] ?? lotItem?.price.metadata?.[META.plan];
-  const rhythmMeta = sub.metadata?.[META.rhythm];
+  const item = items[0] ?? null;
+  const meta = sub.metadata ?? {};
+  const rhythmMeta = meta[META.rhythm];
+  const lots = Number(meta[META.lots]);
+  const base = Number(meta[META.base]);
   const method = sub.default_payment_method && typeof sub.default_payment_method === "object" ? sub.default_payment_method : null;
   const card = method?.card ? { brand: method.card.brand, last4: method.card.last4 }
     : method?.sepa_debit?.last4 ? { brand: "sepa_debit", last4: method.sepa_debit.last4 } : null;
@@ -115,15 +128,16 @@ export function subscriptionView(sub: Stripe.Subscription): SubscriptionView {
     id: sub.id,
     status: sub.status,
     trialEnd: sub.trial_end,
-    periodEnd: lotItem?.current_period_end ?? null,
+    periodEnd: item?.current_period_end ?? null,
     cancelAtPeriodEnd: sub.cancel_at_period_end || sub.cancel_at !== null,
-    plan: isPlanId(planMeta) ? planMeta : null,
-    rhythm: isRhythm(rhythmMeta) ? rhythmMeta : lotItem ? rhythmOfPrice(lotItem.price) : null,
-    lots: lotItem?.quantity ?? 0,
-    seats: seatItem?.quantity ?? 0,
-    lotItemId: lotItem?.id ?? null,
-    seatItemId: seatItem?.id ?? null,
+    // What Stripe charges by is the price's own interval; the mark only stands in without one.
+    rhythm: (item ? rhythmOfPrice(item.price) : null) ?? (isRhythm(rhythmMeta) ? rhythmMeta : null),
+    managed: meta[META.pricing] === PORTFOLIO_PRICING && items.length === 1,
+    itemId: item?.id ?? null,
     charged: items.reduce((sum, i) => sum + (i.price.unit_amount ?? 0) * (i.quantity ?? 1), 0),
+    lots: Number.isInteger(lots) && lots >= 0 ? lots : 0,
+    base: Number.isInteger(base) && base > 0 ? base : null,
+    paidFrom: sub.trial_end ?? sub.start_date,
     card,
   };
 }
@@ -157,8 +171,7 @@ export interface NewCustomer {
   email: string;
   userId: string;
   locale: string;
-  /** The plan picked at sign-up, if any. */
-  plan?: PlanId | null;
+  /** The rhythm picked at sign-up, if any. */
   rhythm?: Rhythm | null;
 }
 
@@ -175,7 +188,6 @@ export async function createCustomer(stripe: Stripe, input: NewCustomer): Promis
     metadata: {
       [META.app]: APP,
       [META.org]: input.orgId,
-      [META.plan]: input.plan ?? DEFAULT_PLAN,
       [META.rhythm]: input.rhythm ?? DEFAULT_RHYTHM,
       [META.locale]: input.locale,
     },
@@ -212,75 +224,47 @@ export async function ensureSnapshot(stripe: Stripe, input: NewCustomer): Promis
   return { customer: customerFacts(created), subscription: null };
 }
 
-// ── Prices ────────────────────────────────────────────────────────────────
+// ── The price ──────────────────────────────────────────────────────────────
 
-export type Component = "lot" | "seat";
+/** The one product every subscription bills: its price is the portfolio's own. */
+export const PRODUCT = { id: "morada_gestion", name: "Morada Gestion" } as const;
 
-const PRODUCTS: Record<`${PlanId}:${Component}`, { id: string; name: string } | null> = {
-  "landlord:lot": { id: "morada_gestion_landlord_lot", name: "Morada Gestion · Propriétaire · par lot" },
-  "landlord:seat": null,
-  "professional:lot": { id: "morada_gestion_professional_lot", name: "Morada Gestion · Professionnel · par lot" },
-  "professional:seat": { id: "morada_gestion_professional_seat", name: "Morada Gestion · Professionnel · par utilisateur" },
-};
+const productConfirmed = new WeakSet<object>();
 
-/** The monthly figure a component costs on a plan and rhythm, from the catalogue. */
-export function monthlyOf(plan: PlanId, component: Component, rhythm: Rhythm): number | null {
-  if (component === "lot") return PLANS[plan].lot[rhythm];
-  return PLANS[plan].seat ? PLANS[plan].seat![rhythm] : null;
-}
-
-export const lookupKey = (plan: PlanId, component: Component, rhythm: Rhythm, monthly: number) => `morada_gestion_${plan}_${component}_${rhythm}_${monthly}`;
-
-const prices = new Map<string, string>();
-
-async function ensureProduct(stripe: Stripe, product: { id: string; name: string }): Promise<void> {
+/** The product, created in the Stripe account the first time a price needs it. */
+async function ensureProduct(stripe: Stripe): Promise<void> {
+  if (productConfirmed.has(stripe)) return;
   try {
-    await stripe.products.retrieve(product.id);
+    await stripe.products.retrieve(PRODUCT.id);
   } catch (error) {
     if (stripeStatus(error) !== 404) throw error;
     try {
-      await stripe.products.create({ id: product.id, name: product.name, metadata: { [META.app]: APP } });
+      await stripe.products.create({ id: PRODUCT.id, name: PRODUCT.name, metadata: { [META.app]: APP } });
     } catch (again) {
       if (stripeCode(again) !== "resource_already_exists") throw again;
     }
   }
+  productConfirmed.add(stripe);
 }
 
-/** The Stripe price for one component of a plan, created from the catalogue the first time. */
-export async function ensurePrice(stripe: Stripe, plan: PlanId, component: Component, rhythm: Rhythm): Promise<string> {
-  const monthly = monthlyOf(plan, component, rhythm);
-  const product = PRODUCTS[`${plan}:${component}`];
-  if (monthly === null || !product) throw new Error(`ensurePrice: ${plan} has no ${component} price`);
-  const key = lookupKey(plan, component, rhythm, monthly);
-  const held = prices.get(key);
-  if (held) return held;
-  const lookup = async () => (await stripe.prices.list({ lookup_keys: [key], active: true, limit: 1 })).data[0]?.id ?? null;
-  const known = await lookup();
-  if (known) { prices.set(key, known); return known; }
-  await ensureProduct(stripe, product);
-  try {
-    const price = await stripe.prices.create({
-      product: product.id,
-      currency: "eur",
-      // Stripe charges per period: the monthly figure times its months.
-      unit_amount: monthly * RHYTHM_MONTHS[rhythm],
-      recurring: rhythm === "year" ? { interval: "year" } : { interval: "month", interval_count: 3 },
-      tax_behavior: PRICES_INCLUDE_VAT ? "inclusive" : "exclusive",
-      lookup_key: key,
-      nickname: key,
-      metadata: { [META.app]: APP, [META.plan]: plan, [META.component]: component, [META.rhythm]: rhythm, monthly_cents: String(monthly) },
-    }, { idempotencyKey: `morada-gestion-price-${key}` });
-    prices.set(key, price.id);
-    return price.id;
-  } catch (error) {
-    // Created by a concurrent request a moment earlier.
-    const again = await lookup();
-    if (again) { prices.set(key, again); return again; }
-    throw error;
-  }
+/** One charge as Stripe takes it: the amount, every three months or once a year, VAT included. */
+export function priceData(amount: Cents, rhythm: Rhythm) {
+  return {
+    currency: "eur",
+    product: PRODUCT.id,
+    unit_amount: amount,
+    recurring: rhythm === "year" ? { interval: "year" as const } : { interval: "month" as const, interval_count: 3 },
+    tax_behavior: PRICES_INCLUDE_VAT ? ("inclusive" as const) : ("exclusive" as const),
+  };
 }
 
-// ── Checkout, portal, plan, quantities, extension ────────────────────────
+/** What a subscription records of its pricing: the mark, the rhythm, the lots and the charge before loyalty. */
+const pricingMeta = (q: Quote) => ({ [META.pricing]: PORTFOLIO_PRICING, [META.rhythm]: q.rhythm, [META.lots]: String(q.lots), [META.base]: String(q.base) });
+
+/** The year of subscription the next charge falls in: the trial's end, else the current period's. */
+const nextChargeYear = (sub: SubscriptionView, now: number) => subscriptionYear(sub.paidFrom, sub.periodEnd ?? now);
+
+// ── Checkout, portal, rhythm, price, extension ────────────────────────────
 
 /** The language Checkout and the portal speak; Lëtzebuergesch readers get their browser's. */
 export const checkoutLocale = (locale: string): "fr" | "en" | "de" | "auto" =>
@@ -291,10 +275,9 @@ const isRunning = (sub: SubscriptionView | null) => !!sub && ["trialing", "activ
 export interface CheckoutInput {
   snapshot: BillingSnapshot;
   orgId: string;
-  plan: PlanId;
   rhythm: Rhythm;
-  lots: number;
-  seats: number;
+  /** The rents of the lots the subscription bills, read here (never taken from the browser). */
+  rents: readonly Cents[];
   locale: string;
   /** The app's own origin, for the return addresses. */
   origin: string;
@@ -304,23 +287,23 @@ export interface CheckoutInput {
   submitMessage: string;
 }
 
-export type CheckoutResult = { url: string } | { error: "already_subscribed" | "plan_too_small" };
+export type CheckoutResult = { url: string } | { error: "already_subscribed" | "too_many_lots" };
 
 /** A Checkout page that creates the subscription, the rest of the trial carried over. */
 export async function createCheckout(stripe: Stripe, input: CheckoutInput): Promise<CheckoutResult> {
   if (isRunning(input.snapshot.subscription)) return { error: "already_subscribed" };
-  const q = quote(input.plan, input.rhythm, input.lots, input.seats);
-  if (!q.fits) return { error: "plan_too_small" };
-  const lotPrice = await ensurePrice(stripe, input.plan, "lot", input.rhythm);
-  const seatPrice = PLANS[input.plan].seat ? await ensurePrice(stripe, input.plan, "seat", input.rhythm) : null;
+  const q = quote(input.rents, input.rhythm, 1);
+  // Beyond the published terms, the price is built with the team.
+  if (!q.fits) return { error: "too_many_lots" };
+  await ensureProduct(stripe);
   const trial = checkoutTrial(input.now, input.snapshot.customer.trialEnd);
-  const meta = { [META.app]: APP, [META.org]: input.orgId, [META.plan]: input.plan, [META.rhythm]: input.rhythm };
+  const meta = { [META.app]: APP, [META.org]: input.orgId, [META.rhythm]: input.rhythm };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: input.snapshot.customer.id,
     client_reference_id: input.orgId,
-    line_items: [{ price: lotPrice, quantity: q.lots }, ...(seatPrice ? [{ price: seatPrice, quantity: q.seats }] : [])],
-    subscription_data: { ...(trial ?? {}), metadata: meta },
+    line_items: [{ price_data: priceData(q.charged, input.rhythm), quantity: 1 }],
+    subscription_data: { ...(trial ?? {}), metadata: { ...meta, ...pricingMeta(q) } },
     payment_method_collection: "always",
     allow_promotion_codes: true,
     billing_address_collection: "auto",
@@ -382,49 +365,83 @@ export async function portalUrl(stripe: Stripe, customerId: string, returnUrl: s
 }
 
 /**
- * A plan or rhythm chosen: before a card, it is noted for the Checkout to
- * come; on a running subscription, its prices change (no charge during the
- * trial; Stripe prorates afterwards).
+ * A rhythm chosen: before a card, it is noted for the Checkout to come; on
+ * a running subscription priced here, its price changes to the rhythm's
+ * (nothing charged during the trial; Stripe prorates afterwards). Terms set
+ * up with the team change with the team.
  */
-export async function choosePlan(stripe: Stripe, snapshot: BillingSnapshot, plan: PlanId, rhythm: Rhythm, lots: number, seats: number): Promise<{ ok: true } | { error: "plan_too_small" }> {
-  const q = quote(plan, rhythm, lots, seats);
-  if (!q.fits) return { error: "plan_too_small" };
-  await stripe.customers.update(snapshot.customer.id, { metadata: { [META.plan]: plan, [META.rhythm]: rhythm } });
+export async function chooseRhythm(stripe: Stripe, snapshot: BillingSnapshot, rhythm: Rhythm, rents: readonly Cents[], now: number): Promise<{ ok: true } | { error: "custom_terms" }> {
   const sub = snapshot.subscription;
-  if (!sub || !isRunning(sub) || !sub.lotItemId) return { ok: true };
-  if (sub.plan === plan && sub.rhythm === rhythm) return { ok: true };
-  const lotPrice = await ensurePrice(stripe, plan, "lot", rhythm);
-  const seatPrice = PLANS[plan].seat ? await ensurePrice(stripe, plan, "seat", rhythm) : null;
-  const items: Stripe.SubscriptionUpdateParams.Item[] = [{ id: sub.lotItemId, price: lotPrice, quantity: q.lots }];
-  if (seatPrice) items.push(sub.seatItemId ? { id: sub.seatItemId, price: seatPrice, quantity: q.seats } : { price: seatPrice, quantity: q.seats });
-  else if (sub.seatItemId) items.push({ id: sub.seatItemId, deleted: true });
+  if (sub && isRunning(sub) && !sub.managed) return { error: "custom_terms" };
+  await stripe.customers.update(snapshot.customer.id, { metadata: { [META.rhythm]: rhythm } });
+  if (!sub || !isRunning(sub) || !sub.itemId || sub.rhythm === rhythm) return { ok: true };
+  // A paying subscription changing interval starts its new period today; a trial keeps its end.
+  const q = quote(rents, rhythm, subscriptionYear(sub.paidFrom, sub.status === "trialing" ? (sub.periodEnd ?? now) : now));
+  await ensureProduct(stripe);
   await stripe.subscriptions.update(sub.id, {
-    items,
-    metadata: { [META.plan]: plan, [META.rhythm]: rhythm },
+    items: [{ id: sub.itemId, price_data: priceData(q.charged, rhythm), quantity: 1 }],
+    metadata: pricingMeta(q),
     proration_behavior: sub.status === "trialing" ? "none" : "create_prorations",
   });
   return { ok: true };
 }
 
-/**
- * The lots and users a running subscription counts, brought to the
- * portfolio's: free during the trial; afterwards an addition is prorated
- * onto the next invoice and a removal applies from the next period.
- */
-export async function syncQuantities(stripe: Stripe, snapshot: BillingSnapshot, lots: number, seats: number): Promise<boolean> {
+/** What a running subscription priced here should charge next, from the portfolio's rents; null when it is not repriced here. */
+export function nextQuote(snapshot: BillingSnapshot, rents: readonly Cents[], now: number): Quote | null {
   const sub = snapshot.subscription;
-  if (!sub || !isRunning(sub) || !sub.lotItemId || !sub.plan) return false;
-  const q = quote(sub.plan, sub.rhythm ?? DEFAULT_RHYTHM, lots, seats);
-  const items: Stripe.SubscriptionUpdateParams.Item[] = [];
-  if (q.lots !== sub.lots) items.push({ id: sub.lotItemId, quantity: q.lots });
-  if (sub.seatItemId && q.seats !== sub.seats) items.push({ id: sub.seatItemId, quantity: q.seats });
-  if (items.length === 0) return false;
-  const grows = q.lots > sub.lots || (!!sub.seatItemId && q.seats > sub.seats);
-  await stripe.subscriptions.update(sub.id, {
-    items,
-    proration_behavior: sub.status === "trialing" || !grows ? "none" : "create_prorations",
-  });
+  if (!sub || !isRunning(sub) || !sub.managed || !sub.itemId || !sub.rhythm || sub.cancelAtPeriodEnd) return null;
+  return quote(rents, sub.rhythm, nextChargeYear(sub, now));
+}
+
+/**
+ * A running subscription's price brought to the portfolio and its year:
+ * free during the trial; afterwards a dearer portfolio is prorated onto the
+ * next invoice, while a cheaper one or a loyalty year applies from the next
+ * period. Nothing is sent when nothing changed.
+ */
+export async function syncPrice(stripe: Stripe, snapshot: BillingSnapshot, rents: readonly Cents[], now: number): Promise<boolean> {
+  const sub = snapshot.subscription;
+  const q = nextQuote(snapshot, rents, now);
+  if (!sub || !q) return false;
+  if (q.charged === sub.charged && q.lots === sub.lots && q.base === sub.base) return false;
+  const params: Stripe.SubscriptionUpdateParams = { metadata: pricingMeta(q) };
+  if (q.charged !== sub.charged) {
+    await ensureProduct(stripe);
+    params.items = [{ id: sub.itemId!, price_data: priceData(q.charged, sub.rhythm!), quantity: 1 }];
+    params.proration_behavior = sub.status !== "trialing" && sub.base !== null && q.base > sub.base ? "create_prorations" : "none";
+  }
+  await stripe.subscriptions.update(sub.id, params);
   return true;
+}
+
+export interface LoyaltyRun { checked: number; stepped: number; failed: number }
+
+/**
+ * The loyalty years, applied before the renewal that opens each one: every
+ * running subscription priced here is brought to the charge its next
+ * renewal's year calls for, from the charge before loyalty recorded at its
+ * last pricing, so no workspace data is read. Run daily; the change applies
+ * from the next period, never to the one already paid.
+ */
+export async function stepLoyalty(stripe: Stripe, now: number): Promise<LoyaltyRun> {
+  const run: LoyaltyRun = { checked: 0, stepped: 0, failed: 0 };
+  const query = `metadata['${META.app}']:'${APP}' AND metadata['${META.pricing}']:'${PORTFOLIO_PRICING}'`;
+  for await (const raw of stripe.subscriptions.search({ query, limit: 100 })) {
+    const sub = subscriptionView(raw);
+    if (!["active", "past_due"].includes(sub.status) || sub.cancelAtPeriodEnd || !sub.managed || !sub.itemId || !sub.rhythm || sub.base === null) continue;
+    run.checked += 1;
+    const target = withLoyalty(sub.base, nextChargeYear(sub, now));
+    if (target === sub.charged) continue;
+    try {
+      await ensureProduct(stripe);
+      await stripe.subscriptions.update(sub.id, { items: [{ id: sub.itemId, price_data: priceData(target, sub.rhythm), quantity: 1 }], proration_behavior: "none" });
+      run.stepped += 1;
+    } catch (error) {
+      run.failed += 1;
+      console.error("billing loyalty step failed:", stripeCode(error) ?? (error instanceof Error ? error.message.slice(0, 120) : "unknown"));
+    }
+  }
+  return run;
 }
 
 /** The one extension, written where only the server reaches it. */

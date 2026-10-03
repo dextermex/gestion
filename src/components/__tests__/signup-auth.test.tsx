@@ -318,7 +318,7 @@ it("an account finished before this change resumes at the email code, and a phon
   expect(assign).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
 });
-it("after the landlord questions the funnel asks for a plan, priced per lot and per month, and notes it before the welcome", async () => {
+it("after the landlord questions the funnel asks how to be billed after the trial, from the published price per lot, and notes it before the welcome", async () => {
   const landlord = { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "alex@example.test", new_email: "", email_confirmed_at: "2026-09-27",
     user_metadata: { first_name: "Alex", last_name: "Example", morada_signup: { version: 1, role: "landlord", stage: "tailor", password_set_at: "2026-09-27T10:00:00Z" } } };
   auth.getUser.mockResolvedValue({ data: { user: landlord }, error: null });
@@ -332,21 +332,21 @@ it("after the landlord questions the funnel asks for a plan, priced per lot and 
   await act(async () => host.querySelector<HTMLButtonElement>(".signup-nav-skip")!.click());
   expect(calls).toEqual([{ action: "complete", preferences: { properties: null, challenge: null, involvement: null } }]);
   expect(host.querySelector("h1")?.textContent).toBe("Choose your plan");
-  const priceOf = (plan: string) => host.querySelector(`[data-plan="${plan}"] .signup-plan-price strong`)?.textContent;
-  expect(priceOf("landlord")).toBe("€5");
-  expect(priceOf("professional")).toBe("€4");
-  expect(host.querySelector('[data-plan="landlord"]')?.getAttribute("data-selected")).toBe("true");
+  // The site's prices: from €10 a lot a month by the quarter, a year at ten months.
+  const priceOf = (rhythm: string) => host.querySelector(`[data-rhythm="${rhythm}"] .signup-plan-price strong`)?.textContent;
+  expect(priceOf("quarter")).toBe("€10");
+  expect(priceOf("year")).toBe("€8.33");
+  expect(host.querySelector('[data-rhythm="year"]')?.textContent).toContain("2 months free");
+  expect(host.querySelector(".signup-plan-note")?.textContent).toContain("from €10 to €32 a month");
+  expect(host.querySelector('[data-rhythm="quarter"]')?.getAttribute("data-selected")).toBe("true");
   await act(async () => host.querySelector<HTMLInputElement>('input[name="rhythm"][value="year"]')!.click());
-  expect(priceOf("landlord")).toBe("€4");
-  expect(priceOf("professional")).toBe("€3.20");
-  expect(host.querySelector('[data-plan="professional"]')?.textContent).toContain("+ €23.20 per user");
-  await act(async () => host.querySelector<HTMLInputElement>('input[name="plan"][value="professional"]')!.click());
+  expect(host.querySelector('[data-rhythm="year"]')?.getAttribute("data-selected")).toBe("true");
   // Nothing is charged or asked for here: the promise says so under the button.
   expect(host.querySelector(".signup-free")?.textContent).toBe("No card needed today. Change plan whenever you like.");
   await submit();
-  expect(calls[1]).toEqual({ action: "plan", plan: "professional", rhythm: "year" });
+  expect(calls[1]).toEqual({ action: "plan", rhythm: "year" });
   expect(host.querySelector('[data-step="welcome"]')).not.toBeNull();
-  expect(host.querySelector("[data-welcome-trial]")?.textContent).toContain("Professional");
+  expect(host.querySelector("[data-welcome-trial]")?.textContent).toContain("then annual billing");
   vi.unstubAllGlobals();
 });
 it("an invited landlord joins a workspace that already has a plan: no plan step", async () => {

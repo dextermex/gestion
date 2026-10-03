@@ -17,12 +17,12 @@ const ORG_B = "0f0f0f0f-0000-4000-8000-0000000000b2";
 const ORG_C = "0f0f0f0f-0000-4000-8000-0000000000c3";
 
 const customer = (id: string, org: string, created: number, over: Record<string, string> = {}, email = `${id}@example.lu`) =>
-  ({ id, object: "customer", created, email, metadata: { [META.app]: "gestion", [META.org]: org, [META.plan]: "landlord", [META.rhythm]: "quarter", [META.locale]: "fr", ...over } });
+  ({ id, object: "customer", created, email, metadata: { [META.app]: "gestion", [META.org]: org, [META.rhythm]: "quarter", [META.locale]: "fr", ...over } });
 
 const trialing = (customerId: string, trialEnd: number) => ({
-  id: `sub_${customerId}`, object: "subscription", status: "trialing", created: NOW - 2 * DAY, trial_end: trialEnd, cancel_at_period_end: false, cancel_at: null,
-  metadata: { [META.plan]: "landlord", [META.rhythm]: "quarter" }, default_payment_method: null,
-  items: { object: "list", has_more: false, data: [{ id: "si_1", quantity: 4, current_period_end: trialEnd, price: { id: "price_1", unit_amount: 1500, recurring: { interval: "month", interval_count: 3 }, metadata: { [META.component]: "lot" } } }] },
+  id: `sub_${customerId}`, object: "subscription", status: "trialing", created: NOW - 2 * DAY, start_date: NOW - 2 * DAY, trial_end: trialEnd, cancel_at_period_end: false, cancel_at: null,
+  metadata: { [META.rhythm]: "quarter", [META.pricing]: "portfolio", [META.lots]: "4", [META.base]: "6000" }, default_payment_method: null,
+  items: { object: "list", has_more: false, data: [{ id: "si_1", quantity: 1, current_period_end: trialEnd, price: { id: "price_1", unit_amount: 6000, recurring: { interval: "month", interval_count: 3 }, metadata: {} } }] },
 });
 
 function standIn(customers: unknown[], subs: Record<string, unknown[]>) {

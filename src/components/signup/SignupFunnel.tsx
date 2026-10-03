@@ -18,7 +18,7 @@ import Turnstile from "./Turnstile";
 import SocialButtons from "./SocialButtons";
 import PhoneConfirmation from "./PhoneConfirmation";
 import { confirmedEmail, LINK_INTENT_KEY, oauthReturnUrl, socialProviders, type SocialProvider } from "@/lib/signup/social";
-import { PLANS, PLAN_IDS, REMINDER_DAYS, RHYTHMS, RHYTHM_MONTHS, TRIAL_DAYS, yearlyDiscountPct, type PlanId, type Rhythm } from "@/domain/billing/plans";
+import { PAID_MONTHS, RENT_BANDS, REMINDER_DAYS, RHYTHMS, RHYTHM_MONTHS, TRIAL_DAYS, fromPerLot, type Rhythm } from "@/domain/billing/pricing";
 import { dayOf, price } from "@/lib/billing/format";
 import { formatDate } from "@/lib/types";
 
@@ -62,44 +62,31 @@ function Choices({ labels, values, selected, onSelect, name, descriptions, icons
 }
 
 /**
- * The plan for the free trial: the billing rhythm, then the two plans, each
- * led by its monthly price per lot. Nothing is charged or asked here; the
- * choice is noted and can change at any time.
+ * The subscription for after the free trial: how it is billed, each way led
+ * by its lowest monthly price per lot (the published bands, a year costing
+ * ten months). Nothing is charged or asked here; the choice is noted and can
+ * change at any time.
  */
-function PlanPicker({ c, locale, plan, rhythm, onPlan, onRhythm }: {
-  c: SignupCopy; locale: Locale; plan: PlanId; rhythm: Rhythm; onPlan: (plan: PlanId) => void; onRhythm: (rhythm: Rhythm) => void;
-}) {
+function PlanPicker({ c, locale, rhythm, onRhythm }: { c: SignupCopy; locale: Locale; rhythm: Rhythm; onRhythm: (rhythm: Rhythm) => void }) {
+  const free = RHYTHM_MONTHS.year - PAID_MONTHS.year;
   return <div className="signup-plans">
-    <fieldset className="signup-rhythm">
+    <fieldset className="signup-choices">
       <legend className="sr-only">{c.planRhythm}</legend>
-      {RHYTHMS.map((value) => <label key={value} data-selected={rhythm === value}>
+      {RHYTHMS.map((value) => <label key={value} className="signup-choice signup-plan" data-selected={rhythm === value} data-rhythm={value}>
         <input type="radio" name="rhythm" value={value} checked={rhythm === value} onChange={() => onRhythm(value)} />
-        <span>{value === "quarter" ? c.planQuarter : c.planYear}</span>
-        {value === "year" && <span className="signup-save">{fmt(c.planSave, { pct: yearlyDiscountPct("landlord") })}</span>}
+        <span className="signup-choice-copy">
+          <span className="signup-plan-name">{value === "quarter" ? c.planQuarter : c.planYear}{value === "year" && <em>{fmt(c.planSave, { months: free })}</em>}</span>
+          <small>{value === "quarter" ? c.planBilledQuarter : c.planBilledYear}</small>
+        </span>
+        <span className="signup-plan-price">
+          <small>{c.planFromLabel}</small>
+          <strong>{price(fromPerLot(value), locale)}</strong>
+          <small>{c.planPerLot}</small>
+        </span>
+        <span className="signup-radio" aria-hidden="true">{rhythm === value && <Icon name="check" />}</span>
       </label>)}
     </fieldset>
-    <fieldset className="signup-choices">
-      <legend className="sr-only">{c.planTitle}</legend>
-      {PLAN_IDS.map((id) => {
-        const offer = PLANS[id];
-        const monthly = offer.lot[rhythm];
-        return <label key={id} className="signup-choice signup-plan" data-selected={plan === id} data-plan={id}>
-          <input type="radio" name="plan" value={id} checked={plan === id} onChange={() => onPlan(id)} />
-          <span className="signup-choice-copy">
-            <span className="signup-plan-name">{id === "landlord" ? c.planLandlord : c.planProfessional}{id === "landlord" && <em>{c.planRecommended}</em>}</span>
-            <small>{id === "landlord" ? c.planLandlordBody : c.planProfessionalBody}</small>
-            <small>{fmt(rhythm === "quarter" ? c.planBilledQuarter : c.planBilledYear, { amount: price(monthly * RHYTHM_MONTHS[rhythm], locale) })}</small>
-          </span>
-          <span className="signup-plan-price">
-            <strong>{price(monthly, locale)}</strong>
-            <small>{c.planPerLot}</small>
-            {offer.seat && <small>{fmt(c.planSeat, { amount: price(offer.seat[rhythm], locale) })}</small>}
-          </span>
-          <span className="signup-radio" aria-hidden="true">{plan === id && <Icon name="check" />}</span>
-        </label>;
-      })}
-    </fieldset>
-    <p className="signup-plan-note">{c.planNote}</p>
+    <p className="signup-plan-note">{fmt(c.planNote, { min: price(RENT_BANDS[0].perLot, locale), max: price(RENT_BANDS[RENT_BANDS.length - 1].perLot, locale) })}</p>
   </div>;
 }
 
@@ -153,7 +140,6 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   const [email, setEmail] = useState(initialEmail);
   const [emailPending, setEmailPending] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>({ ...EMPTY_PREFERENCES });
-  const [plan, setPlan] = useState<PlanId>("landlord");
   const [rhythm, setRhythm] = useState<Rhythm>("quarter");
   const [planChosen, setPlanChosen] = useState(false);
   const [busy, setBusy] = useState(signedIn || !!oauthIntent || recovery);
@@ -464,7 +450,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
       } else if (step === "involvement") {
         if (!preferences.involvement) { invalid(c.selectOption); return; } await finish();
       } else if (step === "plan") {
-        if (await save({ action: "plan", plan, rhythm })) { setPlanChosen(true); go("welcome"); }
+        if (await save({ action: "plan", rhythm })) { setPlanChosen(true); go("welcome"); }
       }
     });
   };
@@ -550,7 +536,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
             <button type="button" className="signup-text-button" onClick={useOtherAccount} disabled={busy}>{c.otherAccount}</button>
           </div> : step === "welcome" ? <>
             <div className="signup-welcome-summary"><Icon name="shield" /><div><strong>{c.verified}</strong><span>{c.saved}</span>
-              {planChosen && <span data-welcome-trial>{fmt(c.welcomeTrial, { date: formatDate(dayOf(Math.floor(Date.now() / 1000) + TRIAL_DAYS * 86_400), locale), plan: plan === "landlord" ? c.planLandlord : c.planProfessional })}</span>}
+              {planChosen && <span data-welcome-trial>{fmt(rhythm === "year" ? c.welcomeTrialYear : c.welcomeTrialQuarter, { date: formatDate(dayOf(Math.floor(Date.now() / 1000) + TRIAL_DAYS * 86_400), locale) })}</span>}
             </div></div>
             {emailPending && <p className="signup-email-note"><Icon name="mail" />{c.emailPending}</p>}
             {previewDone ? <div className="signup-preview-end" role="status"><p>{c.previewDone}</p><button className="signup-primary" type="button" onClick={() => window.location.reload()}>{c.restart}</button></div> :
@@ -608,7 +594,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
               {step === "properties" && <Choices name="properties" labels={c.properties} values={PROPERTY_VALUES} selected={preferences.properties} onSelect={(value) => { setPreferences({ ...preferences, properties: value as Preferences["properties"] }); setError(""); }} />}
               {step === "challenge" && <Choices name="challenge" labels={c.challenges} values={CHALLENGE_VALUES} selected={preferences.challenge} onSelect={(value) => { setPreferences({ ...preferences, challenge: value as Preferences["challenge"] }); setError(""); }} />}
               {step === "involvement" && <Choices name="involvement" labels={c.involvement} values={TIME_VALUES} selected={preferences.involvement} onSelect={(value) => { setPreferences({ ...preferences, involvement: value as Preferences["involvement"] }); setError(""); }} />}
-              {step === "plan" && <PlanPicker c={c} locale={locale} plan={plan} rhythm={rhythm} onPlan={(value) => { setPlan(value); setError(""); }} onRhythm={setRhythm} />}
+              {step === "plan" && <PlanPicker c={c} locale={locale} rhythm={rhythm} onRhythm={(value) => { setRhythm(value); setError(""); }} />}
             </fieldset>
             {step === "email" && emailVerified && <p className="signup-verified signup-email-verified"><Icon name="check" />{c.emailConfirmed}</p>}
             {error && !pendingPhone && <p className="signup-error" id="signup-error" role="alert">{error}</p>}

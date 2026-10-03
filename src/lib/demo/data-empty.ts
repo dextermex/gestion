@@ -62,7 +62,7 @@ export function buildEmptyData(org: Org): DemoData {
     IDENTITY_READY: true,
     SIGNATURE_READY: true,
     // A workspace's real subscription is read from Stripe (src/lib/billing), never from a dataset.
-    BILLING: { trialDay: 0, plan: "landlord", rhythm: "quarter", seats: 1 },
+    BILLING: { trialDay: 0, rhythm: "quarter" },
     PROPERTIES,
     UNITS,
     LEASES,

@@ -1,7 +1,8 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
-import { BILLED_UNIT_KINDS } from "@/domain/billing/plans";
+import { BILLED_UNIT_KINDS, billedRents } from "@/domain/billing/pricing";
+import type { Cents } from "@/domain/money";
 import { withOrgAndClient, type OrgContext } from "@/lib/gestion/api";
 import { getSession } from "@/lib/supabase/server";
 import { getI18n } from "@/lib/i18n";
@@ -44,17 +45,28 @@ export async function billingRoute(req: NextRequest): Promise<BillingRoute | Nex
   return { ctx, stripe, snapshot, locale, d, origin: req.nextUrl.origin };
 }
 
-/** The lots a subscription counts and the workspace's active users, read under the caller's own rights. */
-export async function portfolioCounts(ctx: OrgContext & { client: SupabaseClient }): Promise<{ lots: number; seats: number } | NextResponse> {
-  const [units, members] = await Promise.all([
-    ctx.g.from("units").select("id", { count: "exact", head: true }).eq("org_id", ctx.org.id).is("archived_at", null).in("kind", [...BILLED_UNIT_KINDS]),
-    ctx.client.from("crm_members").select("user_id", { count: "exact", head: true }).eq("agency_id", ctx.org.id).eq("status", "active"),
+/**
+ * The rents of the lots a subscription bills, read under the caller's own
+ * rights: the workspace's live dwellings, shops and offices, and the
+ * running leases on them. A read that fails refuses the action rather than
+ * pricing a portfolio short.
+ */
+export async function portfolioRents(ctx: OrgContext): Promise<{ rents: Cents[] } | NextResponse> {
+  const [units, leases] = await Promise.all([
+    ctx.g.from("units").select("id,kind").eq("org_id", ctx.org.id).is("archived_at", null).in("kind", [...BILLED_UNIT_KINDS]).limit(5000),
+    ctx.g.from("leases").select("unit_id,status,rent_cents").eq("org_id", ctx.org.id).in("status", ["active", "notice"]).limit(5000),
   ]);
-  if (units.error) {
-    console.error("billing lot count failed:", units.error.code);
+  if (units.error || leases.error) {
+    console.error("billing portfolio read failed:", units.error?.code ?? leases.error?.code);
     return NextResponse.json({ error: "storage_failed" }, { status: 502 });
   }
-  return { lots: units.count ?? 0, seats: Math.max(1, members.count ?? 1) };
+  const rows = (data: unknown) => (Array.isArray(data) ? (data as Record<string, unknown>[]) : []);
+  return {
+    rents: billedRents(
+      rows(units.data).map((u) => ({ id: String(u.id), kind: String(u.kind) })),
+      rows(leases.data).map((l) => ({ unitId: String(l.unit_id), status: String(l.status), rentCents: Number(l.rent_cents) })),
+    ),
+  };
 }
 
 /** A Stripe call that failed: logged by kind and code (never a payload), answered as unavailable. */
