@@ -13,7 +13,7 @@ import { getI18n } from "@/lib/i18n";
  * door the owner came through.
  */
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { locale, d } = await getI18n();

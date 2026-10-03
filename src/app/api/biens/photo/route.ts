@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
 import { MEDIA_BUCKET } from "@/lib/gestion/media";
+import { refuseWhenLocked } from "@/lib/billing/gate";
 
 /**
  * Uploads a property photograph into the private `gestion-media` bucket and
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
   const identity = await getIdentity();
   const org = identity?.active;
   if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
+  const locked = await refuseWhenLocked(org);
+  if (locked) return locked;
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");

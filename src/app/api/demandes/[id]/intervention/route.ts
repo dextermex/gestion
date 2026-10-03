@@ -8,7 +8,7 @@ import { createIntervention, statusOfFailure } from "@/lib/gestion/requests";
  * Interventions screen lists it from now on. Idempotent.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { id } = await params;
 

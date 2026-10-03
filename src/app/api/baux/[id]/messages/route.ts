@@ -8,7 +8,7 @@ import { addManagerMessage, statusOfFailure } from "@/lib/gestion/requests";
  * active workspace; one from elsewhere is not found.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;

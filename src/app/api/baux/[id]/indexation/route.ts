@@ -24,7 +24,7 @@ import type { CapitalComponent } from "@/domain/indexation/engine";
  * what the 24-month rule and the standing-order lag detector read next time.
  */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;

@@ -16,7 +16,7 @@ type Row = Record<string, unknown>;
 const s = (v: unknown): string => (typeof v === "string" ? v : "");
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrgAndClient();
+  const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org, client } = ctx;
   const { id } = await params;

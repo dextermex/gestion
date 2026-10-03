@@ -30,7 +30,7 @@ const signer = (v: unknown): SignerForm | null => {
 };
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrgAndClient();
+  const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const leaseId = str(body.leaseId, 64);

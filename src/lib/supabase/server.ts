@@ -50,6 +50,8 @@ export interface Session {
   userId: string;
   email: string;
   accessToken: string;
+  /** Auth's user metadata as verified: personalisation only, never a permission. */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -69,7 +71,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
   try {
     const { data, error } = await anon.auth.getUser(accessToken);
     if (error || !data.user) return null;
-    return { userId: data.user.id, email: data.user.email ?? "", accessToken };
+    return { userId: data.user.id, email: data.user.email ?? "", accessToken, metadata: data.user.user_metadata ?? {} };
   } catch {
     // Supabase unreachable: treat as signed out rather than as authorised.
     return null;

@@ -4,7 +4,7 @@ import { revokeInvitation } from "@/lib/portal/invitations";
 
 /** "Révoquer": the link stops working; the row stays, dated, as history. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { id } = await params;
   const result = await revokeInvitation(ctx, id);

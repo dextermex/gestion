@@ -589,6 +589,66 @@ leaves the sending open, to be read again, nothing half-written. `POST /api/sign
 annuler` cancels a sending still out. Migration 0027 holds the tables; the sample cabinet
 plays a sending under way and one completed.
 
+### Subscriptions: a 30-day trial, then Stripe, nothing stored here
+
+A workspace pays per lot and per month, shown monthly on every screen and charged per
+quarter or per year, after a free trial of 30 days. The catalogue is
+`src/domain/billing/plans.ts`: the landlord plan at €5 per lot up to 50 lots, the
+professional plan at €4 per lot plus €29 per user, the yearly rhythm 20 % below the
+quarterly one, VAT included, only the lots that carry a lease of their own counted (a
+dwelling, a shop, an office; parking spaces and cellars free). Those figures are the
+pricing hypothesis of STRATEGY.md §5.2 with its free tier replaced by the trial; changing
+one is a one-line edit. `src/domain/billing/trial.ts` says where a workspace stands (trial,
+card on file, active, payment failed, expired, ended), how loudly the screens remind
+(quiet, the last week, the last two days, locked) and which reminder e-mail is due.
+
+Nothing about a subscription is stored in the shared database: no migration, no service
+key, no webhook (as for signatures, the state is read back). `src/lib/billing/` keeps it
+at Stripe. One customer per workspace, found by the workspace id in its metadata (Stripe's
+search, with the caller's e-mail as an immediate fallback while the search catches up; the
+oldest wins should two exist). The trial runs from that customer's creation, a date Stripe
+sets and no workspace can move; the customer is created on the workspace's first visit
+with subscriptions on, so existing accounts get their 30 days from then. The plan picked at
+sign-up (`morada_signup.plan` in the account's metadata, personalisation only) is copied
+onto it. The one seven-day extension, offered once the trial is over or in its last two
+days, is written on the customer by the server.
+
+Prices are created from the catalogue the first time Checkout needs them, under a lookup
+key that carries the monthly amount (`morada_gestion_landlord_lot_quarter_500`): the
+screen and the charge cannot disagree, and a changed figure makes new prices while running
+subscriptions keep theirs. The card is taken by Stripe Checkout, which creates the
+subscription with the rest of the trial carried over (`trial_end`, or Stripe's shortest
+trial in the last 48 hours), so the first charge falls on the trial's last day; the lots
+and users are counted here under the caller's rights, never taken from the browser.
+Stripe's portal (card, invoices, cancelling at the period's end) runs on a configuration
+the app creates once. A running subscription's lot count follows the portfolio: the
+layout reconciles it after the response, free during the trial, an addition prorated onto
+the next invoice, a removal applied from the next period. `cache.ts` keeps each snapshot
+five minutes in Next's data cache, refreshed at once when Stripe sends the browser back
+(`/api/abonnement/retour`) or the page changes something.
+
+Once a trial ends with nothing subscribed, the workspace reads everything and changes
+nothing: each write route says so (`withOrg("write")`, 56 handlers), and `gate.ts` answers
+402 `subscription_required`, which the shell turns into the paywall. Every doubt opens: no
+key, Stripe slow or unreachable, no customer yet, a workspace listed in
+`BILLING_EXEMPT_ORGS`. Marking a conversation read, refreshing a signature and reading a
+document stay open; a middleware was not used, since Next.js then buffers request bodies
+and truncates uploads beyond 10 MB.
+
+Conversion is the screens' job, without a card at sign-up: the plan step ends the
+landlord's sign-up (`/inscription`, "30 jours gratuits, sans carte"); in the app, a chip
+counts the days, the dashboard offers to add the card once a lot exists ("0 € today, the
+first charge on the trial's last day"), a banner takes over in the last week, and the
+paywall after it says what is kept ("your 12 lots and 9 leases"). `/api/cron/essais`
+(Vercel Cron, daily, `CRON_SECRET`) e-mails a week before the end, two days before and
+once it has ended, and announces the first charge a week ahead to a card on file; it
+reads only Stripe. `/app/abonnement/apercu` shows every state in development.
+
+Server variables: `STRIPE_SECRET_KEY` (a secret `sk_`/`rk_` key; anything else, such as a
+key's dashboard identifier `mk_…`, is refused by name on the page), `STRIPE_TAX=1` once
+Stripe Tax is set up, `BILLING_EXEMPT_ORGS`, `CRON_SECRET` and `RESEND_API_KEY` for the
+e-mails. Without a key nothing about subscriptions shows or applies.
+
 ### Delivery: an outbox, one sender, notifications both ways
 
 Every e-mail the application composes is a row of `gestion.deliveries` (0023): its kind

@@ -8,6 +8,8 @@ import { buildSearchIndex } from "@/lib/demo/search";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
+import { billedLots } from "@/domain/billing/plans";
+import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
 
 export const metadata: Metadata = {
   title: "Morada Gestion",
@@ -55,7 +57,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // The shell's own read: the portfolio, the people and the badges, no
   // history. The screen inside reads what it shows.
-  const [demo, datasetId] = await Promise.all([getDemo({ shell: true }), getDatasetId()]);
+  // The subscription is the account's own business: read on its own data only,
+  // alongside the portfolio, and never holding the page (five seconds at most).
+  const datasetId = await getDatasetId();
+  const workspace = identity.active;
+  const [demo, billingSnapshot] = await Promise.all([
+    getDemo({ shell: true }),
+    datasetId === "real" && session
+      ? visitSnapshot({ org: workspace, userId: identity.userId, email: session.email || identity.email, locale, metadata: session.metadata })
+      : Promise.resolve(null),
+  ]);
 
   // Everything the client shell needs, serialized. Identity comes from the
   // session; the dataset only ever supplies figures.
@@ -99,6 +110,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       bank: demo.BANK_ACCOUNTS.length > 0,
       rent: demo.RENT_PERIODS.some((rp) => rp.allocatedCents > 0),
     },
+    billing: billingSnapshot
+      ? shellBillingOf(billingSnapshot, workspace.role, {
+          lots: billedLots(demo.UNITS),
+          leases: demo.LEASES.filter((l) => l.status === "active" || l.status === "notice").length,
+        })
+      : null,
   };
 
   return (

@@ -53,7 +53,14 @@ is deleted; nothing renders it as a fallback.
    password on `/connexion`; phone login stays available.
 8. Landlords answer three optional questions: portfolio size, main challenge
    and time spent. “Skip for now” remains visible. Tenants finish at step 7.
-9. Welcome and handoff to `/app` or `/locataire`. A tenant still needs an actual
+9. Landlords pick the plan for their free trial: the billing rhythm (quarterly,
+   or yearly at 20 % less), then the landlord or professional plan, each led by its
+   monthly price per lot. No card is asked; "Commencer mes 30 jours gratuits" notes
+   the choice (`{action:"plan"}`, kept in `morada_signup.plan`) and the side panel
+   shows the trial as three dated steps. An account arriving through an invitation
+   joins a workspace that already has its plan and skips this step. See
+   ARCHITECTURE.md, "Subscriptions".
+10. Welcome and handoff to `/app` or `/locataire`. A tenant still needs an actual
    invitation to access a tenancy. Choosing a role grants no access.
 
 ### Stages (server-side, `/api/signup/profile`)

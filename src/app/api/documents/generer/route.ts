@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrgAndClient();
+  const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const kind = str(body.kind, 40);

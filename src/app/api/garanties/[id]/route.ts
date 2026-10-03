@@ -21,7 +21,7 @@ const has = (b: Record<string, unknown>, k: string) => Object.prototype.hasOwnPr
 const day = (v: unknown) => (ISO.test(str(v, 10)) && !Number.isNaN(Date.parse(str(v, 10))) ? str(v, 10) : null);
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;

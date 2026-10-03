@@ -10,7 +10,7 @@ import { isPaymentError, recordPaymentFifo } from "@/lib/banking/allocate";
  * allocations, nothing here flips a boolean.
  */
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const today = new Date().toISOString().slice(0, 10);

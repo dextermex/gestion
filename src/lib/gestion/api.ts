@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity, type Workspace } from "@/lib/workspace";
+import { refuseWhenLocked } from "@/lib/billing/gate";
 
 /**
  * The shared spine of every gestion write route: a signed-in session, an
@@ -16,22 +17,38 @@ export interface OrgContext {
   userId: string;
 }
 
-export async function withOrg(): Promise<OrgContext | NextResponse> {
+/**
+ * What a handler does with the workspace. A "write" is refused (402
+ * `subscription_required`) once the trial is over with nothing subscribed:
+ * the records stay readable, nothing is deleted. A route that does not say
+ * is a read, so a route added without it is never locked by mistake.
+ */
+export type Access = "read" | "write";
+
+export async function withOrg(access: Access = "read"): Promise<OrgContext | NextResponse> {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const identity = await getIdentity();
   const org = identity?.active;
   if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
+  if (access === "write") {
+    const locked = await refuseWhenLocked(org);
+    if (locked) return locked;
+  }
   return { g: authedClient(session.accessToken).schema("gestion"), org, userId: session.userId };
 }
 
 /** The same spine, with the raw client alongside for the bucket (uploads, signed links). */
-export async function withOrgAndClient(): Promise<(OrgContext & { client: SupabaseClient }) | NextResponse> {
+export async function withOrgAndClient(access: Access = "read"): Promise<(OrgContext & { client: SupabaseClient }) | NextResponse> {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const identity = await getIdentity();
   const org = identity?.active;
   if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
+  if (access === "write") {
+    const locked = await refuseWhenLocked(org);
+    if (locked) return locked;
+  }
   const client = authedClient(session.accessToken);
   return { g: client.schema("gestion"), org, userId: session.userId, client };
 }

@@ -83,6 +83,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!prior.password_set_at) return NextResponse.json({ error: "password_required" }, { status: 400 });
+    if (body.action === "plan") {
+      // A landlord's choice for the trial, read when the workspace's subscription is first set up.
+      if (prior.role !== "landlord") return NextResponse.json({ error: "details_required" }, { status: 400 });
+      const noted = await updateSignupUser(session.accessToken, { data: { morada_signup: {
+        ...prior, plan: { id: body.plan, rhythm: body.rhythm, chosen_at: new Date().toISOString() },
+      } } });
+      if (noted.error) return NextResponse.json({ error: "save_failed" }, { status: 502 });
+      return NextResponse.json({ ok: true });
+    }
     const saved = await updateSignupUser(session.accessToken, { data: { morada_signup: {
       ...prior, stage: "complete", completed_at: new Date().toISOString(),
       preferences: prior.role === "landlord" ? body.preferences : null,

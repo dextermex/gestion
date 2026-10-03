@@ -19,7 +19,7 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const IDENTITY_COLUMNS = /civility|birth_date|birth_place|legal_form|representative_name|representative_role/;
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;

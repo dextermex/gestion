@@ -121,8 +121,11 @@ test("phone signup persists one identity, confirms its email by code, sets a pas
   expect(byPassword.error).toBeNull();
   expect(byPassword.data.user?.id).toBe(id);
   expect((await save(request, current, { action: "complete", preferences })).status()).toBe(200);
+  // The plan for the free trial: noted with the account, nothing charged, an unknown plan refused.
+  expect((await save(request, current, { action: "plan", plan: "free", rhythm: "year" })).status()).toBe(400);
+  expect((await save(request, current, { action: "plan", plan: "professional", rhythm: "year" })).status()).toBe(200);
   const completed = (await db.auth.getUser()).data.user;
-  expect(completed?.user_metadata.morada_signup).toMatchObject({ role: "landlord", stage: "complete", preferences });
+  expect(completed?.user_metadata.morada_signup).toMatchObject({ role: "landlord", stage: "complete", preferences, plan: { id: "professional", rhythm: "year" } });
   const dashboard = await request.get("/app", { headers: sessionHeaders(current) });
   expect(dashboard.status()).toBe(200);
   expect(new URL(dashboard.url()).pathname).toBe("/app");
@@ -145,6 +148,8 @@ test("tenant signup saves its own profile and opens without creating a landlord 
   expect((await save(request, session, { action: "email_confirmed" })).status()).toBe(200);
   expect(await (await save(request, session, { action: "password", password: "Tenant-Passw0rd" })).json()).toEqual({ ok: true, stage: "complete" });
   expect((await db.auth.getUser()).data.user?.user_metadata.morada_signup).toMatchObject({ role: "tenant", stage: "complete", preferences: null });
+  // A tenant has no plan to pick.
+  expect((await save(request, session, { action: "plan", plan: "landlord", rhythm: "quarter" })).status()).toBe(400);
   expect((await client().auth.signInWithPassword({ email, password: "Tenant-Passw0rd" })).error).toBeNull();
   const tenant = await request.get("/locataire", { headers: sessionHeaders(session) });
   expect(tenant.status()).toBe(200);

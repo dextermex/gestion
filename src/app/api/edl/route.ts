@@ -37,7 +37,7 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;

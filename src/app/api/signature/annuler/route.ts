@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const envelopeId = typeof body.envelopeId === "string" ? body.envelopeId.trim() : "";

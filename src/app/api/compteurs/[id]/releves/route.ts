@@ -13,7 +13,7 @@ const SOURCES = ["manual", "edl", "photo_ocr", "import"] as const;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;

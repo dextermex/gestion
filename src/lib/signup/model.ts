@@ -18,13 +18,16 @@ export const profileInput = z.discriminatedUnion("action", [
   // Supabase stores only a bcrypt hash; 72 bytes is bcrypt's limit.
   z.object({ action: z.literal("password"), password: z.string().min(8).max(72) }),
   z.object({ action: z.literal("complete"), preferences: preferenceSchema }),
+  // The plan a landlord picks for the free trial: noted for later, nothing is charged or required.
+  z.object({ action: z.literal("plan"), plan: z.enum(["landlord", "professional"]), rhythm: z.enum(["quarter", "year"]) }),
 ]);
 
-export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "name" | "email" | "email-code" | "create-password" | "properties" | "challenge" | "involvement" | "welcome" | "existing" | "reset";
+export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "name" | "email" | "email-code" | "create-password" | "properties" | "challenge" | "involvement" | "plan" | "welcome" | "existing" | "reset";
 
 /**
  * Account creation, in order: phone code, role, name, email, email code,
- * password, then (landlords) three tailoring questions. `morada_signup.stage`
+ * password, then (landlords) three tailoring questions and the plan for the
+ * free trial (noted, never charged here). `morada_signup.stage`
  * records the last step the server accepted: role, email, email_code,
  * password, tailor, complete. A password is set only after the email is
  * confirmed, so every finished account can sign in with email and password.

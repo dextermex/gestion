@@ -21,7 +21,7 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim
 type Params = { params: Promise<{ id: string; lineId: string }> };
 
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id, lineId } = await params;
@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 /** A line that retains nothing yet may be withdrawn; a justified one is a fact. */
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id, lineId } = await params;

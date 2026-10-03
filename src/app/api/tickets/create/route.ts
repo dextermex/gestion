@@ -3,7 +3,7 @@ import { withOrg, dbError } from "@/lib/gestion/api";
 
 /** Creates an intervention on a unit; linked to its running lease if any. */
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
 

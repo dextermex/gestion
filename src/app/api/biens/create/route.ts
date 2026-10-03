@@ -44,7 +44,7 @@ const num = (v: unknown, max: number): number | null => {
 };
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
 

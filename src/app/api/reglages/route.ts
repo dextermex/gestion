@@ -8,7 +8,7 @@ import { LESSOR_IDENTITY_COLUMNS, parseSettingsInput } from "@/lib/documents/set
  * workspace produces and, for the account to pay into, by its tenants.
  */
 export async function PATCH(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org, userId } = ctx;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;

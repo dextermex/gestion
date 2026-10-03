@@ -3,7 +3,7 @@ import { withOrg, dbError } from "@/lib/gestion/api";
 
 /** A draft décompte is discarded with its lines; an issued one is a fact the tenant received. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;

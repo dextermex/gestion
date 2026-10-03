@@ -11,7 +11,7 @@ import { releaseDecision, settlementOpen, type Tranche } from "@/lib/gestion/dep
  * written together, against the status the caller saw.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;

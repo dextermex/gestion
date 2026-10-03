@@ -18,6 +18,9 @@ import Turnstile from "./Turnstile";
 import SocialButtons from "./SocialButtons";
 import PhoneConfirmation from "./PhoneConfirmation";
 import { confirmedEmail, LINK_INTENT_KEY, oauthReturnUrl, socialProviders, type SocialProvider } from "@/lib/signup/social";
+import { PLANS, PLAN_IDS, REMINDER_DAYS, RHYTHMS, RHYTHM_MONTHS, TRIAL_DAYS, yearlyDiscountPct, type PlanId, type Rhythm } from "@/domain/billing/plans";
+import { dayOf, price } from "@/lib/billing/format";
+import { formatDate } from "@/lib/types";
 
 const PROPERTY_VALUES = ["0", "1", "2-5", "6-10", "11+"] as const;
 const CHALLENGE_VALUES = ["maintenance", "compliance", "rent", "documents", "finances"] as const;
@@ -58,6 +61,66 @@ function Choices({ labels, values, selected, onSelect, name, descriptions, icons
   </fieldset>;
 }
 
+/**
+ * The plan for the free trial: the billing rhythm, then the two plans, each
+ * led by its monthly price per lot. Nothing is charged or asked here; the
+ * choice is noted and can change at any time.
+ */
+function PlanPicker({ c, locale, plan, rhythm, onPlan, onRhythm }: {
+  c: SignupCopy; locale: Locale; plan: PlanId; rhythm: Rhythm; onPlan: (plan: PlanId) => void; onRhythm: (rhythm: Rhythm) => void;
+}) {
+  return <div className="signup-plans">
+    <fieldset className="signup-rhythm">
+      <legend className="sr-only">{c.planRhythm}</legend>
+      {RHYTHMS.map((value) => <label key={value} data-selected={rhythm === value}>
+        <input type="radio" name="rhythm" value={value} checked={rhythm === value} onChange={() => onRhythm(value)} />
+        <span>{value === "quarter" ? c.planQuarter : c.planYear}</span>
+        {value === "year" && <span className="signup-save">{fmt(c.planSave, { pct: yearlyDiscountPct("landlord") })}</span>}
+      </label>)}
+    </fieldset>
+    <fieldset className="signup-choices">
+      <legend className="sr-only">{c.planTitle}</legend>
+      {PLAN_IDS.map((id) => {
+        const offer = PLANS[id];
+        const monthly = offer.lot[rhythm];
+        return <label key={id} className="signup-choice signup-plan" data-selected={plan === id} data-plan={id}>
+          <input type="radio" name="plan" value={id} checked={plan === id} onChange={() => onPlan(id)} />
+          <span className="signup-choice-copy">
+            <span className="signup-plan-name">{id === "landlord" ? c.planLandlord : c.planProfessional}{id === "landlord" && <em>{c.planRecommended}</em>}</span>
+            <small>{id === "landlord" ? c.planLandlordBody : c.planProfessionalBody}</small>
+            <small>{fmt(rhythm === "quarter" ? c.planBilledQuarter : c.planBilledYear, { amount: price(monthly * RHYTHM_MONTHS[rhythm], locale) })}</small>
+          </span>
+          <span className="signup-plan-price">
+            <strong>{price(monthly, locale)}</strong>
+            <small>{c.planPerLot}</small>
+            {offer.seat && <small>{fmt(c.planSeat, { amount: price(offer.seat[rhythm], locale) })}</small>}
+          </span>
+          <span className="signup-radio" aria-hidden="true">{plan === id && <Icon name="check" />}</span>
+        </label>;
+      })}
+    </fieldset>
+    <p className="signup-plan-note">{c.planNote}</p>
+  </div>;
+}
+
+/** Today, the reminder, the end: the trial as three dated steps. */
+function TrialTimeline({ c, locale, className = "" }: { c: SignupCopy; locale: Locale; className?: string }) {
+  const now = Math.floor(Date.now() / 1000);
+  const on = (days: number) => formatDate(dayOf(now + days * 86_400), locale);
+  const steps = [
+    { when: c.planToday, what: c.planTodayBody },
+    { when: on(TRIAL_DAYS - REMINDER_DAYS), what: c.planReminderBody },
+    { when: on(TRIAL_DAYS), what: c.planEndBody },
+  ];
+  return <ol className={`signup-timeline ${className}`}>
+    {steps.map((item, index) => <li key={index} data-first={index === 0 || undefined}>
+      <span className="signup-timeline-dot" aria-hidden="true" />
+      <strong>{item.when}</strong>
+      <span>{item.what}</span>
+    </li>)}
+  </ol>;
+}
+
 /** The sentence for a failed call, after logging its code (never its payload). */
 function errorMessage(stage: SignupStage, failure: { code?: string; status?: number; name?: string } | null | undefined, copy: SignupCopy) {
   logSignupFailure(stage, failure);
@@ -90,6 +153,9 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   const [email, setEmail] = useState(initialEmail);
   const [emailPending, setEmailPending] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>({ ...EMPTY_PREFERENCES });
+  const [plan, setPlan] = useState<PlanId>("landlord");
+  const [rhythm, setRhythm] = useState<Rhythm>("quarter");
+  const [planChosen, setPlanChosen] = useState(false);
   const [busy, setBusy] = useState(signedIn || !!oauthIntent || recovery);
   const [pendingPhone, setPendingPhone] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
@@ -286,8 +352,10 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     setRetryAt(Date.now() + 60000); setRemaining(60); setStatus(c.emailResent);
   });
 
+  // A landlord picks a plan for the trial next; an invited account joins a workspace that already has one.
+  const offersPlan = role !== "tenant" && !(next ?? "").startsWith("/invitation");
   const finish = async (answers = preferences) => {
-    if (await save({ action: "complete", preferences: answers })) go("welcome");
+    if (await save({ action: "complete", preferences: answers })) go(offersPlan ? "plan" : "welcome");
   };
 
   const invalid = (message: string, id?: string) => {
@@ -395,6 +463,8 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         if (!preferences.challenge) { invalid(c.selectOption); return; } go("involvement");
       } else if (step === "involvement") {
         if (!preferences.involvement) { invalid(c.selectOption); return; } await finish();
+      } else if (step === "plan") {
+        if (await save({ action: "plan", plan, rhythm })) { setPlanChosen(true); go("welcome"); }
       }
     });
   };
@@ -440,16 +510,16 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   const titles: Record<SignupStep, string> = {
     login: c.loginTitle, password: c.passwordTitle, phone: loginMode ? c.login : c.secure, verify: c.codeTitle, role: c.roleTitle, name: c.nameTitle, email: c.emailTitle,
     "email-code": c.emailCodeTitle, "create-password": c.createPasswordTitle,
-    properties: c.propertiesTitle, challenge: c.challengeTitle, involvement: c.involvementTitle,
+    properties: c.propertiesTitle, challenge: c.challengeTitle, involvement: c.involvementTitle, plan: c.planTitle,
     welcome: fmt(c.welcomeTitle, { name: firstName || "Morada" }), existing: c.existingTitle, reset: c.resetTitle,
   };
   const intros: Record<SignupStep, string> = {
     login: c.loginIntro, password: email, phone: c.phoneIntro, verify: c.codeIntro, role: c.roleIntro, name: c.nameIntro, email: c.emailIntro,
     "email-code": c.emailCodeIntro, "create-password": fmt(c.createPasswordIntro, { email }),
-    properties: c.propertiesIntro, challenge: c.challengeIntro, involvement: c.involvementIntro,
+    properties: c.propertiesIntro, challenge: c.challengeIntro, involvement: c.involvementIntro, plan: c.planIntro,
     welcome: role === "tenant" ? c.tenantWelcome : c.welcomeIntro, existing: fmt(c.existingIntro, { account }), reset: c.resetIntro,
   };
-  const buttonText = step === "verify" ? c.verify : step === "email-code" ? c.verifyEmail : step === "involvement" ? c.finish : step === "reset" ? c.savePassword : c.continue;
+  const buttonText = step === "verify" ? c.verify : step === "email-code" ? c.verifyEmail : step === "involvement" ? c.finish : step === "plan" ? c.planCta : step === "reset" ? c.savePassword : c.continue;
   const baseUrl = preview ? "/inscription/apercu" : "/inscription";
   const routeParams = "lang=" + locale + (next ? "&next=" + encodeURIComponent(safeSignupNext(next, role ?? "landlord")) : "");
   const loginUrl = baseUrl + "?mode=login&" + routeParams;
@@ -464,7 +534,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
       <div className="signup-form-wrap">
         {step !== "phone" && step !== "login" && step !== "existing" && step !== "welcome" && step !== "reset" && <div className="signup-navigation">
           {canBack ? <button className="signup-back" type="button" onClick={back} disabled={busy} aria-label={c.back}><Icon name="back" /></button> : <span />}
-          <span>{tailoring ? fmt(c.progressCount, { current: ["properties", "challenge", "involvement"].indexOf(step) + 1, total: 3 }) : stage === 0 ? c.account : c.details}</span>
+          <span>{tailoring ? fmt(c.progressCount, { current: ["properties", "challenge", "involvement"].indexOf(step) + 1, total: 3 }) : step === "plan" ? c.planStage : stage === 0 ? c.account : c.details}</span>
           {tailoring ? <button className="signup-nav-skip" type="button" disabled={busy} onClick={() => void run(() => finish(preferences))}>{c.skip}</button> : <nav className="signup-progress" aria-label={c.progress}>
             {[c.account, c.details, c.tailor].map((label, index) => <span key={index} data-active={index === stage} data-done={index < stage} aria-current={index === stage ? "step" : undefined}><span className="signup-progress-line" /><span className="sr-only">{label}</span></span>)}
           </nav>}
@@ -479,7 +549,9 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
             <button type="button" className="signup-primary" onClick={openSpace} disabled={busy}>{c.useAccount}</button>
             <button type="button" className="signup-text-button" onClick={useOtherAccount} disabled={busy}>{c.otherAccount}</button>
           </div> : step === "welcome" ? <>
-            <div className="signup-welcome-summary"><Icon name="shield" /><div><strong>{c.verified}</strong><span>{c.saved}</span></div></div>
+            <div className="signup-welcome-summary"><Icon name="shield" /><div><strong>{c.verified}</strong><span>{c.saved}</span>
+              {planChosen && <span data-welcome-trial>{fmt(c.welcomeTrial, { date: formatDate(dayOf(Math.floor(Date.now() / 1000) + TRIAL_DAYS * 86_400), locale), plan: plan === "landlord" ? c.planLandlord : c.planProfessional })}</span>}
+            </div></div>
             {emailPending && <p className="signup-email-note"><Icon name="mail" />{c.emailPending}</p>}
             {previewDone ? <div className="signup-preview-end" role="status"><p>{c.previewDone}</p><button className="signup-primary" type="button" onClick={() => window.location.reload()}>{c.restart}</button></div> :
               <button className="signup-primary" type="button" onClick={openSpace}>{role === "tenant" ? c.enterTenant : c.enter}</button>}
@@ -536,6 +608,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
               {step === "properties" && <Choices name="properties" labels={c.properties} values={PROPERTY_VALUES} selected={preferences.properties} onSelect={(value) => { setPreferences({ ...preferences, properties: value as Preferences["properties"] }); setError(""); }} />}
               {step === "challenge" && <Choices name="challenge" labels={c.challenges} values={CHALLENGE_VALUES} selected={preferences.challenge} onSelect={(value) => { setPreferences({ ...preferences, challenge: value as Preferences["challenge"] }); setError(""); }} />}
               {step === "involvement" && <Choices name="involvement" labels={c.involvement} values={TIME_VALUES} selected={preferences.involvement} onSelect={(value) => { setPreferences({ ...preferences, involvement: value as Preferences["involvement"] }); setError(""); }} />}
+              {step === "plan" && <PlanPicker c={c} locale={locale} plan={plan} rhythm={rhythm} onPlan={(value) => { setPlan(value); setError(""); }} onRhythm={setRhythm} />}
             </fieldset>
             {step === "email" && emailVerified && <p className="signup-verified signup-email-verified"><Icon name="check" />{c.emailConfirmed}</p>}
             {error && !pendingPhone && <p className="signup-error" id="signup-error" role="alert">{error}</p>}
@@ -544,6 +617,10 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
               {busy ? <><span className="signup-spinner" />{c.working}</> : buttonText}
             </button>
             {((step === "email" && linkingEnabled && !emailVerified) || (step === "login" && socialLoginEnabled)) && <SocialButtons providers={providers} copy={c} disabled={busy} onContinue={continueWithProvider} />}
+            {step === "plan" && <>
+              <p className="signup-free">{c.planFree}</p>
+              <TrialTimeline c={c} locale={locale} className="signup-timeline-inline" />
+            </>}
             {step === "password" && ready && <a className="signup-alternative" href={baseUrl + "?mode=phone&" + routeParams}>{c.phoneLogin}</a>}
             {step === "login" && <>
               {ready && <a className="signup-alternative" href={baseUrl + "?mode=phone&" + routeParams}>{c.phoneLogin}</a>}
@@ -571,8 +648,13 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     </section>
     <PhoneConfirmation number={pendingPhone} busy={busy} error={error} copy={c} onConfirm={() => void run(() => sendCode(pendingPhone))} onClose={() => { setPendingPhone(""); setError(""); }} />
     <aside className="signup-visual" aria-label={c.sideLabel}>
-      <div className="signup-visual-copy"><h2 className="font-display font-bold">{c.sideTitle}</h2><span>{c.sideBody}</span></div>
-      <div className="signup-art"><Image src="/signup-key.webp" alt="" fill sizes="(min-width: 1024px) 46vw, 1px" priority /></div>
+      {step === "plan" ? <div className="signup-visual-trial">
+        <h2 className="font-display font-bold">{c.planTimelineTitle}</h2>
+        <TrialTimeline c={c} locale={locale} />
+      </div> : <>
+        <div className="signup-visual-copy"><h2 className="font-display font-bold">{c.sideTitle}</h2><span>{c.sideBody}</span></div>
+        <div className="signup-art"><Image src="/signup-key.webp" alt="" fill sizes="(min-width: 1024px) 46vw, 1px" priority /></div>
+      </>}
       <div className="signup-visual-foot">{c.sideFoot}</div>
     </aside>
   </main>;

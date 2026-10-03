@@ -12,7 +12,7 @@ import { getI18n } from "@/lib/i18n";
  * makes it the tenancy in force.
  */
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { d, locale } = await getI18n();
 

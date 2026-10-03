@@ -97,6 +97,18 @@ export const IDENTITY_READY: boolean = true;
 /** The base carries the signature tables (migration 0027): a contract can be sent to be signed. */
 export const SIGNATURE_READY: boolean = true;
 
+/** The sample cabinet's subscription, as the subscription page shows it: a trial under way, no card yet. */
+export interface DemoBilling {
+  /** Days the trial has already run. */
+  trialDay: number;
+  plan: "landlord" | "professional";
+  rhythm: "quarter" | "year";
+  /** The cabinet's users, for the plan that counts them. */
+  seats: number;
+}
+
+export const BILLING: DemoBilling = { trialDay: 12, plan: "landlord", rhythm: "quarter", seats: 2 };
+
 export const CONTACTS: DemoContact[] = [
   { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
   { id: "c-jeanne", kind: "natural", name: "Jeanne Muller", email: "jeanne.muller@gmail.com", phone: "+352 621 654 321", language: "fr", roles: ["tenant"] },

@@ -13,7 +13,7 @@ import { discardDocument, storeDocument } from "@/lib/gestion/documents";
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrgAndClient();
+  const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org, userId, client } = ctx;
   const form = await req.formData().catch(() => null);

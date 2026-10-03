@@ -8,7 +8,7 @@ const KINDS = ["electricity", "gas", "water_cold", "water_hot", "heat"] as const
  * target is `common-<propertyId>` (the option shape the sheet already uses).
  */
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
 

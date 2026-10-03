@@ -13,6 +13,7 @@ import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
 import ScrollHeader from "./ScrollHeader";
 import GettingStarted, { type Progress } from "./GettingStarted";
+import { BillingBanner, Paywall, TrialChip, TrialPrompt, type ShellBilling } from "./BillingShell";
 import type { Dict } from "@/lib/i18n/fr";
 import { MORADA_URL, PRO_URL, WELCOME_URL } from "@/lib/constants";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
@@ -41,6 +42,8 @@ export interface ShellData {
   contactOptions: Array<{ id: string; label: string }>;
   /** What the account's own rows attest for the getting-started card. */
   progress: Progress;
+  /** The workspace's subscription, when subscriptions are on and the data is its own. */
+  billing: ShellBilling | null;
 }
 
 /* --------------------------------- nav model --------------------------------
@@ -141,6 +144,7 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
       icon: "settings",
       children: [
         { href: "/app/reglages", label: d.hubs.general },
+        { href: "/app/abonnement", label: d.hubs.subscription },
         { href: "/app/utilisateurs", label: d.hubs.users },
         { href: "/app/integrations", label: d.hubs.integrations },
       ],
@@ -363,6 +367,12 @@ export default function GestionShell({
                 {d.common.demo}
               </span>
             )}
+            {/* The trial's days, on the account's own data only; the banner below says the rest on a phone. */}
+            {shell.billing && (
+              <span className="max-sm:hidden">
+                <TrialChip billing={shell.billing} d={d} />
+              </span>
+            )}
 
             {/* One account, two roles: the owner space is this one, the
                 tenant space is /locataire. Switching is a navigation, never a
@@ -439,11 +449,14 @@ export default function GestionShell({
             </div>
           )}
 
+          {shell.billing && <BillingBanner billing={shell.billing} d={d} locale={locale} />}
+
           {/* On a phone the page ends clear of the home indicator, and of the
               floating getting-started card when the account has one. A
               conversation open over the phone's screen gets the screen whole:
               no gutter, no width limit (the card keeps the safe areas itself). */}
           <main id="main" tabIndex={-1} className={"crm-main mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24")}>
+            {pathname === "/app" && shell.billing && <TrialPrompt billing={shell.billing} d={d} locale={locale} />}
             {children}
           </main>
         </div>
@@ -472,6 +485,8 @@ export default function GestionShell({
           leaseOptions={shell.leaseOptions}
           contactOptions={shell.contactOptions}
         />
+
+        {shell.billing && <Paywall billing={shell.billing} d={d} locale={locale} />}
 
         {/* A "0% done" checklist on top of a full sample cabinet contradicts
             itself. It belongs to the real account only. */}

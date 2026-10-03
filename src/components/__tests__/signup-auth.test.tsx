@@ -318,3 +318,44 @@ it("an account finished before this change resumes at the email code, and a phon
   expect(assign).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
 });
+it("after the landlord questions the funnel asks for a plan, priced per lot and per month, and notes it before the welcome", async () => {
+  const landlord = { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "alex@example.test", new_email: "", email_confirmed_at: "2026-09-27",
+    user_metadata: { first_name: "Alex", last_name: "Example", morada_signup: { version: 1, role: "landlord", stage: "tailor", password_set_at: "2026-09-27T10:00:00Z" } } };
+  auth.getUser.mockResolvedValue({ data: { user: landlord }, error: null });
+  const calls: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+    calls.push(JSON.parse(init.body));
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  }));
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn />));
+  expect(host.querySelector("h1")?.textContent).toBe("How many properties\ndo you manage?");
+  await act(async () => host.querySelector<HTMLButtonElement>(".signup-nav-skip")!.click());
+  expect(calls).toEqual([{ action: "complete", preferences: { properties: null, challenge: null, involvement: null } }]);
+  expect(host.querySelector("h1")?.textContent).toBe("Choose your plan");
+  const priceOf = (plan: string) => host.querySelector(`[data-plan="${plan}"] .signup-plan-price strong`)?.textContent;
+  expect(priceOf("landlord")).toBe("€5");
+  expect(priceOf("professional")).toBe("€4");
+  expect(host.querySelector('[data-plan="landlord"]')?.getAttribute("data-selected")).toBe("true");
+  await act(async () => host.querySelector<HTMLInputElement>('input[name="rhythm"][value="year"]')!.click());
+  expect(priceOf("landlord")).toBe("€4");
+  expect(priceOf("professional")).toBe("€3.20");
+  expect(host.querySelector('[data-plan="professional"]')?.textContent).toContain("+ €23.20 per user");
+  await act(async () => host.querySelector<HTMLInputElement>('input[name="plan"][value="professional"]')!.click());
+  // Nothing is charged or asked for here: the promise says so under the button.
+  expect(host.querySelector(".signup-free")?.textContent).toBe("No card needed today. Change plan whenever you like.");
+  await submit();
+  expect(calls[1]).toEqual({ action: "plan", plan: "professional", rhythm: "year" });
+  expect(host.querySelector('[data-step="welcome"]')).not.toBeNull();
+  expect(host.querySelector("[data-welcome-trial]")?.textContent).toContain("Professional");
+  vi.unstubAllGlobals();
+});
+it("an invited landlord joins a workspace that already has a plan: no plan step", async () => {
+  const invited = { id: "u2", phone: "352621123457", phone_confirmed_at: "2026-09-27", email: "staff@example.test", new_email: "", email_confirmed_at: "2026-09-27",
+    user_metadata: { morada_signup: { version: 1, role: "landlord", stage: "tailor", password_set_at: "2026-09-27T10:00:00Z" } } };
+  auth.getUser.mockResolvedValue({ data: { user: invited }, error: null });
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) })));
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn next="/invitation/abc" />));
+  await act(async () => host.querySelector<HTMLButtonElement>(".signup-nav-skip")!.click());
+  expect(host.querySelector('[data-step="welcome"]')).not.toBeNull();
+  vi.unstubAllGlobals();
+});

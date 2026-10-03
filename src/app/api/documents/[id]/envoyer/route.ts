@@ -11,7 +11,7 @@ import { sendDocumentByMail } from "@/lib/delivery/outbox";
 export const runtime = "nodejs";
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrgAndClient();
+  const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
   const { id } = await params;
   const result = await sendDocumentByMail(ctx, ctx.client, id);

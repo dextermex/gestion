@@ -6,7 +6,7 @@ const KINDS = ["building", "pno", "liability", "rent_guarantee", "pi", "other"] 
 
 /** Records an insurance policy in the workspace's register. */
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
 
