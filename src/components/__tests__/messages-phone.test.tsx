@@ -181,6 +181,13 @@ const click = async (el: Element | null) => {
   expect(el, "the control to click").not.toBeNull();
   await act(async () => (el as HTMLElement).click());
 };
+/** The way back pops the entry the conversation pushed: the browser does that on its own time, then the screen follows. */
+const settle = async () => {
+  await act(async () => {
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+  });
+};
 
 /** The pane that holds the conversation: the card around the chat body. */
 const chatPane = () => document.getElementById("messages-body")?.parentElement ?? null;
@@ -211,7 +218,12 @@ describe("Messages on a phone", () => {
 
   it("opens a tapped conversation over the whole screen, reads it, and comes back to the list where it was", async () => {
     await render();
+    const push = vi.spyOn(window.history, "pushState");
+    const entries = window.history.length;
     await click(rowOf("Lena Bauer"));
+    // The conversation is a history entry of its own, so the phone's back gesture closes it.
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(window.history.length).toBe(entries + 1);
     // The conversation has the screen: the list, the title and the tabs step aside.
     expect(hiddenOnPhone(chatPane())).toBe(false);
     expect(hiddenOnPhone(listPane())).toBe(true);
@@ -225,8 +237,9 @@ describe("Messages on a phone", () => {
     expect(scrolls).toEqual([[0, 0]]);
     // What the tenant wrote is read, in the database too.
     expect(fetched).toEqual(["/api/conversations/t-bauer/lu"]);
-    // Back: the list, where it was, the conversation no longer unread, the address clean.
+    // Back pops that entry: the list, where it was, the conversation no longer unread, the address clean.
     await click(backButton(m.backToThreads));
+    await settle();
     expect(hiddenOnPhone(listPane())).toBe(false);
     expect(hiddenOnPhone(chatPane())).toBe(true);
     expect(window.location.search).toBe("");
@@ -253,9 +266,41 @@ describe("Messages on a phone", () => {
     expect(card?.className).toContain("ring-2");
     // Back leads to the requests, not to the conversations.
     await click(backButton(m.backToRequests));
+    await settle();
     expect(document.getElementById("messages-panel-requests")).not.toBeNull();
     expect(document.getElementById("messages-body")).toBeNull();
-    expect(window.location.search).toBe("?onglet=demandes");
+    expect(window.location.search).toBe("");
+  });
+
+  it("follows the phone's back gesture out of the conversation, and the forward one back into it", async () => {
+    await render();
+    await click(rowOf("Lena Bauer"));
+    expect(hiddenOnPhone(chatPane())).toBe(false);
+    // The gesture: the browser pops the entry on its own.
+    await act(async () => window.history.back());
+    await settle();
+    expect(hiddenOnPhone(listPane())).toBe(false);
+    expect(hiddenOnPhone(chatPane())).toBe(true);
+    expect(window.location.search).toBe("");
+    expect(scrolls).toEqual([
+      [0, 0],
+      [0, 240],
+    ]);
+    await act(async () => window.history.forward());
+    await settle();
+    expect(hiddenOnPhone(chatPane())).toBe(false);
+    expect(document.querySelector("h2")?.textContent).toBe("Lena Bauer");
+    expect(window.location.search).toBe("?fil=t-bauer");
+  });
+
+  it("leaves a conversation the page was opened on its own way: no entry under it to pop", async () => {
+    window.history.replaceState(null, "", "/app/messages?fil=t-bauer");
+    await render({ initialView: "chat", initialThreadId: "t-bauer" });
+    const back = vi.spyOn(window.history, "back");
+    await click(backButton(m.backToThreads));
+    expect(back).not.toHaveBeenCalled();
+    expect(hiddenOnPhone(listPane())).toBe(false);
+    expect(window.location.search).toBe("");
   });
 
   it("opens straight on the conversation the address names", async () => {

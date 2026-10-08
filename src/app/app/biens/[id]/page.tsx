@@ -95,8 +95,12 @@ export default async function BienDetailPage({
 
       {/* The hero: the photograph, the name, and the four facts that decide
           whether this property needs attention today. */}
+      {/* On a phone the facts come first: name, address, one full-width Modifier, then the
+          four figures; the photograph follows as a wide strip, and an empty frame is not
+          shown at all. The title row dissolves into the column (`contents`) so its two
+          children can take their places; above `sm` the layout is the one declared. */}
       <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
-        <div className="aspect-[4/3] w-full overflow-hidden rounded-2xl">
+        <div className={"aspect-[4/3] w-full overflow-hidden rounded-2xl max-sm:order-2 max-sm:aspect-[16/9]" + (p.photoUrl ? "" : " max-sm:hidden")}>
           <PropertyPhoto
             url={p.photoUrl}
             kind={card.kind}
@@ -104,21 +108,23 @@ export default async function BienDetailPage({
             rounded="rounded-2xl"
           />
         </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <div className="min-w-0 max-sm:order-1 max-sm:flex max-sm:flex-col">
+          <div className="flex flex-wrap items-start justify-between gap-3 max-sm:contents">
+            <div className="flex min-w-0 flex-wrap items-center gap-3 max-sm:order-1">
               <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">{p.name}</h1>
               <OccupancyPill card={card} d={d} />
             </div>
             {/* One button for every change this property can take. */}
-            <ModifyMenu groups={menu.groups} labels={modifyLabels(d)} />
+            <div className="max-sm:order-4 max-sm:mt-4">
+              <ModifyMenu groups={menu.groups} labels={modifyLabels(d)} />
+            </div>
           </div>
-          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-ink-soft">
+          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-ink-soft max-sm:order-2">
             <Icon name="pin" size={15} className="shrink-0" />
             {p.address}
           </p>
           {headline.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
+            <div className="mt-3 flex flex-wrap gap-1.5 max-sm:order-3">
               {headline.map((h) => (
                 <span key={h} className="rounded-lg bg-sand-100 px-2.5 py-1 text-xs font-semibold text-ink-soft">
                   {h}
@@ -127,7 +133,7 @@ export default async function BienDetailPage({
             </div>
           )}
 
-          <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 max-sm:order-5 xl:grid-cols-4">
             <HeroStat
               icon="user"
               label={d.bien.tenant}

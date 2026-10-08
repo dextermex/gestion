@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
@@ -442,7 +443,9 @@ export default async function BailDetailPage({
                         >
                           {c.name}
                         </Link>
-                        <p className="truncate text-xs text-ink-soft">{c.email ?? c.phone}</p>
+                        <p className="truncate text-xs text-ink-soft">
+                          <ContactLink email={c.email} phone={c.phone} none="" />
+                        </p>
                       </div>
                       <Badge className="bg-sky-100 text-sky-800">
                         {l.colocation ? d.baux.partyColoc : d.baux.partyTenant}

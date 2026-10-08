@@ -78,7 +78,7 @@ export default function ModifyMenu({ groups, labels }: { groups: MenuGroup[]; la
         onClick={() => setMenuOpen((v) => !v)}
         aria-expanded={menuOpen}
         aria-haspopup={sheet ? "dialog" : "menu"}
-        className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 max-sm:min-h-11"
+        className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 max-sm:min-h-12 max-sm:w-full max-sm:justify-center max-sm:text-[15px]"
       >
         <Icon name="edit" size={15} />
         {labels.trigger}

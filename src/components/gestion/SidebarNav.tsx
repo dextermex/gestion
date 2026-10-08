@@ -14,11 +14,13 @@ type Item = {
 };
 
 /** A group is a disclosure button. Only destinations are links. */
-export default function SidebarNav({ items, pathname, expanded, onToggle }: {
+export default function SidebarNav({ items, pathname, expanded, onToggle, onNavigate }: {
   items: Item[];
   pathname: string;
   expanded: Record<string, boolean>;
   onToggle: (href: string) => void;
+  /** A destination tapped, the current one included: the drawer closes on it. */
+  onNavigate?: (href: string) => void;
 }) {
   const id = useId();
   const matches = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -42,13 +44,13 @@ export default function SidebarNav({ items, pathname, expanded, onToggle }: {
           </button>
           <ul id={`${id}-${index}`} hidden={!open} className="crm-nav-children">
             {item.children.map((child) => <li key={child.href}>
-              <Link href={child.href} className="crm-nav-child" aria-current={matches(child.href) ? "page" : undefined}>
+              <Link href={child.href} className="crm-nav-child" aria-current={matches(child.href) ? "page" : undefined} onClick={() => onNavigate?.(child.href)}>
                 <span className="min-w-0 flex-1">{child.label}</span>
                 {!!child.badge && <span className="crm-nav-count">{child.badge}</span>}
               </Link>
             </li>)}
           </ul>
-        </> : <Link href={item.href} className="crm-nav-parent" aria-current={active ? "page" : undefined}>{content}</Link>}
+        </> : <Link href={item.href} className="crm-nav-parent" aria-current={active ? "page" : undefined} onClick={() => onNavigate?.(item.href)}>{content}</Link>}
       </li>;
     })}
   </ul>;

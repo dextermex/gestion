@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Badge, Card } from "@/components/pro/ui";
 import TenantChat, { type TenantChatMessage, type TenantChatRequest } from "@/components/gestion/TenantChat";
 import { initials } from "@/lib/types";
+import { useViewHistory } from "@/lib/view-history";
 
 /**
  * "Messages" in the tenant's space, laid out for the screen it is on. A
@@ -98,16 +99,19 @@ export default function TenantMessages({
     restoreScroll.current = null;
   }, [view]);
 
-  const rememberInUrl = (conversation: TenantConversationView | null) => {
+  const rememberInUrl = (conversation: TenantConversationView | null, entry = false) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("bail");
     url.searchParams.delete("demande");
     if (conversation) url.searchParams.set("bail", conversation.leaseId);
-    window.history.replaceState(window.history.state, "", url);
+    // A conversation a phone opens over the list is an entry of its own:
+    // the back gesture closes it. Anything else rewrites the address in place.
+    if (entry) viewHistory.enter(url);
+    else window.history.replaceState(window.history.state, "", url);
   };
 
-  /** Opening a conversation: it fills the phone's screen, on its newest message. */
-  const open = (conversation: TenantConversationView) => {
+  /** The conversation on the phone's screen, on its newest message. The address is the caller's. */
+  const show = (conversation: TenantConversationView) => {
     if (view === "list" && onPhone()) {
       listScroll.current = window.scrollY;
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
@@ -115,15 +119,41 @@ export default function TenantMessages({
     setActiveId(conversation.id);
     setFocus(null);
     setView("chat");
-    rememberInUrl(conversation);
+  };
+
+  /** The list on the screen, where the phone left it. The address is the caller's. */
+  const showList = () => {
+    if (onPhone()) restoreScroll.current = listScroll.current;
+    setView("list");
+  };
+
+  // The browser moved by itself (the back gesture, the back or forward
+  // button): the screen follows the address, a conversation or the list.
+  const viewHistory = useViewHistory((url) => {
+    const leaseId = url.searchParams.get("bail");
+    const requestId = url.searchParams.get("demande");
+    const conversation = leaseId ? conversations.find((c) => c.leaseId === leaseId) : requestId ? conversations.find((c) => c.messages.some((m) => m.requestId === requestId)) : undefined;
+    if (conversation) {
+      show(conversation);
+      return true;
+    }
+    showList();
+    return false;
+  });
+
+  /** Opening a conversation: it fills the phone's screen. Over the list, it is an entry the back gesture closes. */
+  const open = (conversation: TenantConversationView) => {
+    const entry = view === "list" && onPhone();
+    show(conversation);
+    rememberInUrl(conversation, entry);
   };
 
   /** A phone's way back: the list, where it was left, the address clean. */
-  const back = () => {
-    if (onPhone()) restoreScroll.current = listScroll.current;
-    setView("list");
-    rememberInUrl(null);
-  };
+  const back = () =>
+    viewHistory.leave(() => {
+      showList();
+      rememberInUrl(null);
+    });
 
   return (
     <div>

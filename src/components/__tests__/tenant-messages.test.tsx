@@ -102,6 +102,13 @@ const click = async (el: Element | null) => {
   expect(el, "the control to click").not.toBeNull();
   await act(async () => (el as HTMLElement).click());
 };
+/** The way back pops the entry the conversation pushed: the browser does that on its own time, then the screen follows. */
+const settle = async () => {
+  await act(async () => {
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+  });
+};
 
 const rows = () => Array.from(document.querySelectorAll<HTMLButtonElement>("#tenant-conversations li > button"));
 /** The card around the conversation. */
@@ -136,7 +143,10 @@ describe("the tenant's Messages on a phone", () => {
 
   it("opens a tapped conversation over the whole screen, the chrome told to step aside, and comes back to the list where it was", async () => {
     await render();
+    const push = vi.spyOn(window.history, "pushState");
     await click(rows()[1]);
+    // The conversation is a history entry of its own, so the phone's back gesture closes it.
+    expect(push).toHaveBeenCalledTimes(1);
     // The conversation has the screen: the card is a screen of its own, the list steps aside.
     expect(hiddenOnPhone(chatPane())).toBe(false);
     expect(chatPane()?.className).toContain("max-lg:h-dvh");
@@ -151,8 +161,9 @@ describe("the tenant's Messages on a phone", () => {
     expect(window.location.search).toBe("?bail=l-old");
     // Opened from the top of the page; the list's place is remembered.
     expect(scrolls).toEqual([[0, 0]]);
-    // Back: the list, where it was, the address clean, the chrome back.
+    // Back pops that entry: the list, where it was, the address clean, the chrome back.
     await click(backButton());
+    await settle();
     expect(hiddenOnPhone(listPane())).toBe(false);
     expect(hiddenOnPhone(chatPane())).toBe(true);
     expect(document.documentElement.hasAttribute("data-phone-chat")).toBe(false);

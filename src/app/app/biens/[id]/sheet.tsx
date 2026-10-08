@@ -117,7 +117,7 @@ export function LotAction({ line, demo, d, className = "" }: { line: UnitLine; d
   return (
     <Link
       href={href}
-      className={`tactile inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 ${className}`}
+      className={`tactile inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 max-sm:min-h-11 max-sm:w-full max-sm:justify-center ${className}`}
     >
       {!draft && <Icon name="plus" size={15} />}
       {label}

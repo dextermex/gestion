@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel, Timeline } from "@/components/gestion/bits";
@@ -75,9 +76,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{c.name}</h1>
-          <p className="mt-0.5 text-sm text-ink-soft">
-            {c.email ?? "—"} · {c.phone ?? "—"} · {fmt(d.contacts.languageLabel, { lang: c.language.toUpperCase() })}
-            {c.residency === "non_resident" && ` · ${fmt(d.contacts.nonResident, { country: c.country ?? "—" })}`}
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-soft">
+            <ContactLink email={c.email} />
+            <span aria-hidden>·</span>
+            <ContactLink phone={c.phone} />
+            <span aria-hidden>·</span>
+            <span>{fmt(d.contacts.languageLabel, { lang: c.language.toUpperCase() })}</span>
+            {c.residency === "non_resident" && <span>· {fmt(d.contacts.nonResident, { country: c.country ?? "—" })}</span>}
           </p>
         </div>
         <div className="flex items-center gap-1.5">

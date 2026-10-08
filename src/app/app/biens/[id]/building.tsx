@@ -118,27 +118,30 @@ export default function BuildingSheet({
         </Link>
       </div>
 
+      {/* On a phone: the facts first, one full-width Modifier, the figures, then the photograph as a wide strip when there is one. */}
       <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl">
+        <div className={"relative aspect-[4/3] w-full overflow-hidden rounded-2xl max-sm:order-2 max-sm:aspect-[16/9]" + (p.photoUrl ? "" : " max-sm:hidden")}>
           <PropertyPhoto url={p.photoUrl} kind="building" alt={fmt(d.biens.photoAlt, { property: p.name })} rounded="rounded-2xl" />
           {p.photoUrl && <PhotoViewer url={p.photoUrl} title={p.name} label={d.bien.viewPhotos} closeLabel={d.common.close} />}
         </div>
-        <div className="min-w-0">
-          <Badge className="bg-brand-100 text-brand-800">
+        <div className="min-w-0 max-sm:order-1 max-sm:flex max-sm:flex-col">
+          <Badge className="bg-brand-100 text-brand-800 max-sm:order-1 max-sm:self-start">
             <Icon name="properties" size={12} />
             {d.bien.badgeBuilding}
           </Badge>
-          <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-            <h1 className="min-w-0 font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">{p.name}</h1>
-            <ModifyMenu groups={menu.groups} labels={modifyLabels(d)} />
+          <div className="mt-2 flex flex-wrap items-start justify-between gap-3 max-sm:contents">
+            <h1 className="min-w-0 font-display text-2xl font-bold tracking-tight text-ink max-sm:order-2 max-sm:mt-2 sm:text-3xl">{p.name}</h1>
+            <div className="max-sm:order-5 max-sm:mt-4">
+              <ModifyMenu groups={menu.groups} labels={modifyLabels(d)} />
+            </div>
           </div>
-          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-ink-soft">
+          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-ink-soft max-sm:order-3">
             <Icon name="pin" size={15} className="shrink-0" />
             {p.address}
           </p>
-          {summary && <p className="mt-2 text-sm leading-relaxed text-ink-soft">{summary}</p>}
+          {summary && <p className="mt-2 text-sm leading-relaxed text-ink-soft max-sm:order-4">{summary}</p>}
 
-          <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 max-sm:order-6 xl:grid-cols-4">
             <KpiTile
               icon={<Icon name="properties" size={18} />}
               value={plural(locale, stats.lots, d.biens.lotOne, d.biens.lotMany)}

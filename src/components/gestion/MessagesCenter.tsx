@@ -8,6 +8,7 @@ import { Badge, Button, Card, Modal, PageHeader, Select, Spinner, Textarea } fro
 import { Icon } from "@/components/pro/icons";
 import { isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
 import { initials, type Meta } from "@/lib/types";
+import { useViewHistory } from "@/lib/view-history";
 
 /**
  * The desk's Messages: one continuous conversation per tenancy, the way a
@@ -269,7 +270,7 @@ export default function MessagesCenter({
     router.refresh();
   }, [activeLoaded, activeToLoad, router]);
 
-  const rememberInUrl = (thread: ThreadView | null, requestId: string | null, nextTab: Tab) => {
+  const rememberInUrl = (thread: ThreadView | null, requestId: string | null, nextTab: Tab, entry = false) => {
     const url = new URL(window.location.href);
     url.searchParams.delete("fil");
     url.searchParams.delete("demande");
@@ -277,9 +278,12 @@ export default function MessagesCenter({
     if (nextTab === "requests") url.searchParams.set("onglet", "demandes");
     else if (requestId) url.searchParams.set("demande", requestId);
     else if (thread) url.searchParams.set("fil", thread.id);
-    // A plain state, so the router takes the address as its own: a refresh
-    // then re-reads the page for this conversation.
-    window.history.replaceState(null, "", url);
+    // A conversation a phone opens over the list is an entry of its own:
+    // the back gesture closes it. Anything else rewrites the address in
+    // place. A plain state either way, so the router takes the address as
+    // its own: a refresh then re-reads the page for this conversation.
+    if (entry) viewHistory.enter(url);
+    else window.history.replaceState(null, "", url);
   };
 
   const signInAgain = () => {
@@ -292,8 +296,8 @@ export default function MessagesCenter({
     return true;
   };
 
-  /** Opening a conversation: it fills the screen, and what the other side wrote is read. */
-  const openThread = (thread: ThreadView, requestId: string | null = null, from: Tab = "conversations") => {
+  /** The conversation on the screen, and what the other side wrote is read. The address is the caller's. */
+  const showThread = (thread: ThreadView, requestId: string | null, from: Tab) => {
     // A phone leaves the list for the conversation: the list's place is kept for the way back.
     if (view === "list" && onPhone()) {
       listScroll.current = window.scrollY;
@@ -305,7 +309,6 @@ export default function MessagesCenter({
     setOrigin(from);
     setView("chat");
     setNotice(null);
-    rememberInUrl(thread, requestId, "conversations");
     if (thread.unread === 0 || readIds.has(thread.id)) return;
     setReadIds((ids) => new Set(ids).add(thread.id));
     if (!writable) return;
@@ -316,14 +319,42 @@ export default function MessagesCenter({
       .catch(() => null);
   };
 
-  /** A phone's way back: the list the conversation was opened from, where it was left. */
-  const backToList = () => {
+  /** The list on the screen, where a phone left it. The address is the caller's. */
+  const showList = (to: Tab) => {
     if (onPhone()) restoreScroll.current = listScroll.current;
     setView("list");
-    setTab(origin);
+    setTab(to);
     setNotice(null);
-    rememberInUrl(null, null, origin);
   };
+
+  // The browser moved by itself (the back gesture, the back or forward
+  // button): the screen follows the address, a conversation or the list
+  // on the tab the address names.
+  const viewHistory = useViewHistory((url) => {
+    const requestId = url.searchParams.get("demande");
+    const threadId = url.searchParams.get("fil") ?? (requestId ? (requestById.get(requestId)?.threadId ?? null) : null);
+    const thread = threadId ? threads.find((t) => t.id === threadId) : undefined;
+    if (thread) {
+      showThread(thread, requestId, origin);
+      return true;
+    }
+    showList(url.searchParams.get("onglet") === "demandes" ? "requests" : origin);
+    return false;
+  });
+
+  /** Opening a conversation: it fills the screen. On a phone, over the list, it is an entry the back gesture closes. */
+  const openThread = (thread: ThreadView, requestId: string | null = null, from: Tab = "conversations") => {
+    const entry = view === "list" && onPhone();
+    showThread(thread, requestId, from);
+    rememberInUrl(thread, requestId, "conversations", entry);
+  };
+
+  /** A phone's way back: the list the conversation was opened from, where it was left. */
+  const backToList = () =>
+    viewHistory.leave(() => {
+      showList(origin);
+      rememberInUrl(null, null, origin);
+    });
 
   /** A request from the tracking view: its conversation, at the request. Without one, its details. */
   const openRequestRow = (request: RequestView) => {

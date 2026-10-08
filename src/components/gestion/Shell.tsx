@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
@@ -288,7 +288,7 @@ export default function GestionShell({
           <span className="block text-xs text-ink-soft">{d.shell.roleOwner}</span>
         </span>
       </div>
-      <SidebarNav items={NAV} pathname={pathname} expanded={expanded}
+      <SidebarNav items={NAV} pathname={pathname} expanded={expanded} onNavigate={() => setMobileOpen(false)}
         onToggle={(href) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }))} />
     </nav>
     <div className="crm-sidebar-footer shrink-0 border-t border-sand-100 px-3 pb-[max(0.75rem,var(--safe-bottom))] pt-2">
@@ -786,13 +786,21 @@ function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // The field takes the caret as the palette appears, in the same breath as
+  // the tap that opened it: that is what makes a phone raise its keyboard.
+  // The page behind holds still meanwhile.
+  useLayoutEffect(() => {
     if (open) {
       setQ("");
       setActive(0);
       const previouslyFocused = document.activeElement as HTMLElement | null;
-      setTimeout(() => inputRef.current?.focus(), 30);
-      return () => previouslyFocused?.focus();
+      const overflow = document.documentElement.style.overflow;
+      document.documentElement.style.overflow = "hidden";
+      inputRef.current?.focus({ preventScroll: true });
+      return () => {
+        document.documentElement.style.overflow = overflow;
+        previouslyFocused?.focus();
+      };
     }
   }, [open]);
 
@@ -841,7 +849,7 @@ function CommandPalette({
 
   let cursor = -1;
   const rowClass = (isActive: boolean) =>
-    "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left " +
+    "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left max-sm:min-h-11 " +
     (isActive ? "bg-sand-100" : "hover:bg-sand-50");
 
   return (
@@ -900,8 +908,16 @@ function CommandPalette({
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            className="w-full bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-soft max-sm:text-base pointer-coarse:text-base"
+            className="w-full min-w-0 bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-soft max-sm:text-base pointer-coarse:text-base"
           />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={d.common.close}
+            className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          >
+            <Icon name="x" size={18} />
+          </button>
         </div>
         <div id="palette-list" role="listbox" ref={listRef} className="max-h-[50dvh] overflow-y-auto overscroll-contain p-2">
           {hits.length > 0 && (

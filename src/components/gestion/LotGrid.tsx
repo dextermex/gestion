@@ -230,7 +230,7 @@ export default function LotGrid({
           <ul className="divide-y divide-sand-100">
             {shown.map((l) => (
               <li key={l.id}>
-                <Link href={l.href} className="tactile grid grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-3 px-4 py-3 transition hover:bg-sand-50 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_1.5rem]">
+                <Link href={l.href} className="tactile grid grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-x-3 gap-y-2 px-4 py-3 transition hover:bg-sand-50 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_1.5rem] sm:gap-3">
                   <span className="flex min-w-0 items-center gap-3">
                     <span className="h-12 w-16 shrink-0 overflow-hidden rounded-lg">
                       <PropertyPhoto url={l.photoUrl} kind={l.kind} alt="" rounded="rounded-lg" />
@@ -240,12 +240,18 @@ export default function LotGrid({
                       <span className="block truncate text-xs text-ink-soft">{[l.kindLabel, l.floor, l.areaLabel, l.bedroomsLabel].filter(Boolean).join(" · ")}</span>
                     </span>
                   </span>
+                  {/* A phone's second line: who, how much, and the state, instead of hiding them. */}
+                  <span className="col-start-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink sm:hidden">
+                    <span className="min-w-0 truncate">{l.tenant || l.draftLabel || "—"}</span>
+                    <span className="tabular-nums text-ink-soft">{l.rentLabel || "—"}</span>
+                    {l.status ? <Badge className={l.status.color}>{l.status.label}</Badge> : l.lettable ? <Badge className="bg-sand-100 text-ink-soft">{labels.vacant}</Badge> : null}
+                  </span>
                   <span className="hidden min-w-0 truncate text-sm text-ink sm:block">{l.tenant || l.draftLabel || "—"}</span>
                   <span className="hidden text-right text-sm tabular-nums text-ink sm:block">{l.rentLabel || "—"}</span>
                   <span className="hidden justify-end sm:flex">
                     {l.status ? <Badge className={l.status.color}>{l.status.label}</Badge> : l.lettable ? <Badge className="bg-sand-100 text-ink-soft">{labels.vacant}</Badge> : null}
                   </span>
-                  <Icon name="chevron-right" size={16} className="text-ink-soft" />
+                  <Icon name="chevron-right" size={16} className="text-ink-soft max-sm:col-start-2 max-sm:row-span-2 max-sm:row-start-1 max-sm:self-center" />
                 </Link>
               </li>
             ))}
