@@ -274,7 +274,7 @@ export default function GestionShell({
     // the dataset switch and ecosystem links stay below. On short landscape
     // screens the entire drawer scrolls so destinations retain enough room.
     <div className="crm-sidebar-inner flex h-full flex-col">
-    <nav className="crm-navigation flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Morada Gestion">
+    <nav className="crm-navigation flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y select-none [-webkit-touch-callout:none]" aria-label="Morada Gestion">
       {/* The CRM logo always returns to the management dashboard. */}
       <Link
         href="/app"
@@ -296,7 +296,7 @@ export default function GestionShell({
           same two segments, one thumb's size each, so the tenant space is
           as reachable from a phone as from a laptop. */}
       {shell.tenant && (
-        <nav aria-label={d.shell.roleAria} className="mb-2 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 xl:hidden">
+        <nav aria-label={d.shell.roleAria} className="mb-2 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 select-none [-webkit-touch-callout:none] xl:hidden">
           <span aria-current="true" className="flex min-h-10 flex-1 items-center justify-center rounded-lg bg-white px-3 text-xs font-semibold text-brand-800 shadow-sm">
             {d.shell.roleOwner}
           </span>
@@ -846,7 +846,7 @@ function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/40 p-4 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/40 p-4 pt-[12svh] backdrop-blur-sm"
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <motion.div
@@ -894,10 +894,16 @@ function CommandPalette({
               }
             }}
             placeholder={d.shell.searchPlaceholder}
-            className="w-full bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-soft max-sm:text-base"
+            // A phone's keyboard for a search: no capital forced on the first letter, no
+            // correction of a name into a word, and a return key that opens the highlighted line.
+            enterKeyHint="go"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className="w-full bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-soft max-sm:text-base pointer-coarse:text-base"
           />
         </div>
-        <div id="palette-list" role="listbox" ref={listRef} className="max-h-[50dvh] overflow-y-auto p-2">
+        <div id="palette-list" role="listbox" ref={listRef} className="max-h-[50dvh] overflow-y-auto overscroll-contain p-2">
           {hits.length > 0 && (
             <>
               <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">

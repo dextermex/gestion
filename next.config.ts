@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
   },
   // The PDF renderer reads its own font data at runtime: left to Node, not bundled.
   serverExternalPackages: ["@react-pdf/renderer"],
+  // Metadata in the <head> for every visitor, not streamed into the <body>
+  // (Next's default for anything but a few named bots): a phone reads the
+  // manifest link and the home-screen tags there only, so "Add to Home
+  // Screen" found no manifest. Nothing is lost: the only generateMetadata
+  // (the root layout) reads one cookie.
+  htmlLimitedBots: /.*/,
 };
 
 // Error monitoring (see src/lib/monitoring.ts and docs/QUALITY.md). The build

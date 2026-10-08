@@ -83,7 +83,7 @@ export default function ModifyMenu({ groups, labels }: { groups: MenuGroup[]; la
       {menuOpen && (
         <div
           role="menu"
-          className="absolute right-0 z-40 mt-2 max-h-[70vh] w-72 overflow-y-auto rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg"
+          className="absolute right-0 z-40 mt-2 max-h-[70dvh] w-72 overflow-y-auto overscroll-contain rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg"
         >
           {groups.map((group, gi) => (
             <div key={group.label} className={gi > 0 ? "mt-1.5 border-t border-sand-100 pt-1.5" : ""}>
@@ -502,6 +502,9 @@ function PayersEditor({
             value={iban}
             onChange={(e) => setIban(e.target.value)}
             placeholder="LU28 0019 4006 4475 0000"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
             className="font-mono tabular-nums"
             maxLength={40}
           />

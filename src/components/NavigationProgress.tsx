@@ -159,9 +159,11 @@ function NavigationProgressBar() {
   );
 
   return (
+    // Along the top edge of the app's bar: below the status bar and the notch
+    // wherever the page reaches under them (zero inset everywhere else).
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 top-0 z-[200] h-0.5"
+      className="pointer-events-none fixed inset-x-0 top-(--safe-top) z-[200] h-0.5"
     >
       <div
         className="h-full origin-left bg-gradient-to-r from-brand-500 via-brand-400 to-accent-500"

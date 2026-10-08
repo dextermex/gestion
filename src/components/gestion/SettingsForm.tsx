@@ -166,15 +166,15 @@ export default function SettingsForm({
           <Input type="email" value={form.email} maxLength={160} onChange={set("email")} disabled={busy} />
         </Field>
         <Field label={labels.fieldPhone}>
-          <Input value={form.phone} maxLength={40} onChange={set("phone")} disabled={busy} />
+          <Input type="tel" autoComplete="tel" value={form.phone} maxLength={40} onChange={set("phone")} disabled={busy} />
         </Field>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
         <Field label={labels.fieldIban}>
-          <Input value={form.iban} maxLength={40} onChange={set("iban")} disabled={busy} className="tabular-nums" />
+          <Input value={form.iban} maxLength={40} onChange={set("iban")} disabled={busy} autoCapitalize="characters" autoCorrect="off" spellCheck={false} className="tabular-nums" />
         </Field>
         <Field label={labels.fieldBic}>
-          <Input value={form.bic} maxLength={11} onChange={set("bic")} disabled={busy} />
+          <Input value={form.bic} maxLength={11} onChange={set("bic")} disabled={busy} autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
         </Field>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

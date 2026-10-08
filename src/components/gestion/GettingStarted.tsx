@@ -85,8 +85,9 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
     });
 
   return (
-    // Steps aside while a conversation fills a phone's screen (Messages sets the attribute on the document).
-    <div className="crm-onboarding fixed bottom-[max(1rem,var(--safe-bottom))] right-[max(1rem,var(--safe-right))] z-40 print:hidden max-lg:[html[data-phone-chat]_&]:hidden">
+    // Steps aside while a conversation fills a phone's screen (Messages sets the attribute on the document),
+    // and while a phone's keyboard is up, rather than floating over the field being typed in.
+    <div className="crm-onboarding fixed bottom-[max(1rem,var(--safe-bottom))] right-[max(1rem,var(--safe-right))] z-40 print:hidden typing:hidden max-lg:[html[data-phone-chat]_&]:hidden">
       <AnimatePresence initial={false} mode="wait">
         {state.collapsed ? (
           <motion.button

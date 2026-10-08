@@ -1,9 +1,12 @@
 "use client";
 
 import { clsx } from "clsx";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { SCRIM_SETTLE, useDragToDismiss } from "@/lib/gesture";
+import { PHONE_SHEET_QUERY, useMediaQuery } from "@/lib/hooks";
+import { springSheet } from "@/lib/motion";
 import { Icon } from "./icons";
 
 /* ---------------------------------- Button --------------------------------- */
@@ -48,8 +51,10 @@ export function Button({
 
 // 16px on a phone: iOS Safari zooms the whole page into any smaller field
 // the moment it gets the caret, which is what makes a form look broken there.
+// By width (a narrow screen) and by touch (`pointer-coarse`): a phone held
+// sideways is wider than `sm` and would otherwise get the 14px desk size.
 const fieldClass =
-  "ui-field w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50 max-sm:min-h-11 max-sm:text-base";
+  "ui-field w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:bg-sand-50 max-sm:min-h-11 max-sm:text-base pointer-coarse:text-base";
 
 const FieldContext = createContext<string | undefined>(undefined);
 
@@ -321,6 +326,8 @@ export function Modal({
   const reduced = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
   const close = useLatest(onClose);
+  // Below `sm` the dialog is a sheet from the foot of the screen, pulled down to dismiss.
+  const sheet = useMediaQuery(PHONE_SHEET_QUERY);
   // The dialog lives at the end of <body>, not where it is declared: a page
   // container that animates (a transform, a fade) traps a fixed descendant
   // in its own stacking context, under the shell's floating cards. A portal
@@ -341,7 +348,9 @@ export function Modal({
   useEffect(() => {
     if (!open || !mounted) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
+    // Without scrolling anything: the sheet is still below the screen's edge
+    // when it takes the focus, on its way up.
+    panelRef.current?.focus({ preventScroll: true });
     document.documentElement.style.overflow = "hidden";
 
     const onKey = (e: KeyboardEvent) => {
@@ -374,46 +383,128 @@ export function Modal({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-sm sm:items-center sm:p-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={reduced ? { duration: 0.15 } : undefined}
-          onPointerDown={(e) => e.target === e.currentTarget && onClose()}
-        >
-          <motion.div
-            ref={panelRef}
-            role="dialog"
-            aria-modal
-            aria-label={title}
-            tabIndex={-1}
-            className={clsx(
-              // A sheet from the bottom on a phone, clear of the home indicator; a centred dialog above.
-              "ui-modal max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl outline-none max-sm:pb-[max(1.25rem,var(--safe-bottom))] sm:rounded-2xl",
-              wide ? "sm:max-w-2xl" : "sm:max-w-md"
-            )}
-            initial={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}
-            animate={reduced ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 }}
-            exit={reduced ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.98 }}
-            transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 380, damping: 32 }}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
-              <button
-                onClick={onClose}
-                className="-m-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100"
-                aria-label={closeLabel}
-              >
-                <Icon name="x" size={18} />
-              </button>
-            </div>
-            {children}
-          </motion.div>
-        </motion.div>
+        <ModalLayer key="dialog" panelRef={panelRef} title={title} wide={wide} closeLabel={closeLabel} onClose={onClose} sheet={sheet} reduced={Boolean(reduced)}>
+          {children}
+        </ModalLayer>
       )}
     </AnimatePresence>,
     document.body,
+  );
+}
+
+/**
+ * What an open Modal puts on the screen. On a phone it is a sheet: it rises
+ * from the foot of the screen and leaves the same way, its header carries
+ * a grabber, and the sheet can be pulled back down (dragging the header),
+ * the scrim lightening as it goes; a flick or a pull past halfway closes
+ * it, anything short of that springs it back. Above `sm` it is the centred
+ * dialog it always was. The title row stays put while a long body scrolls.
+ */
+function ModalLayer({
+  panelRef,
+  title,
+  wide,
+  closeLabel,
+  onClose,
+  sheet,
+  reduced,
+  children,
+}: {
+  panelRef: React.RefObject<HTMLDivElement | null>;
+  title: string;
+  wide?: boolean;
+  closeLabel: string;
+  onClose: () => void;
+  sheet: boolean;
+  reduced: boolean;
+  children: React.ReactNode;
+}) {
+  const y = useMotionValue(0);
+  const scrim = useMotionValue(0);
+  const [scrolled, setScrolled] = useState(false);
+  const drag = useDragToDismiss({
+    value: y,
+    toward: "down",
+    enabled: sheet,
+    reduced,
+    size: () => panelRef.current?.offsetHeight ?? 0,
+    onProgress: (p) => {
+      scrim.stop();
+      scrim.set(1 - p);
+    },
+    onSettle: () => {
+      animate(scrim, 1, reduced ? { duration: 0.15 } : SCRIM_SETTLE);
+    },
+    onDismiss: onClose,
+  });
+  // Where it comes from and goes back to: the foot of the screen for a sheet,
+  // a short rise for the centred dialog, a crossfade under reduced motion.
+  const away = reduced ? { opacity: 0 } : sheet ? { y: "100%" } : { y: 24, opacity: 0, scale: 0.98 };
+  const here = reduced ? { opacity: 1 } : sheet ? { y: 0 } : { y: 0, opacity: 1, scale: 1 };
+
+  return (
+    // `overflow-clip`, not `overflow-hidden`: what hangs below the sheet is cut off at the screen's
+    // edge, and the layer never becomes a scroll box that focusing the dialog could scroll.
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-clip sm:items-center sm:px-safe-6 sm:pt-[max(1.5rem,var(--safe-top))] sm:pb-[max(1.5rem,var(--safe-bottom))]">
+      <motion.div
+        aria-hidden
+        className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
+        style={{ opacity: scrim }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={reduced ? { duration: 0.15 } : undefined}
+        onPointerDown={() => onClose()}
+      />
+      <motion.div
+        ref={panelRef}
+        role="dialog"
+        aria-modal
+        aria-label={title}
+        tabIndex={-1}
+        style={{ y }}
+        className={clsx(
+          // A sheet from the bottom on a phone, clear of the home indicator; a centred dialog above,
+          // clear of a phone's rounded corners and home indicator when it is held sideways.
+          "ui-modal relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white shadow-xl outline-none sm:max-h-[min(92dvh,100%)] sm:rounded-2xl",
+          wide ? "sm:max-w-2xl" : "sm:max-w-md"
+        )}
+        initial={away}
+        animate={here}
+        exit={away}
+        transition={reduced ? { duration: 0.15 } : springSheet}
+      >
+        {/* The header's edge shows only once the body has scrolled under it, as the app's own bar does. */}
+        <div
+          className={clsx(
+            "shrink-0 border-b pb-3.5 transition-[border-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            scrolled ? "border-sand-100" : "border-transparent",
+            sheet && "touch-none select-none"
+          )}
+          {...(sheet ? drag : {})}
+        >
+          {sheet && <span aria-hidden className="absolute left-1/2 top-2 h-[5px] w-9 -translate-x-1/2 rounded-full bg-sand-300" />}
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
+            <button
+              onClick={onClose}
+              className="-m-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100"
+              aria-label={closeLabel}
+            >
+              <Icon name="x" size={18} />
+            </button>
+          </div>
+        </div>
+        <div
+          onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          {children}
+        </div>
+        {/* Below the sheet, the sheet again: the spring's overshoot or a pull past the top never opens a gap at the foot of the screen. */}
+        {sheet && <div aria-hidden className="absolute inset-x-0 top-full h-[50vh] bg-white" />}
+      </motion.div>
+    </div>
   );
 }
 

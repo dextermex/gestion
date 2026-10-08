@@ -57,6 +57,30 @@
    and label side by side and takes less of it. */
 @custom-variant short-landscape (@media (orientation: landscape) and (max-height: 500px));
 
+/* Hover only where a precise pointer can hover. Tailwind's own `hover:` asks
+   for (hover: hover) alone; adding (pointer: fine) also keeps it off the odd
+   touch device that claims a hover, so a tapped card never stays lifted.
+   Same place in the variant order as before, so active and focus still win. */
+@custom-variant hover {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      @slot;
+    }
+  }
+}
+
+/* A phone's keyboard is up (a text field has the caret, on a touch screen):
+   what is fixed at the foot of the screen steps aside, instead of riding up
+   over the field on Android (the keyboard resizes the page there, see
+   `interactiveWidget` in the root layout) or floating mid-screen on iOS. */
+@custom-variant typing {
+  @media (pointer: coarse) {
+    html:has(:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), textarea, [contenteditable="true"]):focus) & {
+      @slot;
+    }
+  }
+}
+
 /* The tenant space keeps the foot of every page clear of its bottom bar
    (TenantBottomNav): the bar's height plus the home indicator below `lg`,
    nothing above, where the tabs under the logo take over. */
@@ -89,6 +113,19 @@ html {
   scroll-behavior: smooth;
   /* Anchor targets clear the 4rem sticky header instead of hiding behind it */
   scroll-padding-top: 5rem;
+}
+
+/* On a touch screen the page is an app, not a document: pulling past the
+   top no longer reloads it (Android's pull-to-refresh) and the page no
+   longer bounces away from its bars. Vertical only, so the browser's
+   sideways back gesture stays. The inner scrollers (a sheet's body, the
+   conversation, the drawer's list) keep their own bounce and stop at their
+   ends (`overscroll-contain`) instead of dragging the page behind along. */
+@media (pointer: coarse) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
 }
 
 body {
@@ -135,6 +172,25 @@ button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]) {
   cursor: pointer;
   touch-action: manipulation;
+}
+/* Links, tabs and disclosures answer a tap at once too: nothing here zooms
+   on a double tap, so the browser has no reason to wait for a second one. */
+a[href],
+summary,
+[role="tab"] {
+  touch-action: manipulation;
+}
+
+/* A control is not text: a long press on a button, a tab or a switch never
+   selects its label or raises the copy menu. Content stays selectable. */
+button,
+[role="button"],
+[role="tab"],
+[role="radio"],
+[role="switch"],
+summary {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Reduced transparency / increased contrast: translucent chrome and scrims
@@ -311,6 +367,27 @@ button:not(:disabled),
   }
 }
 
+/* The press every other tap target gets on a touch screen. The browser's
+   grey tap flash is off (Tailwind's preflight), and a phone has no hover, so
+   a link, a row or a plain button without a press state of its own would
+   give the finger nothing back until the next screen arrives. It dims under
+   the finger, the way an iOS button does: at once on the press, easing back
+   on release. `tactile` elements, the kit's buttons (their `active:`
+   classes) and whatever sits inside them keep their own press. In the
+   components layer, so an element's own utilities always win; opacity only,
+   so reduced motion has nothing to escape. */
+@layer components {
+  @media (pointer: coarse) {
+    :where(a[href], button, [role="button"], [role="tab"], summary):not(.tactile, .tactile *, [class*="active:"], [class*="active:"] *, :disabled, [aria-disabled="true"]) {
+      transition: opacity 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    :where(a[href], button, [role="button"], [role="tab"], summary):not(.tactile, .tactile *, [class*="active:"], [class*="active:"] *, :disabled, [aria-disabled="true"]):active {
+      opacity: 0.6;
+      transition-duration: 0s;
+    }
+  }
+}
+
 /* A wide table on a phone. Columns keep their natural width and the table
    scrolls sideways inside its card, the first column (what the row is about)
    staying put; a shadow at the right edge says more columns follow, and
@@ -482,11 +559,11 @@ button:not(:disabled),
 .crm-sidebar-footer [role="radiogroup"] { border: 0; border-radius: 0.75rem; }
 .crm-sidebar-footer [role="radio"] { border-radius: 0.5rem; }
 .crm-workarea { padding-left: 17.5rem; }
-.crm-toolbar { height: var(--bar-h); padding-inline: 2rem; background: rgb(245 247 248 / 0.86); }
+.crm-toolbar { height: var(--bar-h); padding-inline: max(2rem, var(--safe-left)) max(2rem, var(--safe-right)); background: rgb(245 247 248 / 0.86); }
 .crm-location { padding-right: 0.4rem; }
 .crm-search { min-width: 13rem; min-height: 2.5rem; background: rgb(255 255 255 / 0.85); border-color: var(--crm-edge); }
 .crm-search kbd { margin-left: auto; }
-.crm-sample-banner { margin-inline: 2rem; border: 0; border-radius: 0.75rem; padding: 0.25rem 0.75rem; background: #edf1f3; color: #536771; font-weight: 450; }
+.crm-sample-banner { margin-inline: max(2rem, var(--safe-left)) max(2rem, var(--safe-right)); border: 0; border-radius: 0.75rem; padding: 0.25rem 0.75rem; background: #edf1f3; color: #536771; font-weight: 450; }
 .crm-main { max-width: 100rem; padding: 2rem 2rem 3rem; }
 .crm-shell .font-display { letter-spacing: -0.035em; }
 .crm-shell h1 { font-size: clamp(1.625rem, 2.2vw, 2rem); line-height: 1.2; font-weight: 650; }
@@ -563,18 +640,18 @@ button:not(:disabled),
 @media (width < 80rem) and (width >= 64rem) {
   .crm-sidebar { width: 14.5rem; inset: 0.75rem auto 0.75rem 0.75rem; }
   .crm-workarea { padding-left: 16rem; }
-  .crm-main { padding-inline: 1.25rem; }
-  .crm-toolbar { padding-inline: 1.25rem; }
-  .crm-sample-banner { margin-inline: 1.25rem; }
+  .crm-main { padding-inline: max(1.25rem, var(--safe-left)) max(1.25rem, var(--safe-right)); }
+  .crm-toolbar { padding-inline: max(1.25rem, var(--safe-left)) max(1.25rem, var(--safe-right)); }
+  .crm-sample-banner { margin-inline: max(1.25rem, var(--safe-left)) max(1.25rem, var(--safe-right)); }
   .crm-search { min-width: 10rem; }
   .crm-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .crm-metric { padding: 1.25rem; }
 }
 @media (width < 64rem) {
   .crm-workarea { padding-left: 0; }
-  .crm-toolbar { padding-inline: 1rem; }
+  .crm-toolbar { padding-inline: max(1rem, var(--safe-left)) max(1rem, var(--safe-right)); }
   .crm-main { padding: 1.5rem max(1rem, var(--safe-right)) 5rem max(1rem, var(--safe-left)); }
-  .crm-sample-banner { margin-inline: 1rem; }
+  .crm-sample-banner { margin-inline: max(1rem, var(--safe-left)) max(1rem, var(--safe-right)); }
   .crm-mobile-sidebar { border-radius: 0 1.5rem 1.5rem 0; }
   .crm-mobile-sidebar .crm-navigation { padding-top: 1.5rem; }
   .crm-mobile-sidebar .crm-logo { display: flex; align-items: center; min-height: 2.75rem; margin-top: 0.4rem; margin-bottom: 1.5rem; }
@@ -684,7 +761,7 @@ button:not(:disabled),
 .crm-shell, .tenant-space, .journey-shell {
   background: radial-gradient(ellipse at 90% 0, #d9edff 0, transparent 50rem), radial-gradient(ellipse at 0 40%, #e8f3f8, transparent 50rem), #f5f8fa;
 }
-.crm-main { max-width: 100rem; padding: 2.5rem clamp(1.25rem, 3vw, 3.5rem) 4rem; }
+.crm-main { max-width: 100rem; padding: 2.5rem max(clamp(1.25rem, 3vw, 3.5rem), var(--safe-right)) 4rem max(clamp(1.25rem, 3vw, 3.5rem), var(--safe-left)); }
 .crm-shell h1, .tenant-space h1 { font-size: clamp(1.8rem, 2.5vw, 2.5rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.2; }
 .crm-dashboard-heading { margin-bottom: 2rem; }
 .crm-dashboard-heading p, .ui-page-header p { font-size: .9375rem; margin-top: .65rem; }
@@ -756,8 +833,8 @@ button:not(:disabled),
 .ui-modal form > div:last-child { padding-top: .75rem; }
 .ui-modal form > div:last-child .ui-button:last-child { min-width: 8rem; }
 .journey-shell { overscroll-behavior: contain; }
-.journey-topbar { min-height: 4.5rem; background: rgb(249 252 255 / .9); backdrop-filter: blur(20px); padding-inline: max(1.25rem, calc((100vw - 1180px)/2)); }
-.journey-layout { max-width: 1180px; display: grid; grid-template-columns: 240px minmax(0, 680px); justify-content: space-between; gap: 4rem; padding-block: 3rem; }
+.journey-topbar { min-height: calc(4.5rem + var(--safe-top)); padding-top: var(--safe-top); background: rgb(249 252 255 / .9); backdrop-filter: blur(20px); padding-inline: max(1.25rem, var(--safe-left), calc((100vw - 1180px)/2)) max(1.25rem, var(--safe-right), calc((100vw - 1180px)/2)); }
+.journey-layout { max-width: 1180px; display: grid; grid-template-columns: 240px minmax(0, 680px); justify-content: space-between; gap: 4rem; padding-block: 3rem max(3rem, calc(var(--safe-bottom) + 1.5rem)); }
 .journey-guide { position: sticky; top: 7rem; align-self: start; }
 .journey-guide .glass-house { margin-bottom: 2rem; }
 .journey-guide ol { display: grid; gap: 1.5rem; }
@@ -796,7 +873,7 @@ button:not(:disabled),
   .crm-metric-art { width: 10rem; opacity: .3; }
 }
 @media (width < 64rem) {
-  .crm-main { padding: 1.75rem 1.25rem 5rem; }
+  .crm-main { padding: 1.75rem max(1.25rem, var(--safe-right)) 5rem max(1.25rem, var(--safe-left)); }
   .journey-layout { grid-template-columns: minmax(0, 680px); justify-content: center; gap: 2rem; }
   .journey-guide { position: static; }
   .journey-guide .glass-house { display: none; }
@@ -804,7 +881,7 @@ button:not(:disabled),
   .journey-guide li { font-size: .8125rem; gap: .5rem; }
 }
 @media (width < 40rem) {
-  .crm-main { padding-inline: 1rem; }
+  .crm-main { padding-inline: max(1rem, var(--safe-left)) max(1rem, var(--safe-right)); }
   .crm-overview { grid-template-columns: 1fr; gap: 1rem; }
   .crm-metric:first-child { grid-column: auto; }
   .crm-shell .crm-metric { padding: 1.5rem; }
@@ -815,9 +892,9 @@ button:not(:disabled),
   .crm-shell .crm-panel, .tenant-space .crm-panel { padding: 1.5rem; }
   .crm-todo .crm-link-row > div p + p { display: block; -webkit-line-clamp: unset; }
   .crm-dashboard-grid { gap: 1.25rem; }
-  .ui-modal { padding: 1.5rem; border-radius: 1.75rem 1.75rem 0 0; }
-  .journey-layout { padding-block: 1.5rem 3rem; }
-  .journey-topbar { min-height: 4rem; }
+  .ui-modal { padding: 1.5rem 1.5rem max(1.5rem, calc(var(--safe-bottom) + 0.75rem)); border-radius: 1.75rem 1.75rem 0 0; }
+  .journey-layout { padding-block: 1.5rem max(3rem, calc(var(--safe-bottom) + 1.5rem)); }
+  .journey-topbar { min-height: calc(4rem + var(--safe-top)); }
   .journey-guide li { flex-direction: column; align-items: center; gap: .5rem; text-align: center; font-size: .75rem; flex: 1; }
   .journey-guide li > span { height: 2rem; width: 2rem; }
   .journey-title { font-size: 1.875rem; }
@@ -976,6 +1053,11 @@ button:not(:disabled),
 .crm-shell .table-scroll td { padding-block: 1.125rem; }
 .crm-nav-parent { font-size: .9375rem; }
 .tenant-bottom-nav a, .tenant-bottom-nav button { font-size: .75rem; }
+/* A phone held sideways has little height: the bar packs its icon and label side by side and takes less of it. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .tenant-bottom-nav ul { height: 2.75rem; }
+  .tenant-space { --nav-b: calc(4.5rem + var(--safe-bottom)); }
+}
 @media (width < 40rem) {
   .crm-metric:first-child .crm-metric-value { font-size: 3rem; }
   .journey-card .grid-cols-3 > .ui-field-group:has(input[autocomplete="postal-code"]) { grid-column: span 1; }

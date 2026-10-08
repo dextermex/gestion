@@ -89,10 +89,12 @@ export default function TenantMessages({
     return () => document.documentElement.removeAttribute("data-phone-chat");
   }, [chatOpen]);
 
-  // A phone's list comes back where it was left, once it is on the screen again.
+  // A phone's list comes back where it was left, once it is on the screen
+  // again: at once, the way a messaging app's does (the page otherwise
+  // scrolls smoothly, and the list would be seen travelling back into place).
   useEffect(() => {
     if (view !== "list" || restoreScroll.current === null) return;
-    window.scrollTo(0, restoreScroll.current);
+    window.scrollTo({ top: restoreScroll.current, left: 0, behavior: "instant" });
     restoreScroll.current = null;
   }, [view]);
 
@@ -108,7 +110,7 @@ export default function TenantMessages({
   const open = (conversation: TenantConversationView) => {
     if (view === "list" && onPhone()) {
       listScroll.current = window.scrollY;
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     }
     setActiveId(conversation.id);
     setFocus(null);

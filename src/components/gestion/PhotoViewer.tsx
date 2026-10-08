@@ -22,7 +22,7 @@ export default function PhotoViewer({ url, title, label, closeLabel }: { url: st
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={title} closeLabel={closeLabel}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt={title} className="max-h-[70vh] w-full rounded-xl object-contain" />
+        <img src={url} alt={title} className="max-h-[70dvh] w-full rounded-xl object-contain" />
       </Modal>
     </>
   );

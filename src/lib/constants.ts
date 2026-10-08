@@ -1,4 +1,13 @@
 /**
+ * The product's name, the same in every language, as a phone shows it once
+ * the app is on the home screen: in full in the app switcher and the
+ * install prompt, short under the icon (an iPhone cuts a label past about
+ * twelve characters).
+ */
+export const APP_NAME = "Morada Gestion";
+export const APP_SHORT_NAME = "Morada";
+
+/**
  * Ecosystem URLs. Morada Gestion is the third space of the Morada ecosystem,
  * alongside the portal and Morada Pro. The space gateway lives on the main
  * site, so every link out is configurable for preview deployments.

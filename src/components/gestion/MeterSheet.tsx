@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Select, Textarea, useLatest } from "@/components/pro/ui";
+import { SCRIM_SETTLE, useDragToDismiss } from "@/lib/gesture";
+import { useMounted } from "@/lib/hooks";
 import { METER_UNITS } from "@/lib/types";
 import type { MeterKind } from "@/lib/types";
 import type { Dict } from "@/lib/i18n/fr";
@@ -62,6 +65,27 @@ function MeterSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const mounted = useMounted();
+  // It came in from the right, so a pull to the right takes it back out: it
+  // follows the finger, the scrim lightening with it; a flick or a pull past
+  // halfway closes it, anything less puts it back.
+  const x = useMotionValue(0);
+  const scrim = useMotionValue(0);
+  const drag = useDragToDismiss({
+    value: x,
+    toward: "right",
+    enabled: open,
+    reduced: Boolean(reduced),
+    size: () => panelRef.current?.offsetWidth ?? 480,
+    onProgress: (p) => {
+      scrim.stop();
+      scrim.set(1 - p);
+    },
+    onSettle: () => {
+      animate(scrim, 1, reduced ? { duration: 0.15 } : SCRIM_SETTLE);
+    },
+    onDismiss: onClose,
+  });
 
   const submitReal = async (form: HTMLFormElement) => {
     const f = new FormData(form);
@@ -109,12 +133,17 @@ function MeterSheet({
     };
   }, [open, close]);
 
-  return (
+  // The sheet lives at the end of <body>, as the house Modal does: the page's
+  // animated wrapper would otherwise hold it under the app's bar, which then
+  // covered its title and its close button.
+  if (!mounted) return null;
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-[60]">
           <motion.div
             className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
+            style={{ opacity: scrim }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -128,13 +157,17 @@ function MeterSheet({
             aria-modal
             aria-label={d.compteurs.sheetTitle}
             tabIndex={-1}
-            className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col bg-white shadow-pop outline-none"
+            style={{ x }}
+            // Clear of the notch and the rounded corners on a phone held sideways; a
+            // horizontal pull is the sheet's (back out to the right), a vertical one the form's scroll.
+            className="absolute inset-y-0 right-0 flex w-full max-w-lg touch-pan-y flex-col bg-white pr-(--safe-right) shadow-pop outline-none"
             initial={reduced ? { opacity: 0 } : { x: 480 }}
             animate={reduced ? { opacity: 1 } : { x: 0 }}
             exit={reduced ? { opacity: 0 } : { x: 480 }}
             transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 340, damping: 34 }}
+            {...drag}
           >
-            <div className="flex items-center justify-between border-b border-sand-100 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-sand-100 px-5 pb-4 pt-[max(1rem,var(--safe-top))]">
               <h2 className="font-display text-lg font-bold text-ink">{d.compteurs.sheetTitle}</h2>
               <button
                 onClick={onClose}
@@ -149,7 +182,7 @@ function MeterSheet({
 
             <form
               id="meter-sheet-form"
-              className="flex-1 space-y-4 overflow-y-auto px-5 py-5"
+              className="flex-1 space-y-4 overflow-y-auto overscroll-contain touch-pan-y px-5 py-5"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (real) void submitReal(e.currentTarget);
@@ -173,7 +206,7 @@ function MeterSheet({
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <Field label={d.compteurs.sheetSerial}>
-                    <Input name="serial" required maxLength={40} placeholder="LU-ENO-…" />
+                    <Input name="serial" required maxLength={40} placeholder="LU-ENO-…" autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
@@ -274,7 +307,7 @@ function MeterSheet({
               )}
             </form>
 
-            <div className="flex justify-end gap-2 border-t border-sand-100 px-5 py-4">
+            <div className="flex justify-end gap-2 border-t border-sand-100 px-5 pb-[max(1rem,var(--safe-bottom))] pt-4">
               <Button variant="ghost" onClick={onClose}>
                 {d.common.cancel}
               </Button>
@@ -285,6 +318,7 @@ function MeterSheet({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

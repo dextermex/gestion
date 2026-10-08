@@ -366,7 +366,7 @@ export default function DepartureWizard({
         )}
       </div>
 
-      <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
+      <div className="mx-auto w-full max-w-4xl px-safe-4 pb-[max(2.5rem,calc(var(--safe-bottom)+1.5rem))] pt-10 sm:px-safe-6">
         <AnimatePresence mode="wait" initial={false}>
           {step === 1 && (
             <motion.div key="s1" {...slide(-1)}>

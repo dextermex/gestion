@@ -74,6 +74,28 @@ Charts plot actual monthly values against a shared zero baseline; selected-month
 controls work by touch and keyboard, and exact values remain in a native table.
 Tables scroll within their own containers and keep currency/date strings intact.
 
+## Phones
+
+The same components take the phone's shape below `sm` (40rem); the desktop keeps its
+layout. The rules live in the shared layer (`globals.css`, `pro/ui.tsx`, the shell):
+
+- **Safe areas.** `viewport-fit=cover`; the insets are `--safe-top/right/bottom/left`, the
+  bar is `--bar-h`. The CRM lift rules outrank utilities, so the insets are written into the
+  rules themselves (`max(2rem, var(--safe-left))`), never only as a utility class.
+- **Fields are 16px by width and by touch** (`max-sm:text-base pointer-coarse:text-base`):
+  a phone held sideways is wider than `sm`. Safari never zooms into a field.
+- **Hover is for a mouse.** `hover:` is `(hover: hover) and (pointer: fine)`; a tapped card
+  never stays lifted. Every tap answers: controls without a press of their own dim to 60%
+  while pressed (components layer), and never select their label on a long press.
+- **No bounce, no reload under a thumb**: `overscroll-behavior-y: none` on the root for
+  touch screens; inner scrollers carry `overscroll-contain`.
+- **Sheets and drawers let go like a phone's.** The Modal's sheet (pulled by its header),
+  the drawer (pulled left) and the meter sheet (pulled right) follow the finger and close on
+  a flick or past halfway: `useDragToDismiss` in `src/lib/gesture.ts` on `springSheet`.
+- **Keyboard up**: the `typing:` variant hides what is fixed at the foot of the screen.
+- **Installable.** `src/app/manifest.ts`, icons drawn from the logo by
+  `scripts/app-icons.mjs`, white `theme-color` (the bars), `color-scheme: only light`.
+
 ## Preservation
 
 FR/EN/DE/LU dictionaries remain mandatory. Domain calculations, integer cents,

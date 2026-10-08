@@ -22,7 +22,7 @@ export default function ProvisionError({ d, email }: { d: Dict; email: string })
   };
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-sand-50 px-4 py-12 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-sand-50 px-safe-4 pb-[max(3rem,calc(var(--safe-bottom)+1.5rem))] pt-[max(3rem,calc(var(--safe-top)+1.5rem))] text-center">
       <GestionLogo />
       <h1 className="mt-7 text-balance font-display text-2xl font-bold tracking-tight text-ink">
         {d.auth.provisionFailedTitle}

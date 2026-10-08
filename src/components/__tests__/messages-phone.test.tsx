@@ -116,6 +116,8 @@ const threads: ThreadView[] = [
 let host: HTMLDivElement;
 let root: Root;
 let scrolls: Array<[number, number]>;
+/** How each scroll was asked for: a phone's list jumps back into place, it does not glide. */
+let scrollKinds: string[];
 let fetched: string[];
 
 beforeEach(() => {
@@ -123,6 +125,7 @@ beforeEach(() => {
   document.body.appendChild(host);
   root = createRoot(host);
   scrolls = [];
+  scrollKinds = [];
   fetched = [];
   // A phone: below `lg`, scrolled a little way down its list.
   window.matchMedia = ((query: string) => ({
@@ -135,7 +138,10 @@ beforeEach(() => {
     removeListener: () => {},
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
-  window.scrollTo = ((x: number, y: number) => scrolls.push([x, y])) as unknown as typeof window.scrollTo;
+  window.scrollTo = ((a: number | ScrollToOptions, b?: number) => {
+    scrolls.push(typeof a === "object" ? [a.left ?? 0, a.top ?? 0] : [a, b ?? 0]);
+    scrollKinds.push(typeof a === "object" ? (a.behavior ?? "auto") : "auto");
+  }) as unknown as typeof window.scrollTo;
   Object.defineProperty(window, "scrollY", { value: 240, configurable: true });
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     fetched.push(String(input));
@@ -229,6 +235,7 @@ describe("Messages on a phone", () => {
       [0, 0],
       [0, 240],
     ]);
+    expect(scrollKinds).toEqual(["instant", "instant"]);
     expect(rowOf("Lena Bauer")!.querySelector("[role=img]")).toBeNull();
   });
 

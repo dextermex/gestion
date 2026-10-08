@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { APP_SHORT_NAME } from "@/lib/constants";
 import { getLocale } from "@/lib/i18n";
 import { htmlLang } from "@/lib/i18n/config";
 import "./globals.css";
@@ -30,13 +31,33 @@ const META: Record<string, { title: string; description: string }> = {
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
-  return META[locale] ?? META.fr;
+  return {
+    ...(META[locale] ?? META.fr),
+    // Added to a phone's home screen, the app opens on its own, without the
+    // browser around it (the manifest is app/manifest.ts, the icons sit next
+    // to it). The status bar stays the light one: the app's bars are white
+    // and there is no dark mode. The short name fits under an iPhone icon.
+    appleWebApp: { capable: true, title: APP_SHORT_NAME, statusBarStyle: "default" },
+    // Safari's own name for it, beside the standard one Next writes.
+    other: { "apple-mobile-web-app-capable": "yes" },
+  };
 }
 
 // `viewportFit: cover` lets the page reach an iPhone's rounded corners and
 // home indicator; the safe-area insets (globals.css) keep the chrome and the
-// content out of them.
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
+// content out of them. The browser's own bar takes the white of the app's
+// bars (`themeColor`), and a phone set to darken websites leaves this light
+// design as it is (`only light`: Morada has no dark mode). On Android the
+// keyboard shrinks the page instead of covering it, so a conversation keeps
+// its header and its composer in view while typing (`resizes-content`).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#ffffff",
+  colorScheme: "only light",
+  interactiveWidget: "resizes-content",
+};
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();

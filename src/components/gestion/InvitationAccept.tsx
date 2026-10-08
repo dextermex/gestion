@@ -121,7 +121,7 @@ export default function InvitationAccept({
 
   return (
     <div className="flex min-h-dvh flex-col bg-sand-50">
-      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-10 sm:px-6">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-safe-4 pb-[max(2.5rem,calc(var(--safe-bottom)+1.5rem))] pt-[max(2.5rem,calc(var(--safe-top)+1.5rem))] sm:px-safe-6">
         <div className="flex justify-center">
           <a href={`${MORADA_URL}/welcome`} aria-label="Morada">
             <GestionLogo />

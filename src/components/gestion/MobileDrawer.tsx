@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { useDismiss } from "@/lib/useDismiss";
+import { SCRIM_SETTLE, useDragToDismiss } from "@/lib/gesture";
+import { springSheet } from "@/lib/motion";
 import { useLatest } from "@/components/pro/ui";
 
 export default function MobileDrawer({ open, onClose, label, closeLabel, children }: {
@@ -15,6 +17,26 @@ export default function MobileDrawer({ open, onClose, label, closeLabel, childre
   const ref = useDismiss<HTMLElement>(open, onClose);
   const close = useLatest(onClose);
   const reduced = useReducedMotion();
+  // It came in from the left, so a pull to the left takes it back out: it
+  // follows the finger, the scrim lightening with it, and a flick or a pull
+  // past halfway closes it. A vertical move stays the menu's own scroll.
+  const x = useMotionValue(0);
+  const scrim = useMotionValue(0);
+  const drag = useDragToDismiss({
+    value: x,
+    toward: "left",
+    enabled: open,
+    reduced: Boolean(reduced),
+    size: () => ref.current?.offsetWidth ?? 288,
+    onProgress: (p) => {
+      scrim.stop();
+      scrim.set(1 - p);
+    },
+    onSettle: () => {
+      animate(scrim, 1, reduced ? { duration: 0.15 } : SCRIM_SETTLE);
+    },
+    onDismiss: onClose,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -54,15 +76,17 @@ export default function MobileDrawer({ open, onClose, label, closeLabel, childre
 
   return <AnimatePresence>
     {open && <div className="fixed inset-0 z-50 lg:hidden">
-      <motion.div className="absolute inset-0 bg-ink/40" aria-hidden
+      <motion.div className="absolute inset-0 bg-ink/40" aria-hidden style={{ opacity: scrim }}
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.18 }} />
       <motion.aside ref={ref} role="dialog" aria-modal aria-label={label}
-        className="crm-mobile-sidebar absolute inset-y-0 left-0 w-72 max-w-[calc(100vw-3rem)] bg-white pl-(--safe-left) pt-(--safe-top) shadow-pop"
+        style={{ x }}
+        className="crm-mobile-sidebar absolute inset-y-0 left-0 w-72 max-w-[calc(100vw-3rem)] touch-pan-y bg-white pl-(--safe-left) pt-(--safe-top) shadow-pop"
         initial={reduced ? { opacity: 0 } : { x: -288 }}
         animate={reduced ? { opacity: 1 } : { x: 0 }}
         exit={reduced ? { opacity: 0 } : { x: -288 }}
-        transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 380, damping: 32 }}>
+        transition={reduced ? { duration: 0.15 } : springSheet}
+        {...drag}>
         <button type="button" onClick={onClose} aria-label={closeLabel}
           className="absolute right-2 top-[max(0.5rem,var(--safe-top))] z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>

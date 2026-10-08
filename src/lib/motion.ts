@@ -28,6 +28,13 @@ export const springSoft: Transition = { type: "spring", stiffness: 240, damping:
 export const springSnappy: Transition = { type: "spring", stiffness: 420, damping: 30 };
 export const springGentle: Transition = { type: "spring", stiffness: 150, damping: 24 };
 
+/**
+ * The house modal spring (dialogs, sheets, the drawer), named so a gesture
+ * can hand its release velocity to it. Damping ratio about 0.82 and a
+ * response of about 0.32s: Apple's drawer and sheet setting (0.8 / 0.3).
+ */
+export const springSheet = { type: "spring", stiffness: 380, damping: 32 } as const;
+
 /** Fade-and-rise, the house reveal. Enter is unhurried, tuned to EASE_OUT. */
 export const revealUp: Variants = {
   hidden: { opacity: 0, y: 24 },

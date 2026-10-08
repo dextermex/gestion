@@ -304,7 +304,7 @@ export default function PropertyWizard({
         <span className="text-sm font-semibold text-ink">{d.experience.newProperty}</span>
       </div>
 
-      <div className="journey-layout mx-auto w-full px-4 py-10 sm:px-6">
+      <div className="journey-layout mx-auto w-full px-safe-4 py-10 sm:px-safe-6">
         {step !== 9 && <aside className="journey-guide">
           <GlassHouse />
           <nav aria-label={d.experience.journey}><ol>

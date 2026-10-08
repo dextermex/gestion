@@ -250,6 +250,8 @@ export default function TenantChat({
             placeholder={labels.write}
             rows={1}
             maxLength={4000}
+            // Return sends (Enter below), so a phone's return key says so.
+            enterKeyHint="send"
             className="min-h-0 resize-none max-lg:min-h-11 max-lg:text-base"
             value={draft}
             onChange={(e) => {

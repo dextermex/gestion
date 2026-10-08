@@ -443,7 +443,7 @@ export default function TenantWizard({
         </p>
       </div>
 
-      <div className="journey-layout mx-auto w-full px-4 py-10 sm:px-6">
+      <div className="journey-layout mx-auto w-full px-safe-4 py-10 sm:px-safe-6">
         <aside className="journey-guide rental-guide">
           <p className="mb-6 text-base font-semibold text-ink">{unitLabel}</p>
           <nav aria-label={d.experience.journey}><ol>{RENTAL_STEPS.map((item) => <li key={item} aria-current={item === step ? "step" : undefined} className={stepNumber(item) < stepNumber(step) ? "is-complete" : ""}><span>{stepNumber(item) < stepNumber(step) ? <Icon name="check" size={16}/> : stepNumber(item)}</span>{titles[item]}</li>)}</ol></nav>
@@ -632,6 +632,9 @@ export default function TenantWizard({
                       placeholder="LU28 0019 4006 4475 0000"
                       value={payerIban}
                       onChange={(e) => setPayerIban(e.target.value)}
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
                       className="font-mono tabular-nums"
                     />
                   </Field>
