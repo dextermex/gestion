@@ -96,6 +96,21 @@ layout. The rules live in the shared layer (`globals.css`, `pro/ui.tsx`, the she
 - **Installable.** `src/app/manifest.ts`, icons drawn from the logo by
   `scripts/app-icons.mjs`, white `theme-color` (the bars), `color-scheme: only light`.
 
+Tables below 40rem come in two shapes, both set on the `table-scroll` wrapper
+and both leaving the markup a table: `table-stack` for a table whose rows carry
+actions or a handful of facts (rents, leases, interventions, bills): each row is
+a card, each cell captioned by its column (`data-label`), the first cell or the
+one marked `data-title` the card's title, the `data-actions` cell a full-width
+row of 44px buttons at the foot; `table-fold` for a ledger (charges, insurance,
+templates, loans, the tenant's payments): the page hides the secondary columns
+(`max-sm:hidden`) and folds their value into the first cell (`sm:hidden`), the
+cells may wrap, the figures may not (`data-wrap` lets a long cell wrap). The
+manager space's type never goes under 12px on a phone: eyebrows, badges and
+headings at 12px, notes at 13px (globals.css, the block after the lift). A view
+that takes the screen over a list (a conversation) is a history entry
+(`useViewHistory`), a wizard step is one too (`useStepHistory`), and a wizard's
+work is kept on the device as it goes (`useDraft`, offered back after a reload).
+
 ## Preservation
 
 FR/EN/DE/LU dictionaries remain mandatory. Domain calculations, integer cents,

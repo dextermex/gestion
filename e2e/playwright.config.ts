@@ -45,9 +45,11 @@ export default defineConfig({
     },
     // A phone-sized WebKit, the closest a Linux runner comes to iPhone
     // Safari: the auth door, the typing checks, Messages as a phone shows
-    // them, and every critical screen at a phone's width.
+    // them, every critical screen at a phone's width, and the phone's own
+    // ways (the drawer, the menus, the search, the property, the tables,
+    // the wizards).
     ...(process.env.E2E_WEBKIT === "1"
-      ? [{ name: "iphone-webkit", use: { ...devices["iPhone 14"] }, testMatch: /(auth|focus|messages-phone|responsive)\.spec\.ts/ }]
+      ? [{ name: "iphone-webkit", use: { ...devices["iPhone 14"] }, testMatch: /(auth|focus|messages-phone|responsive|nav-phone|property-phone|tables-phone|wizards-phone)\.spec\.ts/ }]
       : []),
   ],
   webServer: {
