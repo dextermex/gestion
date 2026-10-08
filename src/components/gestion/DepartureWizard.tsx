@@ -360,7 +360,7 @@ export default function DepartureWizard({
           </button>
         )}
         {step <= TOTAL && (
-          <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
+          <p className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm text-ink-soft">
             {d.biens.wizStepOf.replace("{n}", String(step)).replace("{total}", String(TOTAL))}
           </p>
         )}

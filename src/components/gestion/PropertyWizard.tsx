@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Select } from "@/components/pro/ui";
 import GlassHouse from "./GlassHouse";
+import { DraftPrompt } from "@/components/gestion/WizardChrome";
+import { useDraft, useUnloadGuard, type Draft } from "@/lib/draft";
+import { shrinkPhotos } from "@/lib/photo";
+import { useStepHistory } from "@/lib/wizard-history";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 
@@ -73,6 +77,32 @@ const DWELLING: PropertyType[] = ["apartment", "house", "other"];
 
 type UnitDraft = { key: string; label: string; kind: string; floor: string; areaSqm: string };
 type Photo = { key: string; file: File; url: string };
+/** What the device keeps of a property being added (see src/lib/draft.ts). */
+type PropertyDraft = {
+  type: PropertyType | null;
+  step: number;
+  name: string;
+  street: string;
+  num: string;
+  postal: string;
+  city: string;
+  country: string;
+  areaSqm: string;
+  rooms: string;
+  bedrooms: string;
+  floor: string;
+  year: string;
+  photos: File[];
+  coverKey: string | null;
+  units: UnitDraft[];
+  energyClass: string;
+  cadastralCommune: string;
+  cadastralSection: string;
+  cadastralNumber: string;
+  syndicName: string;
+};
+const DRAFT_VERSION = 1;
+const DRAFT_KEY = "bien:nouveau";
 
 let seq = 0;
 const nextKey = () => `u${++seq}`;
@@ -150,22 +180,26 @@ export default function PropertyWizard({
     if (next !== undefined) setStep(next);
   };
 
+  const toPhoto = (file: File): Photo => {
+    const url = URL.createObjectURL(file);
+    photoUrls.current.add(url);
+    return { key: `${file.name}-${file.size}-${file.lastModified}`, file, url };
+  };
+  // Brought down to the upload size as they are chosen: a phone's photograph is ten times too large as taken.
   const addPhotos = (files: FileList | null) => {
     if (!files) return;
-    const added = Array.from(files)
+    const picked = Array.from(files)
       .filter((f) => f.type.startsWith("image/"))
-      .slice(0, 12)
-      .map((file) => {
-        const url = URL.createObjectURL(file);
-        photoUrls.current.add(url);
-        return { key: `${file.name}-${file.size}-${file.lastModified}`, file, url };
+      .slice(0, 12);
+    void shrinkPhotos(picked).then((ready) => {
+      const added = ready.map(toPhoto);
+      setPhotos((prev) => {
+        const merged = [...prev];
+        for (const p of added) if (!merged.some((m) => m.key === p.key)) merged.push(p);
+        return merged.slice(0, 12);
       });
-    setPhotos((prev) => {
-      const merged = [...prev];
-      for (const p of added) if (!merged.some((m) => m.key === p.key)) merged.push(p);
-      return merged.slice(0, 12);
+      setCoverKey((c) => c ?? added[0]?.key ?? null);
     });
-    setCoverKey((c) => c ?? added[0]?.key ?? null);
   };
 
   const removePhoto = (key: string) => {
@@ -176,6 +210,80 @@ export default function PropertyWizard({
     });
     setCoverKey((c) => (c === key ? null : c));
   };
+
+  // The form lives on the device until the property exists: a back gesture
+  // or a dropped tab loses nothing. The draft starts with the first answer
+  // and goes the moment the property is created.
+  const dirty = type !== null || name.trim() !== "" || photos.length > 0 || units.length > 0;
+  const draftData = useMemo<PropertyDraft>(
+    () => ({
+      type,
+      step,
+      name,
+      street,
+      num,
+      postal,
+      city,
+      country,
+      areaSqm,
+      rooms,
+      bedrooms,
+      floor,
+      year,
+      photos: photos.map((p) => p.file),
+      coverKey,
+      units,
+      energyClass,
+      cadastralCommune,
+      cadastralSection,
+      cadastralNumber,
+      syndicName,
+    }),
+    [type, step, name, street, num, postal, city, country, areaSqm, rooms, bedrooms, floor, year, photos, coverKey, units, energyClass, cadastralCommune, cadastralSection, cadastralNumber, syndicName],
+  );
+  const [pending, setPending] = useState<Draft<PropertyDraft> | null>(null);
+  const clearDraft = useDraft(DRAFT_KEY, DRAFT_VERSION, draftData, dirty && step !== 9 && !saving && createdId === null, setPending);
+  useUnloadGuard(dirty && step !== 9 && createdId === null);
+  const resumeDraft = () => {
+    if (!pending) return;
+    const data = pending.data;
+    for (const u of data.units) seq = Math.max(seq, Number(u.key.replace(/\D/g, "")) || 0);
+    setType(data.type);
+    setName(data.name);
+    setStreet(data.street);
+    setNum(data.num);
+    setPostal(data.postal);
+    setCity(data.city);
+    setCountry(data.country);
+    setAreaSqm(data.areaSqm);
+    setRooms(data.rooms);
+    setBedrooms(data.bedrooms);
+    setFloor(data.floor);
+    setYear(data.year);
+    setPhotos(data.photos.map(toPhoto));
+    setCoverKey(data.coverKey);
+    setUnits(data.units);
+    setEnergyClass(data.energyClass);
+    setCadastralCommune(data.cadastralCommune);
+    setCadastralSection(data.cadastralSection);
+    setCadastralNumber(data.cadastralNumber);
+    setSyndicName(data.syndicName);
+    setStep(flow.includes(data.step) && data.step !== 9 ? data.step : 1);
+    setPending(null);
+  };
+  const discardDraft = () => {
+    void clearDraft();
+    setPending(null);
+  };
+  useEffect(() => {
+    if (step === 9) void clearDraft();
+  }, [step, clearDraft]);
+
+  // One history entry per step: the phone's back gesture returns to the previous step.
+  const { back } = useStepHistory(step, setStep, (raw) => {
+    const n = Number(raw);
+    return raw !== null && flow.includes(n) && n !== 9 ? n : null;
+  });
 
   const save = async () => {
     setSaving(true);
@@ -220,6 +328,7 @@ export default function PropertyWizard({
         return;
       }
       const created = (await res.json()) as { id: string; units?: Array<{ id: string; label: string }> };
+      void clearDraft();
       setCreatedId(created.id);
       setCreatedUnits(created.units ?? []);
 
@@ -290,13 +399,13 @@ export default function PropertyWizard({
             {d.biens.wizBack}
           </Link>
         ) : (
-          <button onClick={() => go(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
+          <button onClick={() => back(() => go(-1))} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
             <BackIcon />
             {d.common.back}
           </button>
         )}
         {step !== 9 && (
-          <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
+          <p className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm text-ink-soft max-sm:hidden">
             {d.biens.wizStepOf.replace("{n}", String(position)).replace("{total}", String(flow.length - 1))}
           </p>
         )}
@@ -319,6 +428,7 @@ export default function PropertyWizard({
             <motion.div key="essentials" {...slide(1)}>
               {Heading}
               <p className="journey-intro">{d.experience.propertyDetailsHint}</p>
+              {pending && !dirty && <DraftPrompt d={d} savedAt={pending.savedAt} onResume={resumeDraft} onDiscard={discardDraft} />}
               <form className="journey-card" onSubmit={(e) => { e.preventDefault(); if (canSubmit) go(1); }}>
                 <fieldset>
                   <legend className="mb-3 text-sm font-semibold text-ink">{d.biens.type} *</legend>
@@ -430,21 +540,23 @@ export default function PropertyWizard({
                         <img src={p.url} alt="" className="aspect-[4/3] w-full object-cover" />
                         <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-white/90 px-2 py-1.5 backdrop-blur">
                           {coverKey === p.key ? (
-                            <span className="text-[11px] font-bold text-brand-700">{d.biens.wizCover}</span>
+                            <span className="inline-flex min-h-10 items-center px-1 text-xs font-bold text-brand-700">{d.biens.wizCover}</span>
                           ) : (
                             <button
+                              type="button"
                               onClick={() => setCoverKey(p.key)}
-                              className="text-[11px] font-semibold text-ink-soft hover:text-brand-700"
+                              className="tactile inline-flex min-h-10 items-center rounded-lg px-1.5 text-xs font-semibold text-ink-soft hover:text-brand-700"
                             >
                               {d.biens.wizSetCover}
                             </button>
                           )}
                           <button
+                            type="button"
                             onClick={() => removePhoto(p.key)}
                             aria-label={d.common.delete}
-                            className="text-ink-soft hover:text-red-600"
+                            className="tactile flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/95 text-ink-soft shadow-sm hover:text-red-600"
                           >
-                            <Icon name="trash" size={14} />
+                            <Icon name="trash" size={16} />
                           </button>
                         </div>
                       </li>
@@ -512,9 +624,10 @@ export default function PropertyWizard({
                           </Field>
                         </div>
                         <button
+                          type="button"
                           onClick={() => setUnits((prev) => prev.filter((x) => x.key !== u.key))}
                           aria-label={d.common.delete}
-                          className="col-span-1 mb-2 justify-self-center text-ink-soft hover:text-red-600"
+                          className="tactile col-span-1 mb-2 flex h-11 w-11 items-center justify-center justify-self-center rounded-xl border border-sand-200 bg-white text-ink-soft hover:text-red-600"
                         >
                           <Icon name="trash" size={16} />
                         </button>
@@ -523,18 +636,21 @@ export default function PropertyWizard({
                   </ul>
                 )}
 
-                <button
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-4"
                   onClick={() =>
                     setUnits((prev) => [
                       ...prev,
                       { key: nextKey(), label: "", kind: "dwelling", floor: "", areaSqm: "" },
                     ])
                   }
-                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:underline"
                 >
                   <Icon name="plus" size={15} />
                   {d.biens.wizAddUnit}
-                </button>
+                </Button>
 
 </div>
                 </details>)}
@@ -653,12 +769,9 @@ export default function PropertyWizard({
                     <Button variant="secondary" onClick={() => router.push(`/app/biens/${createdId}?onglet=interventions`)}>
                       {d.biens.wizDoneIntervention}
                     </Button>
-                    <button
-                      onClick={() => router.push(`/app/biens/${createdId}`)}
-                      className="mt-1 text-sm font-semibold text-ink-soft hover:text-ink"
-                    >
+                    <Button type="button" variant="ghost" className="mt-1" onClick={() => router.push(`/app/biens/${createdId}`)}>
                       {d.biens.wizDoneFinish}
-                    </button>
+                    </Button>
                   </div>
                 </>
               ) : (

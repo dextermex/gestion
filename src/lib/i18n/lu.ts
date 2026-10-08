@@ -61,6 +61,10 @@ export const lu: Dict = {
     no: "Neen",
     resetFilters: "Filtere zerécksetzen",
     all: "All",
+    draftFound: "En Entworf vum {date} ass op dësem Apparat gespäichert.",
+    draftResume: "Weiderfueren",
+    draftDiscard: "Nei ufänken",
+    removePhoto: "Foto ewechhuelen",
   },
 
   nav: {

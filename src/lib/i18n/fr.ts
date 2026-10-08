@@ -60,6 +60,10 @@ export const fr = {
     no: "Non",
     resetFilters: "Réinitialiser les filtres",
     all: "Tous",
+    draftFound: "Un brouillon du {date} est enregistré sur cet appareil.",
+    draftResume: "Reprendre",
+    draftDiscard: "Recommencer",
+    removePhoto: "Retirer la photo",
   },
 
   nav: {

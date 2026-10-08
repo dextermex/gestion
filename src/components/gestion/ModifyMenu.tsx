@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { useDismiss } from "@/lib/useDismiss";
+import { PHONE_SHEET_QUERY, useMediaQuery } from "@/lib/hooks";
+import { shrinkPhoto } from "@/lib/photo";
 import type { EditField, EditTopic, MenuGroup, SpecialEditor } from "@/lib/gestion/editors";
 
 /**
@@ -22,6 +24,7 @@ import type { EditField, EditTopic, MenuGroup, SpecialEditor } from "@/lib/gesti
 export interface ModifyLabels {
   trigger: string;
   cancel: string;
+  close: string;
   save: string;
   saved: string;
   failed: string;
@@ -56,14 +59,25 @@ type Open = { label: string; topic?: EditTopic; special?: SpecialEditor } | null
 export default function ModifyMenu({ groups, labels }: { groups: MenuGroup[]; labels: ModifyLabels }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState<Open>(null);
-  const wrapRef = useDismiss<HTMLDivElement>(menuOpen, () => setMenuOpen(false));
+  // On a phone the entries come up as a sheet from the foot of the screen,
+  // always in reach; above `sm` the dropdown hangs under the button.
+  const sheet = useMediaQuery(PHONE_SHEET_QUERY);
+  const wrapRef = useDismiss<HTMLDivElement>(menuOpen && !sheet, () => setMenuOpen(false));
+  const choose = (entry: MenuGroup["entries"][number]) => {
+    setMenuOpen(false);
+    setOpen({
+      label: entry.label,
+      topic: "topic" in entry ? entry.topic : undefined,
+      special: "special" in entry ? entry.special : undefined,
+    });
+  };
 
   return (
     <div ref={wrapRef} className="relative">
       <button
         onClick={() => setMenuOpen((v) => !v)}
         aria-expanded={menuOpen}
-        aria-haspopup="menu"
+        aria-haspopup={sheet ? "dialog" : "menu"}
         className="tactile flex min-h-9 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700 max-sm:min-h-11"
       >
         <Icon name="edit" size={15} />
@@ -80,7 +94,42 @@ export default function ModifyMenu({ groups, labels }: { groups: MenuGroup[]; la
         </svg>
       </button>
 
-      {menuOpen && (
+      <Modal open={menuOpen && sheet} onClose={() => setMenuOpen(false)} title={labels.trigger} closeLabel={labels.close}>
+        <ul className="-mx-1 divide-y divide-sand-100" data-modify-sheet>
+          {groups.map((group) => (
+            <li key={group.label} className="py-1.5">
+              <p className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-ink-soft">{group.label}</p>
+              <ul>
+                {group.entries.map((entry) => (
+                  <li key={entry.id}>
+                    {"href" in entry ? (
+                      <Link
+                        href={entry.href}
+                        onClick={() => setMenuOpen(false)}
+                        className="tactile flex min-h-12 items-center justify-between gap-3 rounded-xl px-3 text-[15px] text-ink transition hover:bg-sand-50"
+                      >
+                        {entry.label}
+                        <Icon name="chevron-right" size={16} className="shrink-0 text-ink-soft" />
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => choose(entry)}
+                        className="tactile flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-[15px] text-ink transition hover:bg-sand-50"
+                      >
+                        {entry.label}
+                        <Icon name="chevron-right" size={16} className="shrink-0 text-ink-soft" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </Modal>
+
+      {menuOpen && !sheet && (
         <div
           role="menu"
           className="absolute right-0 z-40 mt-2 max-h-[70dvh] w-72 overflow-y-auto overscroll-contain rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg"
@@ -105,14 +154,7 @@ export default function ModifyMenu({ groups, labels }: { groups: MenuGroup[]; la
                   <button
                     key={entry.id}
                     role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setOpen({
-                        label: entry.label,
-                        topic: "topic" in entry ? entry.topic : undefined,
-                        special: "special" in entry ? entry.special : undefined,
-                      });
-                    }}
+                    onClick={() => choose(entry)}
                     className="block w-full rounded-lg px-2.5 py-2 text-left text-sm text-ink transition hover:bg-sand-50"
                   >
                     {entry.label}
@@ -412,8 +454,15 @@ function PhotosEditor({
           className="sr-only"
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
-            setFile(f);
-            setPreview(f ? URL.createObjectURL(f) : null);
+            if (!f) {
+              setFile(null);
+              setPreview(null);
+              return;
+            }
+            void shrinkPhoto(f).then((ready) => {
+              setFile(ready);
+              setPreview(URL.createObjectURL(ready));
+            });
           }}
         />
       </label>

@@ -1084,6 +1084,7 @@ export function modifyLabels(d: Dict) {
   return {
     trigger: d.modify.trigger,
     cancel: d.common.cancel,
+    close: d.common.close,
     save: d.common.save,
     saved: d.modify.saved,
     failed: d.modify.failed,

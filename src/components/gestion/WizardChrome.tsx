@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/pro/ui";
+import { draftDate } from "@/lib/draft";
 import type { Dict } from "@/lib/i18n/fr";
 
 /**
@@ -73,6 +74,31 @@ export function WizardFooter({
             {nextLabel ?? d.common.next}
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The device holds a draft of this wizard, written as the owner went: offer
+ * to pick it up where it stopped, or to start again. Shown until the first
+ * change, never on a laptop that has no draft.
+ */
+export function DraftPrompt({ d, savedAt, onResume, onDiscard }: { d: Dict; savedAt: number; onResume: () => void; onDiscard: () => void }) {
+  return (
+    <div
+      role="status"
+      data-draft-prompt
+      className="mx-auto mt-6 flex max-w-xl flex-col gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="text-sm text-ink">{d.common.draftFound.replace("{date}", draftDate(savedAt))}</p>
+      <div className="flex shrink-0 gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onDiscard}>
+          {d.common.draftDiscard}
+        </Button>
+        <Button type="button" size="sm" onClick={onResume}>
+          {d.common.draftResume}
+        </Button>
       </div>
     </div>
   );

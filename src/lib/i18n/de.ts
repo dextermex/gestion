@@ -56,6 +56,10 @@ export const de: Dict = {
     no: "Nein",
     resetFilters: "Filter zurücksetzen",
     all: "Alle",
+    draftFound: "Ein Entwurf vom {date} ist auf diesem Gerät gespeichert.",
+    draftResume: "Fortsetzen",
+    draftDiscard: "Neu beginnen",
+    removePhoto: "Foto entfernen",
   },
 
   nav: {

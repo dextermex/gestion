@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Field, Input, Textarea } from "@/components/pro/ui";
-import { StepCard } from "@/components/gestion/WizardChrome";
+import { DraftPrompt, StepCard } from "@/components/gestion/WizardChrome";
+import { useDraft, useUnloadGuard, type Draft } from "@/lib/draft";
+import { shrinkPhotos } from "@/lib/photo";
+import { stepParser, useStepHistory } from "@/lib/wizard-history";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 
@@ -33,9 +36,25 @@ const CONDITIONS = ["new", "good", "fair", "poor", "damaged"] as const;
 type Condition = (typeof CONDITIONS)[number];
 
 type RoomState = { key: string; name: string; items: Record<string, { condition: Condition; notes: string }> };
+/** A photograph taken in a room, with the address its thumbnail shows. */
+type Shot = { key: string; file: File; url: string };
+/** What the device keeps of a walk-through in progress (see src/lib/draft.ts). */
+type EdlDraft = {
+  rooms: RoomState[];
+  readings: Record<string, string>;
+  keysHandedOver: boolean;
+  observations: string;
+  signed: boolean;
+  completedAt: string;
+  step: number;
+  photos: Record<string, File[]>;
+};
+const DRAFT_VERSION = 1;
 
 let seq = 0;
 const key = () => `r${++seq}`;
+let shotSeq = 0;
+const shotKey = () => `p${++shotSeq}`;
 
 export default function EdlWizard({
   d,
@@ -91,17 +110,35 @@ export default function EdlWizard({
   // The photos taken in each room, by item, until the walk is saved: they
   // are uploaded one by one to the items the base gives back, then the
   // signed inventory is sealed (its manifest hashed, its report produced).
-  const [photos, setPhotos] = useState<Record<string, File[]>>({});
+  const [photos, setPhotos] = useState<Record<string, Shot[]>>({});
   const [phase, setPhase] = useState<"idle" | "photos" | "sealing">("idle");
   const [photoErrors, setPhotoErrors] = useState<string[]>([]);
   const [sealResult, setSealResult] = useState<{ sha256: string; report: { documentId: string; name: string } | null } | null>(null);
   const [sealFailed, setSealFailed] = useState(false);
   const photoKey = (roomKey: string, cat: Category) => `${roomKey}:${cat}`;
+  // Brought down to the upload size as they are taken, so the draft and the
+  // upload both carry a few hundred kilobytes a photograph, not twenty.
   const addPhotos = (roomKey: string, cat: Category, list: FileList | null) => {
     if (!list || list.length === 0) return;
-    const files = Array.from(list);
-    setPhotos((prev) => ({ ...prev, [photoKey(roomKey, cat)]: [...(prev[photoKey(roomKey, cat)] ?? []), ...files] }));
+    const k = photoKey(roomKey, cat);
+    void shrinkPhotos(Array.from(list)).then((files) => {
+      const shots = files.map((file) => ({ key: shotKey(), file, url: URL.createObjectURL(file) }));
+      setPhotos((prev) => ({ ...prev, [k]: [...(prev[k] ?? []), ...shots] }));
+    });
   };
+  const removePhoto = (roomKey: string, cat: Category, shot: string) => {
+    const k = photoKey(roomKey, cat);
+    setPhotos((prev) => {
+      const gone = (prev[k] ?? []).find((s) => s.key === shot);
+      if (gone) URL.revokeObjectURL(gone.url);
+      return { ...prev, [k]: (prev[k] ?? []).filter((s) => s.key !== shot) };
+    });
+  };
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  useEffect(() => () => {
+    for (const list of Object.values(photosRef.current)) for (const s of list) URL.revokeObjectURL(s.url);
+  }, []);
   const photoCount = Object.values(photos).reduce((a, files) => a + files.length, 0);
 
   useEffect(() => {
@@ -131,6 +168,55 @@ export default function EdlWizard({
       notes: v.notes,
     })),
   );
+
+  // The walk-through lives on the device until it is saved: a back gesture,
+  // a reload while the camera is open or a dropped tab loses nothing. The
+  // draft starts with the first thing recorded, and goes once the base has it.
+  const dirty = step > 0 || recordedItems.length > 0 || photoCount > 0;
+  const draftData = useMemo<EdlDraft>(
+    () => ({
+      rooms,
+      readings,
+      keysHandedOver,
+      observations,
+      signed,
+      completedAt,
+      step,
+      photos: Object.fromEntries(Object.entries(photos).map(([k, list]) => [k, list.map((s) => s.file)])),
+    }),
+    [rooms, readings, keysHandedOver, observations, signed, completedAt, step, photos],
+  );
+  const [pending, setPending] = useState<Draft<EdlDraft> | null>(null);
+  const clearDraft = useDraft(`edl:${leaseId}:${kind}`, DRAFT_VERSION, draftData, dirty && step !== doneStep && !saving, setPending);
+  useUnloadGuard(dirty && step !== doneStep);
+  const resumeDraft = () => {
+    if (!pending) return;
+    const data = pending.data;
+    for (const r of data.rooms) seq = Math.max(seq, Number(r.key.replace(/\D/g, "")) || 0);
+    setRooms(data.rooms);
+    setReadings(data.readings);
+    setKeysHandedOver(data.keysHandedOver);
+    setObservations(data.observations);
+    setSigned(data.signed);
+    setCompletedAt(data.completedAt);
+    setPhotos(
+      Object.fromEntries(
+        Object.entries(data.photos).map(([k, files]) => [k, files.map((file) => ({ key: shotKey(), file, url: URL.createObjectURL(file) }))]),
+      ),
+    );
+    setStep(Math.min(Math.max(0, data.step), data.rooms.length + 2));
+    setPending(null);
+  };
+  const discardDraft = () => {
+    void clearDraft();
+    setPending(null);
+  };
+  useEffect(() => {
+    if (step === doneStep) void clearDraft();
+  }, [step, doneStep, clearDraft]);
+
+  // One history entry per step: the phone's back gesture returns to the previous room.
+  const { back } = useStepHistory(step, setStep, stepParser(0, doneStep));
 
   const save = async () => {
     setSaving(true);
@@ -167,6 +253,7 @@ export default function EdlWizard({
       }
       const payload = (await res.json().catch(() => ({}))) as { id?: string; itemRows?: Array<{ id: string; room: string; category: string }> };
       const sessionId = String(payload.id ?? "");
+      void clearDraft();
       const itemRows = payload.itemRows ?? [];
       // Each photo goes to the item it was taken for: the base's row for
       // that room and category. A failed upload is named, never dropped
@@ -176,10 +263,10 @@ export default function EdlWizard({
         setPhase("photos");
         for (const r of rooms) {
           for (const cat of CATEGORIES) {
-            const files = photos[photoKey(r.key, cat)] ?? [];
-            if (files.length === 0) continue;
+            const shots = photos[photoKey(r.key, cat)] ?? [];
+            if (shots.length === 0) continue;
             const target = itemRows.find((x) => x.room === r.name.trim().slice(0, 80) && x.category === cat);
-            for (const file of files) {
+            for (const { file } of shots) {
               if (!target) {
                 failed.push(file.name);
                 continue;
@@ -263,7 +350,7 @@ export default function EdlWizard({
           </Link>
         ) : (
           <button
-            onClick={() => setStep((s) => s - 1)}
+            onClick={() => back(() => setStep((s) => Math.max(0, s - 1)))}
             className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11"
           >
             <BackIcon />
@@ -271,7 +358,7 @@ export default function EdlWizard({
           </button>
         )}
         {step !== doneStep && (
-          <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
+          <p className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm text-ink-soft">
             {d.biens.wizStepOf.replace("{n}", String(step + 1)).replace("{total}", String(total))}
           </p>
         )}
@@ -282,6 +369,7 @@ export default function EdlWizard({
           {step === 0 && (
             <motion.div key="rooms" {...slide(-1)}>
               {Heading}
+              {pending && !dirty && <DraftPrompt d={d} savedAt={pending.savedAt} onResume={resumeDraft} onDiscard={discardDraft} />}
               <StepCard>
                 <p className="text-sm leading-relaxed text-ink-soft">{d.edlWizard.roomsHint}</p>
                 <ul className="mt-4 space-y-2">
@@ -342,16 +430,16 @@ export default function EdlWizard({
                     const item = rooms[step - 1].items[cat];
                     return (
                       <li key={cat} className="rounded-xl border border-sand-200 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 max-sm:flex-col max-sm:items-stretch">
                           <span className="text-sm font-semibold text-ink">{d.edlWizard.category[cat]}</span>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1 max-sm:grid max-sm:grid-cols-5 max-sm:gap-1.5 max-[23rem]:grid-cols-3" data-conditions={cat}>
                             {CONDITIONS.map((c) => (
                               <button
                                 key={c}
                                 aria-pressed={item?.condition === c}
                                 onClick={() => setItem(rooms[step - 1].key, cat, { condition: c })}
                                 className={
-                                  "tactile rounded-lg px-2.5 py-1 text-[12px] font-semibold transition " +
+                                  "tactile whitespace-nowrap rounded-lg px-2.5 py-1 text-[12px] font-semibold transition max-sm:min-h-11 max-sm:px-0.5 " +
                                   (item?.condition === c
                                     ? "bg-brand-600 text-white"
                                     : "bg-sand-100 text-ink-soft hover:bg-sand-200")
@@ -372,7 +460,7 @@ export default function EdlWizard({
                               onChange={(e) => setItem(rooms[step - 1].key, cat, { notes: e.target.value })}
                             />
                             <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <label className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-sand-200 bg-white px-3 text-xs font-semibold text-brand-700 hover:border-brand-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-600">
+                              <label className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-sand-200 bg-white px-3 text-xs font-semibold text-brand-700 hover:border-brand-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-600 max-sm:min-h-11 max-sm:text-sm">
                                 {d.edlWizard.addPhoto}
                                 <input
                                   type="file"
@@ -392,6 +480,26 @@ export default function EdlWizard({
                                 </span>
                               )}
                             </div>
+                            {(photos[photoKey(rooms[step - 1].key, cat)]?.length ?? 0) > 0 && (
+                              <ul className="mt-2 grid grid-cols-3 gap-2" data-photo-list={cat}>
+                                {photos[photoKey(rooms[step - 1].key, cat)].map((shot) => (
+                                  <li key={shot.key} className="relative overflow-hidden rounded-xl border border-sand-200 bg-sand-100">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={shot.url} alt="" className="aspect-[4/3] w-full object-cover" />
+                                    <button
+                                      type="button"
+                                      aria-label={d.common.removePhoto}
+                                      onClick={() => removePhoto(rooms[step - 1].key, cat, shot.key)}
+                                      className="tactile absolute right-0 top-0 flex h-11 w-11 items-center justify-center text-ink"
+                                    >
+                                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 shadow-sm">
+                                        <Icon name="x" size={16} />
+                                      </span>
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </>
                         )}
                       </li>
@@ -399,7 +507,7 @@ export default function EdlWizard({
                   })}
                 </ul>
                 <div className="mt-6 flex items-center justify-between">
-                  <button onClick={() => setStep(step + 1)} className="text-sm font-semibold text-ink-soft hover:text-ink">
+                  <button onClick={() => setStep(step + 1)} className="text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11 max-sm:px-2">
                     {d.edlWizard.skipRoom}
                   </button>
                   <Button onClick={() => setStep(step + 1)}>{d.common.next}</Button>

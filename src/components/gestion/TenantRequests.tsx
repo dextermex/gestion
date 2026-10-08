@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { shrinkPhotos } from "@/lib/photo";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
@@ -98,8 +99,9 @@ export default function TenantRequests({
   };
 
   const pickFiles = (list: FileList | null) => {
-    const chosen = Array.from(list ?? []).filter((f) => f.type.startsWith("image/") && f.size <= MAX_BYTES).slice(0, MAX_FILES);
-    setFiles(chosen);
+    // Brought down to the upload size first: a phone's photograph is well over the limit as taken.
+    const chosen = Array.from(list ?? []).filter((f) => f.type.startsWith("image/")).slice(0, MAX_FILES);
+    void shrinkPhotos(chosen).then((ready) => setFiles(ready.filter((f) => f.size <= MAX_BYTES)));
   };
 
   if (!canCreate) return null;

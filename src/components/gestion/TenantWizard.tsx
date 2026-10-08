@@ -438,7 +438,7 @@ export default function TenantWizard({
         )}
         {/* The indicator reads its position from the same list the body
             renders from, so it cannot drift from what is on screen. */}
-        <p className="absolute left-1/2 hidden -translate-x-1/2 text-sm text-ink-soft sm:block">
+        <p className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm text-ink-soft">
           {d.biens.wizStepOf.replace("{n}", String(stepNumber(step))).replace("{total}", String(RENTAL_TOTAL))}
         </p>
       </div>
