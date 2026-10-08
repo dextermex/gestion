@@ -93,12 +93,53 @@ export function memoryDraftBackend(): DraftBackend {
   };
 }
 
+/**
+ * A photograph as the store keeps it: its bytes and the few facts a File
+ * carries. A File itself is not kept: a browser's store may refuse to hold
+ * one (WebKit in a private or ephemeral session keeps no blob files), and a
+ * draft that silently failed to write is the loss the draft exists to
+ * prevent. Bytes are plain data and go everywhere.
+ */
+interface StoredFile {
+  __file: true;
+  name: string;
+  type: string;
+  lastModified: number;
+  bytes: ArrayBuffer;
+}
+
+const isStoredFile = (v: unknown): v is StoredFile => typeof v === "object" && v !== null && (v as StoredFile).__file === true && (v as StoredFile).bytes instanceof ArrayBuffer;
+const isPlain = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && Object.getPrototypeOf(v) === Object.prototype;
+const bytesOf = (file: File): Promise<ArrayBuffer> => (typeof file.arrayBuffer === "function" ? file.arrayBuffer() : new Response(file).arrayBuffer());
+
+/** The data with every File turned into bytes, arrays and plain objects walked. */
+export async function freeze(value: unknown): Promise<unknown> {
+  if (typeof File !== "undefined" && value instanceof File) {
+    return { __file: true, name: value.name, type: value.type, lastModified: value.lastModified, bytes: await bytesOf(value) } satisfies StoredFile;
+  }
+  if (Array.isArray(value)) return Promise.all(value.map(freeze));
+  if (isPlain(value)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = await freeze(v);
+    return out;
+  }
+  return value;
+}
+
+/** The data read back, every stored photograph a File again. */
+export function thaw(value: unknown): unknown {
+  if (isStoredFile(value)) return new File([value.bytes], value.name, { type: value.type, lastModified: value.lastModified });
+  if (Array.isArray(value)) return value.map(thaw);
+  if (isPlain(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, thaw(v)]));
+  return value;
+}
+
 /** The draft under `key`, when the device holds one written by this version of the wizard. */
 export async function readDraft<T>(key: string, version: number): Promise<Draft<T> | null> {
   try {
-    const raw = (await store().get(key)) as Partial<Draft<T>> | undefined;
+    const raw = (await store().get(key)) as Partial<Draft<unknown>> | undefined;
     if (!raw || raw.v !== version || typeof raw.savedAt !== "number" || raw.data === undefined) return null;
-    return raw as Draft<T>;
+    return { v: raw.v, savedAt: raw.savedAt, data: thaw(raw.data) as T };
   } catch {
     return null;
   }
@@ -106,7 +147,7 @@ export async function readDraft<T>(key: string, version: number): Promise<Draft<
 
 export async function writeDraft<T>(key: string, version: number, data: T): Promise<void> {
   try {
-    const draft: Draft<T> = { v: version, savedAt: Date.now(), data };
+    const draft: Draft<unknown> = { v: version, savedAt: Date.now(), data: await freeze(data) };
     await store().set(key, draft);
   } catch {
     // A full or refused store: the work goes on, without a draft.

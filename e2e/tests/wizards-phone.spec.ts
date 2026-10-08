@@ -20,6 +20,31 @@ const owner = { first: "Jil", last: "Thinnes", email: mail("owner") };
 const next = (page: Page) => page.getByRole("button", { name: /^(Suivant|Commencer|Continuer|Démarrer)/ }).last();
 const counter = (page: Page) => page.locator(".journey-topbar").getByText(/Étape \d+\/\d+/);
 
+/** The draft the device holds under `key`, read the way the wizard reads it (null when there is none). */
+async function storedDraft(page: Page, key: string): Promise<{ step: number; condition: string | null; photos: number } | null> {
+  return page.evaluate(
+    (k) =>
+      new Promise((resolve) => {
+        const req = indexedDB.open("morada-brouillons", 1);
+        req.onsuccess = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains("drafts")) return resolve(null);
+          const get = db.transaction("drafts", "readonly").objectStore("drafts").get(k);
+          get.onsuccess = () => {
+            const d = get.result as { data?: { step?: number; rooms?: Array<{ key?: string; items?: Record<string, { condition?: string }> }>; photos?: Record<string, unknown[]> } } | undefined;
+            if (!d?.data) return resolve(null);
+            // The photographs of the first room's paint, keyed as the wizard keys them (`<room>:<category>`).
+            const room = d.data.rooms?.[0];
+            resolve({ step: d.data.step ?? -1, condition: room?.items?.paint?.condition ?? null, photos: d.data.photos?.[`${room?.key ?? ""}:paint`]?.length ?? 0 });
+          };
+          get.onerror = () => resolve(null);
+        };
+        req.onerror = () => resolve(null);
+      }),
+    key,
+  );
+}
+
 async function clearDrafts(page: Page): Promise<void> {
   await page.evaluate(
     () =>
@@ -65,8 +90,9 @@ test("the état des lieux: thumb-sized chips, thumbnails that can be taken away,
   await test.info().attach("edl-room", { body: await page.screenshot(), contentType: "image/png" });
   await remove.click();
   await expect(thumbs).toHaveCount(1);
-  // The walk is kept on the device: a reload offers it back, and it comes back whole.
-  await page.waitForTimeout(900);
+  // The walk is kept on the device, a moment after the last change: the room's
+  // condition and its remaining photograph are in the store before the reload.
+  await expect.poll(() => storedDraft(page, "edl:l-3b:exit"), { timeout: 10_000 }).toEqual({ step: 1, condition: "good", photos: 1 });
   await page.reload();
   const prompt = page.locator("[data-draft-prompt]");
   await expect(prompt).toBeVisible();
@@ -111,7 +137,7 @@ test("the property wizard: photograph controls a thumb can hit, a draft after a 
   await expect(grid.locator("img")).toHaveCount(2);
   for (const control of await grid.locator("button").all()) expect.soft((await box(control)).height, "a photograph control is a thumb's size").toBeGreaterThanOrEqual(40);
   await test.info().attach("property-photos", { body: await page.screenshot(), contentType: "image/png" });
-  await page.waitForTimeout(900);
+  await expect.poll(async () => (await storedDraft(page, "bien:nouveau")) !== null, { timeout: 10_000 }).toBe(true);
   await page.reload();
   const prompt = page.locator("[data-draft-prompt]");
   await expect(prompt).toBeVisible();
