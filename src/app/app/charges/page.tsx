@@ -91,12 +91,12 @@ export default async function ChargesPage({ searchParams }: { searchParams: Prom
                 ? fmt(d.charges.decompteMeta, { t: syndicLine.tantiemes ?? 0, tt: syndicLine.tantiemesTotal ?? 0, tenant: selectedFacts.tenant })
                 : fmt(d.charges.decompteMetaPlain, { tenant: selectedFacts.tenant })}
             </p>
-            <div className="table-scroll">
+            <div className="table-scroll table-fold">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
                     <th className="px-3 py-2.5 font-semibold">{d.charges.colItem}</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">{d.charges.colBuilding}</th>
+                    <th className="px-3 py-2.5 text-right font-semibold max-sm:hidden">{d.charges.colBuilding}</th>
                     <th className="px-3 py-2.5 text-right font-semibold">{d.charges.colLotShare}</th>
                     <th className="px-3 py-2.5 text-right font-semibold">{d.charges.colRecoverable}</th>
                   </tr>
@@ -110,11 +110,16 @@ export default async function ChargesPage({ searchParams }: { searchParams: Prom
                         </p>
                         {line.blocked && (
                           <p className="text-[11px] text-red-700">
-                            {blockLabel[line.category] ?? categoryLabel[line.category] ?? line.category} — {d.charges.blockNever}
+                            {blockLabel[line.category] ?? categoryLabel[line.category] ?? line.category} · {d.charges.blockNever}
+                          </p>
+                        )}
+                        {line.buildingTotalCents !== null && (
+                          <p className="text-xs text-ink-soft sm:hidden" data-wrap>
+                            {d.charges.colBuilding} : <span className="whitespace-nowrap tabular-nums">{euros(line.buildingTotalCents, locale)}</span>
                           </p>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-ink-soft">
+                      <td className="px-3 py-2.5 text-right tabular-nums text-ink-soft max-sm:hidden">
                         {line.buildingTotalCents !== null ? euros(line.buildingTotalCents, locale) : d.common.none}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-ink-soft">{euros(line.lotShareCents, locale)}</td>
@@ -130,8 +135,8 @@ export default async function ChargesPage({ searchParams }: { searchParams: Prom
                   ))}
                   <tr className="bg-sand-50/60">
                     <td className="px-3 py-2.5 font-bold text-ink">{d.charges.totalRecoverable}</td>
-                    <td className="px-3 py-2.5" />
-                    <td className="px-3 py-2.5 text-right tabular-nums text-red-700">
+                    <td className="px-3 py-2.5 max-sm:hidden" />
+                    <td className="px-3 py-2.5 text-right tabular-nums text-red-700" data-wrap>
                       {fmt(d.charges.blocked, { amount: euros(blockedCents, locale) })}
                     </td>
                     <td className="px-3 py-2.5 text-right font-display font-bold tabular-nums text-ink">

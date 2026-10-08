@@ -150,7 +150,7 @@ test("charges: a décompte entered, its blocked line at zero, issued and carried
   await page.goto(`/app/charges?periode=${created.id}`);
   const item = page.locator(`[data-charge-period="${created.id}"]`);
   await expect(item).toContainText("Brouillon");
-  await expect(page.getByText("Frais de gérance — Jamais")).toBeVisible();
+  await expect(page.getByText("Frais de gérance · Jamais")).toBeVisible();
   await expect(page.getByText(printed(created.advancesBilledCents)).first()).toBeVisible();
 
   const issued = page.waitForResponse((r) => r.url().includes(`/api/charges/periodes/${created.id}/emettre`));

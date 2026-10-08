@@ -426,7 +426,7 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="flex items-center gap-2.5 text-sm font-medium text-ink"
+      className="flex items-center gap-2.5 text-sm font-medium text-ink max-sm:min-h-11"
     >
       <span
         className={

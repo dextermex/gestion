@@ -44,12 +44,12 @@ export default async function AssurancesPage() {
         <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.assurances })} body={d.common.emptyBody} />
       ) : (
         <Card className="overflow-hidden">
-          <div className="table-scroll">
+          <div className="table-scroll table-fold">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
                   <th className="px-4 py-2.5 font-semibold">{d.assurances.colPolicy}</th>
-                  <th className="px-3 py-2.5 font-semibold">{d.assurances.colScope}</th>
+                  <th className="px-3 py-2.5 font-semibold max-sm:hidden">{d.assurances.colScope}</th>
                   <th className="px-3 py-2.5 text-right font-semibold">{d.assurances.colPremium}</th>
                   <th className="px-4 py-2.5 text-right font-semibold">{d.assurances.colExpiry}</th>
                 </tr>
@@ -67,16 +67,17 @@ export default async function AssurancesPage() {
                           {ins.provider}
                           {ins.policyNumber ? ` · ${ins.policyNumber}` : ""}
                         </p>
+                        <p className="text-xs text-ink-soft sm:hidden">{scopeOf(ins.propertyId, ins.leaseId)}</p>
                       </td>
-                      <td className="px-3 py-3 text-xs text-ink-soft">{scopeOf(ins.propertyId, ins.leaseId)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-ink">
+                      <td className="px-3 py-3 text-xs text-ink-soft max-sm:hidden">{scopeOf(ins.propertyId, ins.leaseId)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink" data-wrap>
                         {ins.premiumCents > 0
                           ? fmt(d.assurances.perYear, { amount: euros(ins.premiumCents, locale) })
                           : "—"}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {ins.expiresOn && expiry ? (
-                          <span className="inline-flex items-center gap-2">
+                          <span className="inline-flex items-center gap-2 max-sm:flex-wrap max-sm:justify-end">
                             <span className="tabular-nums text-xs text-ink">{formatDate(ins.expiresOn, locale)}</span>
                             <MetaBadge meta={statusMeta[expiry]} />
                           </span>

@@ -471,7 +471,7 @@ export default function TenantWizard({
                           <button
                             type="button"
                             onClick={() => removePerson(i)}
-                            className="text-xs font-semibold text-ink-soft hover:text-red-700"
+                            className="text-xs font-semibold text-ink-soft hover:text-red-700 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center max-sm:px-2"
                           >
                             {d.location.removePerson}
                           </button>

@@ -246,24 +246,24 @@ export default function SettingsForm({
         </fieldset>
       )}
       <div className="space-y-2 pt-1">
-        <label className="flex items-start gap-2.5">
+        <label className="flex items-start gap-2.5 max-sm:min-h-11 max-sm:items-center">
           <input
             type="checkbox"
             checked={form.notifyTenantMessages}
             onChange={(e) => setForm((f) => ({ ...f, notifyTenantMessages: e.target.checked }))}
             disabled={busy}
-            className="mt-0.5 h-4 w-4 rounded border-sand-300 text-brand-600 focus:ring-brand-400"
+            className="mt-0.5 h-4 w-4 rounded border-sand-300 text-brand-600 focus:ring-brand-400 max-sm:mt-0 max-sm:h-5 max-sm:w-5"
             data-settings-notify-tenant
           />
           <span className="text-sm text-ink">{labels.notifyTenant}</span>
         </label>
-        <label className="flex items-start gap-2.5">
+        <label className="flex items-start gap-2.5 max-sm:min-h-11 max-sm:items-center">
           <input
             type="checkbox"
             checked={form.notifyManagerMessages}
             onChange={(e) => setForm((f) => ({ ...f, notifyManagerMessages: e.target.checked }))}
             disabled={busy}
-            className="mt-0.5 h-4 w-4 rounded border-sand-300 text-brand-600 focus:ring-brand-400"
+            className="mt-0.5 h-4 w-4 rounded border-sand-300 text-brand-600 focus:ring-brand-400 max-sm:mt-0 max-sm:h-5 max-sm:w-5"
             data-settings-notify-manager
           />
           <span className="text-sm text-ink">{labels.notifyManager}</span>

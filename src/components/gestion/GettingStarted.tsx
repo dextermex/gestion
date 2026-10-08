@@ -150,15 +150,21 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
                       aria-checked={done}
                       aria-disabled={s.attested !== null}
                       aria-label={done ? d.onboarding.stepDone : d.onboarding.stepTodo}
-                      className={
-                        "tactile flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors " +
-                        (done ? "border-brand-600 bg-brand-600 text-white" : "border-sand-300 bg-white text-transparent") +
-                        (s.attested === null ? " hover:border-brand-400" : " cursor-default")
-                      }
+                      className={"tactile group -my-3 -ml-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full" + (s.attested === null ? "" : " cursor-default")}
                     >
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3" aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                      </svg>
+                      {/* The mark a thumb can hit: the circle is 20px, the button around it 44px. */}
+                      <span
+                        className={
+                          "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors " +
+                          (done ? "border-brand-600 bg-brand-600 text-white" : "border-sand-300 bg-white text-transparent") +
+                          (s.attested === null ? " group-hover:border-brand-400" : "")
+                        }
+                        aria-hidden
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+                        </svg>
+                      </span>
                     </button>
                     <Link href={s.href} className="group min-w-0 flex-1">
                       <p

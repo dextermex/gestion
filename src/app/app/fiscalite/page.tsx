@@ -404,7 +404,7 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
                 {selection.all.map((o) => (
                   <tr key={o.ownerId} className="border-b border-sand-100 last:border-0" aria-current={o.ownerId === owner.ownerId ? "true" : undefined}>
                     <td className="px-3 py-3">
-                      <Link href={`/app/fiscalite?proprietaire=${encodeURIComponent(o.ownerId)}&exercice=${year}`} className="font-semibold text-ink hover:text-brand-700 hover:underline">
+                      <Link href={`/app/fiscalite?proprietaire=${encodeURIComponent(o.ownerId)}&exercice=${year}`} className="font-semibold text-ink hover:text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
                         {o.ownerName}
                       </Link>
                     </td>

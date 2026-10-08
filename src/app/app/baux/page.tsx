@@ -75,7 +75,7 @@ export default async function BauxPage({
         />
       ) : (
         <Card className="overflow-hidden">
-          <div className="table-scroll">
+          <div className="table-scroll table-stack">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -100,16 +100,16 @@ export default async function BauxPage({
                         {l.colocation && ` · ${d.baux.colocationSigned}`}
                       </p>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3" data-label={d.baux.colType}>
                       <MetaBadge meta={typeMeta[l.type]} />
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(l.rentCents, locale)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{euros(l.chargesCents, locale)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{formatDate(l.startDate, locale)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft">
+                    <td className="px-3 py-3 text-right tabular-nums text-ink" data-label={d.baux.colRent}>{euros(l.rentCents, locale)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft" data-label={d.baux.colCharges}>{euros(l.chargesCents, locale)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft" data-label={d.baux.colStart}>{formatDate(l.startDate, locale)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-soft" data-label={d.baux.colDeposit}>
                       {l.depositMonths} {d.common.months}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" data-label={d.baux.colStatus}>
                       <MetaBadge meta={statusMeta[l.status]} />
                     </td>
                   </tr>

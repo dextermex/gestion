@@ -33,7 +33,7 @@ export default async function EdlPage() {
       <PageHeader title={d.edl.title} subtitle={d.edl.subtitle} />
 
       <Card className="overflow-hidden">
-        <div className="table-scroll">
+        <div className="table-scroll table-stack">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -55,19 +55,19 @@ export default async function EdlPage() {
                       {e.unitLabel || "—"}
                     </Link>
                   </td>
-                  <td className="px-3 py-3 text-xs text-ink-soft">{KIND[e.kind]}</td>
-                  <td className="px-3 py-3 text-right text-xs tabular-nums text-ink">
+                  <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.edl.colKind}>{KIND[e.kind]}</td>
+                  <td className="px-3 py-3 text-right text-xs tabular-nums text-ink" data-label={d.edl.colDate}>
                     {e.completedAt
                       ? formatDate(e.completedAt, locale)
                       : e.scheduledAt
                         ? fmt(d.baux.edlScheduled, { date: formatDate(e.scheduledAt, locale) })
                         : "—"}
                   </td>
-                  <td className="px-3 py-3 text-right text-xs tabular-nums text-ink-soft">
+                  <td className="px-3 py-3 text-right text-xs tabular-nums text-ink-soft" data-label={d.edl.colContent}>
                     {e.itemsCount > 0 ? fmt(d.baux.edlItems, { items: e.itemsCount, photos: e.photosCount }) : "—"}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="inline-flex items-center gap-1.5">
+                  <td className="px-4 py-3 text-right" data-label={d.edl.colStatus}>
+                    <span className="inline-flex items-center gap-1.5 max-sm:flex-wrap max-sm:justify-end">
                       {(() => {
                         const report = generatedFor("edl_report", e.id);
                         return report ? (

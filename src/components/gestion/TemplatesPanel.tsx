@@ -68,13 +68,13 @@ export default function TemplatesPanel({ rows, writable, sampleNote, labels }: {
 
   return (
     <div>
-      <div className="table-scroll">
+      <div className="table-scroll table-fold">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
               <th className="px-3 py-2.5 font-semibold">{labels.colTemplate}</th>
-              <th className="px-3 py-2.5 font-semibold">{labels.colLanguage}</th>
-              <th className="px-3 py-2.5 font-semibold">{labels.colVersion}</th>
+              <th className="px-3 py-2.5 font-semibold max-sm:hidden">{labels.colLanguage}</th>
+              <th className="px-3 py-2.5 font-semibold max-sm:hidden">{labels.colVersion}</th>
               <th className="px-3 py-2.5 font-semibold">{labels.colStatus}</th>
               {/* Anchored: a visually hidden label is absolutely positioned, and would otherwise escape the scrolling table and widen the page. */}
               <th className="relative px-3 py-2.5 text-right font-semibold">
@@ -89,7 +89,10 @@ export default function TemplatesPanel({ rows, writable, sampleNote, labels }: {
                 <tr key={key} className="border-b border-sand-50 align-top last:border-0" data-template={row.kind} data-template-lang={row.lang}>
                   <td className="px-3 py-3">
                     <p className="font-semibold text-ink">{row.label}</p>
-                    <button type="button" className="mt-0.5 text-[11px] font-semibold text-brand-700 hover:underline" onClick={() => setOpen(open === key ? null : key)} aria-expanded={open === key}>
+                    <p className="text-xs tabular-nums text-ink-soft sm:hidden">
+                      {row.languageLabel} · {row.version}
+                    </p>
+                    <button type="button" className="mt-0.5 text-[11px] font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center" onClick={() => setOpen(open === key ? null : key)} aria-expanded={open === key}>
                       {labels.notesLabel}
                     </button>
                     {open === key && (
@@ -103,8 +106,8 @@ export default function TemplatesPanel({ rows, writable, sampleNote, labels }: {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-xs text-ink-soft">{row.languageLabel}</td>
-                  <td className="px-3 py-3 text-xs tabular-nums text-ink-soft">{row.version}</td>
+                  <td className="px-3 py-3 text-xs text-ink-soft max-sm:hidden">{row.languageLabel}</td>
+                  <td className="px-3 py-3 text-xs tabular-nums text-ink-soft max-sm:hidden">{row.version}</td>
                   <td className="px-3 py-3">
                     <span data-template-status={row.current ? "validated" : "pending"}>
                       <Badge className={row.current ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{row.statusLabel}</Badge>

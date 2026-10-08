@@ -61,7 +61,7 @@ export default async function InterventionsPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="table-scroll">
+        <div className="table-scroll table-stack">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -85,21 +85,21 @@ export default async function InterventionsPage() {
                       {t.ref} · {formatDate(t.createdAt, locale)}
                     </p>
                   </td>
-                  <td className="px-3 py-3 text-xs text-ink-soft">{t.unitLabel || "—"}</td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.interventions.colUnit}>{t.unitLabel || "—"}</td>
+                  <td className="px-3 py-3 text-right" data-label={d.interventions.colSeverity}>
                     <MetaBadge meta={severityMeta[t.severity]} />
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3 text-right" data-label={d.interventions.colStatus}>
                     <MetaBadge meta={statusMeta[t.status]} />
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3 text-right" data-label={d.interventions.colSla}>
                     {t.slaDueAt ? (
                       <span className="tabular-nums text-xs text-ink">{formatDate(t.slaDueAt, locale)}</span>
                     ) : (
                       <Badge className="bg-sand-100 text-ink-soft">{d.common.none}</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right" data-actions>
                     <InterventionSheet
                       ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, workOrder: t.workOrder }}
                       ticketMeta={statusMeta[t.status]}

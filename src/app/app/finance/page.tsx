@@ -238,7 +238,7 @@ export default async function FinancePage() {
           {bills.length === 0 ? (
             <p className="text-sm text-ink-soft">{d.finance.billsNone}</p>
           ) : (
-            <div className="table-scroll">
+            <div className="table-scroll table-stack">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -254,8 +254,8 @@ export default async function FinancePage() {
                     const state = billState(bill, TODAY);
                     return (
                       <tr key={bill.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50" data-bill={bill.id}>
-                        <td className="px-4 py-3 tabular-nums text-ink-soft">{formatDate(bill.docDate ?? bill.createdAt, locale)}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-4 py-3 tabular-nums text-ink-soft" data-label={d.finance.billsColDate}>{formatDate(bill.docDate ?? bill.createdAt, locale)}</td>
+                        <td className="px-3 py-3" data-title>
                           <p className="font-semibold text-ink">
                             {[bill.supplierName, bill.subject].filter(Boolean).join(" · ")}
                           </p>
@@ -271,14 +271,16 @@ export default async function FinancePage() {
                             )}
                           </p>
                         </td>
-                        <td className="px-3 py-3 text-xs text-ink-soft">{bill.unitLabel || d.common.none}</td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.finance.billsColUnit}>{bill.unitLabel || d.common.none}</td>
+                        <td className="px-3 py-3 text-right" data-label={d.finance.billsColAmount}>
+                          <div>
                           <p className={"tabular-nums font-semibold " + (bill.direction === "income" ? "text-emerald-700" : "text-ink")}>
                             {euros(bill.amountCents, locale)}
                           </p>
                           {bill.vatCents > 0 && <p className="text-[11px] tabular-nums text-ink-soft">{fmt(d.finance.billVatOf, { vat: euros(bill.vatCents, locale) })}</p>}
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right" data-label={d.finance.billsColStatus} data-actions>
                           <div className="flex flex-col items-end gap-1.5">
                             <Badge className={STATE[state].color}>{STATE[state].label}</Badge>
                             {state !== "paid" && (

@@ -112,7 +112,7 @@ export default async function CompteursPage({
         />
       ) : (
       <Card className="overflow-hidden">
-        <div className="table-scroll">
+        <div className="table-scroll table-stack">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -134,33 +134,33 @@ export default async function CompteursPage({
                         {d.status.meter[m.kind]} · {m.serial}
                       </p>
                       <p className="text-xs text-ink-soft">
-                        {unit ? `${unit.label} — ` : `${d.biens.metersCommon} — `}
+                        {unit ? `${unit.label} · ` : `${d.biens.metersCommon} · `}
                         {property.name}
                       </p>
                     </td>
-                    <td className="px-3 py-3 text-xs text-ink-soft">{m.supplier}</td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.compteurs.colSupplier}>{m.supplier}</td>
+                    <td className="px-3 py-3 text-right" data-label={d.compteurs.colLastReading}>
                       {m.lastReading ? (
-                        <>
+                        <div>
                           <p className="tabular-nums text-ink">
                             {formatNumber(m.lastReading.value, locale)} {METER_UNITS[m.kind]}
                           </p>
                           <p className="text-[11px] text-ink-soft">{formatDate(m.lastReading.date, locale)}</p>
-                        </>
+                        </div>
                       ) : (
                         <span className="text-xs text-ink-soft">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-3 text-right" data-label={d.compteurs.colSource}>
                       {m.lastReading ? (
                         <Badge className="bg-sand-100 text-ink-soft">{sourceLabel(m.lastReading.source)}</Badge>
                       ) : (
                         <Badge className="bg-red-100 text-red-700">{d.compteurs.toRead}</Badge>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" data-label={d.compteurs.colAcks}>
                       {m.lastReading ? (
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1.5 max-sm:flex-wrap">
                           <Badge
                             className={
                               m.lastReading.tenantAck

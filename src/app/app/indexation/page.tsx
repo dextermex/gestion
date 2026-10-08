@@ -103,7 +103,7 @@ export default async function IndexationPage() {
       <PageHeader title={d.indexation.title} subtitle={d.indexation.subtitle} />
 
       <Panel title={d.indexation.residentialTitle}>
-        <div className="table-scroll">
+        <div className="table-scroll table-stack">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -132,14 +132,14 @@ export default async function IndexationPage() {
                         : ` · ${d.indexation.neverAdjusted}`}
                     </p>
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(l.rentCents, locale)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-ink-soft">
+                  <td className="px-3 py-3 text-right tabular-nums text-ink" data-label={d.indexation.colCurrent}>{euros(l.rentCents, locale)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums text-ink-soft" data-label={d.indexation.colCeiling}>
                     {proposal ? euros(proposal.caps.ceilingMonthly, locale) : "—"}
                   </td>
-                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink">
+                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink" data-label={d.indexation.colProposal}>
                     {proposal?.allowed ? euros(proposal.proposedMonthlyRent, locale) : "—"}
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3 text-right" data-label={d.indexation.colDecision}>
                     {!proposal ? (
                       <p className="max-w-xs text-xs text-amber-800 sm:ml-auto">{d.indexation.capitalNone}</p>
                     ) : proposal.allowed ? (
@@ -156,7 +156,7 @@ export default async function IndexationPage() {
                       <Badge className="bg-amber-100 text-amber-800">{d.indexation.decisionAtCeiling}</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right" data-actions>
                     <div className="flex flex-col items-end gap-2">
                       <CapitalEditor
                         leaseId={l.id}

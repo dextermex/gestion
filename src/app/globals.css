@@ -1394,3 +1394,57 @@ summary {
   .billing-plan { border-color: var(--color-ink); }
   .billing-tier[data-current] { box-shadow: inset 0 0 0 1px var(--color-ink); }
 }
+
+/* ---------------------------------------------------------------------------
+   Phones, below 40rem: tables, type and the thumb. Unlayered like the lift,
+   so a cell's own utilities say how it looks in a table and these rules say
+   how it looks once the table has become a stack of cards.
+   --------------------------------------------------------------------------- */
+@media (width < 40rem) {
+  /* A table whose rows carry actions or a handful of facts stacks: the header
+     row is read by assistive technology only, each row is a card, each cell
+     carries the heading it sat under as a caption (data-label), the first
+     cell, or the one marked data-title, is the card's title, and the cell
+     marked data-actions runs the full width at the foot. */
+  .table-scroll.table-stack { overflow: visible; background: #fff; }
+  .table-stack table, .table-stack tbody, .table-stack td { display: block; }
+  .table-stack thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .table-stack tr { display: flex; flex-direction: column; padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-sand-100); }
+  .table-stack tr:last-child { border-bottom: 0; }
+  .table-stack th, .table-stack td { position: static; min-width: 0; white-space: normal; background: transparent; }
+  .crm-shell .table-stack td, .tenant-space .table-stack td, .table-stack td { padding: .3125rem 0; text-align: left; }
+  .table-stack td[data-label] { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; text-align: right; }
+  .table-stack td[data-label]::before { content: attr(data-label); flex: 0 0 auto; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--color-ink-soft); text-align: left; }
+  .table-stack td:first-child:not([data-label]), .table-stack td[data-title] { display: block; order: -1; padding: 0 0 .5rem; font-size: .9375rem; text-align: left; }
+  .table-stack td:first-child:not([data-label]) > a, .table-stack td[data-title] > a { display: inline-flex; min-height: 2.75rem; align-items: center; }
+  .table-stack td[data-actions] { display: block; order: 99; padding: .75rem 0 0; text-align: left; }
+  .table-stack td[data-actions]::before { display: block; margin-bottom: .5rem; }
+  .table-stack td[data-actions] > div { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: .5rem; }
+  .table-stack td[data-actions] [data-doc-kind] { display: flex; flex: 1 1 auto; }
+  .table-stack td[data-actions] button, .table-stack td[data-actions] .ui-button { flex: 1 1 auto; min-height: 2.75rem; justify-content: center; }
+  .table-stack td[data-actions] > button { display: flex; width: 100%; }
+
+  /* A ledger keeps its columns, fewer of them (the page hides the secondary
+     ones and folds their value into the first cell): its cells may wrap, its
+     figures may not, and the gutters tighten so three columns fit the width. */
+  .table-scroll.table-fold th, .table-scroll.table-fold td { white-space: normal; padding-inline: .375rem; }
+  .table-scroll.table-fold .tabular-nums { white-space: nowrap; }
+  .table-scroll.table-fold th:first-child, .table-scroll.table-fold td:first-child { min-width: 5.5rem; padding-left: .75rem; }
+  .table-scroll.table-fold th:last-child, .table-scroll.table-fold td:last-child { padding-right: .75rem; }
+  .table-scroll.table-fold :is(td, th, p, span)[data-wrap] { white-space: normal; }
+
+  /* The manager space's phone type scale, after the tenant space's: nothing
+     under 12px. Eyebrows (uppercase captions), badges and table headings at
+     12px; notes, timestamps and legal bases at 13px. */
+  .crm-main :is(.text-\[9px\], .text-\[10px\], .text-\[11px\]) { font-size: .75rem; }
+  .crm-main .text-\[11px\]:not(.uppercase), .crm-main .text-xs { font-size: .8125rem; line-height: 1.5; }
+  .crm-main .ui-badge { font-size: .75rem; }
+  .crm-main .table-scroll th { font-size: .75rem; }
+
+  /* Controls under the thumb's size: the ledger's exports, the chart's
+     months as a strip that scrolls with 44px buttons. */
+  .crm-ledger-tools a { min-height: 2.75rem; }
+  .cashflow-months { margin-left: 0; justify-content: flex-start; gap: .25rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; padding-bottom: .25rem; }
+  .cashflow-months::-webkit-scrollbar { display: none; }
+  .cashflow-months button { flex: 0 0 auto; min-width: 2.75rem; padding-inline: .5rem; scroll-snap-align: center; }
+}

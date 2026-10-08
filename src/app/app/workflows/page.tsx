@@ -105,7 +105,7 @@ export default async function WorkflowsPage() {
 
       <Panel title={d.workflows.ticketsTitle} className="mt-5">
         <Card className="overflow-hidden border-0 shadow-none">
-          <div className="table-scroll">
+          <div className="table-scroll table-stack">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -123,14 +123,14 @@ export default async function WorkflowsPage() {
                       <p className="font-semibold text-ink">{t.ref}</p>
                       <p className="text-xs text-ink-soft">{t.title}</p>
                     </td>
-                    <td className="px-3 py-3 text-xs text-ink-soft">{t.unitLabel}</td>
-                    <td className="px-3 py-3 text-right text-xs tabular-nums text-ink-soft">
+                    <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.workflows.colUnit}>{t.unitLabel}</td>
+                    <td className="px-3 py-3 text-right text-xs tabular-nums text-ink-soft" data-label={d.workflows.colSla}>
                       {t.slaDueAt ? formatDate(t.slaDueAt, locale) : "—"}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-3 text-right" data-label={d.workflows.colSeverity}>
                       <MetaBadge meta={severityMeta[t.severity]} />
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" data-label={d.workflows.colStatus}>
                       <MetaBadge meta={statusMeta[t.status]} />
                     </td>
                   </tr>

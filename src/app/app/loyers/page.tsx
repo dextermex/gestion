@@ -180,7 +180,7 @@ export default async function LoyersPage({
         />
       ) : (
         <Card className="overflow-hidden">
-          <div className="table-scroll">
+          <div className="table-scroll table-stack">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
@@ -207,21 +207,22 @@ export default async function LoyersPage({
                         </Link>
                         <p className="text-xs text-ink-soft">{leaseTenantNames(l).join(", ")}</p>
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.totalCents, locale)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-ink">{euros(rp.allocatedCents, locale)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink" data-label={d.loyers.colExpected}>{euros(rp.totalCents, locale)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink" data-label={d.loyers.colCollected}>{euros(rp.allocatedCents, locale)}</td>
                       <td
                         className={
                           "px-3 py-3 text-right tabular-nums " +
                           (rowOpen > 0 ? "font-semibold text-red-700" : "text-ink-soft")
                         }
+                        data-label={d.loyers.colBalance}
                       >
                         {euros(rowOpen, locale)}
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft">{formatDate(rp.dueDate, locale)}</td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft" data-label={d.loyers.colDue}>{formatDate(rp.dueDate, locale)}</td>
+                      <td className="px-3 py-3 text-right" data-label={d.loyers.colStatus}>
                         <MetaBadge meta={rentMeta[rp.status]} />
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right" data-actions>
                         <div className="flex flex-col items-end gap-1.5">
                           <GenerateDocument
                             kind="rent_notice"

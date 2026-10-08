@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { CashflowMonth } from "@/domain/finance/cashflow";
 import { euros, formatMonth } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/config";
@@ -21,6 +21,15 @@ export function CashflowChart({ data, locale, currentMonth, legendExpected, lege
   const initial = Math.max(0, data.findIndex((month) => month.month === currentMonth));
   const [selected, setSelected] = useState(initial);
   const activeIndex = Math.min(selected, Math.max(0, data.length - 1));
+  // On a phone the months are a strip wider than the screen: the chosen one is brought into view.
+  const months = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = months.current;
+    if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+    const button = strip.children[activeIndex] as HTMLElement | undefined;
+    if (!button) return;
+    strip.scrollTo({ left: Math.max(0, button.offsetLeft - (strip.clientWidth - button.offsetWidth) / 2) });
+  }, [activeIndex]);
   const active = data[activeIndex];
   const maximum = Math.max(1, ...data.flatMap((month) => [month.expectedCents, month.collectedCents]));
   const magnitude = 10 ** Math.floor(Math.log10(maximum));
@@ -49,7 +58,7 @@ export function CashflowChart({ data, locale, currentMonth, legendExpected, lege
       </svg>
       {active && <span className="cashflow-point" aria-hidden style={{ left: `calc(3.5rem + (100% - 3.5rem) * ${x(activeIndex) / 800})`, top: `${y(active.collectedCents) / 2}%` }} />}
     </div>
-    <div className="cashflow-months" aria-label={monthLabel}>
+    <div className="cashflow-months" aria-label={monthLabel} ref={months}>
       {data.map((month, index) => <button key={month.month} type="button" aria-pressed={index === activeIndex} aria-label={formatMonth(month.month, locale)} onClick={() => setSelected(index)} onFocus={() => setSelected(index)}>
         {new Intl.DateTimeFormat(locale === "lu" ? "fr-LU" : locale, { month: "short", timeZone: "UTC" }).format(new Date(`${month.month}-15T12:00:00Z`))}
       </button>)}

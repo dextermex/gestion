@@ -133,13 +133,13 @@ export default async function TenantPaymentsPage() {
         {pay.history.length === 0 ? (
           <p className="p-5 text-sm text-ink-soft">{d.tenant.payNone}</p>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll table-fold">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
                   <th className="px-4 py-2.5 font-semibold">{d.tenant.payMonth}</th>
                   <th className="px-3 py-2.5 text-right font-semibold">{d.tenant.payAmount}</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">{d.tenant.payStatus}</th>
+                  <th className="px-3 py-2.5 text-right font-semibold max-sm:hidden">{d.tenant.payStatus}</th>
                   <th className="px-4 py-2.5 text-right font-semibold">{d.tenant.payReceipt}</th>
                 </tr>
               </thead>
@@ -151,6 +151,9 @@ export default async function TenantPaymentsPage() {
                       <td className="px-4 py-3">
                         <p className="font-semibold text-ink">{formatMonth(rp.period, locale)}</p>
                         <p className="text-xs text-ink-soft">{formatDate(rp.dueDate, locale)}</p>
+                        <span className="mt-1 inline-flex sm:hidden">
+                          <MetaBadge meta={metaOf(rp.status)} />
+                        </span>
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums text-ink">
                         {euros(rp.totalCents, locale)}
@@ -158,7 +161,7 @@ export default async function TenantPaymentsPage() {
                           <p className="text-xs text-ink-soft">{`${d.tenant.payPaidLine} ${euros(rp.allocatedCents, locale)}`}</p>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="px-3 py-3 text-right max-sm:hidden">
                         <MetaBadge meta={metaOf(rp.status)} />
                       </td>
                       <td className="px-4 py-3 text-right">

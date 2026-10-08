@@ -81,13 +81,13 @@ export default async function LotPage({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold">
-        <Link href="/app/biens" className="text-brand-700 hover:underline">
+        <Link href="/app/biens" className="text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
           {d.biens.title}
         </Link>
         <span className="text-ink-soft" aria-hidden>
           ›
         </span>
-        <Link href={`/app/biens/${p.id}?onglet=lots`} className="text-brand-700 hover:underline">
+        <Link href={`/app/biens/${p.id}?onglet=lots`} className="text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
           {p.name}
         </Link>
         <span className="text-ink-soft" aria-hidden>

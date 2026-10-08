@@ -190,7 +190,6 @@ function quickAdd(d: Dict): Array<{ kind: CreateKind; label: string }> {
     { kind: "contact", label: d.shell.quickAddContact },
     { kind: "payment", label: d.shell.quickAddPayment },
     { kind: "ticket", label: d.shell.quickAddTicket },
-    { kind: "document", label: d.shell.quickAddDocument },
   ];
 }
 
@@ -250,7 +249,7 @@ export default function GestionShell({
   const real = shell.datasetId === "real";
   // The document vault has no real upload backend yet: on a real account the
   // quick-add offers only what actually persists.
-  const QUICK_ADD = useMemo(() => quickAdd(d).filter((i) => !real || i.kind !== "document"), [d, real]);
+  const QUICK_ADD = useMemo(() => quickAdd(d), [d]);
 
   // ⌘K / Ctrl-K
   useEffect(() => {
@@ -442,7 +441,7 @@ export default function GestionShell({
                   document.cookie = "morada_dataset=real; path=/; max-age=31536000; samesite=lax";
                   router.refresh();
                 }}
-                className="inline-flex min-h-8 items-center rounded px-1 underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                className="inline-flex min-h-8 items-center rounded px-1 underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-11"
               >
                 {d.shell.sampleBack}
               </button>
@@ -559,7 +558,7 @@ function LanguageMenu({ locale, label }: { locale: Locale; label: string }) {
             onClick={() => pick(l)}
             aria-current={l === locale ? "true" : undefined}
             className={
-              "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-sand-50 " +
+              "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-sand-50 max-sm:min-h-11 " +
               (l === locale ? "text-brand-800" : "text-ink")
             }
           >
@@ -671,11 +670,11 @@ function UserMenu({
           <p className="truncate text-sm font-semibold text-ink">{name}</p>
           <p className="truncate text-xs text-ink-soft">{email}</p>
         </div>
-        <a href={MORADA_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50">
+        <a href={MORADA_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
           {d.shell.moradaAccount}
         </a>
         {/* Back to the gateway: one account, three spaces. */}
-        <a href={WELCOME_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50">
+        <a href={WELCOME_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
           {d.shell.switchSpace}
         </a>
         <div className="mt-1 border-t border-sand-100 pt-1">
@@ -687,7 +686,7 @@ function UserMenu({
             <button
               onClick={signedIn ? signOut : () => setSignedOutNote(true)}
               disabled={leaving}
-              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 max-sm:min-h-11"
             >
               {d.shell.signOut}
             </button>
