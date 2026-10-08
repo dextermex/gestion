@@ -1,6 +1,6 @@
 import "server-only";
 import { authedClient } from "@/lib/supabase/server";
-import { signMedia } from "@/lib/gestion/media";
+import { signMedia, signThumbnails } from "@/lib/gestion/media";
 import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
 import type { OpenInvoice } from "@/domain/banking/matching";
 import type { DemoData } from "./index";
@@ -113,7 +113,7 @@ function departureOf(details: Row): DemoLease["departure"] | undefined {
 
 export async function buildRealData(org: Org, accessToken: string, scope: ReadScope = {}): Promise<DemoData> {
   const client = authedClient(accessToken);
-  return buildRealDataFrom(client.schema("gestion"), org, (paths) => signMedia(client, paths), scope);
+  return buildRealDataFrom(client.schema("gestion"), org, (paths) => signMedia(client, paths), scope, (paths) => signThumbnails(client, paths));
 }
 
 /**
@@ -127,6 +127,8 @@ export async function buildRealDataFrom(
   org: Org,
   sign: (paths: string[]) => Promise<Map<string, string>>,
   scope: ReadScope = {},
+  /** The same paths as card-sized renders; absent (the tests), the cards show the originals. */
+  signThumbs: (paths: string[]) => Promise<Map<string, string>> = async () => new Map(),
 ): Promise<DemoData> {
   const oid = org.id;
   const today = new Date().toISOString().slice(0, 10);
@@ -399,7 +401,8 @@ export async function buildRealDataFrom(
   // ── Properties & units ──
   // photo_url holds a bucket path, not a link: one batched signing call,
   // skipped entirely when no property has a photograph yet.
-  const signed = await sign([...propertyRows.map((p) => s(p.photo_url)), ...unitRows.map((u) => s(u.photo_url))].filter(Boolean));
+  const photoPaths = [...propertyRows.map((p) => s(p.photo_url)), ...unitRows.map((u) => s(u.photo_url))].filter(Boolean);
+  const [signed, thumbs] = await Promise.all([sign(photoPaths), signThumbs(photoPaths)]);
   const unitsByProperty = new Map<string, number>();
   for (const u of unitRows) {
     unitsByProperty.set(s(u.property_id), (unitsByProperty.get(s(u.property_id)) ?? 0) + 1);
@@ -425,6 +428,7 @@ export async function buildRealDataFrom(
     ownershipNote: "",
     unitsCount: unitsByProperty.get(s(p.id)) ?? 0,
     photoUrl: signed.get(s(p.photo_url)) ?? null,
+    photoThumbUrl: thumbs.get(s(p.photo_url)) ?? null,
   }));
   const UNITS: DemoUnit[] = unitRows.map((u) => ({
     id: s(u.id),
@@ -437,6 +441,7 @@ export async function buildRealDataFrom(
     bedrooms: typeof u.bedrooms === "number" ? u.bedrooms : undefined,
     furnished: b(u.furnished),
     photoUrl: signed.get(s(u.photo_url)) ?? null,
+    photoThumbUrl: thumbs.get(s(u.photo_url)) ?? null,
   }));
 
   // ── Leases ──

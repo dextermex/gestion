@@ -37,3 +37,30 @@ export async function signMedia(
   }
   return out;
 }
+
+/** The width of a card's render: enough for a phone's card at 2x, a fraction of an original. */
+export const THUMB_WIDTH = 640;
+
+/**
+ * path -> signed render of the photograph at card size, for the cards and
+ * the lists; the sheet and the viewer keep the original. The storage API
+ * signs renders one path at a time, so these go out together, and a path
+ * whose render could not be signed is simply absent: that card shows the
+ * original, as before.
+ */
+export async function signThumbnails(client: SupabaseClient, paths: string[], width = THUMB_WIDTH): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const wanted = [...new Set(paths.filter((p) => p && !p.startsWith("http")))];
+  if (wanted.length === 0) return out;
+  const results = await Promise.allSettled(
+    wanted.map((path) =>
+      client.storage.from(MEDIA_BUCKET).createSignedUrl(path, TTL_SECONDS, {
+        transform: { width, height: Math.round((width * 3) / 4), resize: "cover", quality: 75 },
+      }),
+    ),
+  );
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled" && r.value.data?.signedUrl) out.set(wanted[i], r.value.data.signedUrl);
+  });
+  return out;
+}

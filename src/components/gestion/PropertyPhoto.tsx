@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { PropertyKind } from "@/lib/gestion/portfolio";
 
 /**
@@ -61,26 +64,35 @@ function Glyph({ kind }: { kind: PropertyKind }) {
 
 export default function PropertyPhoto({
   url,
+  thumbUrl = null,
   kind,
   alt,
   className = "",
   rounded = "rounded-t-2xl",
 }: {
   url: string | null;
+  /** A card-sized render of the same photograph; the original stands in when it is missing or fails. */
+  thumbUrl?: string | null;
   kind: PropertyKind;
   alt: string;
   className?: string;
   rounded?: string;
 }) {
+  // The render is tried first; should the storage refuse it, the original is loaded instead.
+  const [src, setSrc] = useState(thumbUrl ?? url);
   if (url) {
     // A signed storage URL, not a build-time asset: next/image would have to
     // proxy a short-lived private link on every render.
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={url}
+        src={src ?? url}
         alt={alt}
         loading="lazy"
+        decoding="async"
+        onError={() => {
+          if (src !== url) setSrc(url);
+        }}
         className={`${rounded} ${className} h-full w-full bg-sand-100 object-cover`}
       />
     );

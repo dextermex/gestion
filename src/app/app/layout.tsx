@@ -4,7 +4,6 @@ import GestionShell from "@/components/gestion/Shell";
 import ProvisionError from "@/components/gestion/ProvisionError";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
-import { buildSearchIndex } from "@/lib/demo/search";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
@@ -91,7 +90,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       review: demo.BANK_TXS.filter((t) => t.status === "review").length,
       unread: demo.CONVERSATIONS.reduce((a, c) => a + c.unread, 0),
     },
-    searchIndex: buildSearchIndex(demo),
     unitOptions: demo.UNITS.map((u) => ({
       id: u.id,
       label: `${u.label} \u00b7 ${demo.propertyById(u.propertyId).name}`,

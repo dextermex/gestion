@@ -545,7 +545,7 @@ summary {
 .crm-workspace-icon { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border-radius: 0.7rem; color: var(--color-brand-700); background: #fff; box-shadow: 0 1px 3px rgb(23 43 52 / 0.06); }
 .crm-nav-list { display: flex; flex-direction: column; gap: 0.375rem; }
 .crm-nav-parent { display: flex; align-items: center; gap: 0.7rem; width: 100%; min-height: 2.75rem; padding: 0.625rem 0.75rem; border-radius: 0.8rem; font-size: 0.8125rem; font-weight: 550; color: var(--color-ink-soft); transition: background 150ms, color 150ms; }
-.crm-nav-parent:hover, .crm-nav-child:hover { color: var(--color-ink); background: rgb(23 43 52 / 0.045); }
+@media (hover: hover) { .crm-nav-parent:hover, .crm-nav-child:hover { color: var(--color-ink); background: rgb(23 43 52 / 0.045); } }
 .crm-nav-parent[aria-current="page"] { background: var(--color-brand-700); color: #fff; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 3px 8px -4px rgb(16 80 92 / 0.3); }
 .crm-nav-parent.is-active-group { color: var(--color-brand-800); font-weight: 650; }
 .crm-disclosure { transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -590,7 +590,7 @@ summary {
 .crm-shell .table-scroll th { padding-top: 0.875rem; padding-bottom: 0.875rem; font-weight: 550; }
 .crm-shell .table-scroll td { padding-top: 1rem; padding-bottom: 1rem; }
 .crm-shell .table-scroll tbody tr { transition: background 140ms; }
-.crm-shell .table-scroll tbody tr:hover { background: var(--color-sand-50); }
+@media (hover: hover) { .crm-shell .table-scroll tbody tr:hover { background: var(--color-sand-50); } }
 .crm-shell .table-scroll tbody tr:last-child { border-bottom: 0; }
 .crm-link-row { padding-inline: 0.5rem; margin-inline: -0.5rem; }
 .crm-link-row > div p:first-child { font-weight: 550; line-height: 1.5; }
@@ -608,7 +608,7 @@ summary {
 .crm-metric-track span { display: block; height: 100%; border-radius: inherit; background: var(--color-brand-600); }
 .crm-metric-percent { font-size: 0.6875rem; font-weight: 600; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
 .crm-metric-action { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 2.5rem; margin-top: 0.75rem; color: var(--color-brand-700); font-size: 0.75rem; font-weight: 600; }
-.crm-metric-action:hover { text-decoration: underline; text-underline-offset: 0.2rem; }
+@media (hover: hover) { .crm-metric-action:hover { text-decoration: underline; text-underline-offset: 0.2rem; } }
 /* DOM order follows the single-column layout, beginning with work to handle. */
 .crm-dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-areas: "todo chart" "todo workflows" "activity vigilance"; align-items: start; gap: 1.25rem; margin-top: 1.25rem; }
 .crm-dashboard-grid > * { min-width: 0; }
@@ -621,7 +621,7 @@ summary {
 .crm-workflow-stat { min-width: 0; padding: 0.25rem 1rem; border-right: 1px solid var(--color-sand-200); }
 .crm-workflow-stat:first-child { padding-left: 0; }
 .crm-workflow-stat:last-child { border-right: 0; padding-right: 0; }
-.crm-workflow-stat:hover { color: var(--color-brand-700); }
+@media (hover: hover) { .crm-workflow-stat:hover { color: var(--color-brand-700); } }
 .crm-workflow-stat p:first-child { font-size: 1.75rem; font-weight: 600; }
 .crm-workflow-stat p:last-child { margin-top: 0.25rem; font-size: 0.75rem; color: var(--color-ink-soft); }
 .crm-property-card { padding: 0.5rem !important; }
@@ -728,7 +728,7 @@ summary {
 .crm-chart-bars > div { width: min(1.25rem, 40%); border-radius: 0.35rem 0.35rem 0.125rem 0.125rem; }
 .crm-chart-received { background: var(--color-brand-600); }
 .crm-chart-expected { background: var(--color-brand-100); box-shadow: inset 0 0 0 1px var(--color-brand-600); }
-.crm-chart-column:hover .crm-chart-received { background: var(--color-brand-800); }
+@media (hover: hover) { .crm-chart-column:hover .crm-chart-received { background: var(--color-brand-800); } }
 .crm-chart-month { position: absolute; top: calc(100% + 0.625rem); width: 100%; text-align: center; font-size: 0.6875rem; white-space: nowrap; }
 @media (width < 80rem) {
   .crm-dashboard-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "todo" "chart" "workflows" "activity" "vigilance"; }
@@ -918,7 +918,7 @@ summary {
   .ui-field-label, .journey-option > summary > svg:last-child { transition: none !important; }
 }
 .crm-action-row { display: grid; grid-template-columns: 2.75rem minmax(0,1fr) 1rem; align-items: start; gap: 1rem; padding-block: 1.5rem; border-radius: .75rem; }
-.crm-action-row:hover .crm-action-title { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; }
+@media (hover: hover) { .crm-action-row:hover .crm-action-title { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; } }
 .crm-action-row > svg { margin-top: 1rem; }
 .crm-action-category { display: block; margin-bottom: .4rem; color: var(--color-ink-soft); font-size: .8125rem; }
 .crm-action-title { font-size: .9375rem; font-weight: 550; line-height: 1.55; }
@@ -939,7 +939,7 @@ summary {
 .cashflow-months { display: flex; justify-content: space-between; margin-left: 3.5rem; gap: .25rem; }
 .cashflow-months button { min-width: 2.75rem; min-height: 2.75rem; padding: .5rem .75rem; border-radius: .875rem; color: var(--color-ink-soft); font-size: .8125rem; cursor: pointer; }
 .cashflow-months button[aria-pressed="true"] { background: #e4eff7; color: #1d4c69; font-weight: 650; }
-.cashflow-months button:hover { background: #edf4f9; }
+@media (hover: hover) { .cashflow-months button:hover { background: #edf4f9; } }
 .cashflow-details { margin-top: 1.25rem; border-top: 1px solid var(--color-sand-100); }
 .cashflow-details > summary { width: fit-content; min-height: 2.75rem; padding-top: 1rem; cursor: pointer; font-size: .875rem; font-weight: 550; color: var(--color-brand-700); }
 @media (width < 40rem) {
@@ -978,7 +978,7 @@ summary {
 .tenant-rent-card .text-xs { font-size: .875rem; }
 .tenant-rent-card code { font-size: .9375rem; padding: .5rem .75rem; }
 .tenant-primary-action { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 1.75rem; font-size: .9375rem; font-weight: 600; color: var(--color-brand-800); min-height: 3.5rem; }
-.tenant-primary-action:hover { text-decoration: underline; }
+@media (hover: hover) { .tenant-primary-action:hover { text-decoration: underline; } }
 .tenant-home-card { display: flex; flex-direction: column; }
 .tenant-home-card > img { max-height: 13rem; }
 .tenant-house-illustration { height: 12rem; display: flex; justify-content: center; background: linear-gradient(120deg,#f4faff,#eaf3f9); }
@@ -993,7 +993,7 @@ summary {
 .tenant-main .gap-5 { gap: 1.5rem; }
 .tenant-shortcut { border: 1px solid #dce8f0; border-radius: 1.25rem; padding: 1.5rem; background: linear-gradient(135deg,#f7fbff,#eff5fa); transition: background 150ms,border-color 150ms; }
 .tenant-shortcut .crm-symbol { margin-bottom: 1.25rem; background: #fff; box-shadow: 0 4px 10px #294d650a; }
-.tenant-shortcut:hover { border-color: #a6bdcc; background: #e7f1f8; }
+@media (hover: hover) { .tenant-shortcut:hover { border-color: #a6bdcc; background: #e7f1f8; } }
 .tenant-shortcut p + p { margin-top: .5rem; }
 .tenant-main dl > div { padding-block: .875rem; }
 .tenant-main .crm-link-row { padding-block: 1.25rem; }
@@ -1071,7 +1071,7 @@ summary {
 .crm-welcome .ui-empty p { font-size: 1rem; line-height: 1.65; max-width: 40ch; }
 .request-kind-card { padding: 1.5rem; border-color: #dce6ed; background: #f5f9fc; box-shadow: none; }
 .request-kind-card > .crm-symbol { margin-bottom: 1.25rem; background: #fff; }
-.request-kind-card:hover { background: #eaf3fa; }
+@media (hover: hover) { .request-kind-card:hover { background: #eaf3fa; } }
 @media (width < 40rem) {
   .request-kind-card { display: grid; grid-template-columns: 2.75rem minmax(0,1fr); gap: .25rem 1rem; padding: 1.25rem; }
   .request-kind-card > .crm-symbol { grid-row: 1/3; margin-bottom: 0; }
@@ -1115,7 +1115,7 @@ summary {
 .crm-bank-main { display: flex; flex-direction: column; gap: 1.25rem; }
 .crm-segmented { display: inline-flex; max-width: 100%; overflow-x: auto; gap: .125rem; padding: .1875rem; border-radius: 999px; background: var(--color-sand-100); }
 .crm-segmented button { display: inline-flex; align-items: center; gap: .4rem; min-height: 2.25rem; padding: 0 .875rem; border-radius: 999px; white-space: nowrap; font-size: .8125rem; font-weight: 550; color: var(--color-ink-soft); transition: background 150ms, color 150ms, box-shadow 150ms; }
-.crm-segmented button:hover { color: var(--color-ink); }
+@media (hover: hover) { .crm-segmented button:hover { color: var(--color-ink); } }
 .crm-segmented button[aria-pressed="true"] { background: #fff; color: var(--color-ink); box-shadow: 0 1px 2px rgb(23 43 52 / .1), 0 0 0 1px rgb(23 43 52 / .04); }
 .crm-segmented button span { font-weight: 500; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
 .crm-segmented button[aria-pressed="true"] span { color: var(--color-brand-700); }
@@ -1172,18 +1172,19 @@ summary {
 .crm-doc-groups a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 2.75rem; padding: .25rem 0; border-bottom: 1px solid var(--color-sand-100); font-size: .9375rem; font-weight: 550; color: var(--color-ink); }
 .crm-doc-groups li:last-child a { border-bottom: 0; }
 .crm-doc-groups a span:last-child { font-weight: 500; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
-.crm-doc-groups a:hover span:first-child, .crm-doc-groups a[aria-current] span { color: var(--color-brand-700); }
+.crm-doc-groups a[aria-current] span { color: var(--color-brand-700); }
+@media (hover: hover) { .crm-doc-groups a:hover span:first-child { color: var(--color-brand-700); } }
 .crm-shell .crm-doc-table { border-radius: 1rem; }
 .crm-doc-row { cursor: pointer; transition: background 120ms; }
-.crm-doc-row:hover { background: rgb(246 249 252 / .8); }
+@media (hover: hover) { .crm-doc-row:hover { background: rgb(246 249 252 / .8); } }
 .crm-doc-cell { display: flex; align-items: flex-start; gap: .875rem; min-width: 0; }
 .crm-doc-icon { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border-radius: .75rem; background: #edf4f9; color: #35617b; }
 .crm-doc-icon.is-sealed { background: var(--color-brand-50); color: var(--color-brand-700); }
 .crm-doc-name { font-size: .9375rem; font-weight: 550; line-height: 1.45; overflow-wrap: anywhere; }
-.crm-doc-name a:hover { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; }
+@media (hover: hover) { .crm-doc-name a:hover { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; } }
 .crm-doc-sub { margin-top: .2rem; font-size: .8125rem; line-height: 1.5; color: var(--color-ink-soft); overflow-wrap: anywhere; }
 .crm-doc-more { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; color: var(--color-ink-soft); transition: background 120ms, color 120ms; }
-.crm-doc-more:hover { background: var(--color-sand-100); color: var(--color-ink); }
+@media (hover: hover) { .crm-doc-more:hover { background: var(--color-sand-100); color: var(--color-ink); } }
 .crm-doc-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .75rem; }
 .crm-doc-foot .crm-bank-count { margin-top: 0; }
 .crm-doc-foot [data-pagination] { margin-left: auto; }
@@ -1201,7 +1202,8 @@ summary {
 .crm-doc-reference p { font-size: .875rem; line-height: 1.6; color: var(--color-ink-soft); }
 /* The dialog: a drop zone, the file once chosen, the reader's status, the three fields, the facts it found. */
 .crm-drop-zone { display: flex; width: 100%; flex-direction: column; align-items: center; gap: .5rem; padding: 1.75rem 1rem; border: 1.5px dashed #7b909e; border-radius: 1.25rem; background: #f6f9fc; text-align: center; transition: border-color 150ms, background 150ms; }
-.crm-drop-zone:hover, .crm-drop-zone.is-over { border-color: var(--color-brand-600); background: var(--color-brand-50); }
+.crm-drop-zone.is-over { border-color: var(--color-brand-600); background: var(--color-brand-50); }
+@media (hover: hover) { .crm-drop-zone:hover { border-color: var(--color-brand-600); background: var(--color-brand-50); } }
 .crm-drop-zone:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
 .crm-drop-zone .crm-symbol { margin-bottom: .25rem; }
 .crm-drop-title { font-size: .9375rem; font-weight: 550; }
@@ -1211,7 +1213,7 @@ summary {
 .crm-drop-name { font-size: .9375rem; font-weight: 550; overflow-wrap: anywhere; }
 .crm-drop-meta { margin-top: .1rem; font-size: .8125rem; color: var(--color-ink-soft); }
 .crm-drop-remove { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; flex-shrink: 0; border-radius: .75rem; color: var(--color-ink-soft); }
-.crm-drop-remove:hover { background: var(--color-sand-100); color: var(--color-ink); }
+@media (hover: hover) { .crm-drop-remove:hover { background: var(--color-sand-100); color: var(--color-ink); } }
 .crm-reading { display: flex; align-items: flex-start; gap: .6rem; margin-top: .875rem; font-size: .875rem; line-height: 1.5; color: var(--color-ink-soft); }
 .crm-reading svg { flex-shrink: 0; margin-top: .15rem; }
 .crm-reading.is-done { color: var(--color-emerald-800); font-weight: 550; }
@@ -1249,11 +1251,11 @@ summary {
 .crm-funnel-legal { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-sand-100); font-size: .8125rem; line-height: 1.6; color: var(--color-ink-soft); }
 .crm-shell .crm-contract-table { border-radius: 1rem; }
 .crm-contract-lease { font-size: .9375rem; font-weight: 550; line-height: 1.45; overflow-wrap: anywhere; }
-.crm-contract-lease:hover { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; }
+@media (hover: hover) { .crm-contract-lease:hover { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: .2rem; } }
 .crm-contract-sub { margin-top: .2rem; font-size: .8125rem; line-height: 1.5; color: var(--color-ink-soft); overflow-wrap: anywhere; }
 .crm-contract-state { font-size: .875rem; font-weight: 550; line-height: 1.45; }
 .crm-contract-state a, .crm-contract-link { display: inline-flex; min-height: 1.75rem; align-items: center; font-size: .8125rem; font-weight: 600; color: var(--color-brand-700); }
-.crm-contract-state a:hover, .crm-contract-link:hover { text-decoration: underline; text-underline-offset: .2rem; }
+@media (hover: hover) { .crm-contract-state a:hover, .crm-contract-link:hover { text-decoration: underline; text-underline-offset: .2rem; } }
 /* A contract out for signature: where it stands, then who has signed, one
    person a line, signed in green, waiting in amber, declined in red. A
    sending made in the provider's test environment says so. */
@@ -1304,7 +1306,7 @@ summary {
 .crm-shell .crm-fiscal-owner { width: auto; min-width: 14rem; border-radius: 999px; padding-right: 2.25rem; }
 .crm-fiscal-years { display: inline-flex; gap: .125rem; padding: .1875rem; border-radius: 999px; background: var(--color-sand-100); }
 .crm-fiscal-years a { display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 .875rem; border-radius: 999px; white-space: nowrap; font-size: .8125rem; font-weight: 550; color: var(--color-ink-soft); transition: background 150ms, color 150ms, box-shadow 150ms; }
-.crm-fiscal-years a:hover { color: var(--color-ink); }
+@media (hover: hover) { .crm-fiscal-years a:hover { color: var(--color-ink); } }
 .crm-fiscal-years a[aria-current] { background: #fff; color: var(--color-ink); box-shadow: 0 1px 2px rgb(23 43 52 / .1), 0 0 0 1px rgb(23 43 52 / .04); }
 .crm-metric-loss .crm-metric-value { color: #9b411f; }
 .crm-metric-loss .crm-symbol { color: #a24724; background: #fff0e7; }
@@ -1325,7 +1327,7 @@ summary {
 .crm-ledger-meta { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin-bottom: .5rem; font-size: .8125rem; color: var(--color-ink-soft); }
 .crm-ledger-tools { display: flex; gap: .25rem; }
 .crm-ledger-tools a { display: inline-flex; min-height: 2.25rem; align-items: center; padding: 0 .75rem; border-radius: 999px; border: 1px solid var(--color-sand-200); background: #fff; font-size: .8125rem; font-weight: 600; color: var(--color-brand-700); }
-.crm-ledger-tools a:hover { border-color: var(--color-brand-300); }
+@media (hover: hover) { .crm-ledger-tools a:hover { border-color: var(--color-brand-300); } }
 .crm-fiscal-warnings { display: grid; gap: .5rem; margin-top: 1rem; }
 .crm-fiscal-warnings p { display: flex; gap: .6rem; align-items: flex-start; font-size: .875rem; line-height: 1.55; color: var(--color-ink-soft); }
 .crm-fiscal-warnings p svg { flex-shrink: 0; margin-top: .15rem; color: #a24724; }
@@ -1345,7 +1347,7 @@ summary {
 .crm-downloads-name { font-size: .9375rem; font-weight: 550; overflow-wrap: anywhere; }
 .crm-downloads-sub { margin-top: .15rem; font-size: .8125rem; line-height: 1.5; color: var(--color-ink-soft); }
 .crm-downloads a.crm-download { flex-shrink: 0; display: inline-flex; align-items: center; gap: .4rem; min-height: 2.5rem; padding: 0 1rem; border-radius: 999px; border: 1px solid var(--color-sand-200); background: #fff; font-size: .875rem; font-weight: 600; color: var(--color-ink); }
-.crm-downloads a.crm-download:hover { border-color: var(--color-brand-300); color: var(--color-brand-700); }
+@media (hover: hover) { .crm-downloads a.crm-download:hover { border-color: var(--color-brand-300); color: var(--color-brand-700); } }
 .crm-shell .crm-fiscal-table { border-radius: 1rem; }
 .crm-how { display: grid; gap: 1rem; margin: 0; }
 .crm-how dt { font-size: .9375rem; font-weight: 600; }
@@ -1361,7 +1363,7 @@ summary {
 
 /* The subscription page: plans to pick, the monthly price leading, the trial's course. */
 .billing-plan { position: relative; display: flex; flex-direction: column; gap: .625rem; padding: 1.25rem; border: 1px solid #d4e0e9; border-radius: 1.25rem; background: #f5f9fc; cursor: pointer; transition: border-color 150ms cubic-bezier(0.22,1,0.36,1), background 150ms cubic-bezier(0.22,1,0.36,1), box-shadow 150ms cubic-bezier(0.22,1,0.36,1); }
-.billing-plan:hover { border-color: #a9c6d8; }
+@media (hover: hover) { .billing-plan:hover { border-color: #a9c6d8; } }
 .billing-plan input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .billing-plan:has(input:checked) { border-color: var(--color-brand-600); background: #e7f2f8; box-shadow: inset 0 0 0 1px var(--color-brand-600); }
 .billing-plan:has(input:focus-visible) { outline: 3px solid #83bddd; outline-offset: 3px; }
@@ -1394,6 +1396,9 @@ summary {
   .billing-plan { border-color: var(--color-ink); }
   .billing-tier[data-current] { box-shadow: inset 0 0 0 1px var(--color-ink); }
 }
+
+/* Hover only where a pointer can hover: every :hover rule of the lift above is
+   wrapped in (hover: hover), so a tapped row or card never stays lit on a phone. */
 
 /* ---------------------------------------------------------------------------
    Phones, below 40rem: tables, type and the thumb. Unlayered like the lift,

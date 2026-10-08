@@ -40,6 +40,10 @@ export async function generateMetadata(): Promise<Metadata> {
     appleWebApp: { capable: true, title: APP_SHORT_NAME, statusBarStyle: "default" },
     // Safari's own name for it, beside the standard one Next writes.
     other: { "apple-mobile-web-app-capable": "yes" },
+    // An IBAN, a cadastral reference or a file number is not a phone number:
+    // a phone must not turn such strings into call links of its own accord.
+    // Real phone numbers are links already (tel:), where the product says so.
+    formatDetection: { telephone: false },
   };
 }
 

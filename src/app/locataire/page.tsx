@@ -86,7 +86,7 @@ export default async function TenantHomePage() {
         <Card className="tenant-home-card overflow-hidden">
           {lease.property.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={lease.property.photoUrl} alt="" className="aspect-[16/9] w-full object-cover" />
+            <img src={lease.property.photoUrl} alt="" decoding="async" className="aspect-[16/9] w-full object-cover" />
           ) : (
             <div className="tenant-house-illustration"><GlassHouse /></div>
           )}

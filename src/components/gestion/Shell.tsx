@@ -36,7 +36,6 @@ export interface ShellData {
   userName: string;
   userEmail: string;
   badges: { review: number; unread: number };
-  searchIndex: SearchHit[];
   unitOptions: Array<{ id: string; label: string }>;
   leaseOptions: Array<{ id: string; label: string }>;
   contactOptions: Array<{ id: string; label: string }>;
@@ -181,6 +180,9 @@ function navigable(nav: NavItem[], d: Dict): Array<{ href: string; label: string
   return out;
 }
 
+/** How long the palette keeps the search corpus before asking for it again. */
+const SEARCH_INDEX_TTL = 60_000;
+
 type CreateKind = "property" | "lease" | "contact" | "payment" | "ticket" | "document";
 
 function quickAdd(d: Dict): Array<{ kind: CreateKind; label: string }> {
@@ -211,6 +213,25 @@ export default function GestionShell({
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The search corpus comes when the palette first opens, and again after a
+  // minute: no page carries it, no refresh re-sends it.
+  const [searchIndex, setSearchIndex] = useState<SearchHit[]>([]);
+  const searchIndexAt = useRef(0);
+  useEffect(() => {
+    if (!paletteOpen || Date.now() - searchIndexAt.current < SEARCH_INDEX_TTL) return;
+    let live = true;
+    fetch("/api/recherche", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then((res) => (res.ok ? (res.json() as Promise<SearchHit[]>) : null))
+      .then((hits) => {
+        if (!live || !hits) return;
+        setSearchIndex(hits);
+        searchIndexAt.current = Date.now();
+      })
+      .catch(() => null);
+    return () => {
+      live = false;
+    };
+  }, [paletteOpen]);
 
   // A page restored from the browser's back-forward cache is a snapshot of
   // the screen as it was, not of the account as it is: Safari restores it
@@ -466,7 +487,7 @@ export default function GestionShell({
           d={d}
           nav={NAVIGABLE}
           quickAdd={QUICK_ADD}
-          index={shell.searchIndex}
+          index={searchIndex}
           onCreate={(k) => {
             setPaletteOpen(false);
             if (k === "property") router.push("/app/biens/nouveau");
@@ -1112,7 +1133,7 @@ function CreateDialog({
             <>
               <div className="create-intro"><span className="crm-symbol"><Icon name="contacts" size={24} /></span><p>{d.experience.contactHint}</p></div>
               <Field label={`${d.shell.fieldName} *`}>
-                <Input aria-label={d.shell.fieldName} name="name" autoComplete="name" required maxLength={120} />
+                <Input aria-label={d.shell.fieldName} name="name" autoComplete="off" required maxLength={120} />
               </Field>
               <Field label={d.shell.fieldRole}>
                 <Select name="role" defaultValue="tenant">
@@ -1127,10 +1148,10 @@ function CreateDialog({
                 <summary>{d.experience.contactDetails}<span>{d.experience.optional}</span><Icon name="chevron-down" size={16}/></summary>
                 <div className="space-y-4 pt-4">
               <Field label={d.shell.fieldEmail}>
-                <Input name="email" type="email" autoComplete="email" />
+                <Input name="email" type="email" autoComplete="off" />
               </Field>
               <Field label={d.shell.fieldPhone}>
-                <Input name="phone" type="tel" autoComplete="tel" />
+                <Input name="phone" type="tel" autoComplete="off" />
               </Field>
                 </div>
               </details>
@@ -1181,7 +1202,7 @@ function CreateDialog({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label={d.shell.fieldDepositMonths}>
-                  <Input name="depositMonths" type="number" min={0} max={12} defaultValue={2} />
+                  <Input name="depositMonths" type="number" inputMode="numeric" min={0} max={12} defaultValue={2} />
                 </Field>
                 <Field label={d.shell.fieldDepositForm}>
                   <Select name="depositForm" defaultValue="cash">

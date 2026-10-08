@@ -59,6 +59,7 @@ export function lotViews(card: PropertyCard, demo: DemoData, d: Dict, locale: Lo
       kindLabel: (KIND_LABEL[unit.kind] ?? KIND_LABEL.other)(d),
       kind: unit.kind === "commercial" || unit.kind === "office" ? "commercial" : "apartment",
       photoUrl: unit.photoUrl ?? card.property.photoUrl ?? null,
+      photoThumbUrl: (unit.photoUrl ? unit.photoThumbUrl : card.property.photoThumbUrl) ?? null,
       floor: unit.floor && unit.floor !== "—" ? unit.floor : "",
       areaLabel: unit.areaSqm > 0 ? fmt(d.biens.sqm, { n: unit.areaSqm }) : "",
       bedroomsLabel: unit.bedrooms ? plural(locale, unit.bedrooms, d.biens.bedroomOne, d.biens.bedroomMany) : "",

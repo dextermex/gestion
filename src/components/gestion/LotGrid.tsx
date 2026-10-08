@@ -24,6 +24,8 @@ export interface LotCardView {
   kindLabel: string;
   kind: PropertyKind;
   photoUrl: string | null;
+  /** The photograph at card size, when the storage rendered one. */
+  photoThumbUrl?: string | null;
   floor: string;
   areaLabel: string;
   bedroomsLabel: string;
@@ -171,7 +173,7 @@ export default function LotGrid({
               <Link href={l.href} className="group block h-full">
                 <Card className="flex h-full flex-col overflow-hidden p-0 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-0.5 group-hover:border-brand-100 group-hover:shadow-md motion-reduce:group-hover:translate-y-0">
                   <div className="relative aspect-[16/10] w-full overflow-hidden">
-                    <PropertyPhoto url={l.photoUrl} kind={l.kind} alt={l.label} rounded="" />
+                    <PropertyPhoto url={l.photoUrl} thumbUrl={l.photoThumbUrl} kind={l.kind} alt={l.label} rounded="" />
                     {l.status ? (
                       <Badge className={`absolute right-2.5 top-2.5 shadow-sm ${l.status.color}`}>{l.status.label}</Badge>
                     ) : l.lettable ? (
@@ -233,7 +235,7 @@ export default function LotGrid({
                 <Link href={l.href} className="tactile grid grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-x-3 gap-y-2 px-4 py-3 transition hover:bg-sand-50 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_1.5rem] sm:gap-3">
                   <span className="flex min-w-0 items-center gap-3">
                     <span className="h-12 w-16 shrink-0 overflow-hidden rounded-lg">
-                      <PropertyPhoto url={l.photoUrl} kind={l.kind} alt="" rounded="rounded-lg" />
+                      <PropertyPhoto url={l.photoUrl} thumbUrl={l.photoThumbUrl} kind={l.kind} alt="" rounded="rounded-lg" />
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-ink">{l.label}</span>

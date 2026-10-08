@@ -163,9 +163,14 @@ export async function ownedDocument(ctx: OrgContext, documentId: string, related
 
 const SIGNED_TTL_SECONDS = 60;
 
-/** A short-lived link to the file, named as the register names it, for the account that may read it. */
-export async function signedDocumentUrl(client: SupabaseClient, storagePath: string, name: string): Promise<string | null> {
-  const { data, error } = await client.storage.from(MEDIA_BUCKET).createSignedUrl(storagePath, SIGNED_TTL_SECONDS, { download: name });
+/**
+ * A short-lived link to the file, for the account that may read it. Named
+ * as the register names it and offered as a download, unless the file is
+ * to be shown in the tab (`inline`: a phone, where a download disappears
+ * into a folder and the tab is the reader).
+ */
+export async function signedDocumentUrl(client: SupabaseClient, storagePath: string, name: string, inline = false): Promise<string | null> {
+  const { data, error } = await client.storage.from(MEDIA_BUCKET).createSignedUrl(storagePath, SIGNED_TTL_SECONDS, inline ? undefined : { download: name });
   if (error || !data?.signedUrl) {
     console.error("document signing failed:", error?.message);
     return null;

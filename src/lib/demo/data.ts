@@ -161,6 +161,8 @@ export interface DemoProperty {
   /** Cover photograph, once one has been uploaded. Null renders the drawn
    *  placeholder: a portfolio without photos still has to look deliberate. */
   photoUrl: string | null;
+  /** The same photograph at card size (a storage render), for the cards and the lists. */
+  photoThumbUrl?: string | null;
 }
 
 export const PROPERTIES: DemoProperty[] = [
@@ -262,6 +264,8 @@ export interface DemoUnit {
   vacantSince?: string;
   /** The lot's own photograph, once uploaded; the property's cover stands in otherwise. */
   photoUrl?: string | null;
+  /** The same photograph at card size (a storage render). */
+  photoThumbUrl?: string | null;
 }
 
 export const UNITS: DemoUnit[] = [

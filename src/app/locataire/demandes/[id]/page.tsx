@@ -74,7 +74,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
                 {a.url ? (
                   <a href={a.url} target="_blank" rel="noreferrer" className="block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.url} alt={a.name} className="aspect-square w-full object-cover" />
+                    <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
                   </a>
                 ) : (
                   <p className="p-3 text-xs text-ink-soft">{a.name}</p>

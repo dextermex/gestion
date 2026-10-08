@@ -311,6 +311,7 @@ export default async function BiensPage({
                   <div className="aspect-[16/10] w-full overflow-hidden">
                     <PropertyPhoto
                       url={p.photoUrl}
+                      thumbUrl={p.photoThumbUrl}
                       kind={card.kind}
                       alt={fmt(d.biens.photoAlt, { property: p.name })}
                       rounded=""
