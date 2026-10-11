@@ -11,15 +11,20 @@ import {
 } from "@/lib/banking/saltedge";
 import { mapAccountRow, mapTransactionRow } from "@/lib/banking/mapping";
 import { reconcileUnmatched } from "@/lib/banking/reconcile";
+import { hasPerm, refuseForeignOrigin } from "@/lib/gestion/api";
 
 /**
  * Pulls the workspace's Salt Edge connections into gestion.bank_accounts and
  * gestion.bank_transactions. Every write goes through the caller's own JWT,
  * so RLS decides row by row; there is no service key anywhere. Imports are
  * idempotent: accounts key on (org, provider, provider_account_id),
- * transactions on (bank_account_id, bank_tx_id).
+ * transactions on (bank_account_id, bank_tx_id). The finance permission is
+ * asked first, so a member who could not write the rows never makes the
+ * provider calls either.
  */
 export async function POST() {
+  const foreign = await refuseForeignOrigin();
+  if (foreign) return foreign;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   if (!saltEdgeConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
@@ -27,11 +32,12 @@ export async function POST() {
   const identity = await getIdentity();
   const org = identity?.active;
   if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
+  const g = authedClient(session.accessToken).schema("gestion");
+  if (!(await hasPerm(g, org.id, "gestion.finance.edit"))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   try {
     const customerId = await ensureCustomer(`morada-ws-${org.id}`);
     const connections = await listConnections(customerId);
-    const g = authedClient(session.accessToken).schema("gestion");
     const nowIso = new Date().toISOString();
     let accountCount = 0;
     let txCount = 0;

@@ -163,10 +163,11 @@ completed through to the return. No real import has ever run.
   nothing.
 - A refusal shows Salt Edge's error class on the button, plus its field-level message for
   `WrongRequestFormat`.
-- `GET /api/banking/health` is public and never prints a value. It shows the deployed
-  commit, which variables exist, the return address, the demo provider and Salt Edge's own
-  verdict on the credentials. Ask the owner to open it in a browser whenever the connection
-  misbehaves: the agent sandbox could reach neither Salt Edge nor the deployed hosts.
+- `GET /api/banking/health` never prints a value. Anyone sees the deployed commit; a
+  signed-in member with `gestion.finance.view` also sees which variables exist, the return
+  address, the demo provider and Salt Edge's own verdict on the credentials. Ask the owner
+  to open it in a browser, signed in, whenever the connection misbehaves: the agent sandbox
+  could reach neither Salt Edge nor the deployed hosts.
 
 **Salt Edge account settings (the owner's dashboard)**
 

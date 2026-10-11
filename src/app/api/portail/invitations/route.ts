@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg } from "@/lib/gestion/api";
+import { rateLimited, withOrg } from "@/lib/gestion/api";
+import { takeMailQuota } from "@/lib/delivery/outbox";
 import { getDict, getI18n } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { formatDate } from "@/lib/types";
@@ -11,7 +12,9 @@ import { APP_URL } from "@/lib/constants";
  * database mints the invitation, the e-mail goes out when the deployment
  * can send one, and the link comes back either way so the owner can hand
  * it over. The e-mail is written in the tenant's own language when the
- * contact records one, else in the owner's.
+ * contact records one, else in the owner's. The database checks the right
+ * to invite (gestion.tenants.edit); the person's mail allowance is checked
+ * here, before anything is minted.
  */
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
@@ -23,6 +26,8 @@ export async function POST(req: NextRequest) {
   const leaseId = str(body.leaseId, 64);
   const contactId = str(body.contactId, 64);
   if (!leaseId || !contactId) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const quota = await takeMailQuota(ctx);
+  if (!quota.ok) return rateLimited(quota.retryAfterSec);
 
   // What the e-mail says, read under the owner's own token.
   const [{ data: lease }, { data: contact }] = await Promise.all([

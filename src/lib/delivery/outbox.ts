@@ -8,6 +8,7 @@ import { getDict } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { mailConfigured, sendMail, type MailMessage } from "@/lib/mail";
 import { leaseSubject } from "@/lib/portal/types";
+import { createRateLimiter } from "@/lib/rate-limit";
 import { documentMail, excerptOf, messageMail, requestMail, tenantMessageMail } from "./compose";
 
 /**
@@ -35,6 +36,48 @@ async function dispatch(message: MailMessage): Promise<{ status: DeliveryStatus;
   if (!mailConfigured()) return { status: "not_configured", providerId: null };
   const result = await sendMail(message);
   return result.sent ? { status: "sent", providerId: result.id } : { status: result.reason, providerId: null };
+}
+
+/**
+ * How much mail one account may cause. Every recipient is a contact of the
+ * caller's own workspace (the tenants of one of its leases, or the party an
+ * invitation names), but anyone may open a workspace and type an address
+ * into a contact: the brake is per person, so morada.lu's sender is never a
+ * free relay. Two counts: the requests this instance has seen (a burst and
+ * a day), and the outbox's own rows the person created (the hour and the
+ * day), which every instance shares when the table is there.
+ */
+export const MAIL_LIMITS = {
+  burst: { limit: 10, windowMs: 60_000 },
+  hour: { limit: 60, windowMs: 3_600_000 },
+  day: { limit: 300, windowMs: 86_400_000 },
+} as const;
+
+const mailRequests = createRateLimiter([MAIL_LIMITS.burst, MAIL_LIMITS.hour, MAIL_LIMITS.day]);
+
+export type MailQuota = { ok: true } | { ok: false; retryAfterSec: number };
+
+/**
+ * One more e-mailing request from this person, or how long to wait. Counts
+ * the request in memory, then the outbox lines they created in the last
+ * hour and day under their own token. An outbox that cannot be counted
+ * (the table not there yet) leaves the in-memory count to decide.
+ */
+export async function takeMailQuota(ctx: OrgContext, now: Date = new Date()): Promise<MailQuota> {
+  const verdict = mailRequests.take(ctx.userId, now.getTime());
+  if (!verdict.ok) return { ok: false, retryAfterSec: verdict.retryAfterSec };
+  for (const w of [MAIL_LIMITS.hour, MAIL_LIMITS.day]) {
+    const since = new Date(now.getTime() - w.windowMs).toISOString();
+    const { count, error } = await ctx.g.from("deliveries").select("id", { count: "exact", head: true }).eq("created_by", ctx.userId).gte("created_at", since);
+    if (error) return { ok: true };
+    if ((count ?? 0) >= w.limit) return { ok: false, retryAfterSec: Math.ceil(w.windowMs / 1000 / 4) };
+  }
+  return { ok: true };
+}
+
+/** Forgets the in-memory count (tests). */
+export function resetMailQuota(): void {
+  mailRequests.reset();
 }
 
 interface Recipient {
@@ -137,6 +180,12 @@ export async function notifyTenantsOfMessage(ctx: OrgContext, input: { leaseId: 
     if (!settings.notifyTenant) return [];
     const recipients = await tenantRecipients(ctx, input.leaseId, settings.lang);
     if (recipients.length === 0) return [];
+    // Past the person's allowance the word still stands; only the e-mail waits.
+    const quota = await takeMailQuota(ctx);
+    if (!quota.ok) {
+      console.warn("tenant notification skipped: mail allowance reached");
+      return [];
+    }
     const home = await homeOf(ctx, input.leaseId);
     const out: DeliveryOutcome[] = [];
     for (const r of recipients) {

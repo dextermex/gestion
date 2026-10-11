@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/supabase/server";
+import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
+import { hasPerm, refuseForeignOrigin } from "@/lib/gestion/api";
 import { DATASET_COOKIE } from "@/lib/demo";
 import { SaltEdgeError, createConnectSession, demoProviderCode, fakeProvidersWanted, registerCustomer, returnToFor, saltEdgeConfigured } from "@/lib/banking/saltedge";
 
@@ -14,8 +15,15 @@ import { SaltEdgeError, createConnectSession, demoProviderCode, fakeProvidersWan
  * On a sample cabinet the journey is the real one but opens on Salt Edge's
  * fake bank, for a demo customer of the signed-in account: nothing of it is
  * ever stored, the sample never writes.
+ *
+ * A real consent hands the workspace's bank data to the books, so it needs
+ * what every other bank and payment write needs: gestion.finance.edit on the
+ * workspace, asked of the same predicate the policies use, before the
+ * provider is called. Membership alone is not enough.
  */
 export async function POST(req: NextRequest) {
+  const foreign = await refuseForeignOrigin();
+  if (foreign) return foreign;
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
@@ -49,6 +57,9 @@ export async function POST(req: NextRequest) {
     const identity = await getIdentity();
     const org = identity?.active;
     if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
+    if (!(await hasPerm(authedClient(session.accessToken).schema("gestion"), org.id, "gestion.finance.edit"))) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
 
     const identifier = `morada-ws-${org.id}`;
     await registerCustomer(identifier);

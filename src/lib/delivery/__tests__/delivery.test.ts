@@ -8,7 +8,7 @@ import { activateLease } from "@/lib/gestion/lease";
 import { addManagerMessage } from "@/lib/gestion/requests";
 import { addTenantMessage, createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { documentMail, excerptOf, messageMail, requestMail, tenantMessageMail } from "@/lib/delivery/compose";
-import { sendDocumentByMail } from "@/lib/delivery/outbox";
+import { MAIL_LIMITS, resetMailQuota, sendDocumentByMail, takeMailQuota } from "@/lib/delivery/outbox";
 import { generateDocument, type Generated } from "@/lib/documents/generate";
 import { templateVersion } from "@/lib/documents/wording";
 import { sendMail } from "@/lib/mail";
@@ -155,6 +155,7 @@ describe("the outbox on one database", () => {
   beforeEach(async () => {
     process.env = { ...env };
     delete process.env.RESEND_API_KEY;
+    resetMailQuota();
     db = new FakeDb(today);
     ctx = ctxFor(db);
     storage = fakeStorage();
@@ -249,5 +250,44 @@ describe("the outbox on one database", () => {
     await ctx.g.from("contacts").update({ email: "" }).eq("org_id", ORG).eq("id", contactId);
     expect(await sendDocumentByMail(ctx, storage.client, g.documentId)).toEqual({ error: "no_recipient" });
     expect(deliveries().filter((x) => x.kind === "document")).toHaveLength(2);
+  });
+});
+
+describe("the mail allowance", () => {
+  const NOW = new Date("2026-10-11T12:00:00Z");
+  const at = (msAgo: number) => new Date(NOW.getTime() - msAgo).toISOString();
+  const line = (createdBy: string, createdAt: string): Row => ({ org_id: ORG, kind: "document", recipient_kind: "tenant", recipient_email: "x@example.lu", subject: "s", body_text: "b", status: "sent", created_by: createdBy, created_at: createdAt });
+  beforeEach(() => resetMailQuota());
+
+  it("lets a burst of requests through, then asks the same person to wait, and no one else", async () => {
+    const db = new FakeDb(today);
+    const ctx = ctxFor(db);
+    for (let i = 0; i < MAIL_LIMITS.burst.limit; i++) expect((await takeMailQuota(ctx, new Date(NOW.getTime() + i))).ok).toBe(true);
+    const refused = await takeMailQuota(ctx, new Date(NOW.getTime() + 20));
+    expect(refused.ok).toBe(false);
+    expect(refused.ok ? 0 : refused.retryAfterSec).toBeGreaterThan(0);
+    expect((await takeMailQuota({ ...ctx, userId: "user-2" }, NOW)).ok).toBe(true);
+    // A minute later the burst has room again.
+    expect((await takeMailQuota(ctx, new Date(NOW.getTime() + MAIL_LIMITS.burst.windowMs + 1))).ok).toBe(true);
+  });
+
+  it("counts the outbox lines the person created in the last hour and day, whatever the instance", async () => {
+    const db = new FakeDb(today);
+    const ctx = ctxFor(db);
+    for (let i = 0; i < MAIL_LIMITS.hour.limit; i++) db.insertRow("deliveries", line("user-1", at(60_000 + i)));
+    expect((await takeMailQuota(ctx, NOW)).ok).toBe(false);
+    // Someone else's lines are theirs.
+    expect((await takeMailQuota({ ...ctx, userId: "user-2" }, NOW)).ok).toBe(true);
+    // Lines older than the day do not count.
+    resetMailQuota();
+    const old = new FakeDb(today);
+    for (let i = 0; i < MAIL_LIMITS.day.limit; i++) old.insertRow("deliveries", line("user-1", at(MAIL_LIMITS.day.windowMs + 60_000)));
+    expect((await takeMailQuota(ctxFor(old), NOW)).ok).toBe(true);
+  });
+
+  it("falls back on the in-memory count when the outbox cannot be read", async () => {
+    const db = new FakeDb(today);
+    db.absent.add("deliveries");
+    expect((await takeMailQuota(ctxFor(db), NOW)).ok).toBe(true);
   });
 });
