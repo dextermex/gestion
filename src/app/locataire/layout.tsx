@@ -131,7 +131,7 @@ export default async function TenantLayout({ children }: { children: React.React
             { href: "/locataire/bail", label: d.tenant.navLease, icon: "contract", desc: d.tenant.moreLeaseDesc },
             { href: "/locataire/documents", label: d.tenant.navDocuments, icon: "documents", desc: d.tenant.moreDocsDesc, note: toSend > 0 ? fmt(d.tenant.moreToSend, { n: toSend }) : undefined },
             { href: "/locataire/profil", label: d.tenant.accountMenu, icon: "user", desc: d.tenant.moreAccountDesc, covers: ["/locataire/parametres"] },
-            { href: "/locataire/messages", label: d.tenant.navHelp, icon: "phone", desc: d.tenant.moreHelpDesc, shortcut: true },
+            { href: "/locataire/aide", label: d.tenant.navHelp, icon: "phone", desc: d.tenant.moreHelpDesc },
             ...(canManage ? [{ href: "/app", label: d.tenant.moreOwner, icon: "dashboard" as const }] : []),
           ],
         }}

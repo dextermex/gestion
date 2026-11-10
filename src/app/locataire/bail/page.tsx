@@ -37,14 +37,7 @@ export default async function TenantLeasePage() {
     [d.tenant.leaseTotal, <span key="tot" className="font-display text-base font-bold">{euros(lease.rentCents + lease.chargesCents, locale)}</span>],
     [
       d.tenant.leaseRegime,
-      lease.chargesRegime === "forfait" ? (
-        d.tenant.regimeForfait
-      ) : (
-        <span key="reg">
-          {d.tenant.regimeAdvances}
-          <span className="mt-0.5 block text-xs font-normal text-ink-soft">{d.tenant.regimeAdvancesHint}</span>
-        </span>
-      ),
+      lease.chargesRegime === "forfait" ? d.tenant.regimeForfait : d.tenant.regimeAdvances,
     ],
     [d.tenant.leaseDueDay, fmt(d.tenant.leaseDueDayValue, { n: ordinalDay(locale, lease.paymentDay) })],
     [d.tenant.leaseFurnished, lease.furnished ? d.common.yes : d.common.no],
@@ -102,9 +95,13 @@ export default async function TenantLeasePage() {
       <Card className="p-5">
         <dl className="divide-y divide-sand-100">
           {rows.map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-4 py-2.5">
-              <dt className="text-sm text-ink-soft">{label}</dt>
-              <dd className="text-right text-sm font-semibold text-ink">{value}</dd>
+            <div key={label} className="py-2.5">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-sm text-ink-soft">{label}</dt>
+                <dd className="text-right text-sm font-semibold text-ink">{value}</dd>
+              </div>
+              {/* The plain words under a term of the lease take the row's whole width, so the label keeps its line on a phone. */}
+              {label === d.tenant.leaseRegime && lease.chargesRegime !== "forfait" && <p className="mt-0.5 text-right text-xs text-ink-soft">{d.tenant.regimeAdvancesHint}</p>}
             </div>
           ))}
         </dl>
@@ -126,7 +123,7 @@ export default async function TenantLeasePage() {
                 <dt className="text-sm text-ink-soft">{d.tenant.depositStatus}</dt>
                 <dd>{depMeta[lease.deposit.status] ? <MetaBadge meta={depMeta[lease.deposit.status]} /> : <Badge>{lease.deposit.status}</Badge>}</dd>
               </div>
-              {lease.deposit.status === "held" && <p className="pt-2 text-xs text-ink-soft">{d.tenant.depositHeldHint}</p>}
+              {lease.deposit.status === "held" && <p className="pt-2 text-right text-xs text-ink-soft">{d.tenant.depositHeldHint}</p>}
             </dl>
           ) : (
             <p className="text-sm text-ink-soft">{d.tenant.depositNone}</p>
@@ -165,7 +162,7 @@ export default async function TenantLeasePage() {
 
         <Panel title={d.tenant.insuranceTitle}>
           {lease.insurances.length === 0 ? (
-            <p className="text-sm text-ink-soft">{d.tenant.todoInsuranceMissing}</p>
+            <p className="text-sm text-ink-soft">{d.tenant.insuranceNone}</p>
           ) : (
             <ul className="divide-y divide-sand-100">
               {lease.insurances.map((i) => (

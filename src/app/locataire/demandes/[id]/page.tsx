@@ -8,10 +8,10 @@ import TenantReply from "@/components/gestion/TenantReply";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { visitWhen } from "@/lib/portal/format";
+import { momentShort, visitWhen } from "@/lib/portal/format";
 import { getTenantView } from "@/lib/portal/space";
 import { requestTimeline } from "@/lib/portal/view";
-import { formatDate, formatDateTime, requestStateMeta, ticketSeverityMeta } from "@/lib/types";
+import { formatDate, requestStateMeta, ticketSeverityMeta } from "@/lib/types";
 
 /**
  * One request: what was asked, where it stands, the photos, and the last
@@ -48,7 +48,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
   const live = space.current?.id === request.leaseId || space.others.some((l) => l.id === request.leaseId);
 
   const steps = requestTimeline(request);
-  const stepLabel = { sent: d.tenant.stepSent, taken: d.tenant.stepTaken, visit: d.tenant.stepVisit, resolved: d.tenant.stepResolved, refused: d.tenant.stepRefused };
+  const stepLabel = { sent: d.tenant.stepSent, taken: d.tenant.stepTaken, slot: d.tenant.stepSlot, visit: d.tenant.stepVisit, resolved: d.tenant.stepResolved, refused: d.tenant.stepRefused };
   const visit = request.visit;
   const visitAhead = open && visit !== null && visit.scheduledAt.slice(0, 10) >= space.today;
   const when = visit ? visitWhen(visit.scheduledAt, locale) : null;
@@ -57,7 +57,14 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
   const conversation = space.conversations.find((c) => c.id === request.conversationId) ?? space.conversations.find((c) => c.leaseId === request.leaseId) ?? null;
   const anchorAt = conversation?.messages.find((m) => m.ticketId === request.id)?.sentAt ?? request.createdAt;
   const managerName = space.managers.map((m) => m.name).filter(Boolean).join(" · ") || d.tenant.managerTitle;
-  const recent = (conversation?.messages ?? []).filter((m) => m.ticketId === null && m.senderKind !== "system" && m.sentAt >= anchorAt).slice(-3);
+  // A step's date as its row gives it: with the hour when the row carries one, and said to be an update when that is all the row knows.
+  const stepWhen = (step: (typeof steps)[number]): string => {
+    const at = step.key === "sent" && anchorAt.length > 10 ? anchorAt : (step.at ?? "");
+    const m = momentShort(at, locale);
+    const said = m.time ? fmt(d.tenant.stepMoment, { date: m.date, time: m.time }) : m.date;
+    return step.key === "taken" && step.state === "now" ? fmt(d.tenant.stepUpdated, { date: said }) : said;
+  };
+  const recent = (conversation?.messages ?? []).filter((m) => m.ticketId === null && m.senderKind !== "system" && m.sentAt >= anchorAt).slice(-2);
 
   return (
     <div className="space-y-5">
@@ -93,7 +100,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
       <Panel title={d.tenant.threadTitle}>
         {(visitAhead || request.status === "pending_tenant") && (
           <div className="mb-5 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3.5" data-next-step>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">{d.tenant.nextStepTitle}</p>
+            <p className="tenant-eyebrow text-[11px] font-semibold uppercase tracking-wide text-brand-700">{d.tenant.nextStepTitle}</p>
             {visitAhead && when ? (
               <>
                 <p className="mt-1 font-display text-base font-bold text-ink">
@@ -117,13 +124,9 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
                 <div className="min-w-0 pt-0.5">
                   <p className={"text-sm font-semibold " + (step.state === "todo" ? "text-ink-soft" : "text-ink")}>{step.key === "taken" && step.state !== "todo" && managerName ? fmt(d.tenant.stepTakenBy, { name: managerName }) : stepLabel[step.key]}</p>
                   {planned ? (
-                    <p className="text-xs text-ink-soft">{fmt(visitAhead ? d.tenant.stepPlanned : d.tenant.stepVisitAt, { date: when.date, time: when.time })}</p>
+                    <p className="text-xs tabular-nums text-ink-soft">{when.time ? fmt(d.tenant.stepMoment, { date: when.date, time: when.time }) : when.date}</p>
                   ) : step.at ? (
-                    <p className="text-xs text-ink-soft">
-                      {step.state === "now" && step.key !== "resolved" && step.key !== "refused" && step.key !== "sent"
-                        ? fmt(d.tenant.stepUpdated, { date: formatDate(step.at.slice(0, 10), locale) })
-                        : fmt(d.tenant.stepOn, { date: formatDate(step.at.slice(0, 10), locale) })}
-                    </p>
+                    <p className="text-xs tabular-nums text-ink-soft">{stepWhen(step)}</p>
                   ) : null}
                 </div>
               </li>
@@ -148,7 +151,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
               <li key={m.id} className={m.mine ? "text-right" : ""}>
                 <div className={"inline-block max-w-[85%] whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-left text-sm leading-relaxed " + (m.mine ? "rounded-br-md bg-brand-600 text-white" : "rounded-bl-md bg-sand-100 text-ink")}>{m.body}</div>
                 <p className="mt-1 text-xs text-ink-soft">
-                  {m.mine ? d.tenant.threadYou : m.senderKind === "manager" ? managerName : d.tenant.threadOther} · <span className="tabular-nums">{formatDateTime(m.sentAt, locale)}</span>
+                  {m.mine ? d.tenant.threadYou : m.senderKind === "manager" ? managerName : d.tenant.threadOther} · <span className="tabular-nums">{(() => { const at = momentShort(m.sentAt, locale); return at.time ? fmt(d.tenant.stepMoment, { date: at.date, time: at.time }) : at.date; })()}</span>
                 </p>
               </li>
             ))}

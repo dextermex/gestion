@@ -34,3 +34,24 @@ export function monthName(isoDate: string, locale: Locale): string {
   if (Number.isNaN(moment.getTime())) return "";
   return moment.toLocaleDateString(INTL_LOCALE[locale], { month: "long", timeZone: "UTC" });
 }
+
+/**
+ * A moment as a line of a request's path says it: the day and the month,
+ * and the hour when the row carries one ("19 août", "08:12"), on
+ * Luxembourg's clock. A date alone gives no hour.
+ */
+export function momentShort(iso: string, locale: Locale): { date: string; time: string } {
+  if (iso.length <= 10) {
+    const day = new Date(`${iso}T00:00:00Z`);
+    if (Number.isNaN(day.getTime())) return { date: iso, time: "" };
+    return { date: day.toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }), time: "" };
+  }
+  const zoned = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  const moment = new Date(zoned ? iso : `${iso.slice(0, 19)}Z`);
+  if (Number.isNaN(moment.getTime())) return { date: iso.slice(0, 10), time: "" };
+  const timeZone = zoned ? "Europe/Luxembourg" : "UTC";
+  return {
+    date: moment.toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "long", timeZone }),
+    time: moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone }),
+  };
+}

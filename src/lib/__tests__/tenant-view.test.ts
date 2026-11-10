@@ -85,9 +85,16 @@ describe("a request's path", () => {
   it("follows the ticket's own status", () => {
     expect(states({ status: "new", visit: null })).toEqual(["sent:now", "taken:todo", "visit:todo", "resolved:todo"]);
     expect(states({ status: "triaged", visit: null })).toEqual(["sent:done", "taken:now", "visit:todo", "resolved:todo"]);
-    expect(states({ status: "scheduled" })).toEqual(["sent:done", "taken:done", "visit:now", "resolved:todo"]);
-    expect(states({ status: "done", closedAt: "2026-08-29" })).toEqual(["sent:done", "taken:done", "visit:done", "resolved:now"]);
+    expect(states({ status: "scheduled" })).toEqual(["sent:done", "taken:done", "slot:done", "visit:now", "resolved:todo"]);
+    expect(states({ status: "done", closedAt: "2026-08-29" })).toEqual(["sent:done", "taken:done", "slot:done", "visit:done", "resolved:now"]);
     expect(states({ status: "cancelled", closedAt: "2026-08-20" })).toEqual(["sent:done", "refused:now"]);
+  });
+
+  it("says the slot is confirmed only when the work order does, and never dates it", () => {
+    const offered = { status: "accepted", scheduledAt: "2026-08-28T08:00:00+02:00", artisanName: null };
+    expect(states({ status: "triaged", visit: offered })).toEqual(["sent:done", "taken:now", "visit:todo", "resolved:todo"]);
+    expect(states({ status: "triaged", visit: null }).some((s) => s.startsWith("slot"))).toBe(false);
+    expect(requestTimeline(request({ status: "scheduled" })).find((s) => s.key === "slot")?.at).toBeNull();
   });
 
   it("has no visit step for a question nobody will come for", () => {

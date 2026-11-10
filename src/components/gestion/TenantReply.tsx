@@ -78,7 +78,7 @@ export default function TenantReply({
             }
           }}
         />
-        <Button type="submit" aria-label={labels.send} title={labels.send} className="h-11 w-11 shrink-0 px-0!" loading={state === "sending"} disabled={draft.trim() === ""}>
+        <Button type="submit" aria-label={labels.send} title={labels.send} className="h-11 w-11 shrink-0 px-0!" loading={state === "sending"}>
           {state !== "sending" && <Icon name="send" size={18} className="shrink-0" />}
         </Button>
       </div>

@@ -103,9 +103,9 @@ export default async function TenantProfilePage() {
           <dl className="mt-3 divide-y divide-sand-200/70">
             {(
               [
-                [t.fileTenants, lease.parties.map((p) => p.name).filter(Boolean).join(", ") || d.common.none],
+                [lease.parties.filter((p) => p.name).length > 1 ? t.fileTenants : t.fileTenant, lease.parties.map((p) => p.name).filter(Boolean).join(", ") || d.common.none],
                 [t.fileHome, [`${lease.unit.label} · ${lease.property.name}`, lease.property.address].filter(Boolean).join(", ")],
-                [t.fileLease, `${fmt(t.fileLeaseSince, { from: formatDate(lease.startDate, locale) })} · ${lease.endDate ? fmt(t.until, { date: formatDate(lease.endDate, locale) }) : t.leaseEndOpen}`],
+                [t.fileLease, `${fmt(t.fileLeaseSince, { from: formatDate(lease.startDate, locale) })} · ${lease.endDate ? fmt(t.until, { date: formatDate(lease.endDate, locale) }) : t.fileLeaseOpen}`],
                 ...(space.managers.length > 0 ? [[t.fileManager, space.managers.map((m) => [m.name, m.email].filter(Boolean).join(" · ")).join(", ")] as [string, string]] : []),
               ] as Array<[string, string]>
             ).map(([label, value]) => (

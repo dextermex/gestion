@@ -25,7 +25,7 @@ const DESK = [
   "/app/documents", "/app/contrats", "/app/conformite", "/app/fiscalite", "/app/garanties", "/app/indexation", "/app/interventions", "/app/edl",
   "/app/assurances", "/app/workflows", "/app/aml", "/app/reglages", "/app/utilisateurs", "/app/integrations", "/app/messages", "/app/messages?onglet=demandes",
 ];
-const TENANT = ["/locataire", "/locataire/bail", "/locataire/paiements", "/locataire/demandes", "/locataire/demandes/t-1", "/locataire/messages", "/locataire/documents", "/locataire/profil", "/locataire/parametres"];
+const TENANT = ["/locataire", "/locataire/bail", "/locataire/paiements", "/locataire/demandes", "/locataire/demandes/t-1", "/locataire/messages", "/locataire/documents", "/locataire/profil", "/locataire/parametres", "/locataire/aide"];
 
 interface Reading {
   overflow: number;

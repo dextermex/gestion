@@ -68,7 +68,7 @@ export default async function TenantHomePage() {
         {!ended && (
           <Card className="tenant-rent-card p-5">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.rentTitle}</p>
+              <p className="tenant-eyebrow text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.rentTitle}</p>
               <Badge className={situationColor}>{situationLabel}</Badge>
             </div>
 
@@ -112,7 +112,7 @@ export default async function TenantHomePage() {
 
             {(instructions || lease.rfReference) && (
               <div className="mt-5 border-t border-sand-200/70 pt-4" data-home-pay>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payInstructions}</p>
+                <p className="tenant-eyebrow text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payInstructions}</p>
                 <dl className="tenant-pay-lines mt-2">
                   {instructions && (
                     <>

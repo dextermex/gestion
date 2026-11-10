@@ -46,7 +46,7 @@ export default function CopyButton({ value, label, copiedLabel, ariaLabel }: { v
       type="button"
       onClick={copy}
       aria-label={ariaLabel}
-      className="tactile inline-flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-sand-200 bg-white px-3 text-sm font-semibold text-brand-700 transition hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      className="tactile inline-flex min-h-11 shrink-0 sm:min-h-10 items-center gap-1.5 whitespace-nowrap rounded-xl border border-sand-200 bg-white px-3 text-sm font-semibold text-brand-700 transition hover:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
     >
       <Icon name={copied ? "check" : "copy"} size={16} className="shrink-0" />
       <span role="status">{copied ? copiedLabel : label}</span>

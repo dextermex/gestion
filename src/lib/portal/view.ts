@@ -108,11 +108,14 @@ export function upcomingFor(lease: TenantLease, p: TenantPayments | null, reques
  * the step it is at now.
  */
 export interface RequestStep {
-  key: "sent" | "taken" | "visit" | "resolved" | "refused";
+  key: "sent" | "taken" | "slot" | "visit" | "resolved" | "refused";
   state: "done" | "now" | "todo";
   /** YYYY-MM-DD, or a full ISO date and time for a planned visit; null when no row says. */
   at: string | null;
 }
+
+/** Work-order statuses that say a slot was agreed: the order is scheduled, or the visit is behind it. */
+const SLOT_CONFIRMED = new Set(["scheduled", "done", "invoiced", "paid"]);
 
 export function requestTimeline(r: Pick<TenantRequest, "kind" | "status" | "createdAt" | "updatedAt" | "closedAt" | "visit">): RequestStep[] {
   const s = r.status;
@@ -128,6 +131,8 @@ export function requestTimeline(r: Pick<TenantRequest, "kind" | "status" | "crea
   const withVisit = r.kind === "technical" || r.visit !== null;
   const steps: RequestStep[] = [{ key: "sent", state: taken ? "done" : "now", at: r.createdAt || null }];
   steps.push({ key: "taken", state: !taken ? "todo" : closed || visiting ? "done" : "now", at: taken && !closed && !visiting ? r.updatedAt || null : null });
+  // The slot is confirmed when the work order itself says so (scheduled, or further along). No row dates that moment.
+  if (r.visit && SLOT_CONFIRMED.has(r.visit.status)) steps.push({ key: "slot", state: "done", at: null });
   if (withVisit) {
     steps.push({ key: "visit", state: closed ? "done" : visiting ? "now" : "todo", at: r.visit?.scheduledAt ?? (visiting ? r.updatedAt || null : null) });
   }
