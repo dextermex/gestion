@@ -9,9 +9,12 @@ import { signOutEverywhere } from "@/lib/supabase/browser";
 
 /**
  * The tenant space's navigation on a phone: a bar fixed at the foot of the
- * screen, four destinations and "Plus" for the rest (the requests, the
- * owner's space when the account has one, signing out), the way a phone's
- * apps are laid out. Fixed, so it is one thumb away at any scroll depth;
+ * screen, the four destinations a tenant uses most (home, payments,
+ * requests, messages) and "Plus" for the rest (the lease, the documents,
+ * the profile, the settings, the owner's space when the account has one,
+ * signing out), the way a phone's apps are laid out. A destination may
+ * carry a count (unread messages); a row behind "Plus" may carry a note
+ * (something to send), and "Plus" then shows a dot so it is not missed. Fixed, so it is one thumb away at any scroll depth;
  * clear of the home indicator; packed flat when the phone is held sideways.
  * Above `lg` the space keeps its tabs under the logo and this bar is not
  * on the screen at all. The pages keep their foot clear of it through the
@@ -23,6 +26,10 @@ export interface TenantNavItem {
   href: string;
   label: string;
   icon: IconName;
+  /** A count shown on the icon (unread messages), with the words a screen reader says for it. */
+  badge?: { count: number; label: string };
+  /** A short note shown on a row behind "Plus" ("1 à envoyer"). */
+  note?: string;
 }
 
 export default function TenantBottomNav({
@@ -47,6 +54,7 @@ export default function TenantBottomNav({
   const isActive = (href: string) => (href === "/locataire" ? pathname === "/locataire" : pathname.startsWith(href));
   // A section that lives behind "Plus" lights "Plus" up while it is open.
   const moreActive = more.entries.some((e) => e.href.startsWith("/locataire") && isActive(e.href));
+  const moreNoted = more.entries.some((e) => Boolean(e.note));
 
   const leave = async () => {
     setLeaving(true);
@@ -71,17 +79,23 @@ export default function TenantBottomNav({
             const active = isActive(it.href);
             return (
               <li key={it.href} className="flex min-w-0 flex-1">
-                <Link href={it.href} aria-current={active ? "page" : undefined} className={itemClass(active)}>
+                <Link href={it.href} aria-current={active ? "page" : undefined} className={itemClass(active) + " relative"}>
                   <Icon name={it.icon} size={22} className="shrink-0" />
                   <span className="max-w-full truncate">{it.label}</span>
+                  {it.badge && it.badge.count > 0 && (
+                    <span className="absolute left-1/2 top-0.5 ml-1 inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white short-landscape:static short-landscape:ml-0" aria-label={it.badge.label}>
+                      {it.badge.count > 9 ? "9+" : it.badge.count}
+                    </span>
+                  )}
                 </Link>
               </li>
             );
           })}
           <li className="flex min-w-0 flex-1">
-            <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} className={itemClass(moreActive || open)}>
+            <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} className={itemClass(moreActive || open) + " relative"}>
               <Icon name="more" size={22} className="shrink-0" />
               <span className="max-w-full truncate">{more.label}</span>
+              {moreNoted && <span aria-hidden className="absolute left-1/2 top-1.5 ml-2 h-2 w-2 rounded-full bg-accent-600 ring-2 ring-white short-landscape:hidden" />}
             </button>
           </li>
         </ul>
@@ -101,6 +115,7 @@ export default function TenantBottomNav({
                   <Icon name={e.icon} size={18} />
                 </span>
                 <span className="min-w-0 flex-1 truncate">{e.label}</span>
+                {e.note && <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">{e.note}</span>}
                 <svg className="h-4 w-4 shrink-0 text-ink-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" />
                 </svg>

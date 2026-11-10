@@ -14,7 +14,22 @@ import { REQUEST_KINDS, TECHNICAL_CATEGORIES, type RequestKind } from "@/lib/por
  * manager act. A technical problem lands as an intervention in its
  * category; photos travel with it. The request is written through the API
  * under the tenant's own session and the page then reads it back.
+ *
+ * A link elsewhere in the space may open the form already on its way
+ * (`preset`): sending the insurance certificate, asking for a month's
+ * receipt, asking for a correction to the file. It is the same request,
+ * with its kind and subject filled in and a line saying what to add; the
+ * tenant can still go back and choose otherwise.
  */
+
+export interface RequestPreset {
+  kind: RequestKind;
+  title: string;
+  /** The dialog's heading while the preset stands ("Envoyer mon attestation"). */
+  heading: string;
+  hint: string | null;
+}
+
 
 const MAX_FILES = 5;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -24,6 +39,7 @@ export default function TenantRequests({
   canCreate,
   sampleNote,
   initialOpen = false,
+  preset = null,
 }: {
   labels: RequestLabels;
   /** The tenant has a tenancy in force: a request has somewhere to land. */
@@ -31,13 +47,16 @@ export default function TenantRequests({
   /** On a sample cabinet, the form is shown but nothing is written. */
   sampleNote: string | null;
   initialOpen?: boolean;
+  preset?: RequestPreset | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(initialOpen);
-  const [kind, setKind] = useState<RequestKind | null>(null);
+  const [kind, setKind] = useState<RequestKind | null>(preset?.kind ?? null);
+  /** The preset stands until the tenant goes back to choose another kind, or closes the form. */
+  const [guided, setGuided] = useState(preset !== null);
   const [category, setCategory] = useState<string>("heating");
   const [severity, setSeverity] = useState<"routine" | "priority" | "urgent">("routine");
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(preset?.title ?? "");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [state, setState] = useState<"idle" | "sending" | "uploading" | "failed" | "noLease" | "sample">("idle");
@@ -47,6 +66,7 @@ export default function TenantRequests({
   }, [initialOpen]);
 
   const reset = () => {
+    setGuided(false);
     setKind(null);
     setCategory("heating");
     setSeverity("routine");
@@ -109,7 +129,7 @@ export default function TenantRequests({
   return (
     <>
       <Button onClick={() => setOpen(true)}>{labels.open}</Button>
-      <Modal open={open} onClose={close} title={kind ? labels.kinds[kind][0] : labels.open} closeLabel={labels.close}>
+      <Modal open={open} onClose={close} title={kind ? (guided && preset ? preset.heading : labels.kinds[kind][0]) : labels.open} closeLabel={labels.close}>
         {!kind ? (
           <div>
             <p className="mb-3 text-sm text-ink-soft">{labels.kind}</p>
@@ -130,6 +150,7 @@ export default function TenantRequests({
           </div>
         ) : (
           <form className="space-y-4" onSubmit={submit}>
+            {guided && preset?.hint && <p className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm leading-relaxed text-ink">{preset.hint}</p>}
             {kind === "technical" && (
               <>
                 <Field label={labels.category}>
@@ -146,7 +167,7 @@ export default function TenantRequests({
                     {labels.gasWarning}
                   </p>
                 )}
-                <Field label={labels.urgency}>
+                <Field label={labels.urgency} hint={labels.urgencyHint}>
                   <Select value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}>
                     {(["routine", "priority", "urgent"] as const).map((u) => (
                       <option key={u} value={u}>
@@ -163,10 +184,23 @@ export default function TenantRequests({
             <Field label={labels.description} hint={labels.descriptionHint}>
               <Textarea required={kind === "technical"} maxLength={4000} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
             </Field>
-            <Field label={labels.photos} hint={labels.photosHint}>
-              <Input type="file" accept="image/*" multiple className="py-2 text-xs" onChange={(e) => pickFiles(e.target.files)} />
-              {files.length > 0 && <p className="mt-1 text-xs text-ink-soft">{files.map((f) => f.name).join(", ")}</p>}
-            </Field>
+            <div>
+              <p className="mb-2 text-sm font-medium text-ink">{labels.photos}</p>
+              {/* The file field itself is kept for the keyboard and for assistive tech; what is seen is a button in the space's own style. */}
+              <label className="tactile inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-sand-200 bg-white px-3.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-300 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-600">
+                <Icon name="camera" size={18} className="shrink-0" />
+                {labels.photoPick}
+                <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => pickFiles(e.target.files)} />
+              </label>
+              <p className="mt-2 text-xs text-ink-soft">{labels.photosHint}</p>
+              {files.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-1.5" aria-live="polite">
+                  {files.map((f) => (
+                    <li key={f.name + f.size} className="max-w-full truncate rounded-full bg-sand-100 px-2.5 py-1 text-xs font-medium text-ink">{f.name}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             {state === "failed" && (
               <p role="alert" className="text-xs font-semibold text-red-700">
@@ -185,7 +219,7 @@ export default function TenantRequests({
             )}
 
             <div className="flex flex-wrap justify-between gap-2">
-              <Button type="button" variant="ghost" onClick={() => setKind(null)} disabled={state === "sending" || state === "uploading"}>
+              <Button type="button" variant="ghost" onClick={() => { setGuided(false); setKind(null); }} disabled={state === "sending" || state === "uploading"}>
                 {labels.back}
               </Button>
               <div className="flex gap-2">

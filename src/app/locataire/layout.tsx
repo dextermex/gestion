@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Avatar } from "@/components/pro/ui";
 import GestionLogo from "@/components/gestion/GestionLogo";
 import ScrollHeader from "@/components/gestion/ScrollHeader";
+import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
 import TenantTabs from "@/components/gestion/TenantTabs";
-import { TenantBecomeOwner, TenantSampleBanner, TenantSignOut } from "@/components/gestion/TenantChrome";
+import { TenantBecomeOwner, TenantSampleBanner } from "@/components/gestion/TenantChrome";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { SEEN_COOKIE, parseSeen } from "@/lib/portal/seen";
 import { getTenantView } from "@/lib/portal/space";
+import { todoFor, unreadCount } from "@/lib/portal/view";
 import { getSession } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -25,9 +28,13 @@ export const metadata: Metadata = {
  * a sample cabinet the sample tenant stands in, announced by the same amber
  * line as the management space. Above `lg` the destinations are tabs under
  * the logo; on a phone they are a bar fixed at the foot of the screen
- * (TenantBottomNav), "Plus" holding the rest, and the page has the whole
- * width to itself. A conversation open on a phone has the whole screen:
- * every piece of chrome here reads `html[data-phone-chat]` and steps aside.
+ * (TenantBottomNav): home, payments, requests and messages, "Plus" holding
+ * the lease, the documents, the profile and the settings, and the page has
+ * the whole width to itself. The tenant's name and avatar open their
+ * account (profile, settings, signing out) on every screen. Messages carry
+ * the count of what the other side wrote since the tenant last looked. A
+ * conversation open on a phone has the whole screen: every piece of chrome
+ * here reads `html[data-phone-chat]` and steps aside.
  */
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const { d } = await getI18n();
@@ -37,11 +44,17 @@ export default async function TenantLayout({ children }: { children: React.React
   const { space, sample, canManage } = view;
   const sampleCabinet = sample ? (await getDemo()).ORG.shortName : null;
 
+  // What the other side wrote since this browser last showed the conversation (or since the tenant's own last word).
+  const unread = unreadCount(space.conversations, parseSeen((await cookies()).get(SEEN_COOKIE)?.value));
+  const unreadBadge = unread > 0 ? { count: unread, label: fmt(d.tenant.unreadAria, { n: unread }) } : undefined;
+  // A paper the tenant still owes (the insurance certificate) is said where the documents are.
+  const toSend = space.current ? todoFor(space.current, space.payments, space.today).filter((a) => a.kind === "insurance_missing").length : 0;
+
   const tabs = [
     { href: "/locataire", label: d.tenant.navHome },
     { href: "/locataire/bail", label: d.tenant.navLease },
     { href: "/locataire/paiements", label: d.tenant.navPayments },
-    { href: "/locataire/messages", label: d.tenant.navMessages },
+    { href: "/locataire/messages", label: d.tenant.navMessages, badge: unreadBadge },
     { href: "/locataire/demandes", label: d.tenant.navRequests },
   ];
   const managers = space.managers.map((m) => m.name).filter(Boolean).join(" · ");
@@ -74,16 +87,12 @@ export default async function TenantLayout({ children }: { children: React.React
           )}
           <div className="flex-1" />
           {space.me.name && (
-            <>
-              <span className="hidden text-sm font-semibold text-ink sm:block">{space.me.name}</span>
-              <Avatar name={space.me.name} size={32} />
-            </>
-          )}
-          {/* On a phone, signing out sits behind "Plus" in the bottom bar. */}
-          {session && (
-            <span className="max-lg:hidden">
-              <TenantSignOut label={d.tenant.signOut} />
-            </span>
+            <TenantAccountMenu
+              name={space.me.name}
+              email={space.me.email}
+              signedIn={Boolean(session)}
+              labels={{ menu: d.tenant.accountMenu, profile: d.tenant.navProfile, settings: d.tenant.navSettings, signOut: d.tenant.signOutShort, sampleNotice: d.common.demoNotice }}
+            />
           )}
         </div>
         <div className="mx-auto w-full max-w-6xl px-safe-4 max-lg:hidden sm:px-safe-6">
@@ -102,7 +111,7 @@ export default async function TenantLayout({ children }: { children: React.React
 
       {/* The foot of every page stays clear of the bottom bar (--nav-b, zero above lg). */}
       <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-safe-4 pb-[calc(2rem+var(--nav-b))] max-lg:[html[data-phone-chat]_&]:hidden sm:px-safe-6">
-        <p className="text-[11px] text-ink-soft">{managers ? `${managers} · Morada Gestion` : "Morada Gestion"}</p>
+        <p className="text-xs text-ink-soft">{managers ? `${managers} · Morada Gestion` : "Morada Gestion"}</p>
         {session && !sample && !canManage && <TenantBecomeOwner label={d.tenant.becomeOwner} failed={d.auth.provisionFailedTitle} />}
       </footer>
 
@@ -112,14 +121,17 @@ export default async function TenantLayout({ children }: { children: React.React
         signOut={session ? d.tenant.signOut : null}
         items={[
           { href: "/locataire", label: d.tenant.tabHome, icon: "home" },
-          { href: "/locataire/bail", label: d.tenant.tabLease, icon: "contract" },
           { href: "/locataire/paiements", label: d.tenant.tabPayments, icon: "euro" },
-          { href: "/locataire/messages", label: d.tenant.tabMessages, icon: "messages" },
+          { href: "/locataire/demandes", label: d.tenant.navRequests, icon: "inbox" },
+          { href: "/locataire/messages", label: d.tenant.tabMessages, icon: "messages", badge: unreadBadge },
         ]}
         more={{
           label: d.tenant.tabMore,
           entries: [
-            { href: "/locataire/demandes", label: d.tenant.navRequests, icon: "inbox" },
+            { href: "/locataire/bail", label: d.tenant.navLease, icon: "contract" },
+            { href: "/locataire/documents", label: d.tenant.navDocuments, icon: "documents", note: toSend > 0 ? fmt(d.tenant.moreToSend, { n: toSend }) : undefined },
+            { href: "/locataire/profil", label: d.tenant.navProfile, icon: "user" },
+            { href: "/locataire/parametres", label: d.tenant.navSettings, icon: "settings" },
             ...(canManage ? [{ href: "/app", label: d.tenant.moreOwner, icon: "dashboard" as const }] : []),
           ],
         }}

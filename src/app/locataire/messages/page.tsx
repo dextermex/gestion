@@ -68,6 +68,7 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
       timeLabel: timeOf(m.sentAt, locale),
       requestId: m.ticketId,
     }));
+  const openRequestsOf = (leaseId: string) => space.requests.filter((r) => r.leaseId === leaseId && (r.state === "sent" || r.state === "in_progress")).map((r) => ({ id: r.id, title: r.title }));
   const newRequestHrefOf = (leaseId: string) => (space.current && space.current.id === leaseId ? "/locataire/demandes?nouvelle=1" : null);
 
   // The list: the most recent conversation first, the last word as its preview
@@ -85,6 +86,8 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
         preview: request ? request.title : (last?.body ?? ""),
         previewIsRequest: request !== null,
         messages: toMessages(c.messages),
+        lastAt: last?.sentAt ?? "",
+        openRequests: openRequestsOf(c.leaseId),
         newRequestHref: newRequestHrefOf(c.leaseId),
       };
     });
@@ -93,7 +96,7 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
   // starts it.
   for (const leaseId of [lease.id, ...(params.bail && leases.some((l) => l.id === params.bail) ? [params.bail] : [])]) {
     if (conversations.some((c) => c.leaseId === leaseId)) continue;
-    conversations.push({ id: `lease:${leaseId}`, leaseId, label: homeOf(leaseId), lastLabel: "", preview: "", previewIsRequest: false, messages: [], newRequestHref: newRequestHrefOf(leaseId) });
+    conversations.push({ id: `lease:${leaseId}`, leaseId, label: homeOf(leaseId), lastLabel: "", preview: "", previewIsRequest: false, messages: [], lastAt: "", openRequests: openRequestsOf(leaseId), newRequestHref: newRequestHrefOf(leaseId) });
   }
 
   const byRequest = params.demande ? conversations.find((c) => c.messages.some((m) => m.requestId === params.demande)) : undefined;
@@ -124,6 +127,15 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
         view: d.tenant.msgView,
         requestBadge: d.messages.requestBadge,
         newRequest: d.tenant.reqNew,
+        photo: d.tenant.chatPhoto,
+        photoTitle: d.tenant.chatPhotoTitle,
+        photoPick: d.tenant.chatPhotoPick,
+        photoNone: d.tenant.chatPhotoNone,
+        photoMessage: d.tenant.chatPhotoMessage,
+        photoChoose: d.tenant.photoPick,
+        photoFailed: d.tenant.photoFailed,
+        uploading: d.tenant.uploading,
+        close: d.common.close,
       }}
       backLabel={d.messages.backToThreads}
       sampleNote={sample ? fmt(d.shell.sampleBanner, { cabinet: (await getDemo()).ORG.shortName }) : null}

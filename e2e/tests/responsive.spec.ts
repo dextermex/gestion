@@ -25,7 +25,7 @@ const DESK = [
   "/app/documents", "/app/contrats", "/app/conformite", "/app/fiscalite", "/app/garanties", "/app/indexation", "/app/interventions", "/app/edl",
   "/app/assurances", "/app/workflows", "/app/aml", "/app/reglages", "/app/utilisateurs", "/app/integrations", "/app/messages", "/app/messages?onglet=demandes",
 ];
-const TENANT = ["/locataire", "/locataire/bail", "/locataire/paiements", "/locataire/demandes", "/locataire/demandes/t-1", "/locataire/messages"];
+const TENANT = ["/locataire", "/locataire/bail", "/locataire/paiements", "/locataire/demandes", "/locataire/demandes/t-1", "/locataire/messages", "/locataire/documents", "/locataire/profil", "/locataire/parametres"];
 
 interface Reading {
   overflow: number;
@@ -128,9 +128,10 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       expect(box.width).toBe(width - 24);
       expect(box.y + box.height).toBe(height - 8);
       const entries = bar.locator("a, button");
-      await expect(entries).toHaveText(["Accueil", "Bail", "Paiements", "Messages", "Plus"]);
+      // Home, payments, requests and messages are one tap away (Messages may carry its unread count); the lease sits behind Plus.
+      await expect(entries).toHaveText([/^Accueil$/, /^Paiements$/, /^Demandes$/, /^Messages/, /^Plus$/]);
       for (const e of await entries.all()) expect((await e.boundingBox())!.height).toBeGreaterThanOrEqual(40);
-      await expect(bar.getByRole("link", { name: "Bail" })).toHaveAttribute("aria-current", "page");
+      await expect(bar.getByRole("button", { name: "Plus", exact: true })).toHaveClass(/text-brand-700/);
       // The tabs under the logo are gone: the page has the width to itself, and the sign-out sits behind Plus.
       await expect(page.getByRole("link", { name: "Mon bail" })).toBeHidden();
       await expect(page.getByRole("button", { name: "Se déconnecter" })).toBeHidden();
@@ -143,12 +144,11 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
       const footerLine = (await page.locator("footer p").first().boundingBox())!;
       expect(footerLine.y + footerLine.height).toBeLessThanOrEqual(box.y + 1);
-      // Plus: the requests, the owner's space, signing out, as a sheet within the screen.
+      // Plus: the lease, the documents, the profile, the settings, the owner's space, signing out, as a sheet within the screen.
       await bar.getByRole("button", { name: "Plus", exact: true }).click();
       const sheet = page.getByRole("dialog");
       await expect(sheet).toBeVisible();
-      await expect(sheet.getByRole("link", { name: "Demandes" })).toBeVisible();
-      await expect(sheet.getByRole("link", { name: "Espace propriétaire" })).toBeVisible();
+      for (const name of ["Mon bail", "Documents", "Mon profil", "Paramètres", "Espace propriétaire"]) await expect(sheet.getByRole("link", { name })).toBeVisible();
       await expect(sheet.getByRole("button", { name: "Se déconnecter" })).toBeVisible();
       // It rises on a spring: measured once it has settled within the screen.
       await expect.poll(async () => {
@@ -159,8 +159,8 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       expect(sbox.x).toBeGreaterThanOrEqual(0);
       expect(sbox.x + sbox.width).toBeLessThanOrEqual(width);
       if (width === 390) await test.info().attach("tenant-plus-sheet", { body: await page.screenshot(), contentType: "image/png" });
-      await sheet.getByRole("link", { name: "Demandes" }).click();
-      await expect(page).toHaveURL(/\/locataire\/demandes/);
+      await sheet.getByRole("link", { name: "Documents" }).click();
+      await expect(page).toHaveURL(/\/locataire\/documents/);
       await expect(sheet).toBeHidden();
       await expect(bar.getByRole("button", { name: "Plus", exact: true })).toHaveClass(/text-brand-700/);
     });

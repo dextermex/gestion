@@ -381,6 +381,19 @@ appliquée, l'éditeur « Identité au contrat » ne s'affiche pas, Réglages en
 reste sans l'identité au contrat et le dit, et le contrat d'habitation n'est pas produit
 (la réponse nomme les champs qui manquent).
 
+## 0029 · proposée, NON appliquée · la date de passage lue par le locataire
+
+`0029_portail_visites.sql` n'est pas appliquée en production : elle attend une
+approbation explicite. Elle ajoute une seule fonction, `gestion.my_visits()` (security
+definer, `search_path` fixé, exécutable par `authenticated` seulement), qui rend au
+locataire connecté, pour les demandes posées sur ses propres baux, le statut de l'ordre
+de travail, sa date planifiée et le nom de l'intervenant. Aucune table ni policy
+modifiée : `gestion.work_orders` reste fermée au portail (montant, lien magique,
+créneaux proposés et photos de fin de chantier ne sortent pas). Rien dans `public` ;
+`g_can` non touchée. Le repli est noté en tête du fichier. Tant qu'elle n'est pas
+appliquée, l'espace locataire fonctionne sans elle : le suivi d'une demande et la
+rubrique « À venir » n'affichent simplement aucune date de passage.
+
 ## 0024 · 2026-09-28 · crédits immobiliers et projets d'achat
 
 `0024_investment_workspace.sql` (migration `0024_investment_workspace`, version

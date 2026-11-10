@@ -1,24 +1,32 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Icon } from "@/components/pro/icons";
 import { Badge, Card } from "@/components/pro/ui";
 import { MetaBadge, Panel } from "@/components/gestion/bits";
+import TenantAddPhotos from "@/components/gestion/TenantAddPhotos";
+import TenantReply from "@/components/gestion/TenantReply";
+import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { visitWhen } from "@/lib/portal/format";
 import { getTenantView } from "@/lib/portal/space";
-import { formatDate, requestStateMeta, ticketSeverityMeta } from "@/lib/types";
+import { requestTimeline } from "@/lib/portal/view";
+import { formatDate, formatDateTime, requestStateMeta, ticketSeverityMeta } from "@/lib/types";
 
 /**
- * One request: what was asked, its status, the photos, and the way back
- * to the conversation where it sits. The request comes from the tenant's
- * own space, so an id that is not theirs is simply not found: the database
- * never returned it.
+ * One request: what was asked, where it stands, the photos, and the last
+ * words exchanged about it. The follow-up is the ticket's own status and
+ * dates (sent, taken on, the visit, closed); a planned visit shows its day
+ * and hour only when the database hands them over. The request comes from
+ * the tenant's own space, so an id that is not theirs is simply not found:
+ * the database never returned it.
  */
 export default async function TenantRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
   const view = await getTenantView();
   if (view.kind === "signed_out") return null;
-  const { space } = view;
+  const { space, sample } = view;
   const request = space.requests.find((r) => r.id === id);
   if (!request) notFound();
   const stateMeta = requestStateMeta(d);
@@ -34,11 +42,27 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
     gas: d.tenant.catGas,
     other: d.tenant.catOther,
   };
+  const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: (await getDemo()).ORG.shortName }) : null;
+  const open = request.state === "sent" || request.state === "in_progress";
+  // Writing (a photo, a reply) needs the tenancy in force: the database refuses it otherwise.
+  const live = space.current?.id === request.leaseId || space.others.some((l) => l.id === request.leaseId);
+
+  const steps = requestTimeline(request);
+  const stepLabel = { sent: d.tenant.stepSent, taken: d.tenant.stepTaken, visit: d.tenant.stepVisit, resolved: d.tenant.stepResolved, refused: d.tenant.stepRefused };
+  const visit = request.visit;
+  const visitAhead = open && visit !== null && visit.scheduledAt.slice(0, 10) >= space.today;
+  const when = visit ? visitWhen(visit.scheduledAt, locale) : null;
+
+  // The last words about it: what was said in its conversation since the request was sent.
+  const conversation = space.conversations.find((c) => c.id === request.conversationId) ?? space.conversations.find((c) => c.leaseId === request.leaseId) ?? null;
+  const anchorAt = conversation?.messages.find((m) => m.ticketId === request.id)?.sentAt ?? request.createdAt;
+  const managerName = space.managers.map((m) => m.name).filter(Boolean).join(" · ") || d.tenant.managerTitle;
+  const recent = (conversation?.messages ?? []).filter((m) => m.ticketId === null && m.senderKind !== "system" && m.sentAt >= anchorAt).slice(-3);
 
   return (
     <div className="space-y-5">
       <div>
-        <Link href="/locataire/demandes" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/locataire/demandes" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 hover:underline">
           {d.tenant.reqBack}
         </Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
@@ -66,8 +90,52 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
         </Card>
       )}
 
-      {request.attachments.length > 0 && (
-        <Panel title={d.tenant.attachments}>
+      <Panel title={d.tenant.threadTitle}>
+        {(visitAhead || request.status === "pending_tenant") && (
+          <div className="mb-5 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3.5" data-next-step>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">{d.tenant.nextStepTitle}</p>
+            {visitAhead && when ? (
+              <>
+                <p className="mt-1 font-display text-base font-bold text-ink">
+                  {visit?.artisanName ? fmt(d.tenant.nextVisit, { name: visit.artisanName, date: when.date, time: when.time }) : fmt(d.tenant.nextVisitAnon, { date: when.date, time: when.time })}
+                </p>
+                {live && <p className="mt-0.5 text-sm text-ink-soft">{d.tenant.nextVisitBody}</p>}
+              </>
+            ) : (
+              <p className="mt-1 font-display text-base font-bold text-ink">{d.tenant.nextReply}</p>
+            )}
+          </div>
+        )}
+        <ol className="tenant-steps">
+          {steps.map((step) => {
+            const planned = step.key === "visit" && visit && when;
+            return (
+              <li key={step.key}>
+                <span className="tenant-step-dot" data-state={step.state} aria-hidden>
+                  {step.state === "done" || step.key === "resolved" && step.state === "now" ? <Icon name="check" size={14} /> : step.state === "now" ? <Icon name="clock" size={14} /> : null}
+                </span>
+                <div className="min-w-0 pt-0.5">
+                  <p className={"text-sm font-semibold " + (step.state === "todo" ? "text-ink-soft" : "text-ink")}>{stepLabel[step.key]}</p>
+                  {planned ? (
+                    <p className="text-xs text-ink-soft">{fmt(visitAhead ? d.tenant.stepPlanned : d.tenant.stepVisitAt, { date: when.date, time: when.time })}</p>
+                  ) : step.at ? (
+                    <p className="text-xs text-ink-soft">
+                      {step.state === "now" && step.key !== "resolved" && step.key !== "refused" && step.key !== "sent"
+                        ? fmt(d.tenant.stepUpdated, { date: formatDate(step.at.slice(0, 10), locale) })
+                        : fmt(d.tenant.stepOn, { date: formatDate(step.at.slice(0, 10), locale) })}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </Panel>
+
+      <Panel title={d.tenant.attachments} action={open && live ? <TenantAddPhotos requestId={request.id} labels={{ add: d.tenant.addPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed }} sampleNote={sampleNote} /> : undefined}>
+        {request.attachments.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.tenant.photosNone}</p>
+        ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {request.attachments.map((a) => (
               <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
@@ -82,17 +150,32 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
               </li>
             ))}
           </ul>
-        </Panel>
-      )}
+        )}
+      </Panel>
 
-      <Panel title={d.tenant.threadTitle}>
-        <p className="text-sm text-ink-soft">{d.tenant.msgSub}</p>
-        <Link
-          href={`/locataire/messages?demande=${encodeURIComponent(request.id)}`}
-          className="tactile mt-3 inline-block rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
-        >
-          {d.tenant.reqInChat}
-        </Link>
+      <Panel
+        title={d.tenant.lastMessages}
+        action={
+          <Link href={`/locataire/messages?demande=${encodeURIComponent(request.id)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 hover:underline">
+            {d.tenant.reqInChat}
+          </Link>
+        }
+      >
+        {recent.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.tenant.threadEmpty}</p>
+        ) : (
+          <ul className="space-y-3">
+            {recent.map((m) => (
+              <li key={m.id} className={m.mine ? "text-right" : ""}>
+                <div className={"inline-block max-w-[85%] whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-left text-sm leading-relaxed " + (m.mine ? "rounded-br-md bg-brand-600 text-white" : "rounded-bl-md bg-sand-100 text-ink")}>{m.body}</div>
+                <p className="mt-1 text-xs text-ink-soft">
+                  {m.mine ? d.tenant.threadYou : m.senderKind === "manager" ? managerName : d.tenant.threadOther} · <span className="tabular-nums">{formatDateTime(m.sentAt, locale)}</span>
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {live && <TenantReply leaseId={request.leaseId} labels={{ placeholder: d.tenant.replyPlaceholder, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed }} sampleNote={sampleNote} />}
       </Panel>
     </div>
   );

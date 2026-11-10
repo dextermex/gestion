@@ -1,3 +1,5 @@
+import Link from "next/link";
+import CopyButton from "@/components/gestion/CopyButton";
 import { Badge, Card } from "@/components/pro/ui";
 import { MetaBadge } from "@/components/gestion/bits";
 import TenantEmpty from "@/components/gestion/TenantEmpty";
@@ -5,13 +7,15 @@ import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { getTenantView } from "@/lib/portal/space";
 import { paymentsOf, type TenantPeriod } from "@/lib/portal/tenant-space";
+import { rentDue } from "@/lib/portal/view";
 import { euros, formatDate, formatMonth, rentStatusMeta, type Meta } from "@/lib/types";
 
 /**
- * "Paiements": the ledger as the tenant may read it. What is due now and
- * by when, how it breaks down, what has arrived against it, what is still
- * owed from before, and every month so far. Paid-ness is what the
- * allocations say, on both sides of the product.
+ * "Paiements": the ledger as the tenant may read it. What is owed now and
+ * why, in the words the home uses; else what falls due next and how it
+ * breaks down; where to pay, each value one press from the clipboard; and
+ * every month so far with its receipt, or the way to ask for one. Paid-ness
+ * is what the allocations say, on both sides of the product.
  */
 export default async function TenantPaymentsPage() {
   const { locale, d } = await getI18n();
@@ -22,12 +26,18 @@ export default async function TenantPaymentsPage() {
   if (!lease) return <TenantEmpty d={d} manage={view.canManage} />;
   const ended = space.current === null;
   const pay = space.payments ?? paymentsOf(lease, space.today);
+  const due = rentDue(lease, space.today);
+  const owed = !ended && due.lateCents > 0;
+  const onlyLate = due.latePeriods.length === 1 ? due.latePeriods[0] : null;
   const rentMeta = rentStatusMeta(d) as Record<string, Meta>;
   const metaOf = (status: string): Meta => rentMeta[status] ?? rentMeta[status === "partial_late" ? "late" : "pending"];
   const current: TenantPeriod | null = ended
     ? null
     : pay.thisMonth ?? pay.history.find((p) => p.dueDate === pay.nextDueOn) ?? null;
+  // The period whose lines the summary breaks down: the single late one when rent is owed, else the current one.
+  const detailed: TenantPeriod | null = owed ? onlyLate : current;
   const receipts = new Map(lease.documents.filter((doc) => doc.klass === "receipt").map((doc) => [doc.name, doc]));
+  const instructions = space.paymentInstructions;
 
   return (
     <div>
@@ -38,49 +48,82 @@ export default async function TenantPaymentsPage() {
 
       {!ended && (
         <Card className="tenant-payment-summary mb-5 p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payCurrentTitle}</p>
-          {current ? (
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{owed ? d.tenant.dueNowTitle : d.tenant.payCurrentTitle}</p>
+          {owed || current ? (
             <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
-                <p className="font-display text-3xl font-bold tracking-tight tabular-nums text-ink">{euros(current.totalCents - current.allocatedCents, locale)}</p>
-                <p className="text-sm text-ink-soft">
-                  {formatMonth(current.period, locale)} · {fmt(d.tenant.payDueOn, { date: formatDate(current.dueDate, locale) })}
-                </p>
-                <div className="mt-2">
-                  <MetaBadge meta={metaOf(current.status)} />
-                </div>
-                {lease.rfReference && (
+                {owed ? (
                   <>
-                    <p className="mt-4 text-[11px] font-semibold text-ink-soft">{d.tenant.payRef}</p>
-                    <code className="mt-1 inline-block rounded-md bg-sand-50 px-2 py-1 text-xs font-semibold tabular-nums text-brand-800">{lease.rfReference}</code>
+                    <p className="font-display text-3xl font-bold tracking-tight tabular-nums text-ink">{euros(due.lateCents, locale)}</p>
+                    <p className="text-sm text-ink-soft">
+                      {onlyLate
+                        ? onlyLate.allocatedCents > 0
+                          ? fmt(d.tenant.dueOne, { month: formatMonth(onlyLate.period, locale), paid: euros(onlyLate.allocatedCents, locale), total: euros(onlyLate.totalCents, locale) })
+                          : fmt(d.tenant.dueOneUnpaid, { month: formatMonth(onlyLate.period, locale), date: formatDate(onlyLate.dueDate, locale) })
+                        : fmt(d.tenant.dueMany, { n: due.latePeriods.length })}
+                    </p>
+                    <div className="mt-2">
+                      <Badge className="bg-red-100 text-red-700">{d.tenant.rentLate}</Badge>
+                    </div>
+                    {pay.nextDueOn && (
+                      <p className="mt-4 text-sm text-ink-soft">
+                        {d.tenant.payNextTitle} : <span className="font-semibold tabular-nums text-ink">{fmt(d.tenant.nextRentLine, { amount: euros(pay.nextDueCents, locale), date: formatDate(pay.nextDueOn, locale) })}</span>
+                      </p>
+                    )}
                   </>
-                )}
+                ) : current ? (
+                  <>
+                    <p className="font-display text-3xl font-bold tracking-tight tabular-nums text-ink">{euros(current.totalCents - current.allocatedCents, locale)}</p>
+                    <p className="text-sm text-ink-soft">
+                      {formatMonth(current.period, locale)} · {fmt(d.tenant.payDueOn, { date: formatDate(current.dueDate, locale) })}
+                    </p>
+                    <div className="mt-2">
+                      <MetaBadge meta={metaOf(current.status)} />
+                    </div>
+                  </>
+                ) : null}
               </div>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payBreakdown}</p>
-                <dl className="mt-1 divide-y divide-sand-100 text-sm">
-                  {[
-                    [d.tenant.payRentLine, current.rentCents],
-                    [d.tenant.payChargesLine, current.chargesCents],
-                    [d.tenant.payOtherLine, current.otherCents],
-                    [d.tenant.payVatLine, current.vatCents],
-                  ]
-                    .filter(([, cents]) => (cents as number) > 0)
-                    .map(([label, cents]) => (
-                      <div key={label as string} className="flex justify-between gap-3 py-1.5">
-                        <dt className="text-ink-soft">{label}</dt>
-                        <dd className="tabular-nums text-ink">{euros(cents as number, locale)}</dd>
+                {detailed ? (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payBreakdown}</p>
+                    <dl className="mt-1 divide-y divide-sand-100 text-sm">
+                      {[
+                        [d.tenant.payRentLine, detailed.rentCents],
+                        [d.tenant.payChargesLine, detailed.chargesCents],
+                        [d.tenant.payOtherLine, detailed.otherCents],
+                        [d.tenant.payVatLine, detailed.vatCents],
+                      ]
+                        .filter(([, cents]) => (cents as number) > 0)
+                        .map(([label, cents]) => (
+                          <div key={label as string} className="flex justify-between gap-3 py-1.5">
+                            <dt className="text-ink-soft">{label}</dt>
+                            <dd className="tabular-nums text-ink">{euros(cents as number, locale)}</dd>
+                          </div>
+                        ))}
+                      <div className="flex justify-between gap-3 py-1.5">
+                        <dt className="text-ink-soft">{d.tenant.payPaidLine}</dt>
+                        <dd className="tabular-nums text-ink">{euros(detailed.allocatedCents, locale)}</dd>
                       </div>
-                    ))}
-                  <div className="flex justify-between gap-3 py-1.5">
-                    <dt className="text-ink-soft">{d.tenant.payPaidLine}</dt>
-                    <dd className="tabular-nums text-ink">{euros(current.allocatedCents, locale)}</dd>
-                  </div>
-                  <div className="flex justify-between gap-3 py-1.5 font-semibold">
-                    <dt className="text-ink">{d.tenant.payRemainingLine}</dt>
-                    <dd className="tabular-nums text-ink">{euros(current.totalCents - current.allocatedCents, locale)}</dd>
-                  </div>
-                </dl>
+                      <div className="flex justify-between gap-3 py-1.5 font-semibold">
+                        <dt className="text-ink">{d.tenant.payRemainingLine}</dt>
+                        <dd className="tabular-nums text-ink">{euros(detailed.totalCents - detailed.allocatedCents, locale)}</dd>
+                      </div>
+                    </dl>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payLateTitle}</p>
+                    <dl className="mt-1 divide-y divide-sand-100 text-sm">
+                      {due.latePeriods.map((p) => (
+                        <div key={p.id} className="flex justify-between gap-3 py-1.5">
+                          <dt className="text-ink-soft">{formatMonth(p.period, locale)}</dt>
+                          <dd className="tabular-nums text-ink">{euros(p.totalCents - p.allocatedCents, locale)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -92,27 +135,31 @@ export default async function TenantPaymentsPage() {
       {!ended && (
         <Card className="mb-5 p-5" data-pay-instructions>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payInstructions}</p>
-          {space.paymentInstructions ? (
-            <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
-              <dt className="text-ink-soft">{d.tenant.payHolder}</dt>
-              <dd className="font-semibold text-ink">{space.paymentInstructions.holderName}</dd>
-              <dt className="text-ink-soft">{d.tenant.payIban}</dt>
-              <dd>
-                <code className="rounded-md bg-sand-50 px-2 py-1 text-xs font-semibold tabular-nums text-brand-800" data-pay-iban>
-                  {space.paymentInstructions.iban.replace(/(.{4})/g, "$1 ").trim()}
-                </code>
-              </dd>
-              {space.paymentInstructions.bic && (
-                <>
-                  <dt className="text-ink-soft">{d.tenant.payBic}</dt>
-                  <dd className="tabular-nums text-ink">{space.paymentInstructions.bic}</dd>
-                </>
+          {instructions ? (
+            <dl className="tenant-pay-lines mt-2 text-sm">
+              <div>
+                <dt>{d.tenant.payHolder}</dt>
+                <dd className="font-semibold text-ink">{instructions.holderName}</dd>
+              </div>
+              <div>
+                <dt>{d.tenant.payIban}</dt>
+                <dd className="font-mono text-sm font-semibold tabular-nums text-brand-800" data-pay-iban>
+                  {instructions.iban.replace(/(.{4})/g, "$1 ").trim()}
+                </dd>
+                <CopyButton value={instructions.iban} label={d.tenant.copy} copiedLabel={d.tenant.copied} ariaLabel={fmt(d.tenant.copyAria, { what: d.tenant.payIban })} />
+              </div>
+              {instructions.bic && (
+                <div>
+                  <dt>{d.tenant.payBic}</dt>
+                  <dd className="tabular-nums text-ink">{instructions.bic}</dd>
+                </div>
               )}
               {lease.rfReference && (
-                <>
-                  <dt className="text-ink-soft">{d.tenant.payRef}</dt>
-                  <dd className="tabular-nums text-ink">{lease.rfReference}</dd>
-                </>
+                <div>
+                  <dt>{d.tenant.payRefShort}</dt>
+                  <dd className="font-mono text-sm font-semibold tabular-nums text-brand-800">{lease.rfReference}</dd>
+                  <CopyButton value={lease.rfReference} label={d.tenant.copy} copiedLabel={d.tenant.copied} ariaLabel={fmt(d.tenant.copyAria, { what: d.tenant.payRefShort })} />
+                </div>
               )}
             </dl>
           ) : (
@@ -121,10 +168,14 @@ export default async function TenantPaymentsPage() {
         </Card>
       )}
 
-      {pay.outstandingCents > 0 && (
-        <div role="alert" className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5">
-          <p className="font-display text-base font-bold text-red-800">{d.tenant.payOutstandingTitle}</p>
-          <p className="mt-1 text-sm text-red-800">{fmt(d.tenant.payOutstandingBody, { amount: euros(pay.outstandingCents, locale) })}</p>
+      {owed && due.staleOrder && (
+        <div className="mb-6 rounded-2xl bg-amber-50 p-5 text-sm leading-relaxed text-amber-900">
+          <p className="font-display text-base font-bold">{fmt(d.tenant.payWhyTitle, { amount: euros(due.lateCents, locale) })}</p>
+          <p className="mt-1">
+            {lease.lastAdjustmentOn && lease.previousRentCents !== null
+              ? fmt(d.tenant.payWhyBody, { date: formatDate(lease.lastAdjustmentOn, locale), old: euros(lease.previousRentCents, locale), new: euros(lease.rentCents, locale), total: euros(due.staleOrder.dueCents, locale) })
+              : fmt(d.tenant.payWhyBodyShort, { total: euros(due.staleOrder.dueCents, locale) })}
+          </p>
         </div>
       )}
 
@@ -166,11 +217,19 @@ export default async function TenantPaymentsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {receipt?.url ? (
-                          <a href={receipt.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+                          <a href={receipt.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 hover:underline">
                             {d.tenant.receiptDownload}
                           </a>
                         ) : rp.status === "paid" ? (
-                          <span className="text-xs text-ink-soft">{d.common.none}</span>
+                          // Paid, and no receipt on file: said plainly, with the way to ask while the tenancy runs.
+                          <span className="inline-flex flex-col items-end">
+                            <span className="text-xs text-ink-soft">{d.tenant.receiptNone}</span>
+                            {!ended && (
+                              <Link href={`/locataire/demandes?nouvelle=quittance&mois=${encodeURIComponent(rp.period)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 underline underline-offset-4 hover:no-underline">
+                                {d.tenant.receiptAsk}
+                              </Link>
+                            )}
+                          </span>
                         ) : (
                           <Badge>{d.tenant.receiptSoon}</Badge>
                         )}

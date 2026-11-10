@@ -2,27 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOutEverywhere } from "@/lib/supabase/browser";
-
-/** Leaving the tenant space signs out of every Morada space: one session, one cookie. */
-export function TenantSignOut({ label }: { label: string }) {
-  const [leaving, setLeaving] = useState(false);
-  const signOut = async () => {
-    setLeaving(true);
-    await signOutEverywhere();
-    window.location.assign("/connexion?next=/locataire");
-  };
-  return (
-    <button
-      type="button"
-      onClick={signOut}
-      disabled={leaving}
-      className="inline-flex min-h-9 items-center rounded-lg px-2 py-1 text-xs font-semibold text-ink-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-50"
-    >
-      {label}
-    </button>
-  );
-}
 
 /** The same amber line as the management space: sample data says so on every screen. */
 export function TenantSampleBanner({ text, back }: { text: string; back: string }) {
