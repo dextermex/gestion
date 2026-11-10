@@ -30,6 +30,12 @@ export interface TenantNavItem {
   badge?: { count: number; label: string };
   /** A short note shown on a row behind "Plus" ("1 à envoyer"). */
   note?: string;
+  /** A line under a row behind "Plus", saying what is there. */
+  desc?: string;
+  /** A row that points at a destination of the bar (help, to messages): it does not light "Plus". */
+  shortcut?: boolean;
+  /** Other sections this row stands for (the account row, for the settings). */
+  covers?: string[];
 }
 
 export default function TenantBottomNav({
@@ -53,7 +59,7 @@ export default function TenantBottomNav({
 
   const isActive = (href: string) => (href === "/locataire" ? pathname === "/locataire" : pathname.startsWith(href));
   // A section that lives behind "Plus" lights "Plus" up while it is open.
-  const moreActive = more.entries.some((e) => e.href.startsWith("/locataire") && isActive(e.href));
+  const moreActive = more.entries.some((e) => !e.shortcut && e.href.startsWith("/locataire") && (isActive(e.href) || (e.covers ?? []).some(isActive)));
   const moreNoted = more.entries.some((e) => Boolean(e.note));
 
   const leave = async () => {
@@ -108,13 +114,16 @@ export default function TenantBottomNav({
               <Link
                 href={e.href}
                 onClick={() => setOpen(false)}
-                aria-current={e.href.startsWith("/locataire") && isActive(e.href) ? "page" : undefined}
-                className="tactile flex min-h-14 items-center gap-3 rounded-xl px-2 text-sm font-semibold text-ink transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
+                aria-current={!e.shortcut && e.href.startsWith("/locataire") && isActive(e.href) ? "page" : undefined}
+                className="tactile flex min-h-14 items-center gap-3 rounded-xl px-2 py-2.5 text-sm font-semibold text-ink transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                   <Icon name={e.icon} size={18} />
                 </span>
-                <span className="min-w-0 flex-1 truncate">{e.label}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{e.label}</span>
+                  {e.desc && <span className="block text-xs font-normal leading-snug text-ink-soft">{e.desc}</span>}
+                </span>
                 {e.note && <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">{e.note}</span>}
                 <svg className="h-4 w-4 shrink-0 text-ink-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" />

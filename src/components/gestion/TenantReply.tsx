@@ -14,11 +14,14 @@ export default function TenantReply({
   leaseId,
   labels,
   sampleNote,
+  before,
 }: {
   leaseId: string;
   labels: { placeholder: string; send: string; sent: string; failed: string };
   /** On a sample cabinet, the field works but nothing is written. */
   sampleNote: string | null;
+  /** What stands before the field: the photo button, on a request still open. */
+  before?: React.ReactNode;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState("");
@@ -54,6 +57,7 @@ export default function TenantReply({
   return (
     <form onSubmit={send} className="mt-4">
       <div className="flex items-end gap-2">
+        {before}
         <Textarea
           id="tenant-request-reply"
           aria-label={labels.placeholder}

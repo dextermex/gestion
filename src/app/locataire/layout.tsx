@@ -128,10 +128,10 @@ export default async function TenantLayout({ children }: { children: React.React
         more={{
           label: d.tenant.tabMore,
           entries: [
-            { href: "/locataire/bail", label: d.tenant.navLease, icon: "contract" },
-            { href: "/locataire/documents", label: d.tenant.navDocuments, icon: "documents", note: toSend > 0 ? fmt(d.tenant.moreToSend, { n: toSend }) : undefined },
-            { href: "/locataire/profil", label: d.tenant.navProfile, icon: "user" },
-            { href: "/locataire/parametres", label: d.tenant.navSettings, icon: "settings" },
+            { href: "/locataire/bail", label: d.tenant.navLease, icon: "contract", desc: d.tenant.moreLeaseDesc },
+            { href: "/locataire/documents", label: d.tenant.navDocuments, icon: "documents", desc: d.tenant.moreDocsDesc, note: toSend > 0 ? fmt(d.tenant.moreToSend, { n: toSend }) : undefined },
+            { href: "/locataire/profil", label: d.tenant.accountMenu, icon: "user", desc: d.tenant.moreAccountDesc, covers: ["/locataire/parametres"] },
+            { href: "/locataire/messages", label: d.tenant.navHelp, icon: "phone", desc: d.tenant.moreHelpDesc, shortcut: true },
             ...(canManage ? [{ href: "/app", label: d.tenant.moreOwner, icon: "dashboard" as const }] : []),
           ],
         }}

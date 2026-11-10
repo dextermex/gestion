@@ -16,3 +16,21 @@ export function visitWhen(iso: string, locale: Locale): { date: string; time: st
     time: moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone }),
   };
 }
+
+/**
+ * A month as a sentence takes it. French joins it with "de" and elides
+ * before a vowel ("d'août 2026", "de mai 2026"); the other languages take
+ * the month as it is.
+ */
+export function monthPhrase(label: string, locale: Locale): string {
+  if (locale !== "fr") return label;
+  const lower = label.charAt(0).toLowerCase() + label.slice(1);
+  return (/^[aeiouyhéèêàâîôû]/i.test(lower) ? "d'" : "de ") + lower;
+}
+
+/** The month's name alone, for a line whose date already says the year. */
+export function monthName(isoDate: string, locale: Locale): string {
+  const moment = new Date(`${isoDate.slice(0, 7)}-01T00:00:00Z`);
+  if (Number.isNaN(moment.getTime())) return "";
+  return moment.toLocaleDateString(INTL_LOCALE[locale], { month: "long", timeZone: "UTC" });
+}

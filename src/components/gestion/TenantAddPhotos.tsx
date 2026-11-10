@@ -18,11 +18,14 @@ export default function TenantAddPhotos({
   requestId,
   labels,
   sampleNote,
+  compact = false,
 }: {
   requestId: string;
   labels: { add: string; uploading: string; added: string; failed: string };
   /** On a sample cabinet, the picker opens but nothing is written. */
   sampleNote: string | null;
+  /** Beside the reply field: the camera alone, its label read out, the outcome under it. */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "uploading" | "added" | "failed" | "sample">("idle");
@@ -61,6 +64,30 @@ export default function TenantAddPhotos({
     }
   };
 
+  const outcome = state === "added" ? labels.added : state === "failed" ? labels.failed : state === "sample" ? sampleNote : "";
+  const outcomeClass = state === "failed" ? "text-red-700" : state === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-emerald-800";
+
+  if (compact) {
+    return (
+      <div className="relative shrink-0">
+        <label
+          title={labels.add}
+          className={
+            "tactile flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-sand-200 bg-white text-brand-700 transition hover:border-brand-300 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-600 " +
+            (state === "uploading" ? "pointer-events-none opacity-60" : "")
+          }
+        >
+          <Icon name="camera" size={20} className="shrink-0" />
+          <span className="sr-only">{state === "uploading" ? labels.uploading : labels.add}</span>
+          <input type="file" accept="image/*" multiple className="sr-only" disabled={state === "uploading"} onChange={(e) => void pick(e.currentTarget)} />
+        </label>
+        <p role="status" className={"absolute left-0 top-full mt-1.5 w-max max-w-[70vw] text-xs font-semibold " + (outcome ? outcomeClass : "")}>
+          {outcome}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-end gap-1.5">
       <label
@@ -73,8 +100,8 @@ export default function TenantAddPhotos({
         {state === "uploading" ? labels.uploading : labels.add}
         <input type="file" accept="image/*" multiple className="sr-only" disabled={state === "uploading"} onChange={(e) => void pick(e.currentTarget)} />
       </label>
-      <p role="status" className={"min-h-4 text-right text-xs font-semibold " + (state === "failed" ? "text-red-700" : state === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-emerald-800")}>
-        {state === "added" ? labels.added : state === "failed" ? labels.failed : state === "sample" ? sampleNote : ""}
+      <p role="status" className={"min-h-4 text-right text-xs font-semibold " + outcomeClass}>
+        {outcome}
       </p>
     </div>
   );

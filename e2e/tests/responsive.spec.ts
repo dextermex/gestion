@@ -148,7 +148,7 @@ test("the tenant's navigation is a bar at the foot of the phone, Plus holding th
       await bar.getByRole("button", { name: "Plus", exact: true }).click();
       const sheet = page.getByRole("dialog");
       await expect(sheet).toBeVisible();
-      for (const name of ["Mon bail", "Documents", "Mon profil", "Paramètres", "Espace propriétaire"]) await expect(sheet.getByRole("link", { name })).toBeVisible();
+      for (const name of ["Mon bail", "Documents", "Mon compte", "Aide", "Espace propriétaire"]) await expect(sheet.getByRole("link", { name })).toBeVisible();
       await expect(sheet.getByRole("button", { name: "Se déconnecter" })).toBeVisible();
       // It rises on a spring: measured once it has settled within the screen.
       await expect.poll(async () => {

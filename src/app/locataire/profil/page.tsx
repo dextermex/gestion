@@ -36,6 +36,11 @@ export default async function TenantProfilePage() {
       <div>
         <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{t.profileTitle}</h1>
         <p className="mt-1 text-sm text-ink-soft">{t.profileSub}</p>
+        {/* On a phone the account row of "Plus" lands here: the settings are one tap further. */}
+        <Link href="/locataire/parametres" className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-700 hover:underline lg:hidden">
+          <Icon name="settings" size={18} className="shrink-0" />
+          {t.navSettings}
+        </Link>
       </div>
 
       <Card className="crm-panel p-5" data-profile-mine>

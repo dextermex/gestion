@@ -115,7 +115,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
                   {step.state === "done" || step.key === "resolved" && step.state === "now" ? <Icon name="check" size={14} /> : step.state === "now" ? <Icon name="clock" size={14} /> : null}
                 </span>
                 <div className="min-w-0 pt-0.5">
-                  <p className={"text-sm font-semibold " + (step.state === "todo" ? "text-ink-soft" : "text-ink")}>{stepLabel[step.key]}</p>
+                  <p className={"text-sm font-semibold " + (step.state === "todo" ? "text-ink-soft" : "text-ink")}>{step.key === "taken" && step.state !== "todo" && managerName ? fmt(d.tenant.stepTakenBy, { name: managerName }) : stepLabel[step.key]}</p>
                   {planned ? (
                     <p className="text-xs text-ink-soft">{fmt(visitAhead ? d.tenant.stepPlanned : d.tenant.stepVisitAt, { date: when.date, time: when.time })}</p>
                   ) : step.at ? (
@@ -130,27 +130,6 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
             );
           })}
         </ol>
-      </Panel>
-
-      <Panel title={d.tenant.attachments} action={open && live ? <TenantAddPhotos requestId={request.id} labels={{ add: d.tenant.addPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed }} sampleNote={sampleNote} /> : undefined}>
-        {request.attachments.length === 0 ? (
-          <p className="text-sm text-ink-soft">{d.tenant.photosNone}</p>
-        ) : (
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {request.attachments.map((a) => (
-              <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
-                {a.url ? (
-                  <a href={a.url} target="_blank" rel="noreferrer" className="block">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
-                  </a>
-                ) : (
-                  <p className="p-3 text-xs text-ink-soft">{a.name}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
       </Panel>
 
       <Panel
@@ -175,7 +154,35 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
             ))}
           </ul>
         )}
-        {live && <TenantReply leaseId={request.leaseId} labels={{ placeholder: d.tenant.replyPlaceholder, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed }} sampleNote={sampleNote} />}
+        {live && (
+          <TenantReply
+            leaseId={request.leaseId}
+            labels={{ placeholder: d.tenant.replyPlaceholder, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed }}
+            sampleNote={sampleNote}
+            before={open ? <TenantAddPhotos compact requestId={request.id} labels={{ add: d.tenant.attachPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed }} sampleNote={sampleNote} /> : undefined}
+          />
+        )}
+      </Panel>
+
+      <Panel title={d.tenant.photosTitle} action={open && live ? <TenantAddPhotos requestId={request.id} labels={{ add: d.tenant.addPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed }} sampleNote={sampleNote} /> : undefined}>
+        {request.attachments.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.tenant.photosNone}</p>
+        ) : (
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {request.attachments.map((a) => (
+              <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
+                {a.url ? (
+                  <a href={a.url} target="_blank" rel="noreferrer" className="block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
+                  </a>
+                ) : (
+                  <p className="p-3 text-xs text-ink-soft">{a.name}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </Panel>
     </div>
   );

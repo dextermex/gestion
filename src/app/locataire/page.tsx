@@ -7,7 +7,7 @@ import { LinkRow, MetaBadge, Panel } from "@/components/gestion/bits";
 import TenantEmpty from "@/components/gestion/TenantEmpty";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { visitWhen } from "@/lib/portal/format";
+import { visitWhen, monthName, monthPhrase } from "@/lib/portal/format";
 import { getTenantView } from "@/lib/portal/space";
 import { paymentsOf } from "@/lib/portal/tenant-space";
 import { rentDue, rentSituation, todoFor, upcomingFor } from "@/lib/portal/view";
@@ -79,8 +79,8 @@ export default async function TenantHomePage() {
                 <p className="text-sm text-ink-soft">
                   {onlyLate
                     ? onlyLate.allocatedCents > 0
-                      ? fmt(d.tenant.dueOne, { month: formatMonth(onlyLate.period, locale), paid: euros(onlyLate.allocatedCents, locale), total: euros(onlyLate.totalCents, locale) })
-                      : fmt(d.tenant.dueOneUnpaid, { month: formatMonth(onlyLate.period, locale), date: formatDate(onlyLate.dueDate, locale) })
+                      ? fmt(d.tenant.dueOne, { month: monthPhrase(formatMonth(onlyLate.period, locale), locale), paid: euros(onlyLate.allocatedCents, locale), total: euros(onlyLate.totalCents, locale) })
+                      : fmt(d.tenant.dueOneUnpaid, { month: monthPhrase(formatMonth(onlyLate.period, locale), locale), date: formatDate(onlyLate.dueDate, locale) })
                     : fmt(d.tenant.dueMany, { n: due.latePeriods.length })}
                 </p>
                 {due.staleOrder && (
@@ -212,7 +212,7 @@ export default async function TenantHomePage() {
                             </>
                           )}
                           {u.kind === "edl" && (u.edlKind === "exit" ? d.tenant.upEdlExit : d.tenant.upEdlEntry)}
-                          {u.kind === "rent" && fmt(d.tenant.upRent, { amount: euros(u.amountCents, locale) })}
+                          {u.kind === "rent" && fmt(d.tenant.upRent, { month: monthPhrase(monthName(u.at, locale), locale), amount: euros(u.amountCents, locale) })}
                           {u.kind === "lease_end" && d.tenant.upLeaseEnd}
                         </span>
                       </span>

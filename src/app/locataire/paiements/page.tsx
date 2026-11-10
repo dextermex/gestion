@@ -3,6 +3,7 @@ import CopyButton from "@/components/gestion/CopyButton";
 import { Badge, Card } from "@/components/pro/ui";
 import { MetaBadge } from "@/components/gestion/bits";
 import TenantEmpty from "@/components/gestion/TenantEmpty";
+import { monthPhrase } from "@/lib/portal/format";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { getTenantView } from "@/lib/portal/space";
@@ -58,8 +59,8 @@ export default async function TenantPaymentsPage() {
                     <p className="text-sm text-ink-soft">
                       {onlyLate
                         ? onlyLate.allocatedCents > 0
-                          ? fmt(d.tenant.dueOne, { month: formatMonth(onlyLate.period, locale), paid: euros(onlyLate.allocatedCents, locale), total: euros(onlyLate.totalCents, locale) })
-                          : fmt(d.tenant.dueOneUnpaid, { month: formatMonth(onlyLate.period, locale), date: formatDate(onlyLate.dueDate, locale) })
+                          ? fmt(d.tenant.dueOne, { month: monthPhrase(formatMonth(onlyLate.period, locale), locale), paid: euros(onlyLate.allocatedCents, locale), total: euros(onlyLate.totalCents, locale) })
+                          : fmt(d.tenant.dueOneUnpaid, { month: monthPhrase(formatMonth(onlyLate.period, locale), locale), date: formatDate(onlyLate.dueDate, locale) })
                         : fmt(d.tenant.dueMany, { n: due.latePeriods.length })}
                     </p>
                     <div className="mt-2">
@@ -136,7 +137,7 @@ export default async function TenantPaymentsPage() {
         <Card className="mb-5 p-5" data-pay-instructions>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payInstructions}</p>
           {instructions ? (
-            <dl className="tenant-pay-lines mt-2 text-sm">
+            <dl className="tenant-pay-lines tenant-pay-lines-near mt-2 text-sm">
               <div>
                 <dt>{d.tenant.payHolder}</dt>
                 <dd className="font-semibold text-ink">{instructions.holderName}</dd>
@@ -156,7 +157,7 @@ export default async function TenantPaymentsPage() {
               )}
               {lease.rfReference && (
                 <div>
-                  <dt>{d.tenant.payRefShort}</dt>
+                  <dt>{d.tenant.payRef}</dt>
                   <dd className="font-mono text-sm font-semibold tabular-nums text-brand-800">{lease.rfReference}</dd>
                   <CopyButton value={lease.rfReference} label={d.tenant.copy} copiedLabel={d.tenant.copied} ariaLabel={fmt(d.tenant.copyAria, { what: d.tenant.payRefShort })} />
                 </div>
@@ -170,8 +171,8 @@ export default async function TenantPaymentsPage() {
 
       {owed && due.staleOrder && (
         <div className="mb-6 rounded-2xl bg-amber-50 p-5 text-sm leading-relaxed text-amber-900">
-          <p className="font-display text-base font-bold">{fmt(d.tenant.payWhyTitle, { amount: euros(due.lateCents, locale) })}</p>
-          <p className="mt-1">
+          <p>
+            <strong className="font-bold">{fmt(d.tenant.payWhyTitle, { amount: euros(due.lateCents, locale) })}</strong>{" "}
             {lease.lastAdjustmentOn && lease.previousRentCents !== null
               ? fmt(d.tenant.payWhyBody, { date: formatDate(lease.lastAdjustmentOn, locale), old: euros(lease.previousRentCents, locale), new: euros(lease.rentCents, locale), total: euros(due.staleOrder.dueCents, locale) })
               : fmt(d.tenant.payWhyBodyShort, { total: euros(due.staleOrder.dueCents, locale) })}

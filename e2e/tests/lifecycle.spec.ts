@@ -114,7 +114,7 @@ test("the tenant writes to the owner, then sends a request with a photo", async 
   expect(requestId, "the request id from the page the tenant lands on").not.toBe("");
   await expect(page.getByRole("heading", { level: 1, name: requestTitle })).toBeVisible();
   await expect(page.getByText("Envoyée", { exact: true })).toBeVisible();
-  await expect(page.getByText("Photos jointes")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Photos", exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("img[alt='evier.png']")).toHaveCount(1);
   // The request sits in the same conversation, after the first message.
   await page.getByRole("link", { name: "Ouvrir la conversation" }).click();

@@ -988,6 +988,10 @@ summary {
   .tenant-main dl.tenant-pay-lines > div { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0; }
   .tenant-pay-lines dt { grid-column: 1 / -1; font-size: .8125rem; }
 }
+/* Payments, from tablet up: the copy button sits beside what it copies. */
+@media (min-width: 640px) {
+  .tenant-main dl.tenant-pay-lines-near > div { grid-template-columns: 11rem max-content max-content; justify-content: start; }
+}
 /* The lease file on the profile: read only, on the space's own sand ground so it is not taken for a form. */
 .tenant-space .ui-card.tenant-file-card { background: #f4f7f9; box-shadow: none; }
 /* A request's path: a dot per step, a line between them. */
