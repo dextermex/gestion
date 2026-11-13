@@ -120,6 +120,19 @@ export interface TenantConversation {
   messages: TenantMessage[];
 }
 
+/**
+ * The contractor's visit on a request, once the manager has planned one:
+ * read through `gestion.my_visits()` (0029), which hands back the date, the
+ * work order's status and the contractor's name and nothing else of the order.
+ */
+export interface TenantVisit {
+  /** The work order's own status: scheduled, done, invoiced, paid… */
+  status: string;
+  /** ISO date and time of the planned visit. */
+  scheduledAt: string;
+  artisanName: string | null;
+}
+
 export interface TenantRequest {
   id: string;
   ref: string;
@@ -137,6 +150,8 @@ export interface TenantRequest {
   attachments: TenantDocument[];
   /** The conversation the request sits in, once anchored there. */
   conversationId: string | null;
+  /** The planned visit, when there is one and the database can say so; null otherwise. */
+  visit: TenantVisit | null;
 }
 
 export interface TenantPayments {
@@ -188,6 +203,16 @@ export async function buildTenantSpace(
     }
     return (data as Row[] | null) ?? [];
   };
+  // A door a later migration opens (0029): until it is applied the function is
+  // unknown to the API, which is not an error worth a log line, only "nothing yet".
+  const rpcOptional = async (name: string): Promise<Row[]> => {
+    const { data, error } = await g.rpc(name);
+    if (error) {
+      if (error.code !== "PGRST202" && error.code !== "42883") console.error(`tenant read failed (${name}):`, error.code, error.message);
+      return [];
+    }
+    return (data as Row[] | null) ?? [];
+  };
   const read = async (table: string, select: string, apply?: (q: Narrow) => Narrow): Promise<Row[]> => {
     const base = g.from(table).select(select) as unknown as Narrow;
     const query = apply ? apply(base) : base;
@@ -231,11 +256,12 @@ export async function buildTenantSpace(
   // requests' own: asked for by those ids, not "everything the policy lets
   // through" and sorted out in memory.
   const ticketIds = ticketRows.map((t) => s(t.id));
-  const [documentRows, conversationRows] = await Promise.all([
+  const [documentRows, conversationRows, visitRows] = await Promise.all([
     read("documents", "id,class,name,storage_path,related_type,related_id,created_at", (q) =>
       q.in("related_id", [...leaseIds, ...ticketIds]).order("created_at", { ascending: false }),
     ),
     read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "lease").in("scope_id", leaseIds)),
+    ticketIds.length > 0 ? rpcOptional("my_visits") : Promise.resolve([] as Row[]),
   ]);
   const conversationIds = conversationRows.map((c) => s(c.id));
   const messageRows = conversationIds.length > 0
@@ -359,6 +385,15 @@ export async function buildTenantSpace(
       return { id: s(c.id), leaseId: s(c.scope_id), label: labelOfLease(s(c.scope_id)), lastMessageAt: msgs[msgs.length - 1]?.sentAt ?? "", messages: msgs };
     })
     .sort((a, b) => (a.leaseId === current?.id ? -1 : b.leaseId === current?.id ? 1 : a.lastMessageAt < b.lastMessageAt ? 1 : -1));
+  // One visit per request: the latest planned one. Only the tenant's own tickets are kept,
+  // whatever the function returned.
+  const visitByTicket = new Map<string, TenantVisit>();
+  for (const v of [...visitRows].sort((a, b) => (s(a.scheduled_at) < s(b.scheduled_at) ? -1 : 1))) {
+    const ticketId = s(v.ticket_id);
+    const at = s(v.scheduled_at);
+    if (!ticketIds.includes(ticketId) || at === "") continue;
+    visitByTicket.set(ticketId, { status: s(v.status), scheduledAt: at, artisanName: s(v.artisan_name) || null });
+  }
   const requests: TenantRequest[] = ticketRows.map((t) => {
     const conversationId = anchorByTicket.get(s(t.id)) ?? conversationByLease.get(s(t.lease_id)) ?? null;
     const description = s(t.description).replace(/^\[(document|question|other)\]\s*/, "");
@@ -378,6 +413,7 @@ export async function buildTenantSpace(
       closedAt: day(t.closed_at),
       attachments: documents.filter((d) => d.relatedType === "ticket" && d.relatedId === s(t.id)),
       conversationId,
+      visit: visitByTicket.get(s(t.id)) ?? null,
     };
   });
 

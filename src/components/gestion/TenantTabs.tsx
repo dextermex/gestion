@@ -9,7 +9,8 @@ export default function TenantTabs({
   tabs,
   label,
 }: {
-  tabs: Array<{ href: string; label: string }>;
+  /** `badge`: a count worth showing beside the tab (unread messages), with the words a screen reader says for it. */
+  tabs: Array<{ href: string; label: string; badge?: { count: number; label: string } }>;
   label: string;
 }) {
   const pathname = usePathname();
@@ -30,6 +31,11 @@ export default function TenantTabs({
           }
         >
           <Icon name={TAB_ICONS[t.href] ?? "home"} size={20} />{t.label}
+          {t.badge && t.badge.count > 0 && (
+            <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[11px] font-bold leading-none text-white" aria-label={t.badge.label}>
+              {t.badge.count > 9 ? "9+" : t.badge.count}
+            </span>
+          )}
         </Link>
       ))}
     </nav>

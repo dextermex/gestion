@@ -93,6 +93,10 @@ export function tenantSpaceFromSample(demo: DemoData): TenantSpace {
         updatedAt: t.updatedAt,
         closedAt: t.closedAt,
         attachments: [],
+        // The sample work order, as the owner's screens show it: its date, its status, its contractor.
+        visit: t.workOrder?.scheduledAt
+          ? { status: t.workOrder.status, scheduledAt: t.workOrder.scheduledAt, artisanName: t.workOrder.artisanContactId ? demo.contactById(t.workOrder.artisanContactId).name : null }
+          : null,
         conversationId: demo.CONVERSATIONS.find((c) => c.scopeType === "lease" && c.scopeId === current.id)?.id ?? null,
       }))
     : [];
