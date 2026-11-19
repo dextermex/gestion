@@ -57,6 +57,9 @@ const labels: MessagesLabels = {
   backToThreads: m.backToThreads,
   backToRequests: m.backToRequests,
   loading: fr.common.loading,
+  loadFailed: m.threadLoadFailed,
+  retry: m.threadRetry,
+  showEarlier: m.threadEarlier,
 };
 
 const request: RequestView = {
@@ -92,8 +95,8 @@ const threads: ThreadView[] = [
     previewIsRequest: true,
     loaded: true,
     messages: [
-      { id: "m-1", from: "Marc Thill", kind: "tenant", body: "Bonjour, une question sur le bail.", dayLabel: "22/09/2026", timeLabel: "08:40", requestId: null },
-      { id: "m-2", from: "Marc Thill", kind: "tenant", body: request.title, dayLabel: "22/09/2026", timeLabel: "09:00", requestId: "r-1" },
+      { id: "m-1", from: "Marc Thill", kind: "tenant", body: "Bonjour, une question sur le bail.", at: "2026-09-22T06:40:00.000Z", dayLabel: "22/09/2026", timeLabel: "08:40", requestId: null },
+      { id: "m-2", from: "Marc Thill", kind: "tenant", body: request.title, at: "2026-09-22T07:00:00.000Z", dayLabel: "22/09/2026", timeLabel: "09:00", requestId: "r-1" },
     ],
   },
   {
@@ -109,7 +112,7 @@ const threads: ThreadView[] = [
     preview: "Merci pour la clé.",
     previewIsRequest: false,
     loaded: true,
-    messages: [{ id: "m-3", from: "Lena Bauer", kind: "tenant", body: "Merci pour la clé.", dayLabel: "21/09/2026", timeLabel: "17:10", requestId: null }],
+    messages: [{ id: "m-3", from: "Lena Bauer", kind: "tenant", body: "Merci pour la clé.", at: "2026-09-21T15:10:00.000Z", dayLabel: "21/09/2026", timeLabel: "17:10", requestId: null }],
   },
 ];
 

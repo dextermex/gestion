@@ -737,6 +737,10 @@ class FakeQuery implements PromiseLike<Result> {
     this.filters.push((r) => String(r[key]) <= String(value));
     return this;
   }
+  lt(key: string, value: unknown): this {
+    this.filters.push((r) => String(r[key]) < String(value));
+    return this;
+  }
   neq(key: string, value: unknown): this {
     this.filters.push((r) => r[key] !== value);
     return this;

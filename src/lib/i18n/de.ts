@@ -1539,6 +1539,9 @@ export const de: Dict = {
     viewRequest: "Anfrage ansehen",
     backToThreads: "Zurück zu den Unterhaltungen",
     backToRequests: "Zurück zu den Anfragen",
+    threadLoadFailed: "Die Unterhaltung konnte nicht geladen werden.",
+    threadRetry: "Erneut versuchen",
+    threadEarlier: "Frühere Nachrichten anzeigen",
   },
 
   finance: {

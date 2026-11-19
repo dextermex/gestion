@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LegalNote } from "@/components/gestion/bits";
 import { Badge, Button, Card, Modal, PageHeader, Select, Spinner, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
+import { THREAD_PAGE, mergeLines, type ThreadMessageLine } from "@/lib/gestion/threads";
 import { isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
 import { initials, type Meta } from "@/lib/types";
+import { usePageRefresh } from "@/lib/page-refresh";
 import { useViewHistory } from "@/lib/view-history";
 
 /**
@@ -17,6 +18,13 @@ import { useViewHistory } from "@/lib/view-history";
  * tenant's space reads; nothing on this screen is a copy. Every write goes
  * through the API under the manager's own session and the page then reads
  * the rows back.
+ *
+ * The page reads one conversation in full; any other is read when it is
+ * opened, by a request of its own to the conversation's read route, kept
+ * in this component's state. That request belongs to the conversation, not
+ * to the router: a second click, a change of tab or the back gesture leaves
+ * it running, a click on a conversation that is not there yet starts it
+ * again, and one that fails or runs out of time says so with a way to retry.
  *
  * A laptop shows the list and the open conversation side by side. A phone
  * shows one at a time, the way a messaging app does: the list first, most
@@ -31,6 +39,8 @@ export interface MessageView {
   from: string;
   kind: "tenant" | "manager" | "owner" | "artisan" | "system";
   body: string;
+  /** When it was written (the stored instant): what orders the messages and names the page before them. */
+  at: string;
   dayLabel: string;
   timeLabel: string;
   /** Set when the message is a request's place in the conversation: the card reads the request. */
@@ -81,10 +91,19 @@ export interface ThreadView {
   /**
    * Whether every message is here. The page reads one conversation in full
    * (the one the address names, else the most recent); the others carry
-   * their last word only and are read when opened.
+   * their last word only and are read when opened, by the screen itself.
    */
   loaded: boolean;
 }
+
+/** What this screen read of a conversation by itself: its messages, and whether earlier ones remain. */
+interface ThreadReading {
+  messages: MessageView[];
+  earlier: boolean;
+}
+
+/** How long a conversation may take to answer before the screen says it could not be loaded. */
+export const THREAD_LOAD_TIMEOUT_MS = 15_000;
 
 export interface MessagesLabels {
   tabConversations: string;
@@ -125,6 +144,9 @@ export interface MessagesLabels {
   backToThreads: string;
   backToRequests: string;
   loading: string;
+  loadFailed: string;
+  retry: string;
+  showEarlier: string;
 }
 
 export type Tab = "conversations" | "requests";
@@ -145,6 +167,13 @@ const SENDER_COLORS: Record<MessageView["kind"], string> = {
 /** Below Tailwind's `lg` (64rem): where the list and the conversation take turns on the screen. */
 const PHONE_QUERY = "(max-width: 1023.98px)";
 const onPhone = (): boolean => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(PHONE_QUERY).matches;
+
+const signInAgain = () => {
+  window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+};
+
+/** The key a load is known by while it runs: the conversation's newest messages, or the page before the ones shown. */
+const loadKey = (threadId: string, earlier: boolean): string => (earlier ? `${threadId}#earlier` : threadId);
 
 /**
  * The conversation filling a phone's whole screen, the way a messaging app
@@ -188,7 +217,9 @@ export default function MessagesCenter({
   writable: boolean;
   sampleNote: string | null;
 }) {
-  const router = useRouter();
+  // The lists and the counts are the page's: read again after a write, and
+  // asked for again if the router dropped the refresh (see usePageRefresh).
+  const page = usePageRefresh(threads);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [view, setView] = useState<PhoneView>(initialView);
   /** The list the open conversation was reached from: where a phone's way back leads. */
@@ -202,7 +233,23 @@ export default function MessagesCenter({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  /** The conversations this screen read by itself, by id. */
+  const [readings, setReadings] = useState<Record<string, ThreadReading>>({});
+  /** The loads that ended on an error or ran out of time, by load key. */
+  const [failedLoads, setFailedLoads] = useState<Record<string, true>>({});
+  /** The loads running now, by load key (for the screen: a spinner, a busy button). */
+  const [runningLoads, setRunningLoads] = useState<Record<string, true>>({});
+  /** Counts the loads that ended: what was waiting on one looks again. */
+  const [settled, setSettled] = useState(0);
+  /** A conversation's first message gave it an id: until the page lists it, the tenancy's row stands for it. */
+  const [aliases, setAliases] = useState<Record<string, string>>({});
+  const inFlight = useRef(new Map<string, AbortController>());
+  /** The last message each conversation was read for by itself: one automatic read per conversation and last message. */
+  const readFor = useRef<Record<string, string>>({});
+  const alive = useRef(true);
   const bodyRef = useRef<HTMLDivElement>(null);
+  /** How far from its foot the conversation stood when earlier messages were asked for: they arrive above without moving it. */
+  const keepFromFoot = useRef<number | null>(null);
   /** Where a phone's list was scrolled to when a conversation took the screen, and whether to go back there. */
   const listScroll = useRef(0);
   const restoreScroll = useRef<number | null>(null);
@@ -212,10 +259,26 @@ export default function MessagesCenter({
   const interventionOf = (r: RequestView): string | null => interventionOverrides[r.id] ?? r.interventionId;
   const unreadOf = (t: ThreadView): number => (readIds.has(t.id) ? 0 : t.unread);
 
-  const active = threads.find((t) => t.id === activeId) ?? threads[0] ?? null;
+  const active = threads.find((t) => t.id === activeId) ?? threads.find((t) => activeId !== null && t.id === aliases[activeId]) ?? threads[0] ?? null;
   const openRequest = openRequestId ? (requestById.get(openRequestId) ?? null) : null;
   const openCount = requests.filter((r) => isRequestOpen(statusOf(r))).length;
-  const messageCount = active?.messages.length ?? 0;
+
+  // The open conversation as the screen has it: what the page read of it
+  // (all of it when it is the one the page opened on) and what this screen
+  // read by itself, each message once, in the order they were written.
+  // A tenancy's first word gave its conversation an id the page does not list yet: it is read under that id.
+  const activeKey = active === null ? null : activeId !== null && aliases[activeId] === active.id ? activeId : active.id;
+  const activeReading = activeKey ? readings[activeKey] : undefined;
+  const activeReady = active !== null && (active.loaded || activeReading !== undefined);
+  const activeMessages = !active ? [] : mergeLines(activeReading?.messages ?? [], active.loaded ? active.messages : []);
+  const activeEarlier = activeReading ? activeReading.earlier : active !== null && active.loaded && active.messages.length >= THREAD_PAGE;
+  // The page's last word of a conversation it did not read in full: when the
+  // screen's own reading lacks it, something was written since.
+  const activeHeadId = active && !active.loaded ? (active.messages[active.messages.length - 1]?.id ?? "") : "";
+  const activeStale = active !== null && !active.loaded && (activeReading === undefined || (activeHeadId !== "" && !activeReading.messages.some((m) => m.id === activeHeadId)));
+  const activeToLoad = activeStale && activeKey ? activeKey : null;
+  const activeLoadFailed = activeKey !== null && failedLoads[loadKey(activeKey, false)] === true;
+  const messageCount = activeMessages.length;
   // On a phone the conversation has the screen and the rest steps aside; a
   // laptop pays no attention (the classes it drives are `max-lg:` only).
   const chatOpen = view === "chat" && tab === "conversations" && active !== null;
@@ -228,6 +291,12 @@ export default function MessagesCenter({
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
+    // Earlier messages came in above: what was being read stays where it was.
+    if (keepFromFoot.current !== null) {
+      el.scrollTop = Math.max(0, el.scrollHeight - keepFromFoot.current);
+      keepFromFoot.current = null;
+      return;
+    }
     if (focusRequestId) {
       const card = el.querySelector<HTMLElement>(`[data-request="${focusRequestId}"]`);
       if (card) {
@@ -257,18 +326,83 @@ export default function MessagesCenter({
     return () => document.documentElement.removeAttribute("data-phone-chat");
   }, [chatOpen]);
 
-  // A conversation the page has not read in full yet: the address names
-  // it and the page is read again for it, this component keeping its
-  // state (the list, the drafts, the way back); the body waits meanwhile.
-  const activeLoaded = active?.loaded ?? true;
-  const activeToLoad = active && !active.loaded ? active.id : null;
   useEffect(() => {
-    if (activeLoaded || !activeToLoad) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("fil", activeToLoad);
-    window.history.replaceState(null, "", url);
-    router.refresh();
-  }, [activeLoaded, activeToLoad, router]);
+    alive.current = true;
+    const running = inFlight.current;
+    return () => {
+      alive.current = false;
+      for (const load of running.values()) load.abort();
+      running.clear();
+    };
+  }, []);
+
+  /**
+   * Reads a conversation by its own request: its newest messages, or
+   * (`before`) the page that precedes a moment. One load per conversation
+   * at a time: asked again while it runs, it simply goes on, so nothing a
+   * person does on the screen can cancel it. It ends on the messages, or on
+   * a failure the screen shows (an error, or no answer in time).
+   */
+  const loadThread = useCallback(async (threadId: string, before: string | null = null): Promise<void> => {
+    const key = loadKey(threadId, before !== null);
+    if (inFlight.current.has(key)) return;
+    const abort = new AbortController();
+    inFlight.current.set(key, abort);
+    const timer = window.setTimeout(() => abort.abort(), THREAD_LOAD_TIMEOUT_MS);
+    setRunningLoads((all) => ({ ...all, [key]: true }));
+    setFailedLoads((all) => {
+      if (!all[key]) return all;
+      const rest = { ...all };
+      delete rest[key];
+      return rest;
+    });
+    let failed = false;
+    try {
+      const query = before !== null ? `?avant=${encodeURIComponent(before)}` : "";
+      const res = await fetch(`/api/conversations/${encodeURIComponent(threadId)}/messages${query}`, { signal: abort.signal, cache: "no-store" });
+      if (res.status === 401) return signInAgain();
+      const data = (await res.json().catch(() => null)) as { messages?: ThreadMessageLine[]; earlier?: boolean } | null;
+      if (!res.ok || !data || !Array.isArray(data.messages)) failed = true;
+      else if (alive.current) {
+        const lines: MessageView[] = data.messages.map((m) => ({ id: m.id, from: m.from, kind: m.kind, body: m.body, at: m.at, dayLabel: m.dayLabel, timeLabel: m.timeLabel, requestId: m.ticketId }));
+        const earlier = data.earlier === true;
+        setReadings((all) => {
+          const had = all[threadId];
+          // The page before the ones shown says whether more remain; the newest messages only say so the first time.
+          return { ...all, [threadId]: { messages: mergeLines(had?.messages ?? [], lines), earlier: before !== null || !had ? earlier : had.earlier } };
+        });
+      }
+    } catch {
+      failed = true;
+    } finally {
+      window.clearTimeout(timer);
+      inFlight.current.delete(key);
+      if (alive.current) {
+        if (failed) {
+          keepFromFoot.current = null;
+          setFailedLoads((all) => ({ ...all, [key]: true }));
+        }
+        setRunningLoads((all) => {
+          const rest = { ...all };
+          delete rest[key];
+          return rest;
+        });
+        setSettled((n) => n + 1);
+      }
+    }
+  }, []);
+
+  // A conversation the page did not read in full, or one something was
+  // written to since this screen read it: read by its own request, once per
+  // conversation and last message. Nothing here touches the address or the
+  // router. A failure waits for the person (the retry, or the row again).
+  useEffect(() => {
+    if (!activeToLoad || inFlight.current.has(loadKey(activeToLoad, false))) return;
+    const wanted = activeHeadId || "first";
+    if (readFor.current[activeToLoad] === wanted) return;
+    readFor.current[activeToLoad] = wanted;
+    void loadThread(activeToLoad);
+  }, [activeToLoad, activeHeadId, settled, loadThread]);
 
   const rememberInUrl = (thread: ThreadView | null, requestId: string | null, nextTab: Tab, entry = false) => {
     const url = new URL(window.location.href);
@@ -284,10 +418,8 @@ export default function MessagesCenter({
     // its own: a refresh then re-reads the page for this conversation.
     if (entry) viewHistory.enter(url);
     else window.history.replaceState(null, "", url);
-  };
-
-  const signInAgain = () => {
-    window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+    // The router drops a pending refresh when the address is written: one still waited for is asked for again.
+    page.reissue();
   };
 
   const sampleOnly = (): boolean => {
@@ -309,12 +441,17 @@ export default function MessagesCenter({
     setOrigin(from);
     setView("chat");
     setNotice(null);
+    // A conversation that is not on the screen yet (never read, or its last read failed) is read now.
+    if (!thread.loaded && readings[thread.id] === undefined) {
+      readFor.current[thread.id] = thread.messages[thread.messages.length - 1]?.id || "first";
+      void loadThread(thread.id);
+    }
     if (thread.unread === 0 || readIds.has(thread.id)) return;
     setReadIds((ids) => new Set(ids).add(thread.id));
     if (!writable) return;
     fetch(`/api/conversations/${thread.id}/lu`, { method: "POST" })
       .then((res) => {
-        if (res.ok) router.refresh();
+        if (res.ok) page.refresh();
       })
       .catch(() => null);
   };
@@ -347,6 +484,13 @@ export default function MessagesCenter({
     const entry = view === "list" && onPhone();
     showThread(thread, requestId, from);
     rememberInUrl(thread, requestId, "conversations", entry);
+  };
+
+  /** The messages before the ones shown, asked for by the person; they arrive above without moving what is being read. */
+  const showEarlier = (threadId: string, before: string) => {
+    const el = bodyRef.current;
+    keepFromFoot.current = el ? el.scrollHeight - el.scrollTop : null;
+    void loadThread(threadId, before);
   };
 
   /** A phone's way back: the list the conversation was opened from, where it was left. */
@@ -388,9 +532,21 @@ export default function MessagesCenter({
       }
       setDrafts((all) => ({ ...all, [thread.id]: "" }));
       setFocusRequestId(null);
-      if (data.conversationId && data.conversationId !== thread.id) setActiveId(data.conversationId);
+      const conversationId = data.conversationId ?? thread.id;
+      if (conversationId !== thread.id) {
+        // The tenancy's first word opened its conversation: the screen follows it, and so does the address.
+        setAliases((all) => ({ ...all, [conversationId]: thread.id }));
+        setActiveId(conversationId);
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("fil") === thread.id) {
+          url.searchParams.set("fil", conversationId);
+          window.history.replaceState(null, "", url);
+        }
+      }
       setNotice({ tone: "ok", text: labels.sent });
-      router.refresh();
+      // The conversation is read back by its own request; the page follows for the list and the counts.
+      if (!conversationId.startsWith("lease:")) void loadThread(conversationId);
+      page.refresh();
     } catch {
       setNotice({ tone: "error", text: labels.sendFailed });
     } finally {
@@ -413,7 +569,7 @@ export default function MessagesCenter({
         setNotice({ tone: "error", text: labels.statusFailed });
         return;
       }
-      router.refresh();
+      page.refresh();
     } catch {
       setStatusOverrides((all) => ({ ...all, [request.id]: before }));
       setNotice({ tone: "error", text: labels.statusFailed });
@@ -436,7 +592,7 @@ export default function MessagesCenter({
       }
       setInterventionOverrides((all) => ({ ...all, [request.id]: data.id as string }));
       setNotice({ tone: "ok", text: labels.interventionCreated });
-      router.refresh();
+      page.refresh();
     } catch {
       setNotice({ tone: "error", text: labels.interventionFailed });
     } finally {
@@ -505,14 +661,30 @@ export default function MessagesCenter({
               </div>
 
               <div ref={bodyRef} id="messages-body" className="relative space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4 max-lg:min-h-0 max-lg:flex-1 lg:h-[62vh] lg:min-h-[26rem] lg:px-5">
-                {!active.loaded && (
+                {!activeReady && !activeLoadFailed && (
                   <div className="flex justify-center py-10" data-thread-loading>
                     <Spinner label={labels.loading} />
                   </div>
                 )}
-                {active.loaded && active.messages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.noThreadYet}</p>}
-                {active.loaded && active.messages.map((m, i) => {
-                  const prev = active.messages[i - 1];
+                {!activeReady && activeLoadFailed && (
+                  <div className="flex flex-col items-center gap-3 py-10 text-center" role="alert" data-thread-error>
+                    <p className="text-sm font-semibold text-red-700">{labels.loadFailed}</p>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => activeKey && void loadThread(activeKey)}>
+                      {labels.retry}
+                    </Button>
+                  </div>
+                )}
+                {activeReady && activeMessages.length === 0 && <p className="py-10 text-center text-sm text-ink-soft">{labels.noThreadYet}</p>}
+                {activeReady && activeEarlier && activeKey && activeMessages.length > 0 && (
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Button type="button" variant="ghost" size="sm" loading={runningLoads[loadKey(activeKey, true)] === true} onClick={() => showEarlier(activeKey, activeMessages[0].at)}>
+                      {labels.showEarlier}
+                    </Button>
+                    {failedLoads[loadKey(activeKey, true)] && <p className="text-xs font-semibold text-red-700">{labels.loadFailed}</p>}
+                  </div>
+                )}
+                {activeReady && activeMessages.map((m, i) => {
+                  const prev = activeMessages[i - 1];
                   const request = m.requestId ? (requestById.get(m.requestId) ?? null) : null;
                   return (
                     <div key={m.id} className="space-y-3">

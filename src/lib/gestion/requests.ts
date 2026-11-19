@@ -3,6 +3,7 @@ import type { OrgContext } from "@/lib/gestion/api";
 import { leaseOfConversation, notifyTenantsOfMessage } from "@/lib/delivery/outbox";
 import { appendMessage, leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_STATUSES, leaseSubject, ticketStatusFor, type RequestStatus } from "@/lib/portal/types";
+import { THREAD_PAGE, type ThreadMessage } from "@/lib/gestion/threads";
 
 /**
  * The desk's side of a tenant request: the same ticket row the tenant
@@ -134,6 +135,60 @@ export async function addManagerMessage(
   // The tenants are told by e-mail when the workspace wants it; the word stands whatever becomes of the mail.
   if (leaseId) await notifyTenantsOfMessage(ctx, { leaseId, text });
   return { id: sent.id, conversationId };
+}
+
+const SENDER_KINDS: readonly ThreadMessage["kind"][] = ["tenant", "manager", "owner", "artisan", "system"];
+
+/**
+ * One conversation of the workspace, read for the screen: its newest
+ * messages in the order they were written, each under the name the list
+ * shows (the contact's, else the workspace's for the desk). `before` asks
+ * for the page that precedes a moment; `earlier` says whether one exists.
+ * The same rows, names and order the page's own loader gives the
+ * conversation it opens on.
+ */
+export async function readConversation(
+  ctx: OrgContext,
+  conversationId: string,
+  opts: { before?: string | null; limit?: number } = {},
+): Promise<{ messages: ThreadMessage[]; earlier: boolean } | { error: RequestWriteFailure }> {
+  const { g, org } = ctx;
+  const { data: found, error: findErr } = await g.from("conversations").select("id").eq("org_id", org.id).eq("id", conversationId).maybeSingle();
+  if (findErr) return failure(findErr, "conversation lookup");
+  if (!found) return { error: "not_found" };
+
+  const limit = Math.max(1, Math.min(opts.limit ?? THREAD_PAGE, THREAD_PAGE));
+  let query = g.from("messages").select("id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,ticket_id").eq("org_id", org.id).eq("conversation_id", conversationId);
+  if (opts.before) query = query.lt("sent_at", opts.before);
+  // One more than the page: its presence says there is an earlier page.
+  const { data, error } = await query.order("sent_at", { ascending: false }).limit(limit + 1);
+  if (error) return failure(error, "conversation read");
+  const rows = ((data as Row[] | null) ?? []).slice();
+  const earlier = rows.length > limit;
+  const page = rows.slice(0, limit).reverse();
+
+  const ids = (key: string): string[] => [...new Set(page.map((m) => (typeof m[key] === "string" ? (m[key] as string) : "")).filter(Boolean))];
+  const contactIds = ids("sender_contact_id");
+  const userIds = ids("sender_user_id");
+  const CONTACT = "id,display_name,legal_name,first_name,last_name,user_id";
+  const [byId, byUser] = await Promise.all([
+    contactIds.length > 0 ? g.from("contacts").select(CONTACT).eq("org_id", org.id).is("archived_at", null).in("id", contactIds) : Promise.resolve({ data: [] as Row[], error: null }),
+    userIds.length > 0 ? g.from("contacts").select(CONTACT).eq("org_id", org.id).is("archived_at", null).in("user_id", userIds) : Promise.resolve({ data: [] as Row[], error: null }),
+  ]);
+  if (byId.error) console.error("conversation sender lookup failed:", byId.error.code, byId.error.message);
+  if (byUser.error) console.error("conversation sender lookup failed:", byUser.error.code, byUser.error.message);
+  const nameOf = (c: Row): string => String(c.display_name || c.legal_name || [c.first_name, c.last_name].filter(Boolean).join(" ") || "");
+  const nameById = new Map(((byId.data as Row[] | null) ?? []).map((c) => [String(c.id), nameOf(c)]));
+  const nameByUser = new Map(((byUser.data as Row[] | null) ?? []).map((c) => [String(c.user_id), nameOf(c)]));
+
+  return {
+    earlier,
+    messages: page.map((m) => {
+      const kind = (SENDER_KINDS as readonly string[]).includes(String(m.sender_kind)) ? (String(m.sender_kind) as ThreadMessage["kind"]) : "system";
+      const from = nameById.get(String(m.sender_contact_id ?? "")) || nameByUser.get(String(m.sender_user_id ?? "")) || (m.sender_kind === "manager" ? org.name : "Système");
+      return { id: String(m.id), from, kind, body: String(m.body ?? ""), at: String(m.sent_at ?? ""), ticketId: m.ticket_id ? String(m.ticket_id) : null };
+    }),
+  };
 }
 
 /** Opening a conversation at the desk: what the other side wrote is now read. Unrelated to any request's status. */

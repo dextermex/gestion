@@ -1544,6 +1544,9 @@ export const lu: Dict = {
     viewRequest: "Ufro kucken",
     backToThreads: "Zréck op d'Conversatiounen",
     backToRequests: "Zréck op d'Ufroen",
+    threadLoadFailed: "D'Conversatioun konnt net geluede ginn.",
+    threadRetry: "Nach eng Kéier probéieren",
+    threadEarlier: "Fréier Messagen uweisen",
   },
 
   finance: {

@@ -30,6 +30,7 @@ import { templateVersion } from "@/lib/documents/wording";
 import type { ContactIdentity, DemoAuditEntry, DemoDelivery, DemoGenerated, DemoLessor, DemoSignatureEnvelope, DemoTemplate } from "./data";
 import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
 import { todayISO } from "@/lib/clock";
+import { THREAD_PAGE, lastSpokenAt, mostRecent } from "@/lib/gestion/threads";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -303,7 +304,10 @@ export async function buildRealDataFrom(
   const ticketIds = ticketRows.map((t) => s(t.id));
   const periodIds = new Set(periodRows.map((rp) => s(rp.id)));
   const lateOutsideWindow = statusRows.map((st) => s(st.id)).filter((id) => !periodIds.has(id));
-  const newest = [...conversationRows].sort((a, b) => (s(a.last_message_at) || s(a.created_at)) < (s(b.last_message_at) || s(b.created_at)) ? 1 : -1)[0];
+  // The most recent conversation, by the rule the screen orders its list with (`byMostRecent`): the last message's own time.
+  const lastSentByConv = new Map(headRows.map((h) => [s(h.conversation_id), s(h.last_sent_at)]));
+  const spokeAt = (c: Row): string => lastSpokenAt({ lastSentAt: lastSentByConv.get(s(c.id)), lastMessageAt: c.last_message_at, createdAt: c.created_at });
+  const newest = mostRecent(conversationRows.map((c) => ({ id: s(c.id), lastMessageAt: spokeAt(c) })));
   // The thread read in full: the one asked for when it is the workspace's
   // (an unknown or foreign id falls back to the most recent, the policies
   // having answered nothing for it), the tenancy's own on its sheet, else
@@ -312,7 +316,7 @@ export async function buildRealDataFrom(
   const scopedConversationId =
     asked ??
     (scope.conversationId
-      ? (newest ? s(newest.id) : null)
+      ? (newest ? newest.id : null)
       : leaseScoped
         ? ((conversationRows.find((c) => s(c.scope_type) === "lease" && s(c.scope_id) === leaseScoped)?.id as string | undefined) ?? null)
         : null);
@@ -322,7 +326,10 @@ export async function buildRealDataFrom(
     inChunks(depositRows.map((d) => s(d.id)), (ids) => q("deposit_deductions", "id,deposit_id,kind,label,amount_cents,justified_at,justification_document_id,edl_item_id", (b) => b.in("deposit_id", ids))),
     inChunks(edlRows.map((e) => s(e.id)), (ids) => q("edl_session_counts", "session_id,items,photos", (b) => b.in("session_id", ids))),
     inChunks(lateOutsideWindow, (ids) => q("rent_periods", "id,lease_id,period,due_date,rent_cents,charges_cents,vat_cents,total_cents", (b) => b.in("id", ids))),
-    scopedConversationId ? q("messages", "*", (b) => b.eq("conversation_id", scopedConversationId).order("sent_at"), 5000) : Promise.resolve([] as Row[]),
+    // The conversation read in full: its newest messages (a long history is read from its end), in the order they were written.
+    scopedConversationId
+      ? q("messages", "*", (b) => b.eq("conversation_id", scopedConversationId).order("sent_at", { ascending: false }), THREAD_PAGE).then((rows) => rows.reverse())
+      : Promise.resolve([] as Row[]),
     scoped ? inChunks([...periodIds], (ids) => q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.eq("related_type", "rent_period").in("related_id", ids))) : Promise.resolve([] as Row[]),
     // The pieces the screens name: a request's photos, and on a sheet the property's, its lots' and its tenancies' own.
     inChunks([...ticketIds, ...(scoped ? [...leaseIds, ...sheetUnitIds, ...sheetPropertyIds] : [])], (ids) => q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,sha256,created_at", (b) => b.in("related_id", ids))),
@@ -822,7 +829,7 @@ export async function buildRealDataFrom(
             ? [contactIndex.get(scopeId)?.name ?? ""].filter(Boolean)
             : [];
     const outsider = msgs.find((m) => s(m.sender_kind) !== "manager" && s(m.sender_kind) !== "system");
-    const lastAt = msgs.length > 0 ? s(msgs[msgs.length - 1].sent_at) : s(c.last_message_at) || s(c.created_at);
+    const lastAt = msgs.length > 0 ? s(msgs[msgs.length - 1].sent_at) : spokeAt(c);
     return {
       id: s(c.id),
       subject: s(c.subject),

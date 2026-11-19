@@ -1550,6 +1550,9 @@ export const fr = {
     viewRequest: "Voir la demande",
     backToThreads: "Retour aux conversations",
     backToRequests: "Retour aux demandes",
+    threadLoadFailed: "La conversation n'a pas pu être chargée.",
+    threadRetry: "Réessayer",
+    threadEarlier: "Afficher les messages précédents",
   },
 
   finance: {
