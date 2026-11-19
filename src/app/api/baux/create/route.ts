@@ -4,6 +4,7 @@ import { parseEuroInput } from "@/lib/gestion/euros";
 import { createLease, normalizeDepositForm, normalizePaymentDay } from "@/lib/gestion/lease";
 import { getI18n } from "@/lib/i18n";
 import { todayISO } from "@/lib/clock";
+import { BILLED_UNIT_KINDS } from "@/domain/billing/pricing";
 
 /**
  * The quick-add lease: an existing contact on an existing lot.
@@ -34,12 +35,14 @@ export async function POST(req: NextRequest) {
   }
 
   const [{ data: unit, error: unitErr }, { data: tenant, error: tenantErr }] = await Promise.all([
-    g.from("units").select("id,furnished").eq("org_id", org.id).eq("id", unitId).maybeSingle(),
+    g.from("units").select("id,furnished,kind").eq("org_id", org.id).eq("id", unitId).maybeSingle(),
     g.from("contacts").select("id").eq("org_id", org.id).eq("id", tenantContactId).maybeSingle(),
   ]);
   if (unitErr) return dbError("lease unit lookup", unitErr);
   if (tenantErr) return dbError("lease tenant lookup", tenantErr);
   if (!unit || !tenant) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  // A parking space or a cellar carries no lease of its own: the property's sheet shows none, so none is written.
+  if (!BILLED_UNIT_KINDS.includes(String(unit.kind))) return NextResponse.json({ error: "not_lettable" }, { status: 400 });
 
   const lease = await createLease(ctx, d, {
     unitId,

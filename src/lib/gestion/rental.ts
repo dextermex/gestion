@@ -16,6 +16,7 @@ import {
 } from "@/lib/gestion/lease";
 import { completedOnSave, firstIncomplete, stepNamed, type RentalStep } from "@/lib/gestion/rental-flow";
 import { todayISO } from "@/lib/clock";
+import { BILLED_UNIT_KINDS } from "@/domain/billing/pricing";
 
 /**
  * The rental dossier: the guided tenancy, saved as the owner goes.
@@ -203,12 +204,13 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
   // request is not believed about either.
   const { data: unit, error: unitErr } = await g
     .from("units")
-    .select("id,furnished,property_id")
+    .select("id,furnished,property_id,kind")
     .eq("org_id", org.id)
     .eq("id", input.unitId)
     .maybeSingle();
   if (unitErr) return fail("dossier unit lookup", unitErr);
-  if (!unit) return { error: "not_found" };
+  // A parking space or a cellar carries no lease of its own: for a rental, such a lot is not one.
+  if (!unit || !BILLED_UNIT_KINDS.includes(String(unit.kind))) return { error: "not_found" };
 
   // ── The draft row: the one being resumed, the one already on this lot, or a new one ──
   // A dossier belongs to one lot for life: it is written with that lot's

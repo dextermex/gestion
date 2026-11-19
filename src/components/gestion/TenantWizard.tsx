@@ -208,8 +208,8 @@ export default function TenantWizard({
         }),
       });
       if (res.status === 401) {
-        const here = `/app/biens/locataire?${leaseId ? `bail=${leaseId}` : `lot=${unitId}`}`;
-        window.location.assign(`/connexion?next=${encodeURIComponent(here)}`);
+        // Back to the step on screen: the address names the dossier and the step once the dossier exists.
+        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         return null;
       }
       if (!res.ok) {

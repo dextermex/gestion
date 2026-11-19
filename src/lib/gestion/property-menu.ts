@@ -1,6 +1,6 @@
 import "server-only";
 import type { DemoData } from "@/lib/demo";
-import type { PropertyCard } from "@/lib/gestion/portfolio";
+import { isLettable, type PropertyCard } from "@/lib/gestion/portfolio";
 import type { EditField, EditTopic, MenuEntry, MenuGroup } from "@/lib/gestion/editors";
 import type { DemoContact } from "@/lib/demo/data";
 import { LEGAL_FORMS } from "@/lib/documents/contract-parties";
@@ -36,7 +36,9 @@ export function propertyMenu(
   // its own tabs. The building's facts are edited from the building's page.
   const lotScope = card.scope === "lot" && single !== null;
   const base = lotScope ? `/app/biens/${p.id}/lots/${single.unit.id}` : `/app/biens/${p.id}`;
-  const live = card.lots.find((l) => l.lease) ?? null;
+  // A tenancy is edited where it is one: on a home of its own or on a lot's own sheet. A building runs
+  // several, each with its own tenant, guarantee and departure: its menu offers none of them.
+  const live = single?.lease ? single : null;
   const lease = live?.lease ?? null;
   // Everyone on the lease is a tenant in their own right, so each one gets
   // an editor of their own rather than the first name standing for all.
@@ -311,9 +313,10 @@ export function propertyMenu(
       label: `${d.modify.groupRental} · ${live.tenantNames.join(", ") || live.unit.label}`,
       entries,
     });
-  } else if (single) {
+  } else if (single && isLettable(single.unit)) {
     // A dossier in preparation is resumed, never doubled; a lot that had a
-    // tenant before takes a new one.
+    // tenant before takes a new one. A parking space or a cellar carries no
+    // lease of its own and is offered none.
     const draft = single.drafts[single.drafts.length - 1];
     const hadTenant = demo.LEASES.some((l) => l.unitId === single.unit.id && l.status === "ended");
     groups.push({

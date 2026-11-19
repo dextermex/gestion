@@ -51,6 +51,7 @@ export default async function EtatDesLieuxPage({
       leaseId={lease.id}
       kind={type === "exit" ? "exit" : "entry"}
       unitLabel={unit.label}
+      unitId={unit.id}
       propertyId={property.id}
       propertyName={property.name}
       meters={meters}

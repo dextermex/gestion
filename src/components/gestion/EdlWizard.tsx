@@ -62,6 +62,7 @@ export default function EdlWizard({
   leaseId,
   kind,
   unitLabel,
+  unitId,
   propertyId,
   propertyName,
   meters,
@@ -74,6 +75,8 @@ export default function EdlWizard({
   leaseId: string;
   kind: "entry" | "exit";
   unitLabel: string;
+  /** The lot inspected: "back to the property" lands on its tenancy, also in a building. */
+  unitId?: string;
   propertyId: string;
   propertyName: string;
   meters: MeterOption[];
@@ -88,6 +91,7 @@ export default function EdlWizard({
   const router = useRouter();
   const reduced = useReducedMotion();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const backToProperty = `/app/biens/${propertyId}?onglet=location${unitId ? `&lot=${unitId}` : ""}`;
 
   const [rooms, setRooms] = useState<RoomState[]>(() =>
     suggestedRooms.map((name) => ({ key: key(), name, items: {} })),
@@ -244,7 +248,7 @@ export default function EdlWizard({
         }),
       });
       if (res.status === 401) {
-        window.location.assign(`/connexion?next=/app/biens/etat-des-lieux?bail=${leaseId}`);
+        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         return;
       }
       if (!res.ok) {
@@ -343,7 +347,7 @@ export default function EdlWizard({
       <div className="journey-topbar sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 0 || step === doneStep ? (
           <Link
-            href={returnTo ?? `/app/biens/${propertyId}?onglet=location`}
+            href={returnTo ?? backToProperty}
             className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11"
           >
             <BackIcon />
@@ -669,7 +673,7 @@ export default function EdlWizard({
                 )}
                 <Button
                   variant={returnTo ? "secondary" : "primary"}
-                  onClick={() => router.push(`/app/biens/${propertyId}?onglet=location`)}
+                  onClick={() => router.push(backToProperty)}
                 >
                   {d.location.backToProperty}
                 </Button>
