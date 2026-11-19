@@ -27,6 +27,9 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Backend (Deno Edge Functions, SQL) shared with the mobile app: not
+      // part of the Next.js app, not type-checked or linted by it.
+      "supabase/**",
     ],
   },
 ];
