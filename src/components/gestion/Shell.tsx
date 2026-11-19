@@ -690,9 +690,10 @@ function UserMenu({
           <p className="truncate text-sm font-semibold text-ink">{name}</p>
           <p className="truncate text-xs text-ink-soft">{email}</p>
         </div>
-        <a href={MORADA_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
+        {/* The person's own account: what they signed up with, and its deletion. */}
+        <Link href="/app/compte" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
           {d.shell.moradaAccount}
-        </a>
+        </Link>
         {/* Back to the gateway: one account, three spaces. */}
         <a href={WELCOME_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
           {d.shell.switchSpace}
