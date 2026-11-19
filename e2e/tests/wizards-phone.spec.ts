@@ -26,6 +26,11 @@ async function storedDraft(page: Page, key: string): Promise<{ step: number; con
     (k) =>
       new Promise((resolve) => {
         const req = indexedDB.open("morada-brouillons", 1);
+        // Created the way the wizard creates it: a helper that opens the store first must not leave
+        // a version 1 without "drafts", which the wizard would then find and never be able to write to.
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore("drafts");
+        };
         req.onsuccess = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains("drafts")) return resolve(null);
@@ -50,6 +55,11 @@ async function clearDrafts(page: Page): Promise<void> {
     () =>
       new Promise<void>((resolve) => {
         const req = indexedDB.open("morada-brouillons", 1);
+        // Created the way the wizard creates it: a helper that opens the store first must not leave
+        // a version 1 without "drafts", which the wizard would then find and never be able to write to.
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore("drafts");
+        };
         req.onsuccess = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains("drafts")) return resolve();
