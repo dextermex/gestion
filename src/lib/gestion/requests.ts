@@ -2,7 +2,9 @@ import "server-only";
 import type { OrgContext } from "@/lib/gestion/api";
 import { leaseOfConversation, notifyTenantsOfMessage } from "@/lib/delivery/outbox";
 import { appendMessage, leaseConversation } from "@/lib/portal/thread";
-import { REQUEST_STATUSES, leaseSubject, ticketStatusFor, type RequestStatus } from "@/lib/portal/types";
+import { REQUEST_STATUSES, leaseSubject, requestStatusOf, type RequestStatus } from "@/lib/portal/types";
+import { ticketForRequestStatus } from "@/lib/gestion/interventions";
+import type { TicketStatus, WorkOrderStatus } from "@/lib/types";
 import { THREAD_PAGE, latestMoment, type ThreadMessage } from "@/lib/gestion/threads";
 
 /**
@@ -41,33 +43,44 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim
 
 /** The request, if it is the workspace's. */
 async function ownTicket(g: Db, orgId: string, ticketId: string): Promise<{ ticket: Row | null } | { error: RequestWriteFailure }> {
-  const { data, error } = await g.from("tickets").select("id,title,status,lease_id").eq("org_id", orgId).eq("id", ticketId).maybeSingle();
+  const { data, error } = await g.from("tickets").select("id,title,status,lease_id,closed_at").eq("org_id", orgId).eq("id", ticketId).maybeSingle();
   if (error) return failure(error, "request lookup");
   return { ticket: (data as Row | null) ?? null };
 }
 
 /**
- * The owner's status on a request. The four statuses map onto the
- * intervention system's own; resolving or refusing also dates the closure,
- * reopening clears it.
+ * The owner's status on a request, from Messages. What it writes on the
+ * ticket is decided with the ticket's work order in view
+ * (`ticketForRequestStatus`), the same rules the Interventions steps follow:
+ * resolving or refusing dates the closure once; choosing an open status on
+ * a closed request is the explicit reopening; and a request whose
+ * intervention is under way stays in progress, whatever was asked (`held`).
+ * The answer is the status the request now has, read back from the row.
  */
 export async function setRequestStatus(
   ctx: OrgContext,
   ticketId: string,
   status: RequestStatus,
-): Promise<{ status: RequestStatus } | { error: RequestWriteFailure }> {
+): Promise<{ status: RequestStatus; held: boolean } | { error: RequestWriteFailure }> {
   const found = await ownTicket(ctx.g, ctx.org.id, ticketId);
   if ("error" in found) return found;
   if (!found.ticket) return { error: "not_found" };
+  const { data: orders, error: orderErr } = await ctx.g.from("work_orders").select("id,status,created_at").eq("org_id", ctx.org.id).eq("ticket_id", ticketId).order("created_at").limit(1);
+  if (orderErr) return failure(orderErr, "work order lookup");
+  const workOrder = ((orders as Row[] | null) ?? [])[0];
+  const next = ticketForRequestStatus(status, { status: String(found.ticket.status) as TicketStatus, workOrder: workOrder ? (String(workOrder.status) as WorkOrderStatus) : null });
   const now = new Date().toISOString();
-  const closed = status === "resolved" || status === "refused";
-  const { error } = await ctx.g
+  const closure = next.closure === "set" ? { closed_at: found.ticket.closed_at ?? now } : next.closure === "clear" ? { closed_at: null } : {};
+  const { data, error } = await ctx.g
     .from("tickets")
-    .update({ status: ticketStatusFor(status), updated_at: now, closed_at: closed ? now : null })
+    .update({ status: next.status, updated_at: now, ...closure })
     .eq("org_id", ctx.org.id)
-    .eq("id", ticketId);
+    .eq("id", ticketId)
+    .select("id");
   if (error) return failure(error, "request status update");
-  return { status };
+  // Nothing was written: the policies let this member read the request, not change it.
+  if (((data as unknown[] | null) ?? []).length === 0) return { error: "forbidden" };
+  return { status: requestStatusOf(next.status), held: next.held };
 }
 
 /** "Apt 3B · Résidence Beaulieu" for a lease of the workspace, or nothing if it cannot be read. */

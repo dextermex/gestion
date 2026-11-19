@@ -131,6 +131,8 @@ export interface MessagesLabels {
   sentNoMail: string;
   sendFailed: string;
   statusFailed: string;
+  /** An intervention is under way: the request stays in progress whatever was chosen. */
+  statusHeld: string;
   interventionFailed: string;
   unreadAria: string;
   colSubject: string;
@@ -236,7 +238,12 @@ export default function MessagesCenter({
    */
   const [readThrough, setReadThrough] = useState<Record<string, string>>({});
   const visible = useTabVisible();
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, RequestStatus>>({});
+  /**
+   * A status just chosen, shown before the page has read it back: it holds
+   * only while the page still reports the status it was chosen over, so a
+   * change made since (here or on another screen) is never hidden.
+   */
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, { status: RequestStatus; over: RequestStatus }>>({});
   const [interventionOverrides, setInterventionOverrides] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Busy>(null);
@@ -263,7 +270,7 @@ export default function MessagesCenter({
   const restoreScroll = useRef<number | null>(null);
 
   const requestById = new Map(requests.map((r) => [r.id, r]));
-  const statusOf = (r: RequestView): RequestStatus => statusOverrides[r.id] ?? r.status;
+  const statusOf = (r: RequestView): RequestStatus => (statusOverrides[r.id] && statusOverrides[r.id].over === r.status ? statusOverrides[r.id].status : r.status);
   const interventionOf = (r: RequestView): string | null => interventionOverrides[r.id] ?? r.interventionId;
   /** The last message of a conversation as the page lists it (its last word, or the last of the whole thread). */
   const lastIdOf = (t: ThreadView): string => t.messages[t.messages.length - 1]?.id ?? "";
@@ -593,21 +600,26 @@ export default function MessagesCenter({
   const setStatus = async (request: RequestView, status: RequestStatus) => {
     const before = statusOf(request);
     if (status === before || busy) return;
-    setStatusOverrides((all) => ({ ...all, [request.id]: status }));
+    const show = (next: RequestStatus) => setStatusOverrides((all) => ({ ...all, [request.id]: { status: next, over: request.status } }));
+    show(status);
     if (sampleOnly()) return;
     setBusy("status");
     setNotice(null);
     try {
       const res = await fetch(`/api/demandes/${request.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
       if (res.status === 401) return signInAgain();
+      const data = (await res.json().catch(() => ({}))) as { status?: RequestStatus; held?: boolean };
       if (!res.ok) {
-        setStatusOverrides((all) => ({ ...all, [request.id]: before }));
+        show(before);
         setNotice({ tone: "error", text: labels.statusFailed });
         return;
       }
+      // The status the request now has, as the server wrote it: an intervention under way keeps it in progress.
+      if (data.status && (REQUEST_STATUSES as readonly string[]).includes(data.status)) show(data.status);
+      if (data.held) setNotice({ tone: "error", text: labels.statusHeld });
       page.refresh();
     } catch {
-      setStatusOverrides((all) => ({ ...all, [request.id]: before }));
+      show(before);
       setNotice({ tone: "error", text: labels.statusFailed });
     } finally {
       setBusy(null);

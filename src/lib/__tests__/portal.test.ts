@@ -574,7 +574,8 @@ describe("the portal's vocabulary", () => {
     expect(requestKindOf({ category: "administrative", description: "[document] attestation" })).toBe("document");
     expect(requestKindOf({ category: "administrative", description: "[question] charges" })).toBe("question");
     expect(requestKindOf({ category: "administrative", description: "no tag" })).toBe("other");
-    expect(["new", "triaged"].map(requestState)).toEqual(["sent", "sent"]);
+    // "Sent" only while nobody has touched it: a request qualified or handed to a tradesperson is in progress.
+    expect(["new", "triaged"].map(requestState)).toEqual(["sent", "in_progress"]);
     expect(["offered", "scheduled", "in_progress", "pending_tenant"].map(requestState)).toEqual(["in_progress", "in_progress", "in_progress", "in_progress"]);
     expect(["done", "closed", "cancelled"].map(requestState)).toEqual(["resolved", "resolved", "refused"]);
     expect(parseRequestInput({ kind: "spam", title: "x" })).toBeNull();

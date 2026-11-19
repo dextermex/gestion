@@ -177,6 +177,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
           sentNoMail: m.replySentNoMail,
           sendFailed: m.sendFailed,
           statusFailed: m.statusFailed,
+          statusHeld: m.statusHeld,
           interventionFailed: m.interventionFailed,
           unreadAria: m.unreadAria,
           colSubject: m.colSubject,

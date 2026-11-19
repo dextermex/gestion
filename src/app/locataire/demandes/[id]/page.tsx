@@ -104,7 +104,14 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
             {visitAhead && when ? (
               <>
                 <p className="mt-1 font-display text-base font-bold text-ink">
-                  {visit?.artisanName ? fmt(d.tenant.nextVisit, { name: visit.artisanName, date: when.date, time: when.time }) : fmt(d.tenant.nextVisitAnon, { date: when.date, time: when.time })}
+                  {/* The hour only when the desk entered one: a visit planned for a day says the day. */}
+                  {when.time
+                    ? visit?.artisanName
+                      ? fmt(d.tenant.nextVisit, { name: visit.artisanName, date: when.date, time: when.time })
+                      : fmt(d.tenant.nextVisitAnon, { date: when.date, time: when.time })
+                    : visit?.artisanName
+                      ? fmt(d.tenant.nextVisitDay, { name: visit.artisanName, date: when.date })
+                      : fmt(d.tenant.nextVisitAnonDay, { date: when.date })}
                 </p>
                 {live && <p className="mt-0.5 text-sm text-ink-soft">{d.tenant.nextVisitBody}</p>}
               </>

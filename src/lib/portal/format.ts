@@ -1,4 +1,5 @@
 import { LUX_TIME_ZONE, dayOf } from "@/lib/clock";
+import { visitHasHour } from "@/lib/gestion/interventions";
 import { INTL_LOCALE, type Locale } from "@/lib/i18n/config";
 import { formatDate } from "@/lib/types";
 
@@ -45,6 +46,8 @@ export function whenShort(iso: string, locale: Locale, today: string): string {
  * A planned visit's day and hour as the tenant reads them: on Luxembourg's
  * clock, whatever clock the server keeps. A timestamp that names no zone
  * (the sample cabinets') is already wall-clock time and is read as written.
+ * The hour is given only when the desk entered one: a visit planned for a
+ * day alone has none, and none is printed.
  */
 export function visitWhen(iso: string, locale: Locale): { date: string; time: string } {
   const at = clockOf(iso);
@@ -52,7 +55,7 @@ export function visitWhen(iso: string, locale: Locale): { date: string; time: st
   const { moment, timeZone } = at;
   return {
     date: moment.toLocaleDateString(INTL_LOCALE[locale], { weekday: "short", day: "numeric", month: "short", timeZone }),
-    time: moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone }),
+    time: visitHasHour(iso) ? moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone }) : "",
   };
 }
 

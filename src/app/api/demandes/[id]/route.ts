@@ -5,7 +5,9 @@ import { parseRequestStatus, setRequestStatus, statusOfFailure } from "@/lib/ges
 /**
  * The owner's status on a tenant request: to handle, in progress, resolved
  * or refused. The request is looked up in the active workspace under the
- * caller's own token; one from elsewhere is not found.
+ * caller's own token; one from elsewhere is not found. The answer carries
+ * the status the request now has, which is "in progress" whatever was
+ * asked while an intervention is under way on it (`held`).
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await withOrg("write");
@@ -17,5 +19,5 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const result = await setRequestStatus(ctx, id, status);
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: statusOfFailure(result.error) });
-  return NextResponse.json({ ok: true, status: result.status });
+  return NextResponse.json({ ok: true, status: result.status, held: result.held });
 }

@@ -130,7 +130,7 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     ]);
 
     // ── The first request is resolved; the second waits; the conversation reads the same on both sides ──
-    expect(await setRequestStatus(ctx, first.id, "resolved")).toEqual({ status: "resolved" });
+    expect(await setRequestStatus(ctx, first.id, "resolved")).toEqual({ status: "resolved", held: false });
     demo = await hydrate(db, ORG, { conversationId });
     expect(demo.TICKETS.map((t) => requestStatusOf(t.status))).toEqual(["resolved", "todo"]);
     mine = await space(db, anna);
@@ -163,13 +163,13 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     expect(demo.CONVERSATIONS.find((c) => c.id === conversationId)!.messages).toHaveLength(7);
 
     // ── Reopened, refused, resolved again: one status, read two ways ──
-    expect(await setRequestStatus(ctx, second.id, "in_progress")).toEqual({ status: "in_progress" });
-    expect(await setRequestStatus(ctx, second.id, "refused")).toEqual({ status: "refused" });
+    expect(await setRequestStatus(ctx, second.id, "in_progress")).toEqual({ status: "in_progress", held: false });
+    expect(await setRequestStatus(ctx, second.id, "refused")).toEqual({ status: "refused", held: false });
     let row = db.table("tickets").find((t) => t.id === second.id)!;
     expect([row.status, row.closed_at !== null]).toEqual(["cancelled", true]);
     mine = await space(db, anna);
     expect(mine.requests.find((r) => r.id === second.id)!.state).toBe("refused");
-    expect(await setRequestStatus(ctx, second.id, "todo")).toEqual({ status: "todo" });
+    expect(await setRequestStatus(ctx, second.id, "todo")).toEqual({ status: "todo", held: false });
     row = db.table("tickets").find((t) => t.id === second.id)!;
     expect([row.status, row.closed_at]).toEqual(["new", null]);
 
@@ -332,9 +332,53 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
   });
 });
 
+describe("one status for a request, from Messages and from Interventions", () => {
+  it("keeps a request with an intervention under way in progress, dates its closure once, and reopens it where the work order stands", async () => {
+    const db = new FakeDb(today);
+    const ctx = ctxFor(db);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
+    const { propertyId, unitId } = seedProperty(db);
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    await linkAccount(db, ctx, rental, anna);
+    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
+    const request = await createTenantRequest(db.tenantClient(anna), anna, lease, technical("Chaudière en panne", "Plus d'eau chaude."));
+    if ("error" in request) throw new Error(request.error);
+    const row = () => db.table("tickets").find((t) => t.id === request.id)!;
+    const tenantSees = async () => (await space(db, anna)).requests.find((r) => r.id === request.id)!.state;
+
+    // The desk opens an intervention and a visit is planned (the steps of the Interventions sheet, as rows).
+    const work = await createIntervention(ctx, request.id);
+    if ("error" in work) throw new Error(work.error);
+    db.table("work_orders").find((w) => w.id === work.id)!.status = "scheduled";
+    row().status = "scheduled";
+    expect(await tenantSees()).toBe("in_progress");
+
+    // "À traiter" chosen in Messages meanwhile: the request is not sent back, and the desk is told why.
+    expect(await setRequestStatus(ctx, request.id, "todo")).toEqual({ status: "in_progress", held: true });
+    expect([row().status, row().closed_at]).toEqual(["scheduled", null]);
+    expect(await tenantSees()).toBe("in_progress");
+
+    // Resolved in Messages: closed, dated once.
+    expect(await setRequestStatus(ctx, request.id, "resolved")).toEqual({ status: "resolved", held: false });
+    const closedAt = row().closed_at;
+    expect([row().status, typeof closedAt]).toEqual(["done", "string"]);
+    row().closed_at = "2026-01-05T10:00:00.000Z";
+    expect(await setRequestStatus(ctx, request.id, "resolved")).toEqual({ status: "resolved", held: false });
+    expect(row().closed_at).toBe("2026-01-05T10:00:00.000Z");
+    expect(await tenantSees()).toBe("resolved");
+
+    // The explicit reopening: open again, where its work order stands (a planned visit), the closure cleared.
+    expect(await setRequestStatus(ctx, request.id, "in_progress")).toEqual({ status: "in_progress", held: false });
+    expect([row().status, row().closed_at]).toEqual(["scheduled", null]);
+    expect(await tenantSees()).toBe("in_progress");
+  });
+});
+
 describe("the request vocabulary the desk and the tenant share", () => {
   it("folds the intervention statuses into four and picks one back", () => {
-    expect(["new", "triaged"].map(requestStatusOf)).toEqual(["todo", "todo"]);
+    // "To handle" only while nobody has touched it: once qualified or handed to a tradesperson, a request is in progress on every screen.
+    expect(["new", "triaged"].map(requestStatusOf)).toEqual(["todo", "in_progress"]);
     expect(["offered", "scheduled", "in_progress", "pending_tenant"].map(requestStatusOf)).toEqual(["in_progress", "in_progress", "in_progress", "in_progress"]);
     expect(["done", "closed"].map(requestStatusOf)).toEqual(["resolved", "resolved"]);
     expect(requestStatusOf("cancelled")).toBe("refused");

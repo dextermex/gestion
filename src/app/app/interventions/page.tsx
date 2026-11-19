@@ -5,6 +5,7 @@ import { getDemo, isSampleData } from "@/lib/demo";
 import { formatDate, ticketSeverityMeta, ticketStatusMeta, workOrderStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { isTicketClosed } from "@/lib/gestion/interventions";
 import { isIntervention } from "@/lib/portal/types";
 
 /**
@@ -30,7 +31,7 @@ export default async function InterventionsPage() {
   const artisans = demo.CONTACTS.filter((c) => c.roles.includes("artisan")).map((c) => ({ id: c.id, name: c.name }));
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: demo.ORG.shortName }) : null;
   const sheetLabels = { ...d.interventions, close: d.common.close };
-  const open = TICKETS.filter((t) => !["done", "closed", "cancelled"].includes(t.status));
+  const open = TICKETS.filter((t) => !isTicketClosed(t.status));
   const urgent = open.filter((t) => t.severity === "urgent" || t.severity === "emergency");
   const pendingTenant = open.filter((t) => t.status === "pending_tenant");
   const rows = [...TICKETS].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -101,7 +102,7 @@ export default async function InterventionsPage() {
                   </td>
                   <td className="px-4 py-3 text-right" data-actions>
                     <InterventionSheet
-                      ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, workOrder: t.workOrder }}
+                      ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, closed: isTicketClosed(t.status), workOrder: t.workOrder }}
                       ticketMeta={statusMeta[t.status]}
                       workOrderMeta={t.workOrder ? workOrderMeta[t.workOrder.status] : null}
                       artisans={artisans}
