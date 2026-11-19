@@ -161,7 +161,7 @@ export default async function LotPage({
 
       <TabBar base={base} visible={visible} tab={tab} d={d} />
 
-      {tab === "apercu" && <Overview card={card} demo={demo} d={d} locale={locale} real={real} />}
+      {tab === "apercu" && <Overview card={card} demo={demo} d={d} locale={locale} real={real} base={base} />}
       {tab === "location" && lettable && <Rental card={card} demo={demo} d={d} locale={locale} real={real} />}
       {tab === "technique" && <Technical card={card} demo={demo} d={d} locale={locale} />}
       {tab === "interventions" && <Interventions card={card} demo={demo} d={d} locale={locale} />}

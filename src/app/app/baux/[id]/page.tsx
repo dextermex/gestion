@@ -97,6 +97,15 @@ export default async function BailDetailPage({
       (c.scopeId === null && unitShort.length >= 3 && c.scopeLabel.includes(unitShort)),
   );
 
+  // "Ouvrir la messagerie" opens this tenancy's own conversation: the one it has, or the one the desk's
+  // first word will create (Messages offers that for a running lease); otherwise the inbox.
+  const ownThread = threads.find((c) => c.scopeType === "lease" && c.scopeId === l.id);
+  const messagesHref = ownThread
+    ? `/app/messages?fil=${encodeURIComponent(ownThread.id)}`
+    : l.status === "active" || l.status === "notice"
+      ? `/app/messages?fil=${encodeURIComponent(`lease:${l.id}`)}`
+      : "/app/messages";
+
   const rentMeta = rentStatusMeta(d);
   const depositForms = depositFormLabels(d);
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
@@ -753,7 +762,7 @@ export default async function BailDetailPage({
           <Panel
             title={d.baux.tabMessages}
             action={
-              <Link href="/app/messages" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+              <Link href={messagesHref} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                 {d.baux.msgsOpen}
               </Link>
             }

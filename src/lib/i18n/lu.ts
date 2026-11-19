@@ -923,6 +923,7 @@ export const lu: Dict = {
     colStatus: "Statut",
     backToProperty: "Zréck op {property}",
     openLot: "De Lot opmaachen",
+    allInterventions: "All Interventiounen",
   },
   location: {
     titleInspection: "EDL vun der Entrée",

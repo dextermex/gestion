@@ -91,7 +91,7 @@ export default async function TenantLayout({ children }: { children: React.React
               name={space.me.name}
               email={space.me.email}
               signedIn={Boolean(session)}
-              labels={{ menu: d.tenant.accountMenu, profile: d.tenant.navProfile, settings: d.tenant.navSettings, signOut: d.tenant.signOutShort, sampleNotice: d.common.demoNotice }}
+              labels={{ menu: d.tenant.accountMenu, profile: d.tenant.navProfile, settings: d.tenant.navSettings, documents: d.tenant.navDocuments, help: d.tenant.navHelp, signOut: d.tenant.signOutShort, sampleNotice: d.common.demoNotice }}
             />
           )}
         </div>

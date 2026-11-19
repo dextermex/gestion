@@ -918,6 +918,7 @@ export const en: Dict = {
     colStatus: "Status",
     backToProperty: "Back to {property}",
     openLot: "Open the lot",
+    allInterventions: "All interventions",
   },
   location: {
     titleInspection: "Entry inventory",

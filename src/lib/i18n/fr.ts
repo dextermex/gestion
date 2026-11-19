@@ -929,6 +929,7 @@ export const fr = {
     colStatus: "Statut",
     backToProperty: "Retour à {property}",
     openLot: "Ouvrir le lot",
+    allInterventions: "Toutes les interventions",
   },
   location: {
     titleInspection: "État des lieux d'entrée",

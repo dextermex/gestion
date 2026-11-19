@@ -205,7 +205,7 @@ export default async function ContratsPage() {
               <span style={{ width: `${slots > 0 ? Math.round((validated / slots) * 100) : 0}%` }} />
             </div>
           </div>
-          <Link href="/app/reglages" className="crm-metric-action">
+          <Link href="/app/reglages#modeles" className="crm-metric-action">
             {d.contrats.templatesAction}
             <Icon name="chevron-right" size={15} />
           </Link>
@@ -221,7 +221,7 @@ export default async function ContratsPage() {
           <p className="crm-metric-value">{missing.length}</p>
           <p className="crm-metric-sub">{missing.length > 0 ? d.contrats.missingSub : d.contrats.missingNone}</p>
           {missing.length > 0 && (
-            <Link href="/app/baux" className="crm-metric-action">
+            <Link href="#registre" className="crm-metric-action">
               {d.contrats.missingAction}
               <Icon name="chevron-right" size={15} />
             </Link>
@@ -229,6 +229,8 @@ export default async function ContratsPage() {
         </Card>
       </section>
 
+      {/* The count above ("contracts missing") lands here: the rows it counted say so in their own column. */}
+      <section id="registre" className="scroll-mt-24">
       <Panel title={d.contrats.registryTitle}>
         {rows.length === 0 ? (
           <EmptyState icon="contract" title={d.contrats.missingNone} />
@@ -249,6 +251,52 @@ export default async function ContratsPage() {
                   const contract = contractOf(l);
                   const sending = sendingOf(l);
                   const live = sending !== null && isLive(sending.status);
+                  // Where the contract stands and what can be opened from here: its own column from `sm`, under the lease on a phone.
+                  const contractInfo = sending ? (
+                        <div className="crm-sign-state" data-signature-state={sending.status}>
+                          <p className="crm-contract-state">
+                            {sendingState(sending)}
+                            {sending.providerEnv === "sandbox" && <span className="crm-sign-test">{d.contrats.sigSandbox}</span>}
+                            {sending.status === "done" && sending.signedDocumentId && !sample && (
+                              <>
+                                {" · "}
+                                <a href={`/api/documents/${encodeURIComponent(sending.signedDocumentId)}/fichier`}>{d.contrats.sigOpenSigned}</a>
+                              </>
+                            )}
+                          </p>
+                          {(sending.status === "ongoing" || sending.status === "declined") && (
+                            <ul className="crm-sign-signers">
+                              {sending.signers.map((s) => (
+                                <li key={s.position} className={"is-" + s.status}>
+                                  {signerLine(s)}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ) : contract ? (
+                        <p className="crm-contract-state">
+                          {fmt(d.contrats.contractProduced, { date: formatDate(contract.generatedAt, locale) })}
+                          {!sample && (
+                            <>
+                              {" · "}
+                              <a href={`/api/documents/${encodeURIComponent(contract.documentId)}/fichier`}>{d.contrats.openFile}</a>
+                            </>
+                          )}
+                        </p>
+                      ) : l.status === "draft" ? (
+                        <p className="crm-contract-state">
+                          {d.contrats.contractDraft}
+                          {" · "}
+                          <Link href={`/app/biens/locataire?bail=${encodeURIComponent(l.id)}`}>{d.contrats.resume}</Link>
+                        </p>
+                      ) : (
+                        <p className="crm-contract-state">
+                          {d.contrats.contractOutside}
+                          {" · "}
+                          <Link href={`/app/baux/${l.id}`}>{d.contrats.openLease}</Link>
+                        </p>
+                      );
                   return (
                     <tr key={l.id} className="border-b border-sand-100 align-top last:border-0" data-contract={l.id}>
                       <td className="px-4 py-3">
@@ -259,15 +307,8 @@ export default async function ContratsPage() {
                           {leaseTenantNames(l).join(", ")} · {euros(l.rentCents, locale)}
                           {d.common.perMonth} · {formatDate(l.startDate, locale)}
                         </p>
-                        <div className="mt-2 sm:hidden">
-                          {sending ? (
-                            <p className="crm-contract-state">{sendingState(sending)}</p>
-                          ) : contract ? (
-                            <p className="crm-contract-state">{fmt(d.contrats.contractProduced, { date: formatDate(contract.generatedAt, locale) })}</p>
-                          ) : (
-                            <p className="crm-contract-state">{l.status === "draft" ? d.contrats.contractDraft : d.contrats.contractOutside}</p>
-                          )}
-                        </div>
+                        {/* The same state and the same links as the column a phone hides, each a thumb's height. */}
+                        <div className="mt-2 sm:hidden [&_a]:min-h-10">{contractInfo}</div>
                       </td>
                       <td className="px-3 py-3 max-md:hidden">
                         <MetaBadge meta={typeMeta[l.type]} />
@@ -276,51 +317,7 @@ export default async function ContratsPage() {
                         <MetaBadge meta={statusMeta[l.status]} />
                       </td>
                       <td className="px-3 py-3 max-sm:hidden">
-                        {sending ? (
-                          <div className="crm-sign-state" data-signature-state={sending.status}>
-                            <p className="crm-contract-state">
-                              {sendingState(sending)}
-                              {sending.providerEnv === "sandbox" && <span className="crm-sign-test">{d.contrats.sigSandbox}</span>}
-                              {sending.status === "done" && sending.signedDocumentId && !sample && (
-                                <>
-                                  {" · "}
-                                  <a href={`/api/documents/${encodeURIComponent(sending.signedDocumentId)}/fichier`}>{d.contrats.sigOpenSigned}</a>
-                                </>
-                              )}
-                            </p>
-                            {(sending.status === "ongoing" || sending.status === "declined") && (
-                              <ul className="crm-sign-signers">
-                                {sending.signers.map((s) => (
-                                  <li key={s.position} className={"is-" + s.status}>
-                                    {signerLine(s)}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        ) : contract ? (
-                          <p className="crm-contract-state">
-                            {fmt(d.contrats.contractProduced, { date: formatDate(contract.generatedAt, locale) })}
-                            {!sample && (
-                              <>
-                                {" · "}
-                                <a href={`/api/documents/${encodeURIComponent(contract.documentId)}/fichier`}>{d.contrats.openFile}</a>
-                              </>
-                            )}
-                          </p>
-                        ) : l.status === "draft" ? (
-                          <p className="crm-contract-state">
-                            {d.contrats.contractDraft}
-                            {" · "}
-                            <Link href={`/app/biens/locataire?bail=${encodeURIComponent(l.id)}`}>{d.contrats.resume}</Link>
-                          </p>
-                        ) : (
-                          <p className="crm-contract-state">
-                            {d.contrats.contractOutside}
-                            {" · "}
-                            <Link href={`/app/baux/${l.id}`}>{d.contrats.openLease}</Link>
-                          </p>
-                        )}
+                        {contractInfo}
                       </td>
                       {sample && (
                         <td className="px-3 py-2 text-right">
@@ -344,12 +341,13 @@ export default async function ContratsPage() {
           </div>
         )}
       </Panel>
+      </section>
 
       <Panel
         title={d.contrats.templatesListTitle}
         className="mt-5"
         action={
-          <Link href="/app/reglages" className="crm-contract-link">
+          <Link href="/app/reglages#modeles" className="crm-contract-link">
             {d.contrats.templatesAction}
           </Link>
         }
