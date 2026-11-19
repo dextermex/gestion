@@ -442,3 +442,26 @@ attendues (index `org_id` encore inutilisés sur des tables vides ; `property_id
 `unit_id` sans index couvrant, comme les 155 autres clés étrangères signalées).
 
 Le repli ciblé est noté en tête du fichier et dans `0099_rollback.sql`.
+
+## Backend partagé (schéma + Edge Functions) · 2026-11-19 · consolidé dans `supabase/shared/`
+
+Décision du propriétaire (2026-11-19) : le backend du schéma `gestion` et les
+Edge Functions, jusqu'ici tenus dans `dextermex/morada-mobile-app`, ont **ce dépôt
+pour source de vérité**. Ils sont rapatriés dans `supabase/shared/` (voir son
+README). Ils ne sont **pas** dans le jeu numéroté `supabase/applied/NNNN_*.sql` que
+la CI rejoue : horodatés, dépendants de `vault`/`pg_cron`/`pg_net`, ils ont été
+appliqués à la main sur le projet hébergé, instruction par instruction.
+
+- `20261002120000_notifications_mobile.sql` — appliquée 2026-10-02 (hébergé).
+- `20261010120000_referrals_mobile.sql` — datée 2026-10-10 (état prod à confirmer).
+- `20261011120000_security_tenant_isolation.sql` — appliquée 2026-10-11 (hébergé) :
+  le correctif d'isolation inter-locataires de l'audit du 11 oct. **Déjà en
+  production** ; l'audit mené dans ce dépôt l'avait re-dérivé en doublon (ne pas
+  ré-appliquer).
+- `20261119120000_billing_status.sql` — **NON appliquée** ; à finir de câbler côté
+  web (webhook Stripe en écriture, porte de facturation en lecture).
+
+Edge Functions : `bank`, `notify`, `revenuecat`, `scan-receipt` (déployées par
+`supabase functions deploy`). Rien dans `supabase/applied/` ni dans `public` n'est
+modifié par ce rapatriement ; `g_can` reste intouchée. L'app mobile doit ensuite
+retirer son `supabase/` et rester un pur client.
