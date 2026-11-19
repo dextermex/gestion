@@ -58,5 +58,7 @@ export default defineConfig({
     cwd: "..",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // The phone and responsive specs read the sample cabinet; production leaves this unset.
+    env: { MORADA_SAMPLE_DATA: "1" },
   },
 });

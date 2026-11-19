@@ -20,8 +20,8 @@ import { getSession } from "@/lib/supabase/server";
 
 /**
  * Which data a signed-in account is looking at. `real` is its own, and is the
- * default; the other two are sample cabinets, chosen deliberately from the
- * sidebar and announced by a banner on every screen.
+ * default; the other two are sample cabinets, available only where the
+ * deployment sets `MORADA_SAMPLE_DATA=1`, and announced by a banner on every screen.
  *
  * Sample data lives in this repository and is only ever rendered. It is never
  * written to Supabase, and it is never a fallback: an account with nothing to
@@ -40,7 +40,16 @@ export const DATASET_COOKIE = "morada_dataset";
 // LU overlay is a compile error, mirroring the `Dict = typeof fr` i18n rule.
 const DATASETS = { fr: frData, lu: luData } satisfies Record<SampleId, DemoData>;
 
+/**
+ * Sample cabinets are off unless the deployment asks for them. Production
+ * leaves `MORADA_SAMPLE_DATA` unset: the cookie is then ignored and every
+ * account reads its own space only. The test suite and a demonstration
+ * deployment set it to "1".
+ */
+export const sampleDataEnabled = () => process.env.MORADA_SAMPLE_DATA === "1";
+
 export async function getDatasetId(): Promise<DatasetId> {
+  if (!sampleDataEnabled()) return "real";
   const jar = await cookies();
   const raw = jar.get(DATASET_COOKIE)?.value;
   return raw === "fr" || raw === "lu" ? raw : "real";
@@ -54,9 +63,9 @@ export async function getDatasetId(): Promise<DatasetId> {
  * exists yet. Each domain that gets connected fills its own collection here,
  * and the pages need no change — they were always reading through this seam.
  *
- * Picking a sample cabinet from the sidebar swaps that for one of the two
- * demonstration datasets. It takes a deliberate click, every screen then wears
- * a banner saying so, and nothing about it ever reaches the database.
+ * Where sample data is enabled, the `morada_dataset` cookie swaps that for one
+ * of the two demonstration datasets. Every screen then wears a banner saying
+ * so, and nothing about it ever reaches the database.
  *
  * A screen may say what it is looking at (`ReadScope`): one tenancy, one
  * property, one thread, a page of a list. The real loader then filters and
