@@ -192,7 +192,9 @@ test("arrears: the formal reminder's letter from the ladder's rows, the mise en 
     expect((await page.request.post(`/api/baux/${leaseId}/relances`, { data: { stage, rentPeriodId } })).ok(), `${stage} recorded`).toBe(true);
   }
   await page.reload();
+  // The reload folds the row again: its papers are read once it is open.
   const formalControl = li.locator('[data-doc-kind="arrears_formal"]');
+  await unfold(formalControl);
   await expect(formalControl).toBeVisible();
   const formal = await produce(page, formalControl);
   expect(formal.status, "the formal reminder's letter is produced").toBe(201);
@@ -205,6 +207,7 @@ test("arrears: the formal reminder's letter from the ladder's rows, the mise en 
   expect(letterId).toBeTruthy();
   await page.reload();
   const medControl = docControl(page, "arrears_mise_en_demeure", letterId);
+  await unfold(medControl);
   await expect(medControl).toBeVisible();
   const letter = await produce(page, medControl);
   expect(letter.status, "the mise en demeure is produced").toBe(201);
