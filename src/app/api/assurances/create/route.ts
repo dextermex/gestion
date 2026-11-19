@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg, dbError } from "@/lib/gestion/api";
+import { withOrg, dbError, isUuid, isoDay, refuseWithout } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 
 const KINDS = ["building", "pno", "liability", "rent_guarantee", "pi", "other"] as const;
@@ -9,16 +9,28 @@ export async function POST(req: NextRequest) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
+  const refused = await refuseWithout(ctx, "gestion.properties.edit");
+  if (refused) return refused;
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const kind = (KINDS as readonly string[]).includes(String(body.kind)) ? String(body.kind) : "other";
+  const raw = (await req.json().catch(() => null)) as unknown;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const body = raw as Record<string, unknown>;
+  // No kind given is "other"; a kind that is not one is refused, never stored as another.
+  const givenKind = String(body.kind ?? "");
+  if (givenKind !== "" && !(KINDS as readonly string[]).includes(givenKind)) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const kind = givenKind || "other";
   const provider = String(body.provider ?? "").trim().slice(0, 120);
   const policyNumber = String(body.policyNumber ?? "").trim().slice(0, 60);
   const premiumRaw = String(body.premium ?? "").trim();
   const premiumCents = premiumRaw === "" ? 0 : parseEuroInput(premiumRaw) ?? -1;
   const propertyId = String(body.propertyId ?? "") || null;
-  const expiresOn = /^\d{4}-\d{2}-\d{2}$/.test(String(body.expiresOn)) ? String(body.expiresOn) : null;
-  const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(String(body.startsOn)) ? String(body.startsOn) : null;
+  if (propertyId && !isUuid(propertyId)) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const given = (v: unknown) => v !== undefined && v !== null && v !== "";
+  const expiresOn = isoDay(body.expiresOn);
+  const startsOn = isoDay(body.startsOn);
+  // A date that was typed and is not a day is refused, never dropped.
+  if ((given(body.expiresOn) && !expiresOn) || (given(body.startsOn) && !startsOn)) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  if (startsOn && expiresOn && expiresOn < startsOn) return NextResponse.json({ error: "invalid" }, { status: 400 });
   if (!provider || premiumCents < 0) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
   if (propertyId) {

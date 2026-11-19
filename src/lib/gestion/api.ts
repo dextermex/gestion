@@ -156,13 +156,42 @@ export async function refuseWithout(ctx: Pick<OrgContext, "g" | "org">, permissi
   return (await can(ctx, permission)) ? null : NextResponse.json({ error: "forbidden", permission }, { status: 403 });
 }
 
+/**
+ * The request's JSON body as a plain object. No body, a body that is not
+ * JSON, a list, a bare value or `null` all read as an empty object: a
+ * handler looks its fields up without ever throwing on what was sent.
+ */
+export async function jsonBody(req: Request): Promise<Record<string, unknown>> {
+  const raw: unknown = await req.json().catch(() => null);
+  return raw !== null && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+}
+
+/** A well-formed record id: the only shape a path or a body may name a row by. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
+
+/** A real calendar day written "YYYY-MM-DD" (not the 31st of February), or null. */
+export function isoDay(v: unknown): string | null {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const [y, m, d] = v.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d ? v : null;
+}
+
 /** Uniform PostgREST error mapping, logging the detail server-side only. */
 export function dbError(context: string, error: { code?: string; message?: string } | null): NextResponse {
   const code = error?.code;
   if (code === "PGRST106") return NextResponse.json({ error: "schema_unexposed" }, { status: 503 });
-  // A table or view this build expects that the database does not have yet: the migration is pending.
-  if (code === "PGRST205" || code === "42P01") return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
+  // A table, view or column this build expects that the database does not have yet: the migration is pending.
+  if (code === "PGRST205" || code === "PGRST204" || code === "42P01" || code === "42703") {
+    console.error(`${context}: the database lacks what this build expects:`, code);
+    return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
+  }
   if (code === "42501") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // What was sent cannot be a value of the column it was meant for (an id that
+  // is not one, a number past the column's range, a day that does not exist):
+  // the request is at fault, not the storage.
+  if (code === "22P02" || code === "22003" || code === "22007" || code === "22008") return NextResponse.json({ error: "invalid" }, { status: 400 });
   console.error(`${context} failed:`, code, error?.message);
   return NextResponse.json({ error: "storage_failed" }, { status: 502 });
 }

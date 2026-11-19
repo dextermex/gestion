@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg, dbError } from "@/lib/gestion/api";
+import { withOrg, dbError, isUuid, isoDay, refuseWithout, jsonBody } from "@/lib/gestion/api";
 import { todayISO } from "@/lib/clock";
 
 /**
@@ -7,14 +7,15 @@ import { todayISO } from "@/lib/clock";
  * effect runs, through the generated legal_effect_on column), or the letter
  * came back undelivered. Nothing else about a letter changes after dispatch.
  */
-const isoDay = (v: unknown): string | null => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null);
-
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const refused = await refuseWithout(ctx, "gestion.leases.edit");
+  if (refused) return refused;
+  const body = await jsonBody(req);
   const today = todayISO();
 
   const { data: letter, error: readErr } = await g.from("registered_letters").select("id,status,dispatched_on").eq("org_id", org.id).eq("id", id).maybeSingle();
@@ -31,7 +32,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!arReceivedOn || arReceivedOn > today || (dispatchedOn && arReceivedOn < dispatchedOn)) return NextResponse.json({ error: "invalid" }, { status: 400 });
     patch = { status: "ar_received", ar_received_on: arReceivedOn };
   }
-  const { error } = await g.from("registered_letters").update(patch).eq("org_id", org.id).eq("id", id);
+  // Only a letter still on its way changes: the status read above is part of
+  // the write, so two answers for one letter cannot both land, and "ok" is
+  // said only of a row that changed.
+  const { data, error } = await g.from("registered_letters").update(patch).eq("org_id", org.id).eq("id", id).eq("status", "dispatched").select("id");
   if (error) return dbError("registered letter update", error);
+  if (!data?.length) return NextResponse.json({ error: "already" }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

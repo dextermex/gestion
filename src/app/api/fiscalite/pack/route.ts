@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg } from "@/lib/gestion/api";
-import { getDatasetId, getDemo, isSampleData } from "@/lib/demo";
+import { getDemo, isSampleData } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { renderLabels } from "@/lib/documents/generate";
@@ -14,9 +14,9 @@ import { lineLabel, sectionLabel } from "@/lib/fiscal/labels";
  * The exercise as files: the pack (PDF), the lines of the 190/210
  * statements (CSV, the accountant's import) and one property's form
  * fields (CSV, to copy over). Every figure comes from the same prepared
- * exercise as the screen. A download is a read: a sample cabinet gets
- * real files computed from its dataset, a real account reads under its
- * own token.
+ * exercise as the screen. A download is a read, for a signed-in member of
+ * a workspace: a sample cabinet gets real files computed from its dataset,
+ * a real account reads under its own token.
  */
 export const runtime = "nodejs";
 
@@ -28,10 +28,11 @@ function attachment(name: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  if ((await getDatasetId()) === "real") {
-    const ctx = await withOrg();
-    if (ctx instanceof NextResponse) return ctx;
-  }
+  // A session and a workspace, whatever the dataset: a sample cabinet's files
+  // are fictitious, but producing one is work this server does on demand,
+  // and it does none for a stranger.
+  const ctx = await withOrg();
+  if (ctx instanceof NextResponse) return ctx;
   const params = req.nextUrl.searchParams;
   const ownerId = str(params.get("proprietaire"), 64);
   const taxYear = Number(params.get("exercice"));
@@ -46,7 +47,14 @@ export async function GET(req: NextRequest) {
 
   if (format === "pdf") {
     const model = composeFiscalPack(owner, { d, locale, cabinetName: data.ORG.name, today: data.TODAY, sample });
-    const bytes = await renderPdf(model, renderLabels(locale));
+    let bytes: Awaited<ReturnType<typeof renderPdf>>;
+    try {
+      bytes = await renderPdf(model, renderLabels(locale));
+    } catch (e) {
+      // The renderer's own failure, said as one: the kind of error, never the exercise's figures.
+      console.error("fiscal pack render failed:", e instanceof Error ? e.name : "error");
+      return NextResponse.json({ error: "render_failed" }, { status: 500 });
+    }
     const name = `${safeFileName(fmt(d.fiscalite.dlPack, { year, owner: owner.ownerName }))}.pdf`;
     return new NextResponse(new Uint8Array(bytes), { status: 200, headers: { "Content-Type": "application/pdf", "Content-Disposition": attachment(name), "Cache-Control": "private, no-store" } });
   }

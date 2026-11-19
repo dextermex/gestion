@@ -1,23 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg, dbError } from "@/lib/gestion/api";
+import { withOrg, dbError, isUuid, isoDay, refuseWithout } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 
 /** One insurance policy: the building's, or the tenancy's. */
 const KINDS = ["building", "pno", "liability", "rent_guarantee", "pi", "other"] as const;
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const has = (b: Record<string, unknown>, k: string) => Object.prototype.hasOwnProperty.call(b, k);
-const day = (v: unknown) => (ISO.test(str(v, 10)) ? str(v, 10) : null);
+const PERMISSION = "gestion.properties.edit";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const refused = await refuseWithout(ctx, PERMISSION);
+  if (refused) return refused;
+  const raw = (await req.json().catch(() => null)) as unknown;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const body = raw as Record<string, unknown>;
 
   const patch: Record<string, unknown> = {};
-  if (has(body, "kind") && (KINDS as readonly string[]).includes(String(body.kind))) patch.kind = String(body.kind);
+  if (has(body, "kind")) {
+    if (!(KINDS as readonly string[]).includes(String(body.kind))) return NextResponse.json({ error: "invalid" }, { status: 400 });
+    patch.kind = String(body.kind);
+  }
   if (has(body, "provider")) {
     const provider = str(body.provider, 120);
     if (!provider) return NextResponse.json({ error: "invalid" }, { status: 400 });
@@ -25,11 +32,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (has(body, "policyNumber")) patch.policy_number = str(body.policyNumber, 80);
   if (has(body, "premium")) {
-    const raw = str(body.premium, 20);
-    patch.premium_cents = raw === "" ? 0 : parseEuroInput(raw) ?? 0;
+    // An empty premium is "none"; one that does not read as an amount is refused, never stored as zero.
+    const premium = str(body.premium, 20);
+    const cents = premium === "" ? 0 : parseEuroInput(premium);
+    if (cents === null) return NextResponse.json({ error: "invalid" }, { status: 400 });
+    patch.premium_cents = cents;
   }
-  if (has(body, "startsOn")) patch.starts_on = day(body.startsOn);
-  if (has(body, "expiresOn")) patch.expires_on = day(body.expiresOn);
+  // A date is a real day or is cleared; anything else is refused.
+  for (const [key, column] of [["startsOn", "starts_on"], ["expiresOn", "expires_on"]] as const) {
+    if (!has(body, key)) continue;
+    const given = body[key];
+    const value = given === null || given === "" ? null : isoDay(given);
+    if (value === null && given !== null && given !== "") return NextResponse.json({ error: "invalid" }, { status: 400 });
+    patch[column] = value;
+  }
+  if (typeof patch.starts_on === "string" && typeof patch.expires_on === "string" && patch.expires_on < patch.starts_on) return NextResponse.json({ error: "invalid" }, { status: 400 });
   if (has(body, "notes")) patch.notes = str(body.notes, 2000);
 
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
@@ -44,7 +61,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;
-  const { error } = await g.from("insurance_policies").delete().eq("org_id", org.id).eq("id", id);
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const refused = await refuseWithout(ctx, PERMISSION);
+  if (refused) return refused;
+  // "Deleted" is said only of a row that was: none matched is not found.
+  const { data, error } = await g.from("insurance_policies").delete().eq("org_id", org.id).eq("id", id).select("id");
   if (error) return dbError("insurance delete", error);
+  if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
