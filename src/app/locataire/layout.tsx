@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import GestionLogo from "@/components/gestion/GestionLogo";
 import ScrollHeader from "@/components/gestion/ScrollHeader";
+import SessionKeeper from "@/components/gestion/SessionKeeper";
 import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
 import TenantTabs from "@/components/gestion/TenantTabs";
@@ -15,6 +16,7 @@ import { SEEN_COOKIE, parseSeen } from "@/lib/portal/seen";
 import { getTenantView } from "@/lib/portal/space";
 import { todoFor, unreadCount } from "@/lib/portal/view";
 import { getSession } from "@/lib/supabase/server";
+import { REQUESTED_PATH_HEADER, signInAddress } from "@/lib/auth/return-path";
 
 export const metadata: Metadata = {
   title: "Morada Gestion · Espace locataire",
@@ -39,7 +41,8 @@ export const metadata: Metadata = {
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const { d } = await getI18n();
   const view = await getTenantView();
-  if (view.kind === "signed_out") redirect("/connexion?next=/locataire");
+  // Signing in returns to the page that was asked for (the middleware names it).
+  if (view.kind === "signed_out") redirect(signInAddress((await headers()).get(REQUESTED_PATH_HEADER), "locataire"));
   const session = await getSession();
   const { space, sample, canManage } = view;
   const sampleCabinet = sample ? (await getDemo()).ORG.shortName : null;
@@ -61,6 +64,7 @@ export default async function TenantLayout({ children }: { children: React.React
 
   return (
     <div className="tenant-space min-h-dvh bg-sand-50">
+      {session && <SessionKeeper />}
       {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
           is the whole screen: the bar, the sample line, the foot and the bottom bar
           step aside, and the conversation's own header takes the top. */}

@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
+import SessionKeeper from "@/components/gestion/SessionKeeper";
 import ProvisionError from "@/components/gestion/ProvisionError";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
+import { REQUESTED_PATH_HEADER, signInAddress } from "@/lib/auth/return-path";
 import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
 
@@ -32,7 +35,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           active: { id: "preview", name: "Espace de test", kind: "manager", role: "owner" },
         }
       : await getIdentity();
-  if (!identity) redirect("/connexion?next=/app");
+  // Signing in returns to the page that was asked for (the middleware names it).
+  if (!identity) redirect(signInAddress((await headers()).get(REQUESTED_PATH_HEADER), "app"));
 
   // One account, two roles. Whether this account is a tenant anywhere is the
   // predicate the tenant space starts from (`gestion.is_tenant()`), asked
@@ -118,8 +122,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <GestionShell locale={locale} dict={d} shell={shellData}>
-      {children}
-    </GestionShell>
+    <>
+      {session && <SessionKeeper />}
+      <GestionShell locale={locale} dict={d} shell={shellData}>
+        {children}
+      </GestionShell>
+    </>
   );
 }

@@ -5,17 +5,31 @@
  */
 
 const CHUNK = 3000;              // room under the 4096-byte per-cookie limit
-const MAX_CHUNKS = 8;
-const ONE_YEAR = 60 * 60 * 24 * 365;
+export const MAX_CHUNKS = 8;
+/**
+ * How long the cookie outlives its last write. Every renewal of the access
+ * token writes it again (about hourly while a space is open), so this is
+ * sixty days without a visit, not sixty days in all. It was a year.
+ */
+export const SESSION_MAX_AGE = 60 * 60 * 24 * 60;
 const B64 = "b64.";              // marks an encoded value, so raw ones still read
+
+/**
+ * The parent domain a host shares its session with, or nothing: localhost
+ * and preview deployments stay host-scoped. One rule for the browser, which
+ * writes the cookie on sign-in, and the server, which writes it again when
+ * it renewed the access token.
+ */
+export function sharedCookieDomain(hostname: string): string | null {
+  const host = hostname.toLowerCase();
+  return host === "morada.lu" || host.endsWith(".morada.lu") ? ".morada.lu" : null;
+}
 
 /** Cookies are shared across subdomains only when scoped to the parent. */
 function domainAttr(): string {
   if (typeof window === "undefined") return "";
-  const host = window.location.hostname;
-  return host === "morada.lu" || host.endsWith(".morada.lu")
-    ? "; domain=.morada.lu"
-    : ""; // localhost and preview deployments stay host-scoped
+  const domain = sharedCookieDomain(window.location.hostname);
+  return domain ? `; domain=${domain}` : "";
 }
 
 /**
@@ -24,7 +38,7 @@ function domainAttr(): string {
  * the per-cookie limit; base64url inflates by exactly a third and produces
  * only characters a cookie accepts verbatim.
  */
-function encode(value: string): string {
+export function encodeSession(value: string): string {
   const bytes = new TextEncoder().encode(value);
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -33,12 +47,31 @@ function encode(value: string): string {
   return B64 + btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function decode(stored: string): string {
+export function decodeSession(stored: string): string {
   if (!stored.startsWith(B64)) return stored;
   const binary = atob(stored.slice(B64.length).replace(/-/g, "+").replace(/_/g, "/"));
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new TextDecoder().decode(bytes);
+}
+
+/**
+ * The cookies one session is written as: a single one under the key when it
+ * fits, otherwise `<key>.0`, `<key>.1`… Whoever writes them (the browser
+ * below, the server after a renewal) must also erase the names this list
+ * does not carry, or a stale piece would be read back with the new ones.
+ */
+export function sessionCookieParts(key: string, value: string): { name: string; value: string }[] {
+  const encoded = encodeSession(value);
+  if (encoded.length <= CHUNK) return [{ name: key, value: encoded }];
+  const parts: { name: string; value: string }[] = [];
+  for (let i = 0; i * CHUNK < encoded.length; i++) parts.push({ name: `${key}.${i}`, value: encoded.slice(i * CHUNK, (i + 1) * CHUNK) });
+  return parts;
+}
+
+/** Every name a session may have been written under. */
+export function sessionCookieNames(key: string): string[] {
+  return [key, ...Array.from({ length: MAX_CHUNKS }, (_, i) => `${key}.${i}`)];
 }
 
 function readCookie(name: string): string | null {
@@ -108,7 +141,7 @@ export function createCookieStorage(opts: { mirrorToLocalStorage: boolean }) {
       const stored = readChunked(key);
       if (stored !== null) {
         try {
-          return decode(stored);
+          return decodeSession(stored);
         } catch {
           // A truncated or hand-edited cookie reads as "no session" rather
           // than throwing inside the Supabase client.
@@ -136,21 +169,16 @@ export function createCookieStorage(opts: { mirrorToLocalStorage: boolean }) {
 
     setItem(key: string, value: string): void {
       clearChunks(key);
-      const encoded = encode(value);
-      if (encoded.length <= CHUNK) {
-        writeCookie(key, encoded, ONE_YEAR);
-      } else {
-        for (let i = 0; i * CHUNK < encoded.length; i++) {
-          writeCookie(`${key}.${i}`, encoded.slice(i * CHUNK, (i + 1) * CHUNK), ONE_YEAR);
-        }
-      }
-      // Phase 1 keeps localStorage in step, so reverting the deploy logs
-      // nobody out. Phase 3 drops this.
+      for (const part of sessionCookieParts(key, value)) writeCookie(part.name, part.value, SESSION_MAX_AGE);
+      // The cookie is the one record. The copy an earlier build kept in
+      // localStorage is written only where a caller still asks for it, and
+      // otherwise removed the first time the session is written again.
       try {
         if (opts.mirrorToLocalStorage) local()?.setItem(key, value);
+        else local()?.removeItem(key);
         local()?.setItem(adoptedMarker(key), "1");
       } catch {
-        /* quota or private browsing — the cookie is the source of truth */
+        /* quota or private browsing: the cookie is the source of truth */
       }
     },
 
