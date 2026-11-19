@@ -118,3 +118,32 @@ describe("the rail", () => {
     expect(aml()).not.toBeNull();
   });
 });
+
+describe("the workspace at the head of the rail", () => {
+  const two = { workspaceId: "ag-1", workspaces: [{ id: "ag-1", name: "Cabinet Reuter" }, { id: "ag-2", name: "Nadia Kremer" }] };
+
+  it("is a plain name for an account with one workspace", async () => {
+    await act(async () => root.render(<GestionShell locale="fr" dict={fr} shell={shell({ workspaceId: "ag-1", workspaces: [two.workspaces[0]] })}><p>page</p></GestionShell>));
+    expect(document.querySelector(".crm-workspace-switch")).toBeNull();
+    expect(document.querySelector(".crm-workspace")?.textContent).toContain("Espace test");
+  });
+
+  it("opens another workspace of the account: the choice is kept and the app starts again on its home", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { href: "http://localhost/app/biens/p-1", assign });
+    await act(async () => root.render(<GestionShell locale="fr" dict={fr} shell={shell(two)}><p>page</p></GestionShell>));
+    const toggle = document.querySelector<HTMLButtonElement>("aside .crm-workspace-switch")!;
+    expect(toggle.getAttribute("aria-label")).toContain(fr.shell.switchSpace);
+    await act(async () => toggle.click());
+    const rows = [...document.querySelectorAll<HTMLButtonElement>("aside .crm-workspace-switch + ul button")];
+    expect(rows.map((b) => b.textContent)).toEqual(["Cabinet Reuter", "Nadia Kremer"]);
+    expect(rows[0].getAttribute("aria-current")).toBe("true");
+    // The workspace on screen: nothing changes.
+    await act(async () => rows[0].click());
+    expect(assign).not.toHaveBeenCalled();
+    await act(async () => toggle.click());
+    await act(async () => document.querySelectorAll<HTMLButtonElement>("aside .crm-workspace-switch + ul button")[1].click());
+    expect(document.cookie).toContain("morada_workspace=ag-2");
+    expect(assign).toHaveBeenCalledWith("/app");
+  });
+});

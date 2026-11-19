@@ -2588,6 +2588,8 @@ export const fr = {
     existsSignIn: "Se connecter avec cette adresse",
     weakPassword: "Mot de passe trop court : 6 caractères minimum.",
     passwordHint: "6 caractères minimum. Votre navigateur peut vous en proposer un.",
+    noAccessTitle: "Cet espace ne vous est pas ouvert",
+    noAccessBody: "Votre compte est rattaché à un espace de gestion, mais votre rôle n'y donne pas accès aux biens. Demandez à la personne qui administre cet espace de vous l'ouvrir, ou écrivez-nous.",
   },
   billing: {
     title: "Abonnement",

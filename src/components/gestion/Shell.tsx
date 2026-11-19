@@ -21,6 +21,7 @@ import type { DatasetId } from "@/lib/demo";
 import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
 import { todayISO } from "@/lib/clock";
 import { inSection } from "@/lib/nav-match";
+import { WORKSPACE_COOKIE } from "@/lib/workspace-cookie";
 
 /** Everything the shell needs from the active demo dataset, precomputed
  *  server-side in the layout — the client bundle never ships the datasets. */
@@ -45,6 +46,9 @@ export interface ShellData {
   progress: Progress;
   /** The workspace's subscription, when subscriptions are on and the data is its own. */
   billing: ShellBilling | null;
+  /** The workspace on screen and every workspace the account may open: more than one shows the switch in the rail. */
+  workspaceId?: string;
+  workspaces?: Array<{ id: string; name: string }>;
 }
 
 /* --------------------------------- nav model --------------------------------
@@ -305,13 +309,14 @@ export default function GestionShell({
       >
         <GestionLogo />
       </Link>
-      <div className="crm-workspace">
-        <span className="crm-workspace-icon"><Icon name="properties" size={19} /></span>
-        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{shell.orgShortName}</span>
-          {/* The role is named only where there is a second one to tell it from. */}
-          {shell.tenant && <span className="block text-xs text-ink-soft">{d.shell.roleOwner}</span>}
-        </span>
-      </div>
+      {/* The role is named only where there is a second one to tell it from; the workspace becomes a switch only where there is another to open. */}
+      <WorkspaceBlock
+        name={shell.orgShortName}
+        role={shell.tenant ? d.shell.roleOwner : null}
+        currentId={shell.workspaceId ?? ""}
+        others={shell.sampleCabinet ? [] : (shell.workspaces ?? [])}
+        label={d.shell.switchSpace}
+      />
       <SidebarNav items={NAV} pathname={pathname} expanded={expanded} onNavigate={() => setMobileOpen(false)}
         onToggle={(href) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }))} />
     </nav>
@@ -510,6 +515,68 @@ export default function GestionShell({
         {!shell.sampleCabinet && <GettingStarted d={d} progress={shell.progress} kind={shell.workspaceKind} />}
       </div>
     </MotionConfig>
+  );
+}
+
+/* ------------------------------ workspace block ----------------------------- */
+
+/**
+ * The workspace on screen, at the head of the rail. An account that belongs
+ * to several (its own and an agency's, say) opens another from here: the
+ * choice is kept in a cookie the server checks against the account's
+ * memberships, and the app starts again on that workspace's home, since no
+ * record of one workspace exists in another.
+ */
+function WorkspaceBlock({ name, role, currentId, others, label }: { name: string; role: string | null; currentId: string; others: Array<{ id: string; name: string }>; label: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
+  const body = (
+    <>
+      <span className="crm-workspace-icon"><Icon name="properties" size={19} /></span>
+      <span className="min-w-0 flex-1 text-left">
+        <span className="block truncate text-sm font-semibold text-ink">{name}</span>
+        {role && <span className="block text-xs text-ink-soft">{role}</span>}
+      </span>
+    </>
+  );
+  if (others.length < 2) return <div className="crm-workspace">{body}</div>;
+  const pick = (id: string) => {
+    setOpen(false);
+    if (id === currentId) return;
+    document.cookie = `${WORKSPACE_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
+    window.location.assign("/app");
+  };
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-label={`${label} · ${name}`}
+        className="crm-workspace crm-workspace-switch tactile w-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      >
+        {body}
+        <Icon name="chevron-down" size={15} className="shrink-0 text-ink-soft" />
+      </button>
+      {open && (
+        <ul aria-label={label} className="absolute inset-x-0 top-full z-40 -mt-3 rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg">
+          {others.map((w) => (
+            <li key={w.id}>
+              <button
+                type="button"
+                onClick={() => pick(w.id)}
+                aria-current={w.id === currentId ? "true" : undefined}
+                className={"flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-medium hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 " + (w.id === currentId ? "text-brand-800" : "text-ink")}
+              >
+                <span className="min-w-0 truncate">{w.name}</span>
+                {w.id === currentId && <Icon name="check" size={16} className="shrink-0 text-brand-600" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

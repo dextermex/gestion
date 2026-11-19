@@ -1,6 +1,8 @@
 import "server-only";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { authedClient, getSession, type Session } from "@/lib/supabase/server";
+import { WORKSPACE_COOKIE } from "@/lib/workspace-cookie";
 
 /**
  * Who the signed-in user is, and which workspaces they may manage.
@@ -28,6 +30,23 @@ export interface Identity {
   displayName: string;
   workspaces: Workspace[];
   active: Workspace | null;
+}
+
+/**
+ * The workspace the browser asked for, among those the account may open: an
+ * account in several chooses one in the rail, and the choice holds. The
+ * cookie only names a workspace; it opens nothing the database did not
+ * already admit the account to.
+ */
+async function chosenWorkspace(workspaces: Workspace[]): Promise<Workspace | null> {
+  if (workspaces.length < 2) return workspaces[0] ?? null;
+  let wanted: string | undefined;
+  try {
+    wanted = (await cookies()).get(WORKSPACE_COOKIE)?.value;
+  } catch {
+    // Outside a request (a script, a test): no choice to read.
+  }
+  return workspaces.find((w) => w.id === wanted) ?? workspaces[0];
 }
 
 /** "Prénom Nom", or the part of the e-mail before the @ as a last resort. */
@@ -88,7 +107,7 @@ export const getIdentity = cache(async (): Promise<Identity | null> => {
     email: session.email,
     displayName,
     workspaces,
-    active: workspaces[0] ?? null,
+    active: await chosenWorkspace(workspaces),
   };
 });
 

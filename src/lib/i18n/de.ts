@@ -2577,6 +2577,8 @@ export const de: Dict = {
     existsSignIn: "Mit dieser Adresse anmelden",
     weakPassword: "Passwort zu kurz: mindestens 6 Zeichen.",
     passwordHint: "Mindestens 6 Zeichen. Ihr Browser kann eines vorschlagen.",
+    noAccessTitle: "Dieser Bereich ist für Sie nicht freigegeben",
+    noAccessBody: "Ihr Konto gehört zu einem Verwaltungsbereich, aber Ihre Rolle gibt dort keinen Zugriff auf die Objekte. Bitten Sie die Person, die diesen Bereich verwaltet, ihn für Sie freizugeben, oder schreiben Sie uns.",
   },
   billing: {
     title: "Abonnement",

@@ -2582,6 +2582,8 @@ export const lu: Dict = {
     existsSignIn: "Mat dëser Adress umellen",
     weakPassword: "Passwuert ze kuerz: mindestens 6 Zeechen.",
     passwordHint: "Mindestens 6 Zeechen. Äre Browser kann Iech eent proposéieren.",
+    noAccessTitle: "Dëse Beräich ass fir Iech net fräigeschalt",
+    noAccessBody: "Äre Kont gehéiert zu engem Gestiounsberäich, awer Är Roll gëtt do keen Zougrëff op d'Bienen. Frot d'Persoun, déi dëse Beräich verwalt, en fir Iech fräizeschalten, oder schreift eis.",
   },
   billing: {
     title: "Abonnement",

@@ -2577,6 +2577,8 @@ export const en: Dict = {
     existsSignIn: "Sign in with this address",
     weakPassword: "Password too short: 6 characters minimum.",
     passwordHint: "6 characters minimum. Your browser can suggest one.",
+    noAccessTitle: "This space is not open to you",
+    noAccessBody: "Your account belongs to a management space, but your role there gives no access to the properties. Ask the person who administers that space to open it for you, or write to us.",
   },
   billing: {
     title: "Subscription",

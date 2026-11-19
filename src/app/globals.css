@@ -739,7 +739,8 @@ summary {
   .crm-mobile-sidebar { overflow-y: auto; overscroll-behavior: contain; }
   .crm-mobile-sidebar .crm-sidebar-inner { height: auto; min-height: 100%; }
   .crm-mobile-sidebar .crm-navigation { flex: none; overflow-y: visible; }
-  .crm-mobile-sidebar .crm-workspace { display: none; }
+  /* The switch between workspaces stays: it is the only way to another one. */
+  .crm-mobile-sidebar .crm-workspace:not(.crm-workspace-switch) { display: none; }
 }
 
 .crm-onboarding { max-width: calc(100vw - 2rem); }
