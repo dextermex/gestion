@@ -174,7 +174,7 @@ export function propertyMenu(
     const identities: MenuEntry[] = demo.IDENTITY_READY
       ? tenants.map((tenant, i) => {
           const label = `${d.modify.tenantIdentity} \u00b7 ${tenant.name}`;
-          return { id: `identity-${i}`, label, topic: identityTopic(d, tenant, `identity-${i}`, label) };
+          return { id: `identity-${i}`, label, topic: identityTopic(d, tenant, `identity-${i}`, label, demo.TODAY) };
         })
       : [];
 
@@ -266,7 +266,7 @@ export function propertyMenu(
                       (s) => ({ value: s, label: d.status.deposit[s] }),
                     ),
                   },
-                  { kind: "date" as const, name: "receivedOn", label: d.modify.receivedOn, value: deposit.receivedOn ?? "" },
+                  { kind: "date" as const, name: "receivedOn", label: d.modify.receivedOn, value: deposit.receivedOn ?? "", max: demo.TODAY },
                 ],
               },
             },
@@ -402,7 +402,7 @@ const COUNTRIES = [
  * form, register number, representative and seat. The kind is the first
  * field; the other kind's fields show once it is saved.
  */
-function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string): EditTopic {
+function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string, today: string): EditTopic {
   const idn = tenant.identity;
   const legal = tenant.kind === "legal";
   const choose = { value: "", label: d.modify.choose };
@@ -443,7 +443,7 @@ function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string):
           value: idn?.civility ?? "",
           options: [choose, { value: "m", label: d.modify.civilityM }, { value: "f", label: d.modify.civilityF }, { value: "x", label: d.modify.civilityX }],
         },
-        { kind: "date", name: "birthDate", label: d.modify.birthDate, value: idn?.birthDate ?? "" },
+        { kind: "date", name: "birthDate", label: d.modify.birthDate, value: idn?.birthDate ?? "", max: today },
         { kind: "text", name: "birthPlace", label: d.modify.birthPlace, value: idn?.birthPlace ?? "", maxLength: 120 },
         { kind: "text", name: "nationality", label: d.modify.nationality, value: idn?.nationality ?? "", hint: d.modify.nationalityHint, maxLength: 80 },
         ...address,

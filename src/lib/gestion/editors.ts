@@ -12,7 +12,7 @@ export type EditField =
   | { kind: "text"; name: string; label: string; value: string; hint?: string; required?: boolean; maxLength?: number; placeholder?: string; mono?: boolean; span?: 1 | 2 }
   | { kind: "number"; name: string; label: string; value: string; hint?: string; span?: 1 | 2 }
   | { kind: "euro"; name: string; label: string; value: string; hint?: string; span?: 1 | 2 }
-  | { kind: "date"; name: string; label: string; value: string; hint?: string; span?: 1 | 2 }
+  | { kind: "date"; name: string; label: string; value: string; hint?: string; /** Bounds, as ISO days. */ min?: string; max?: string; span?: 1 | 2 }
   | { kind: "select"; name: string; label: string; value: string; options: Array<{ value: string; label: string }>; hint?: string; span?: 1 | 2 }
   | { kind: "toggle"; name: string; label: string; value: boolean; span?: 1 | 2 }
   | { kind: "textarea"; name: string; label: string; value: string; maxLength?: number; span?: 1 | 2 };

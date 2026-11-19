@@ -7,6 +7,7 @@ import { fmt, type Locale } from "@/lib/i18n/config";
 import { euros, formatDate, formatMonth } from "@/lib/types";
 import { callJson } from "./call";
 import { refusalLine, useApiProblems } from "./ApiErrors";
+import DateField from "./DateField";
 
 /**
  * The residential adjustment as steps the desk records: the capital investi
@@ -17,6 +18,8 @@ import { refusalLine, useApiProblems } from "./ApiErrors";
  * plays the outcome and writes nothing.
  */
 export interface IndexationLabels {
+  /** How a day is typed: day, month, year. */
+  datePlaceholder: string;
   capitalDeclare: string;
   capitalYear: string;
   capitalAmount: string;
@@ -212,7 +215,7 @@ export function AdjustmentSteps({
   const dateField = (label: string, min?: string) => (
     <label className="block">
       <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{label}</span>
-      <Input type="date" value={date} min={min} max={todayISO} onChange={(e) => setDate(e.target.value)} className="w-44 max-sm:w-full" disabled={busy} />
+      <DateField value={date} min={min} max={todayISO} onChange={setDate} placeholder={labels.datePlaceholder} className="w-44 max-sm:w-full" disabled={busy} />
     </label>
   );
 

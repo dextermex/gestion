@@ -21,7 +21,7 @@ export default async function IndexationPage() {
   const sample = await isSampleData();
   const writable = !sample;
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
-  const indexationLabels = { ...d.indexation, close: d.common.close };
+  const indexationLabels = { ...d.indexation, close: d.common.close, datePlaceholder: d.loyers.datePlaceholder };
   const docLabels = generateLabels(d);
 
   // A real account with nothing in it: say so rather than reach for a

@@ -1090,6 +1090,7 @@ export function modifyLabels(d: Dict) {
     failed: d.modify.failed,
     emailTaken: d.modify.emailTaken,
     schemaOutdated: d.modify.schemaOutdated,
+    datePlaceholder: d.loyers.datePlaceholder,
     photoCurrent: d.modify.photoCurrent,
     photoChoose: d.modify.photoChoose,
     photoRemove: d.modify.photoRemove,

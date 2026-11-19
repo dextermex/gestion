@@ -10,6 +10,8 @@ import { PHONE_SHEET_QUERY, useMediaQuery } from "@/lib/hooks";
 import { COVER_PHOTO_MAX_MB, shrinkPhoto } from "@/lib/photo";
 import { ApiProblemNote, useApiProblems } from "@/components/gestion/ApiErrors";
 import type { ApiProblem } from "@/lib/api-errors";
+import DateField from "@/components/gestion/DateField";
+import { invalidDayField } from "@/lib/forms";
 import { initialValues, topicBody, type EditField, type EditTopic, type EditValues, type MenuGroup, type SpecialEditor } from "@/lib/gestion/editors";
 
 /**
@@ -33,6 +35,8 @@ export interface ModifyLabels {
   emailTaken: string;
   /** Fields the database does not carry yet (a migration awaiting approval). */
   schemaOutdated: string;
+  /** How a day is typed in a date field: day, month, year. */
+  datePlaceholder: string;
   /** Photos editor. */
   photoCurrent: string;
   photoChoose: string;
@@ -182,10 +186,12 @@ function FieldView({
   field,
   value,
   onChange,
+  datePlaceholder,
 }: {
   field: EditField;
   value: string | boolean;
   onChange: (v: string | boolean) => void;
+  datePlaceholder: string;
 }) {
   if (field.kind === "toggle") {
     return (
@@ -198,6 +204,14 @@ function FieldView({
         />
         <span className="text-sm text-ink">{field.label}</span>
       </label>
+    );
+  }
+  if (field.kind === "date") {
+    // The product's own date field: day, month, year on every browser, handing back an ISO day.
+    return (
+      <Field label={field.label} hint={field.hint}>
+        <DateField value={String(value)} onChange={onChange} min={field.min} max={field.max} placeholder={datePlaceholder} />
+      </Field>
     );
   }
   const common = { value: String(value), onChange: (e: { target: { value: string } }) => onChange(e.target.value) };
@@ -216,7 +230,7 @@ function FieldView({
       ) : (
         <Input
           {...common}
-          type={field.kind === "date" ? "date" : "text"}
+          type="text"
           inputMode={field.kind === "euro" || field.kind === "number" ? "decimal" : undefined}
           required={"required" in field ? field.required : undefined}
           maxLength={"maxLength" in field ? field.maxLength : undefined}
@@ -279,13 +293,16 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
         className="space-y-1"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!saving) void submit();
+          // A date typed that is not a day is corrected first: sent as it is, it would erase the stored one.
+          const badDay = invalidDayField(e.currentTarget);
+          if (badDay) badDay.focus();
+          else if (!saving) void submit();
         }}
       >
         <div className="grid grid-cols-2 gap-x-3">
           {topic.fields.map((f) => (
             <div key={f.name} className={f.span === 2 || f.kind === "textarea" ? "col-span-2" : "col-span-2 sm:col-span-1"}>
-              <FieldView field={f} value={values[f.name]} onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} />
+              <FieldView field={f} value={values[f.name]} onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} datePlaceholder={labels.datePlaceholder} />
             </div>
           ))}
         </div>

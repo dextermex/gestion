@@ -20,6 +20,8 @@ export default async function GarantiesPage() {
   const sample = await isSampleData();
   const writable = !sample;
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
+  // The guarantee's own copy, with the way a day is typed in its date fields.
+  const depositLabels = { ...d.garanties, datePlaceholder: d.loyers.datePlaceholder };
 
   // A real account with nothing in it: say so rather than reach for a
   // showcase record that no longer exists.
@@ -161,7 +163,7 @@ export default async function GarantiesPage() {
                         lineStatus={line.status}
                         todayISO={TODAY}
                         writable={writable}
-                        labels={d.garanties}
+                        labels={depositLabels}
                       />
                     )}
                   </div>
@@ -222,7 +224,7 @@ export default async function GarantiesPage() {
                 locale={locale}
                 writable={writable}
                 sampleNote={sampleNote}
-                labels={d.garanties}
+                labels={depositLabels}
               />
             )}
 
@@ -283,7 +285,7 @@ export default async function GarantiesPage() {
                       </div>
                     </div>
                     {dep.status === "pending" && (
-                      <DepositReceive depositId={dep.id} todayISO={TODAY} locale={locale} writable={writable} sampleNote={sampleNote} labels={d.garanties} />
+                      <DepositReceive depositId={dep.id} todayISO={TODAY} locale={locale} writable={writable} sampleNote={sampleNote} labels={depositLabels} />
                     )}
                   </li>
                 );
