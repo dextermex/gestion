@@ -11,12 +11,19 @@ import { addMonths } from "@/domain/dates";
 /**
  * The months a live lease's ledger must hold, as YYYY-MM-01: from the start
  * month (capped a year back) through next month, never past the lease's end.
+ * `trackFrom` is the month the owner chose to track rent from: a tenancy that
+ * already ran when it was recorded opens no month before it, so nothing the
+ * owner never asked Morada to follow reads as unpaid.
  */
-export function ledgerMonths(startDate: string, endDate: string | null, today: string): string[] {
+export function ledgerMonths(startDate: string, endDate: string | null, today: string, trackFrom: string | null = null): string[] {
   const liveMonth = `${today.slice(0, 7)}-01`;
   const floor = addMonths(liveMonth, -11);
   const startMonth = `${startDate.slice(0, 7)}-01`;
   let m = startMonth < floor ? floor : startMonth;
+  if (trackFrom && /^\d{4}-\d{2}/.test(trackFrom)) {
+    const from = `${trackFrom.slice(0, 7)}-01`;
+    if (from > m) m = from;
+  }
   let end = addMonths(liveMonth, 1);
   if (endDate) {
     const endMonth = `${endDate.slice(0, 7)}-01`;

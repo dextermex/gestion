@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fr } from "@/lib/i18n/fr";
 import type { OrgContext } from "@/lib/gestion/api";
 import { saveRentalDraft } from "@/lib/gestion/rental";
-import { closeLease } from "@/lib/gestion/lease";
 import { addDays, addMonths } from "@/domain/dates";
 import { createInvitation, invitationLink, invitationMail, revokeInvitation, sendInvitation } from "@/lib/portal/invitations";
 import { acceptInvitation, previewInvitation } from "@/lib/portal/accept";
@@ -12,7 +11,7 @@ import { attachmentFolder, inviteFor, inviteState, requestKindOf, requestState, 
 import { alertsFor, rentSituation } from "@/lib/portal/view";
 import type { TenantLease } from "@/lib/portal/tenant-space";
 import { FakeDb } from "./helpers/fake-postgrest";
-import { ORG, OTHER_ORG, ctxFor, dossier, hydrate, letTo, seedProperty, space } from "./helpers/tenancy";
+import { ORG, OTHER_ORG, ctxFor, departOn, dossier, hydrate, letTo, seedProperty, space } from "./helpers/tenancy";
 
 /**
  * The tenant portal, end to end, on one database.
@@ -201,14 +200,15 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(mine.requests[0].state).toBe("resolved");
 
     // ── The owner records the departure: the tenancy closes, history stays hers ──
-    const closed = await closeLease(ctx, rental.leaseId, { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today);
+    const closed = await departOn(db, ctx, rental.leaseId, lastDayOfMonth);
     if ("error" in closed) throw new Error(closed.error);
     demo = await hydrate(db);
     expect(demo.LEASES.find((l) => l.id === rental.leaseId)!.status).toBe("ended");
 
     mine = await space(db, anna);
     expect(mine.current).toBeNull();
-    expect(mine.payments).toBeNull();
+    // The former tenancy keeps its money picture: what is still owed on it is said, here nothing.
+    expect(mine.payments).toMatchObject({ outstandingCents: 0 });
     expect(mine.past.map((l) => [l.id, l.status, l.endDate])).toEqual([[rental.leaseId, "ended", lastDayOfMonth]]);
     expect(mine.past[0].periods.length).toBeGreaterThan(0);
     expect(mine.requests).toHaveLength(1);
@@ -349,7 +349,7 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(db.table("contacts").filter((c) => c.email === "anna.weber@example.lu")).toHaveLength(1);
 
     // She leaves, then comes back for another lot: same contact, same account, no second invitation.
-    const closed = await closeLease(ctx, rental.leaseId, { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today);
+    const closed = await departOn(db, ctx, rental.leaseId, lastDayOfMonth);
     if ("error" in closed) throw new Error(closed.error);
     const { unitId: otherUnit } = seedProperty(db, ORG, "Studio Gare");
     const again = await letTo(ctx, otherUnit, [{ ...ANNA, email: "ANNA.weber@example.lu" }], "900");

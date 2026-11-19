@@ -1,7 +1,7 @@
 import "server-only";
 import type { GestionReader } from "@/lib/demo/data-real";
 import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
-import { nextDueOn } from "@/lib/gestion/ledger";
+import { effectiveLeaseStatus, nextDueOn } from "@/lib/gestion/ledger";
 import { requestKindOf, requestState, ticketRef, type RequestKind, type RequestState } from "@/lib/portal/types";
 
 /**
@@ -224,7 +224,10 @@ export async function buildTenantSpace(
     return (data as unknown as Row[]) ?? [];
   };
 
-  const [homes, partyRows, managerRows, instructionRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers"), rpc("my_payment_instructions")]);
+  const [everyHome, partyRows, managerRows, instructionRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers"), rpc("my_payment_instructions")]);
+  // A dossier still in preparation is the owner's working copy: a tenant
+  // sees a tenancy from its activation, never a draft that names them.
+  const homes = everyHome.filter((h) => s(h.lease_status) !== "draft");
   const leaseIds = homes.map((h) => s(h.lease_id));
   if (leaseIds.length === 0) {
     return {
@@ -299,7 +302,8 @@ export async function buildTenantSpace(
       orgId: s(h.org_id),
       unitId: s(h.unit_id),
       propertyId: s(h.property_id),
-      status: s(h.lease_status),
+      // In force until its last day; the date decides until the nightly job has written it.
+      status: effectiveLeaseStatus(s(h.lease_status), day(h.end_date), opts.today),
       type: s(h.lease_type) === "commercial" ? "commercial" : "residential",
       startDate: day(h.start_date) ?? "",
       endDate: day(h.end_date),
@@ -363,6 +367,8 @@ export async function buildTenantSpace(
   const current = live[0] ?? null;
   const others = live.filter((l) => l !== current);
   const past = leases.filter((l) => !isLive(l)).sort(byStart);
+  /** The tenancy every page shows: the one in force, else the latest former one. */
+  const shown = current ?? past[0] ?? null;
 
   const conversationByLease = new Map(conversationRows.map((c) => [s(c.scope_id), s(c.id)]));
   const anchorByTicket = new Map<string, string>();
@@ -428,13 +434,16 @@ export async function buildTenantSpace(
     others,
     past,
     managers: managerRows.map((m) => ({ orgId: s(m.org_id), name: s(m.name), email: s(m.email) || null, phone: s(m.phone) || null })),
+    // The account to pay and the money picture are those of the tenancy on
+    // screen, in force or not: a former tenant who still owes rent is shown
+    // the same balance the owner sees, and where to pay it.
     paymentInstructions: (() => {
-      const row = current ? instructionRows.find((r) => s(r.org_id) === current.orgId) : undefined;
+      const row = shown ? instructionRows.find((r) => s(r.org_id) === shown.orgId) : undefined;
       return row && s(row.iban) ? { legalName: s(row.legal_name), iban: s(row.iban), bic: s(row.bic) || null, holderName: s(row.holder_name) || s(row.legal_name) } : null;
     })(),
     requests,
     conversations,
-    payments: current ? paymentsOf(current, opts.today) : null,
+    payments: shown ? paymentsOf(shown, opts.today) : null,
   };
 }
 

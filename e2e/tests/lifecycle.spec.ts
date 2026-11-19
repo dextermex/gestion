@@ -34,7 +34,8 @@ test("the owner creates a house", async ({ page }) => {
 
 test("the rental dossier is filled and activated", async ({ page }) => {
   await signIn(page, owner.email);
-  await letLot(page, unitId, tenant);
+  // The tenancy began ten days ago, so that a departure can be recorded for today further down.
+  await letLot(page, unitId, tenant, "1250", daysFromNow(-10));
   leaseId = await leaseIdOf(page, propertyId);
   await expect(page.getByText("Inviter le locataire")).toBeVisible();
 });
@@ -260,13 +261,42 @@ test("another manager sees none of it", async ({ page }) => {
   await signOutFromShell(page);
 });
 
-test("the owner records the departure", async ({ page }) => {
+test("the owner gives notice of a departure ahead: the tenancy stays in force", async ({ page }) => {
   await signIn(page, owner.email);
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
   await foldGettingStarted(page);
   await page.getByRole("link", { name: "Enregistrer le départ du locataire" }).click();
   await page.waitForURL(/\/app\/biens\/depart\?bail=/);
   await page.getByLabel("Date de fin du bail").fill(daysFromNow(45));
+  // A date ahead is a notice: the first step records it, the rest of the departure waits for the day.
+  await page.getByRole("button", { name: "Enregistrer le préavis" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: /Le départ de .+ est prévu le / })).toBeVisible({ timeout: 30_000 });
+  // The lot is still let: no new tenant is offered, the tenant is still on the sheet, the departure can be completed.
+  await expect(page.getByRole("button", { name: "Ajouter un nouveau locataire" })).toHaveCount(0);
+  await page.goto(`/app/biens/${propertyId}?onglet=location`);
+  await expect(page.getByText(`${tenant.first} ${tenant.last}`).first()).toBeVisible();
+  await expect(page.getByText(/Départ prévu le /).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Modifier ou finaliser le départ" })).toBeVisible();
+  await signOutFromShell(page);
+});
+
+test("the tenant on notice keeps the home and can still ask", async ({ page }) => {
+  await signIn(page, tenant.email, "/locataire");
+  await expect(page.getByText(houseName).first()).toBeVisible();
+  await expect(page.getByText("Votre location est terminée")).toHaveCount(0);
+  await page.goto("/locataire/demandes");
+  await expect(page.getByRole("button", { name: /nouvelle demande/i })).toBeVisible();
+  await signOutFromTenantSpace(page);
+});
+
+test("the owner records the departure on the day: the tenancy ends", async ({ page }) => {
+  await signIn(page, owner.email);
+  await page.goto(`/app/biens/${propertyId}?onglet=location`);
+  await foldGettingStarted(page);
+  await page.getByRole("link", { name: "Modifier ou finaliser le départ" }).click();
+  await page.waitForURL(/\/app\/biens\/depart\?bail=/);
+  // Today: the departure happens now, and the whole flow is walked.
+  await page.getByLabel("Date de fin du bail").fill(daysFromNow(0));
   await nextStep(page, "Suivant"); // date → inventory
   await nextStep(page, "Plus tard"); // the exit inventory, later
   await nextUntil(page, page.getByRole("button", { name: "Confirmer le départ" }), 6); // meters, keys, outstanding, deposit
@@ -278,6 +308,7 @@ test("the owner records the departure", async ({ page }) => {
   // The lot is free again: no departure to record, and the tenancy is history.
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
   await expect(page.getByRole("link", { name: "Enregistrer le départ du locataire" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Modifier ou finaliser le départ" })).toHaveCount(0);
   await page.goto(`/app/biens/${propertyId}?onglet=historique`);
   await expect(page.getByText(`${tenant.first} ${tenant.last}`).first()).toBeVisible();
 });

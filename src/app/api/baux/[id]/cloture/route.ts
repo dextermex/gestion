@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
-import { parseEuroInput } from "@/lib/gestion/euros";
 import { CLOSURE_OUTCOMES, closeLease, type ClosureOutcome } from "@/lib/gestion/lease";
 
 /**
  * A tenant leaves. The route only reads the form; `closeLease` is the one
- * place that knows how a tenancy ends without destroying anything.
+ * place that knows how a tenancy ends without destroying anything. A date
+ * ahead answers `status: "notice"`: the tenancy stays in force until then.
+ * The guarantee is only ever told that the keys are back: an outcome other
+ * than the opening of its restitution or a dispute is not read, and no
+ * amount is.
  */
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,7 +27,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const result = await closeLease(ctx, id, {
     endDate: ISO.test(str(body.endDate, 10)) ? str(body.endDate, 10) : null,
     depositOutcome: outcome,
-    releasedCents: parseEuroInput(str(body.releasedAmount, 20)) ?? 0,
     keysReturned: body.keysReturned === true,
     keysReturnedOn: ISO.test(str(body.keysReturnedOn, 10)) ? str(body.keysReturnedOn, 10) : null,
     decompteIssuedOn: ISO.test(str(body.decompteIssuedOn, 10)) ? str(body.decompteIssuedOn, 10) : null,

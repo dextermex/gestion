@@ -80,6 +80,8 @@ const DEFAULTS: Record<string, () => Row> = {
     vat_regime: "exempt",
     vat_option: {},
     details: {},
+    // 0032: the month rent tracking starts from.
+    ledger_from: null,
   }),
   lease_parties: () => ({ joint_liability: true, moved_in_on: null, moved_out_on: null }),
   rent_periods: () => ({ charges_cents: 0, other_cents: 0, other_label: null, vat_cents: 0, written_off: false }),
@@ -91,7 +93,10 @@ const DEFAULTS: Record<string, () => Row> = {
     released_first_tranche_cents: null,
     released_balance_cents: null,
   }),
-  payment_allocations: () => ({ auto: false, reversed_at: null }),
+  payments: () => ({ bank_transaction_id: null, method: "transfer", note: null, cancelled_at: null, cancelled_by: null, cancel_reason: null, request_key: null }),
+  payment_allocations: () => ({ auto: false, reversed_at: null, reversed_by: null, allocated_by: null }),
+  bank_transactions: () => ({ match_status: "unmatched", match_tier: null, match_confidence: null, match_explain: null, currency: "EUR", counterparty_name: "", counterparty_iban: null, remittance_info: "", end_to_end_id: null }),
+  charge_periods: () => ({ status: "open", advances_billed_cents: 0, actual_cents: 0, issued_on: null, due_on: null }),
   tickets: () => ({ description: null, closed_at: null, sla_due_at: null }),
   work_orders: () => ({ status: "offered", artisan_contact_id: null }),
   conversations: () => ({ last_message_at: null }),
@@ -285,7 +290,18 @@ export class FakeDb {
 
   // ── The portal RPCs (0006, 0015), with the same checks as their SQL ──
 
+  /** Functions the base does not carry yet (a migration not applied): calling one fails as PostgREST says. */
+  readonly absentRpc = new Set<string>();
+
   callRpc(name: string, args: Row, principal: Principal): Result {
+    if (this.absentRpc.has(name)) return { data: null, error: { code: "PGRST202", message: `Could not find the function gestion.${name} in the schema cache` } };
+    try {
+      const ledger = this.callLedgerRpc(name, args, principal);
+      if (ledger) return ledger;
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      return { data: null, error: { code: err.code ?? "XX000", message: err.message } };
+    }
     const raise = (message: string): Result => ({ data: null, error: { code: "P0001", message } });
     const uid = principal.kind === "tenant" ? principal.userId : null;
     switch (name) {
@@ -515,6 +531,17 @@ export class FakeDb {
       const clash = this.table(table).some((r) => r !== row && r.lease_id === row.lease_id && (r.status === "draft" || r.status === "ongoing"));
       if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "signature_envelopes_live_idx"' };
     }
+    // payments_bank_transaction_live_key and payments_request_key (0032).
+    if (table === "payments") {
+      if (row.bank_transaction_id != null && row.cancelled_at == null) {
+        const clash = this.table(table).some((r) => r !== row && r.bank_transaction_id === row.bank_transaction_id && r.cancelled_at == null);
+        if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "payments_bank_transaction_live_key"' };
+      }
+      if (row.request_key != null) {
+        const clash = this.table(table).some((r) => r !== row && r.org_id === row.org_id && r.request_key === row.request_key);
+        if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "payments_request_key"' };
+      }
+    }
     // contacts_email_active_key (0002): one live contact per e-mail and workspace.
     if (table === "contacts" && row.email != null && row.archived_at == null) {
       const clash = this.table(table).some((r) => r !== row && r.org_id === row.org_id && r.email === row.email && r.archived_at == null);
@@ -597,7 +624,253 @@ export class FakeDb {
     if (table === "rent_period_status") return this.periodStatus();
     if (table === "conversation_heads") return this.conversationHeads();
     if (table === "edl_session_counts") return this.edlSessionCounts();
+    if (table === "lease_credit") return this.leaseCredit();
     return this.table(table);
+  }
+
+  // ── The ledger's functions (0032), with the same rules as their SQL ──
+
+  /** What of a period nothing live covers yet. */
+  private openCents(period: Row): number {
+    const allocated = this.table("payment_allocations")
+      .filter((a) => a.rent_period_id === period.id && a.reversed_at == null)
+      .reduce((sum, a) => sum + n(a.amount_cents), 0);
+    return n(period.total_cents) - allocated;
+  }
+
+  /** What of a payment sits on no period. */
+  private unallocated(payment: Row): number {
+    const allocated = this.table("payment_allocations")
+      .filter((a) => a.payment_id === payment.id && a.reversed_at == null)
+      .reduce((sum, a) => sum + n(a.amount_cents), 0);
+    return n(payment.amount_cents) - allocated;
+  }
+
+  /** The lease_credit view: money received on a tenancy that no period carries. */
+  leaseCredit(): Row[] {
+    const byLease = new Map<string, Row>();
+    for (const p of this.table("payments")) {
+      if (p.lease_id == null || p.cancelled_at != null) continue;
+      const row = byLease.get(String(p.lease_id)) ?? { org_id: p.org_id, lease_id: p.lease_id, credit_cents: 0 };
+      row.credit_cents = n(row.credit_cents) + this.unallocated(p);
+      byLease.set(String(p.lease_id), row);
+    }
+    return [...byLease.values()].filter((r) => n(r.credit_cents) > 0);
+  }
+
+  private periodsOldestFirst(rows: Row[]): Row[] {
+    return rows.slice().sort((a, b) => (String(a.due_date) < String(b.due_date) ? -1 : String(a.due_date) > String(b.due_date) ? 1 : String(a.period) < String(b.period) ? -1 : 1));
+  }
+
+  /** gestion.apply_lease_credit: the tenancy's unallocated money onto its open periods, oldest first. */
+  applyLeaseCredit(leaseId: unknown, auto = true, by: string | null = null): number {
+    let total = 0;
+    const payments = this.table("payments")
+      .filter((p) => p.lease_id === leaseId && p.cancelled_at == null)
+      .slice()
+      .sort((a, b) => (String(a.received_on) < String(b.received_on) ? -1 : String(a.received_on) > String(b.received_on) ? 1 : 0));
+    for (const pay of payments) {
+      let left = this.unallocated(pay);
+      if (left <= 0) continue;
+      for (const per of this.periodsOldestFirst(this.table("rent_periods").filter((rp) => rp.lease_id === leaseId && !rp.written_off))) {
+        if (left <= 0) break;
+        const open = this.openCents(per);
+        if (open <= 0) continue;
+        const take = Math.min(left, open);
+        this.insertRow("payment_allocations", { org_id: pay.org_id, payment_id: pay.id, rent_period_id: per.id, amount_cents: take, auto, allocated_by: by });
+        left -= take;
+        total += take;
+      }
+    }
+    return total;
+  }
+
+  /** gestion.settle_lease_end: the ledger trimmed after the end month and, the day come, the tenancy ended. */
+  settleLeaseEnd(leaseId: unknown): { status: string; dropped: number } {
+    const lease = this.table("leases").find((l) => l.id === leaseId);
+    if (!lease) throw Object.assign(new Error("gestion: lease not found"), { code: "P0002" });
+    if (lease.end_date == null || lease.status === "draft") return { status: String(lease.status), dropped: 0 };
+    const end = String(lease.end_date);
+    const [y, m] = end.slice(0, 7).split("-").map(Number);
+    const after = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const allocations = this.table("payment_allocations");
+    const live = (rp: Row) => allocations.some((a) => a.rent_period_id === rp.id && a.reversed_at == null);
+    const any = (rp: Row) => allocations.some((a) => a.rent_period_id === rp.id);
+    let dropped = 0;
+    const kept: Row[] = [];
+    for (const rp of this.table("rent_periods")) {
+      const future = rp.lease_id === leaseId && String(rp.period) >= after;
+      if (!future) {
+        kept.push(rp);
+      } else if (n(rp.other_cents) !== 0) {
+        if (!live(rp)) {
+          rp.rent_cents = 0;
+          rp.charges_cents = 0;
+          rp.vat_cents = 0;
+          GENERATED.rent_periods(rp);
+        }
+        kept.push(rp);
+      } else if (!any(rp)) {
+        dropped += 1;
+      } else {
+        if (!live(rp) && !rp.written_off) {
+          rp.written_off = true;
+          dropped += 1;
+        }
+        kept.push(rp);
+      }
+    }
+    this.replace("rent_periods", kept);
+    if (LIVE.has(String(lease.status)) && end <= this.today) {
+      lease.status = "ended";
+      const details = { ...((lease.details as Row | null) ?? {}) };
+      delete details.departure;
+      lease.details = details;
+      for (const lp of this.table("lease_parties")) if (lp.lease_id === leaseId && lp.moved_out_on == null) lp.moved_out_on = end;
+    }
+    return { status: String(lease.status), dropped };
+  }
+
+  /** The ledger RPCs of 0032, for the manager's client. */
+  private callLedgerRpc(name: string, args: Row, principal: Principal): Result | null {
+    const raise = (message: string, code = "P0001"): Result => ({ data: null, error: { code, message } });
+    const manager = principal.kind === "manager";
+    switch (name) {
+      case "apply_lease_credit":
+        return { data: manager ? this.applyLeaseCredit(args.p_lease, args.p_auto !== false) : 0, error: null };
+      case "record_payment": {
+        const amount = n(args.p_amount_cents);
+        if (amount <= 0 || !args.p_received_on) return raise("gestion: invalid payment", "22023");
+        const lease = this.table("leases").find((l) => l.id === args.p_lease);
+        if (!lease || !manager) return raise("gestion: lease not found", "P0002");
+        if (args.p_request_key != null) {
+          const prior = this.table("payments").find((p) => p.org_id === lease.org_id && p.request_key === args.p_request_key);
+          if (prior) {
+            const left = this.unallocated(prior);
+            return { data: { payment_id: prior.id, allocated: n(prior.amount_cents) - left, credit: Math.max(left, 0), linked: false, replayed: true }, error: null };
+          }
+        }
+        const auto = args.p_auto === true;
+        let payment: Row | undefined;
+        let linked = false;
+        if (args.p_bank_transaction != null) {
+          const tx = this.table("bank_transactions").find(
+            (t) => t.id === args.p_bank_transaction && t.org_id === lease.org_id && (t.match_status === "unmatched" || t.match_status === "review") && n(t.amount_cents) === amount,
+          );
+          if (!tx) return raise("gestion: operation already matched");
+          const match = (args.p_match as Row | null) ?? {};
+          tx.match_status = auto ? "auto" : "manual";
+          tx.match_tier = match.tier ?? (auto ? null : "manual");
+          tx.match_confidence = match.confidence ?? null;
+          tx.match_explain = match.explain ?? null;
+          const days = n(args.p_twin_days);
+          if (days > 0) {
+            const gap = (a: unknown, b: unknown) => Math.abs((Date.parse(`${String(a)}T00:00:00Z`) - Date.parse(`${String(b)}T00:00:00Z`)) / 86400000);
+            payment = this.table("payments")
+              .filter((p) => p.org_id === lease.org_id && p.lease_id === lease.id && p.bank_transaction_id == null && p.cancelled_at == null && n(p.amount_cents) === amount && gap(p.received_on, args.p_received_on) <= days)
+              .sort((a, b) => gap(a.received_on, args.p_received_on) - gap(b.received_on, args.p_received_on))[0];
+            if (payment) {
+              payment.bank_transaction_id = args.p_bank_transaction;
+              linked = true;
+            }
+          }
+        }
+        if (!payment) {
+          payment = this.insertRow("payments", {
+            org_id: lease.org_id, lease_id: lease.id, bank_transaction_id: args.p_bank_transaction ?? null, received_on: args.p_received_on,
+            amount_cents: amount, method: args.p_method ?? "transfer", note: args.p_note || null, request_key: args.p_request_key ?? null,
+          });
+          if (Array.isArray(args.p_periods)) {
+            let left = amount;
+            const named = this.table("rent_periods").filter((rp) => (args.p_periods as unknown[]).includes(rp.id) && rp.org_id === lease.org_id && !rp.written_off);
+            for (const per of this.periodsOldestFirst(named)) {
+              if (left <= 0) break;
+              const open = this.openCents(per);
+              if (open <= 0) continue;
+              const take = Math.min(left, open);
+              this.insertRow("payment_allocations", { org_id: lease.org_id, payment_id: payment.id, rent_period_id: per.id, amount_cents: take, auto, allocated_by: null });
+              left -= take;
+            }
+          }
+        }
+        this.applyLeaseCredit(lease.id, auto);
+        const left = this.unallocated(payment);
+        return { data: { payment_id: payment.id, allocated: n(payment.amount_cents) - left, credit: Math.max(left, 0), linked, replayed: false }, error: null };
+      }
+      case "cancel_payment": {
+        const payment = this.table("payments").find((p) => p.id === args.p_payment);
+        if (!payment || !manager) return raise("gestion: payment not found", "P0002");
+        if (payment.cancelled_at != null) return { data: { ok: true, already: true, lease_id: payment.lease_id, bank_transaction_id: payment.bank_transaction_id }, error: null };
+        const own = this.table("payment_allocations").filter((a) => a.payment_id === payment.id && a.reversed_at == null);
+        const receipt = !this.absent.has("generated_documents") && own.some((a) => this.table("generated_documents").some((gd) => gd.kind === "rent_receipt" && gd.source_id === a.rent_period_id));
+        if (receipt) return raise("gestion: receipt issued");
+        for (const a of own) a.reversed_at = this.nowIso();
+        payment.cancelled_at = this.nowIso();
+        payment.cancel_reason = typeof args.p_reason === "string" && args.p_reason !== "" ? args.p_reason.slice(0, 500) : null;
+        if (payment.bank_transaction_id != null) {
+          const tx = this.table("bank_transactions").find((t) => t.id === payment.bank_transaction_id && (t.match_status === "auto" || t.match_status === "manual"));
+          if (tx) Object.assign(tx, { match_status: "review", match_tier: null, match_confidence: null, match_explain: "payment_cancelled" });
+        }
+        if (payment.lease_id != null) this.applyLeaseCredit(payment.lease_id, true);
+        return { data: { ok: true, already: false, lease_id: payment.lease_id, bank_transaction_id: payment.bank_transaction_id }, error: null };
+      }
+      case "settle_lease_end": {
+        if (!manager || !this.table("leases").some((l) => l.id === args.p_lease)) return raise("gestion: lease not found", "P0002");
+        return { data: this.settleLeaseEnd(args.p_lease), error: null };
+      }
+      case "close_lease": {
+        const lease = this.table("leases").find((l) => l.id === args.p_lease);
+        if (!lease || !manager) return raise("gestion: lease not found", "P0002");
+        if (lease.status === "ended") return raise("gestion: lease already ended");
+        if (lease.status === "draft") return raise("gestion: lease not live");
+        const end = String(args.p_end_date ?? "");
+        if (!end || end <= String(lease.start_date)) return raise("gestion: end before start", "22023");
+        if (end > this.today) lease.status = "notice";
+        lease.end_date = end;
+        return { data: { ...this.settleLeaseEnd(lease.id), end_date: end, unit_id: lease.unit_id }, error: null };
+      }
+      case "issue_charge_period": {
+        const cp = this.table("charge_periods").find((x) => x.id === args.p_period);
+        if (!cp || !manager) return raise("gestion: charge period not found", "P0002");
+        if (cp.status !== "draft") return raise("gestion: not a draft");
+        Object.assign(cp, { status: "issued", issued_on: args.p_issued_on, due_on: args.p_due_on });
+        const balance = n(cp.actual_cents) - n(cp.advances_billed_cents);
+        let carried: string | null = null;
+        if (balance > 0) {
+          const month = `${this.today.slice(0, 7)}-01`;
+          const label = String(args.p_label ?? "");
+          const allocations = this.table("payment_allocations");
+          const free = this.table("rent_periods")
+            .filter((rp) => rp.lease_id === cp.lease_id && String(rp.period) >= month && !rp.written_off && !allocations.some((a) => a.rent_period_id === rp.id && a.reversed_at == null))
+            .sort((a, b) => (String(a.period) < String(b.period) ? -1 : 1))[0];
+          if (free) {
+            free.other_cents = n(free.other_cents) + balance;
+            free.other_label = !free.other_label || free.other_label === label ? label : `${String(free.other_label)} · ${label}`;
+            GENERATED.rent_periods(free);
+            carried = String(free.period);
+          } else {
+            const lease = this.table("leases").find((l) => l.id === cp.lease_id) ?? {};
+            carried = month;
+            const next = (d: string): string => {
+              const [y, m] = d.slice(0, 7).split("-").map(Number);
+              return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+            };
+            while (this.table("rent_periods").some((rp) => rp.lease_id === cp.lease_id && rp.period === carried)) carried = next(carried);
+            const runs = LIVE.has(String(lease.status)) && (lease.end_date == null || carried <= `${String(lease.end_date).slice(0, 7)}-01`);
+            const day = String(Math.min(Math.max(n(lease.payment_day) || 1, 1), 28)).padStart(2, "0");
+            const due = `${carried.slice(0, 7)}-${day}`;
+            this.insertRow("rent_periods", {
+              org_id: cp.org_id, lease_id: cp.lease_id, period: carried,
+              due_date: runs ? (due < String(lease.start_date) ? lease.start_date : due) : args.p_due_on,
+              rent_cents: runs ? n(lease.rent_cents) : 0, charges_cents: runs ? n(lease.charges_cents) : 0, other_cents: balance, other_label: label,
+            });
+          }
+        }
+        return { data: { ok: true, balance_cents: balance, carried_to: carried }, error: null };
+      }
+      default:
+        return null;
+    }
   }
 
   removeLease(id: unknown): void {

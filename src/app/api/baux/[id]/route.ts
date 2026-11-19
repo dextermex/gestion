@@ -10,6 +10,7 @@ import {
   repriceOpenPeriods,
   saveDeparture,
 } from "@/lib/gestion/lease";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Editing a running tenancy: its terms, and what it costs.
@@ -98,7 +99,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (has(body, "paymentDay")) patch.payment_day = normalizePaymentDay(body.paymentDay);
   if (has(body, "type")) patch.lease_type = body.type === "commercial" ? "commercial" : "residential";
   if (has(body, "startDate") && ISO.test(str(body.startDate, 10))) patch.start_date = str(body.startDate, 10);
-  if (has(body, "endDate")) patch.end_date = ISO.test(str(body.endDate, 10)) ? str(body.endDate, 10) : null;
+  if (has(body, "endDate")) {
+    const end = ISO.test(str(body.endDate, 10)) ? str(body.endDate, 10) : null;
+    // A tenancy is over from its end date on: a date already reached would
+    // end a running lease from this form. That is a departure, and it has
+    // its own flow (the keys, the ledger, the guarantee).
+    if (end !== null && end <= todayISO() && (lease.status === "active" || lease.status === "notice")) {
+      return NextResponse.json({ error: "end_reached" }, { status: 400 });
+    }
+    patch.end_date = end;
+  }
   if (has(body, "chargesRegime")) {
     patch.charges_regime = body.chargesRegime === "forfait" ? "forfait" : "advances";
   }

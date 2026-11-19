@@ -10,6 +10,8 @@ import { StepCard, WizardFooter } from "@/components/gestion/WizardChrome";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 import { todayISO } from "@/lib/clock";
+import type { Locale } from "@/lib/i18n/config";
+import { formatDate } from "@/lib/types";
 
 /**
  * A tenant leaves.
@@ -69,7 +71,9 @@ export type DepartureLease = {
   startStep: number;
 };
 
-const OUTCOMES = ["release_pending", "released", "partially_released", "forfeited", "disputed"] as const;
+// What a departure may say about the guarantee: its restitution opens, or it
+// is disputed. Money leaves a guarantee from Garanties alone.
+const OUTCOMES = ["release_pending", "disputed"] as const;
 type Outcome = (typeof OUTCOMES)[number];
 const TOTAL = 7;
 
@@ -81,11 +85,13 @@ const monthAfter = (date: string): string => {
 
 export default function DepartureWizard({
   d,
+  locale = "fr",
   lease,
   real,
   notice,
 }: {
   d: Dict;
+  locale?: Locale;
   lease: DepartureLease;
   real: boolean;
   notice: string;
@@ -102,20 +108,22 @@ export default function DepartureWizard({
   const [depositOutcome, setDepositOutcome] = useState<Outcome>(
     (OUTCOMES as readonly string[]).includes(ex?.depositOutcome ?? "") ? (ex!.depositOutcome as Outcome) : "release_pending",
   );
-  const [releasedAmount, setReleasedAmount] = useState(ex?.releasedAmount ?? "");
   const [decompteIssuedOn, setDecompteIssuedOn] = useState(ex?.decompteIssuedOn ?? "");
   const [metersDone, setMetersDone] = useState(ex?.metersDone ?? false);
   const [readings, setReadings] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ droppedPeriods: number } | null>(null);
+  const [result, setResult] = useState<{ droppedPeriods: number; status?: "ended" | "notice"; pending?: string[] } | null>(null);
 
   useEffect(() => {
     headingRef.current?.focus();
   }, [step]);
 
   const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(endDate) && endDate > lease.startDate;
+  // A date ahead is a notice: the tenancy stays in force until that day, and
+  // the rest of the departure (inventory, meters, keys, guarantee) happens then.
+  const planned = dateOk && endDate > todayISO();
   // Months after the departure that nothing was paid into: they will go.
   const dropped = dateOk ? lease.periods.filter((p) => p.month >= monthAfter(endDate) && !p.allocated).length : 0;
 
@@ -142,7 +150,7 @@ export default function DepartureWizard({
             keysReturned,
             keysReturnedOn: keysReturnedOn || null,
             depositOutcome,
-            releasedAmount,
+            releasedAmount: "",
             decompteIssuedOn: decompteIssuedOn || null,
             metersDone,
           },
@@ -247,7 +255,7 @@ export default function DepartureWizard({
       const res = await fetch(`/api/baux/${lease.id}/cloture`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endDate, keysReturned, keysReturnedOn: keysReturnedOn || null, depositOutcome, releasedAmount, decompteIssuedOn }),
+        body: JSON.stringify({ endDate, keysReturned, keysReturnedOn: keysReturnedOn || null, depositOutcome, decompteIssuedOn }),
       });
       if (res.status === 401) {
         window.location.assign(`/connexion?next=${encodeURIComponent(`/app/biens/depart?bail=${lease.id}`)}`);
@@ -261,7 +269,7 @@ export default function DepartureWizard({
         setError(d.departure.saveFailed);
         return;
       }
-      setResult((await res.json()) as { droppedPeriods: number });
+      setResult((await res.json()) as { droppedPeriods: number; status?: "ended" | "notice"; pending?: string[] });
       // The done screen is this component's own state. Refreshing the route
       // here would re-run the page for a lease that has just ended, and that
       // page sends ended leases to the property's history: the confirmation
@@ -297,6 +305,8 @@ export default function DepartureWizard({
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  // What the confirmation did: ended the tenancy, or put it on notice until its date.
+  const onNotice = real ? result?.status === "notice" : planned;
 
   const Heading = (
     <>
@@ -382,8 +392,15 @@ export default function DepartureWizard({
                   <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                 </Field>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.departure.dateNote}</p>
+                {planned && (
+                  <p role="status" className="mt-3 rounded-xl bg-sand-50 px-3.5 py-2.5 text-sm leading-relaxed text-ink">
+                    {d.departure.noticeHint}
+                  </p>
+                )}
                 {errorLine}
-                {footer({ onNext: () => void advance(), canNext: dateOk })}
+                {planned
+                  ? footer({ onNext: () => void confirm(), nextLabel: d.departure.noticeConfirm, canNext: dateOk })
+                  : footer({ onNext: () => void advance(), canNext: dateOk })}
               </StepCard>
             </motion.div>
           )}
@@ -522,11 +539,7 @@ export default function DepartureWizard({
                       ))}
                     </Select>
                   </Field>
-                  {(depositOutcome === "released" || depositOutcome === "partially_released") && (
-                    <Field label={d.departure.releasedAmount}>
-                      <Input inputMode="decimal" className="text-right tabular-nums" value={releasedAmount} onChange={(e) => setReleasedAmount(e.target.value)} />
-                    </Field>
-                  )}
+                  <p className="text-xs leading-relaxed text-ink-soft">{d.departure.guaranteeHint}</p>
                   <Field label={d.departure.decompteIssuedOn} hint={d.departure.decompteHint}>
                     <Input type="date" value={decompteIssuedOn} onChange={(e) => setDecompteIssuedOn(e.target.value)} />
                   </Field>
@@ -562,13 +575,20 @@ export default function DepartureWizard({
                 <Icon name="check" size={28} />
               </span>
               <h1 ref={headingRef} tabIndex={-1} className="mt-5 font-display text-2xl font-bold tracking-tight text-ink outline-none">
-                {d.departure.doneTitle.replace("{tenant}", lease.tenantNames)}
+                {onNotice
+                  ? d.departure.noticeDoneTitle.replace("{tenant}", lease.tenantNames).replace("{date}", formatDate(endDate, locale))
+                  : d.departure.doneTitle.replace("{tenant}", lease.tenantNames)}
               </h1>
               {real ? (
                 <>
-                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">{d.departure.doneBody}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">{onNotice ? d.departure.noticeDoneBody : d.departure.doneBody}</p>
                   {result && result.droppedPeriods > 0 && (
                     <p className="mt-2 text-sm text-ink-soft">{d.departure.doneDropped.replace("{n}", String(result.droppedPeriods))}</p>
+                  )}
+                  {result?.pending?.includes("deposit") && (
+                    <p role="alert" className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+                      {d.departure.donePending}
+                    </p>
                   )}
                 </>
               ) : (
@@ -577,10 +597,13 @@ export default function DepartureWizard({
                 </p>
               )}
               <div className="mt-6 flex flex-col gap-2.5">
-                <Button onClick={() => router.push(`/app/biens/locataire?lot=${lease.unitId}`)}>
-                  <Icon name="plus" size={15} />
-                  {d.bien.addNewTenant}
-                </Button>
+                {/* The lot is free only once the tenancy has ended: on notice it is still let. */}
+                {!onNotice && (
+                  <Button onClick={() => router.push(`/app/biens/locataire?lot=${lease.unitId}`)}>
+                    <Icon name="plus" size={15} />
+                    {d.bien.addNewTenant}
+                  </Button>
+                )}
                 <Button variant="secondary" onClick={() => router.push(`/app/biens/${lease.propertyId}`)}>
                   {d.location.backToProperty}
                 </Button>

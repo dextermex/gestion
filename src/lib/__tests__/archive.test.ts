@@ -62,7 +62,7 @@ describe("an archived property", () => {
     const start = `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`;
     const { propertyId, unitId } = seedProperty(db, ORG, "Maison Weber");
     const rental = await letTo(ctx, unitId, [ANNA], "1 250", start);
-    const closed = await closeLease(ctx, rental.leaseId, { endDate: today, depositOutcome: "release_pending", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today);
+    const closed = await closeLease(ctx, rental.leaseId, { endDate: today, depositOutcome: "release_pending", keysReturned: true, decompteIssuedOn: null }, today);
     expect(closed).toMatchObject({ ok: true });
     db.table("properties").find((p) => p.id === propertyId)!.archived_at = `${today}T09:00:00.000Z`;
     db.table("units").find((u) => u.id === unitId)!.archived_at = `${today}T09:00:00.000Z`;
