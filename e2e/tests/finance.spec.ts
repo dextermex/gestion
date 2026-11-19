@@ -124,12 +124,16 @@ test("finance: a bill with its invoice enters the books, is due, is marked paid,
   // What every bill needs first; what an accountant asks for waits under "Plus de détails".
   await dialog.getByLabel("Montant").fill("1240");
   await dialog.getByLabel("Objet").fill("Entretien chaudière");
+  // No lot and no category are chosen for the owner: a bill sits on the lot they pick, in the bucket they pick.
+  await expect(dialog.getByLabel("Bien / lot")).toHaveValue("");
+  await dialog.getByLabel("Bien / lot").selectOption({ index: 1 });
   await dialog.getByLabel("Date du document").fill(frDay(today));
+  await expect(dialog.getByLabel("Catégorie")).toHaveValue("");
+  await dialog.getByLabel("Catégorie").selectOption("maintenance_repairs");
+  await dialog.getByLabel("TVA").selectOption("17");
   await dialog.getByText("Plus de détails").click();
   await dialog.getByLabel("N° de document").fill("F-2026-118");
   await dialog.getByLabel("Échéance").fill(frDay(daysFromNow(30)));
-  await dialog.getByLabel("Catégorie").selectOption("maintenance_repairs");
-  await dialog.getByLabel("TVA").selectOption("17");
   const created = page.waitForResponse((r) => r.url().endsWith("/api/finance/factures") && r.request().method() === "POST");
   await dialog.getByRole("button", { name: "Enregistrer la facture" }).click();
   const res = await created;
