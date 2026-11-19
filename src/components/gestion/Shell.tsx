@@ -8,6 +8,7 @@ import { useDismiss } from "@/lib/useDismiss";
 import { Button, Field, InlineError, Input, Modal, Select } from "@/components/pro/ui";
 import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
+import KeepFresh from "@/components/KeepFresh";
 import GestionLogo from "./GestionLogo";
 import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
@@ -350,6 +351,7 @@ export default function GestionShell({
         {d.common.skipToContent}
       </a>
       <NavigationProgress />
+      <KeepFresh />
       <div className="crm-shell min-h-dvh">
         {/* Desktop sidebar */}
         <aside className="crm-sidebar chrome-material fixed z-40 hidden lg:block">

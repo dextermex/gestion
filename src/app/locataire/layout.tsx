@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import GestionLogo from "@/components/gestion/GestionLogo";
+import KeepFresh from "@/components/KeepFresh";
 import ScrollHeader from "@/components/gestion/ScrollHeader";
 import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
@@ -61,6 +62,8 @@ export default async function TenantLayout({ children }: { children: React.React
 
   return (
     <div className="tenant-space min-h-dvh bg-sand-50">
+      {/* The documents and photographs of this space are links signed for an hour: a page left open is read again before they run out. */}
+      <KeepFresh />
       {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
           is the whole screen: the bar, the sample line, the foot and the bottom bar
           step aside, and the conversation's own header takes the top. */}
