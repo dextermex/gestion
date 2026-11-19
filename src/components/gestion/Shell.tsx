@@ -301,7 +301,8 @@ export default function GestionShell({
       <div className="crm-workspace">
         <span className="crm-workspace-icon"><Icon name="properties" size={19} /></span>
         <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{shell.orgShortName}</span>
-          <span className="block text-xs text-ink-soft">{d.shell.roleOwner}</span>
+          {/* The role is named only where there is a second one to tell it from. */}
+          {shell.tenant && <span className="block text-xs text-ink-soft">{d.shell.roleOwner}</span>}
         </span>
       </div>
       <SidebarNav items={NAV} pathname={pathname} expanded={expanded} onNavigate={() => setMobileOpen(false)}
