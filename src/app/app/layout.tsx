@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
 import ProvisionError from "@/components/gestion/ProvisionError";
+import { ApiErrorsProvider } from "@/components/gestion/ApiErrors";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
@@ -119,7 +120,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <GestionShell locale={locale} dict={d} shell={shellData}>
-      {children}
+      {/* Every form of the space reads what a refusal means from here (src/lib/api-errors.ts). */}
+      <ApiErrorsProvider copy={d.apiErrors}>{children}</ApiErrorsProvider>
     </GestionShell>
   );
 }
