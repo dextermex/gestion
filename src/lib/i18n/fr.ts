@@ -2336,8 +2336,7 @@ export const fr = {
     title: "Utilisateurs & accès",
     subtitle: "Qui peut ouvrir cet espace. L'identité est celle de Morada : un seul compte pour tout l'écosystème.",
     you: "(vous)",
-    manageInPro: "Les invitations et les rôles se gèrent dans Morada Pro, avec la même identité.",
-    openPro: "Ouvrir Morada Pro",
+    manageByTeam: "Inviter un collègue ou changer un rôle ne se fait pas encore depuis cet écran : l'équipe Morada s'en charge sur demande. Écrivez à",
   },
 
   integrations: {
@@ -2353,8 +2352,7 @@ export const fr = {
     signatureBody: "Envoi du contrat produit, suivi des signataires, retour du contrat signé dans le registre, scellé par empreinte.",
     signatureOffBody: "Aucun fournisseur renseigné sur ce déploiement : le registre des contrats montre le parcours et n'envoie rien.",
     ecosystemTitle: "Écosystème Morada",
-    moradaBody: "Annonces et recherche : le portail public.",
-    proBody: "CRM du cabinet : équipe, mandats, identité partagée.",
+    moradaBody: "Le site public : guides du bailleur, calculateurs et tarifs.",
     open: "Ouvrir",
   },
 

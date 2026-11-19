@@ -2325,8 +2325,7 @@ export const de: Dict = {
     title: "Benutzer & Zugriff",
     subtitle: "Wer diesen Arbeitsbereich öffnen kann. Die Identität ist die von Morada: ein Konto für das ganze Ökosystem.",
     you: "(Sie)",
-    manageInPro: "Einladungen und Rollen werden in Morada Pro verwaltet, mit derselben Identität.",
-    openPro: "Morada Pro öffnen",
+    manageByTeam: "Einen Kollegen einladen oder eine Rolle ändern ist von diesem Bildschirm aus noch nicht möglich: Das Morada-Team übernimmt das auf Anfrage. Schreiben Sie an",
   },
 
   integrations: {
@@ -2342,8 +2341,7 @@ export const de: Dict = {
     signatureBody: "Versand des erstellten Vertrags, Verfolgung der Unterzeichner, Rückkehr des unterschriebenen Vertrags ins Register, per Fingerabdruck versiegelt.",
     signatureOffBody: "Kein Anbieter in diesem Deployment hinterlegt: Das Vertragsregister zeigt den Weg und versendet nichts.",
     ecosystemTitle: "Morada-Ökosystem",
-    moradaBody: "Anzeigen und Suche: das öffentliche Portal.",
-    proBody: "CRM der Kanzlei: Team, Mandate, gemeinsame Identität.",
+    moradaBody: "Die öffentliche Website: Ratgeber für Vermieter, Rechner und Preise.",
     open: "Öffnen",
   },
 

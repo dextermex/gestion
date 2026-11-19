@@ -2330,8 +2330,7 @@ export const lu: Dict = {
     title: "Benotzer & Accès",
     subtitle: "Wien dësen Espace opmaache kann. D'Identitéit ass déi vu Morada: ee Kont fir de ganzen Ökosystem.",
     you: "(Dir)",
-    manageInPro: "Invitatiounen a Rolle ginn a Morada Pro geréiert, mat derselwechter Identitéit.",
-    openPro: "Morada Pro opmaachen",
+    manageByTeam: "E Kolleg invitéieren oder eng Roll änneren ass vun dësem Schierm aus nach net méiglech: d'Morada-Equipe mécht dat op Ufro. Schreift un",
   },
 
   integrations: {
@@ -2347,8 +2346,7 @@ export const lu: Dict = {
     signatureBody: "Schécke vum produzéierte Kontrakt, Suivi vun den Ënnerschreiwer, Retour vum ënnerschriwwene Kontrakt an de Register, per Empreinte verséigelt.",
     signatureOffBody: "Kee Fournisseur op dësem Deployment renseignéiert: De Kontraktregëster weist de Wee a schéckt näischt.",
     ecosystemTitle: "Morada-Ökosystem",
-    moradaBody: "Annoncen a Sich: dat ëffentlecht Portal.",
-    proBody: "CRM vum Cabinet: Equipe, Mandater, gedeelt Identitéit.",
+    moradaBody: "Den ëffentleche Site: Guidë fir Proprietären, Rechner a Präisser.",
     open: "Opmaachen",
   },
 
