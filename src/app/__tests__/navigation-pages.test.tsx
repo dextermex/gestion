@@ -6,6 +6,7 @@ import { fmt } from "@/lib/i18n/config";
 import { buildEmptyData, orgFromWorkspace } from "@/lib/demo/data-empty";
 import type { DemoData } from "@/lib/demo";
 import { todayISO } from "@/lib/clock";
+import { formatMonth } from "@/lib/types";
 
 /**
  * Where the manager screens lead on an account's own data. Every card,
@@ -143,5 +144,88 @@ describe("Baux", () => {
     expect(html).toContain(fr.baux.emptyTitle);
     expect(html).toContain(fr.common.resetFilters);
     expect(html).not.toContain(fr.baux.noneTitle);
+  });
+});
+
+describe("Loyers", () => {
+  const render = async (params: Record<string, string> = {}) => {
+    const { default: Page } = await import("@/app/app/loyers/page");
+    return text(renderToString(await Page({ searchParams: Promise.resolve(params) })));
+  };
+  /** The month before this one, unpaid and past its due date. */
+  const withArrears = (): DemoData => {
+    const [y, m] = month.split("-").map(Number);
+    const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+    const base = account();
+    return { ...base, RENT_PERIODS: [...base.RENT_PERIODS, { id: "rp-0", leaseId: "lease-1", period: prev, dueDate: `${prev}-01`, rentCents: 125000, chargesCents: 15000, vatCents: 0, totalCents: 140000, allocatedCents: 0, status: "late" }] };
+  };
+
+  it("names the view on screen and offers the way out of it", async () => {
+    data = withArrears();
+    const html = await render({ vue: "impayes" });
+    expect(html).toContain(fr.loyers.tabsAria);
+    // The three views are links; the one on screen is marked.
+    expect(hrefs(html)).toEqual(expect.arrayContaining(["/app/loyers", "/app/loyers?vue=impayes", "/app/loyers?vue=payes"]));
+    expect(html).toMatch(/aria-current="page"[^>]*>À encaisser/);
+    // The paid rent of the month is not in this view.
+    expect(html).not.toContain(fmt(fr.loyers.groupPaid, { n: 1 }));
+    expect(html).toContain(fr.loyers.groupEarlier);
+  });
+
+  it("keeps the view when the month changes", async () => {
+    data = withArrears();
+    const html = await render({ vue: "impayes" });
+    const prevMonthLink = hrefs(html).find((h) => h.startsWith("/app/loyers?mois="));
+    expect(prevMonthLink).toContain("vue=impayes");
+  });
+
+  it("sends the late chip to the rows it counts, also from the paid view", async () => {
+    data = withArrears();
+    expect(hrefs(await render())).toContain("#a-encaisser");
+    const paid = await render({ vue: "payes" });
+    expect(paid).not.toContain('id="a-encaisser"');
+    expect(hrefs(paid)).not.toContain("#a-encaisser");
+    expect(hrefs(paid)).toContain("/app/loyers?vue=impayes#a-encaisser");
+  });
+
+  it("opens every month Accueil can show", async () => {
+    const { monthWindow } = await import("@/lib/months");
+    const oldest = monthWindow(month)[0];
+    const html = await render({ mois: oldest });
+    // The oldest month of the window is shown as asked, not replaced by the current one.
+    expect(html).toContain(fmt(fr.loyers.heroLabel, { month: formatMonth(oldest, "fr") }));
+    expect(html).not.toContain(fmt(fr.loyers.groupPaid, { n: 1 }));
+    expect(html).toContain(fr.loyers.nothingDue);
+  });
+});
+
+describe("Accueil", () => {
+  const render = async (params: Record<string, string> = {}) => {
+    const { default: Page } = await import("@/app/app/page");
+    return text(renderToString(await Page({ searchParams: Promise.resolve(params) })));
+  };
+
+  it("does not say everything is collected while a rent of the month is still to come", async () => {
+    const base = account();
+    data = { ...base, RENT_PERIODS: base.RENT_PERIODS.map((rp) => ({ ...rp, allocatedCents: 0, status: "pending" as const })) };
+    const html = await render();
+    expect(html).toContain("0/1");
+    expect(html).not.toContain(fr.home.ringAllPaid);
+    expect(html).toContain(fmt(fr.home.ringOpen, { n: 1 }));
+  });
+
+  it("says everything is collected once every rent of the month is paid", async () => {
+    const html = await render();
+    expect(html).toContain("1/1");
+    expect(html).toContain(fr.home.ringAllPaid);
+  });
+
+  it("opens the properties from the lots chip, and Loyers on the month shown from the month chip", async () => {
+    const { monthWindow } = await import("@/lib/months");
+    const oldest = monthWindow(month)[0];
+    const html = await render({ mois: oldest });
+    expect(hrefs(html)).toContain("/app/biens");
+    expect(hrefs(html)).not.toContain("/app/biens?occupation=vacants");
+    expect(hrefs(html)).toContain(`/app/loyers?mois=${oldest}`);
   });
 });

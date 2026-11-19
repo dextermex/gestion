@@ -524,6 +524,10 @@ export const en: Dict = {
     viewPaid: "paid",
     emptyTitle: "Nothing in this view",
     emptyBody: "No rent period matches this filter for this month.",
+    tabsAria: "Rent views",
+    tabAll: "All",
+    tabOpen: "To collect",
+    tabPaid: "Paid",
   },
 
   banque: {

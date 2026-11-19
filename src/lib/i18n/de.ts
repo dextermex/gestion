@@ -524,6 +524,10 @@ export const de: Dict = {
     viewPaid: "bezahlt",
     emptyTitle: "Nichts in dieser Ansicht",
     emptyBody: "Keine Fälligkeit entspricht diesem Filter in diesem Monat.",
+    tabsAria: "Mietansichten",
+    tabAll: "Alle",
+    tabOpen: "Offen",
+    tabPaid: "Bezahlt",
   },
 
   banque: {

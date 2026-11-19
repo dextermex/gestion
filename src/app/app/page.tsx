@@ -13,7 +13,8 @@ import { settlementNotes } from "@/lib/i18n/engine";
 import { cpeExpiryDeadline, vacancyClock } from "@/domain/compliance/deadlines";
 import { computeSettlement } from "@/domain/deposits/settlement";
 import { monthlyCashflow } from "@/domain/finance/cashflow";
-import { addDays, addMonths, diffDays } from "@/domain/dates";
+import { addDays, diffDays } from "@/domain/dates";
+import { monthWindow } from "@/lib/months";
 
 /**
  * Aujourd'hui: the command center. Every block is DERIVED — a row appears
@@ -52,7 +53,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   } = demo;
 
   const liveMonth = TODAY.slice(0, 7);
-  const chartMonths = [-4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  // The same months Loyers pages through: a chip of this screen always opens the month it shows.
+  const chartMonths = monthWindow(liveMonth);
   // The month on the screen: the one the address names when it is one of the bars and has begun, else this one.
   const pastMonths = chartMonths.filter((m) => m <= liveMonth);
   const shownMonth = params.mois && pastMonths.includes(params.mois) ? params.mois : liveMonth;
@@ -309,7 +311,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             fraction={month.length === 0 ? 0 : paidCount / month.length}
             value={`${paidCount}/${month.length}`}
             label={d.home.ringLabel}
-            sub={lateCount > 0 ? fmt(d.home.ringOpen, { n: month.length - paidCount }) : d.home.ringAllPaid}
+            // "All collected" only when every rent of the month is paid; a rent not yet due is still to collect.
+            sub={month.length === 0 ? undefined : paidCount === month.length ? d.home.ringAllPaid : fmt(d.home.ringOpen, { n: month.length - paidCount })}
           />
         }
         actions={
@@ -325,11 +328,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           {fmt(d.home.collectedOf, { pct, expected: eurosWhole(expected, locale) })}
         </HeroChip>
         {lateCount > 0 && (
-          <HeroChip href="/app/loyers?vue=impayes" icon="alert" tone="late">
+          <HeroChip href={shownMonth === liveMonth ? "/app/loyers?vue=impayes" : `/app/loyers?mois=${shownMonth}&vue=impayes`} icon="alert" tone="late">
             {fmt(d.home.lateChip, { n: lateCount, amount: eurosWhole(lateMonthCents, locale) })}
           </HeroChip>
         )}
-        <HeroChip href="/app/biens?occupation=vacants" icon="key">
+        <HeroChip href="/app/biens" icon="key">
           {fmt(d.home.lotsChip, { let: occupiedCount, total: lettable.length })}
         </HeroChip>
       </Hero>

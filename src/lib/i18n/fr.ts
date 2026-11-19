@@ -535,6 +535,10 @@ export const fr = {
     refsTitle: "Références & avis d'échéance",
     refsSub: "Avis mensuel avec QR de paiement : IBAN, nom vérifié, montant et référence pré-remplis",
     refsLegal: "Référence créancier RF permanente par bail (ISO 11649). Les apps bancaires luxembourgeoises n'ont pas de champ structuré : le moteur retrouve la référence dans le libellé libre, somme de contrôle vérifiée.",
+    tabsAria: "Vues des loyers",
+    tabAll: "Tout",
+    tabOpen: "À encaisser",
+    tabPaid: "Payés",
   },
 
   banque: {

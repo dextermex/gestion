@@ -529,6 +529,10 @@ export const lu: Dict = {
     viewPaid: "bezuelt",
     emptyTitle: "Näischt an dëser Vue",
     emptyBody: "Keng Echeance entsprécht dësem Filter fir dëse Mount.",
+    tabsAria: "Vuen vun de Loyeren",
+    tabAll: "All",
+    tabOpen: "Op",
+    tabPaid: "Bezuelt",
   },
 
   banque: {
