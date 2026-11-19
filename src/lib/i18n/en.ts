@@ -1246,6 +1246,7 @@ export const en: Dict = {
     wizDoneIntervention: "Add an intervention",
     wizDoneFinish: "See the property sheet",
     wizPhotoFailed: "The property was created, but one photo could not be uploaded. Try again from the sheet.",
+    wizParkingUnavailable: "The type \"Parking or garage\" is not available in your space yet. It will be after the next update: what you entered is kept on this device.",
     kindBuilding: "Building",
     kindHouse: "House",
     kindApartment: "Apartment",

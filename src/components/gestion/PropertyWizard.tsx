@@ -10,6 +10,7 @@ import GlassHouse from "./GlassHouse";
 import { DraftPrompt } from "@/components/gestion/WizardChrome";
 import { useDraft, useUnloadGuard, type Draft } from "@/lib/draft";
 import { shrinkPhotos } from "@/lib/photo";
+import { networkProblem, readApiProblem, signInHref } from "@/lib/api-errors";
 import { useStepHistory } from "@/lib/wizard-history";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
@@ -285,9 +286,42 @@ export default function PropertyWizard({
     return raw !== null && flow.includes(n) && n !== 9 ? n : null;
   });
 
+  /**
+   * The photographs follow the property they belong to. A failed upload, a
+   * refused one or a connection cut on the way never loses the property and
+   * never sends the wizard back to "Créer": the sheet simply has no cover
+   * yet, and the last screen says so.
+   */
+  const sendPhotos = async (propertyId: string) => {
+    const ordered = coverKey ? [...photos].sort((a, b) => (a.key === coverKey ? -1 : b.key === coverKey ? 1 : 0)) : photos;
+    try {
+      for (const photo of ordered) {
+        const body = new FormData();
+        body.append("file", photo.file);
+        body.append("propertyId", propertyId);
+        const up = await fetch("/api/biens/photo", { method: "POST", body });
+        if (!up.ok) {
+          setSaveError(d.biens.wizPhotoFailed);
+          return;
+        }
+      }
+    } catch {
+      setSaveError(d.biens.wizPhotoFailed);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     setSaveError(null);
+    // The property exists already (an earlier press went through): it is never
+    // created a second time. Only what was left, the photographs, is sent.
+    if (createdId) {
+      await sendPhotos(createdId);
+      setStep(9);
+      setSaving(false);
+      return;
+    }
+    let created: { id: string; units?: Array<{ id: string; label: string }> };
     try {
       const res = await fetch("/api/biens/create", {
         method: "POST",
@@ -319,36 +353,31 @@ export default function PropertyWizard({
         }),
       });
       if (res.status === 401) {
-        window.location.assign("/connexion?next=/app/biens/nouveau");
+        // What was typed is kept on the device (the draft) and offered back after signing in.
+        window.location.assign(signInHref("/app/biens/nouveau"));
         return;
       }
       if (!res.ok) {
-        setSaveError(d.biens.wizSaveFailed);
+        // Said in words: a subscription, a role, a field, or a type the base does not carry yet (parking, before 0026).
+        const problem = await readApiProblem(res, d.apiErrors, {
+          fallback: d.biens.wizSaveFailed,
+          codes: type === "parking" ? { schema_outdated: d.biens.wizParkingUnavailable } : undefined,
+        });
+        setSaveError(problem.message);
         setSaving(false);
         return;
       }
-      const created = (await res.json()) as { id: string; units?: Array<{ id: string; label: string }> };
-      void clearDraft();
-      setCreatedId(created.id);
-      setCreatedUnits(created.units ?? []);
-
-      // The photographs follow the property they belong to. A failed upload
-      // never loses the property: the sheet simply has no cover yet.
-      const ordered = coverKey ? [...photos].sort((a, b) => (a.key === coverKey ? -1 : b.key === coverKey ? 1 : 0)) : photos;
-      for (const photo of ordered) {
-        const body = new FormData();
-        body.append("file", photo.file);
-        body.append("propertyId", created.id);
-        const up = await fetch("/api/biens/photo", { method: "POST", body });
-        if (!up.ok) {
-          setSaveError(d.biens.wizPhotoFailed);
-          break;
-        }
-      }
-      setStep(9);
+      created = (await res.json()) as { id: string; units?: Array<{ id: string; label: string }> };
     } catch {
-      setSaveError(d.biens.wizSaveFailed);
+      setSaveError(networkProblem(d.apiErrors).message);
+      setSaving(false);
+      return;
     }
+    void clearDraft();
+    setCreatedId(created.id);
+    setCreatedUnits(created.units ?? []);
+    await sendPhotos(created.id);
+    setStep(9);
     setSaving(false);
   };
 

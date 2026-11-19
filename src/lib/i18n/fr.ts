@@ -1257,6 +1257,7 @@ export const fr = {
     wizDoneIntervention: "Ajouter une intervention",
     wizDoneFinish: "Voir la fiche du bien",
     wizPhotoFailed: "Le bien est créé, mais une photo n'a pas pu être envoyée. Réessayez depuis la fiche.",
+    wizParkingUnavailable: "Le type « Parking ou garage » n'est pas encore disponible sur votre espace. Il le sera après la prochaine mise à jour : votre saisie est conservée sur cet appareil.",
     kindBuilding: "Immeuble",
     kindHouse: "Maison",
     kindApartment: "Appartement",

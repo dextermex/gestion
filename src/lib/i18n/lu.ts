@@ -1251,6 +1251,7 @@ export const lu: Dict = {
     wizDoneIntervention: "Eng Intervention derbäisetzen",
     wizDoneFinish: "D'Fiche vum Bien kucken",
     wizPhotoFailed: "De Bien ass ugeluecht, mä eng Foto konnt net eropgeluede ginn. Probéiert nach eng Kéier vun der Fiche aus.",
+    wizParkingUnavailable: "Den Typ „Parking oder Garage“ ass an Ärem Beräich nach net disponibel. En ass et no der nächster Aktualiséierung: wat Dir aginn hutt, bleift op dësem Apparat erhalen.",
     kindBuilding: "Immeubel",
     kindHouse: "Haus",
     kindApartment: "Appartement",

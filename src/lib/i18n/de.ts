@@ -1246,6 +1246,7 @@ export const de: Dict = {
     wizDoneIntervention: "Auftrag hinzufügen",
     wizDoneFinish: "Objekt ansehen",
     wizPhotoFailed: "Das Objekt wurde angelegt, ein Foto konnte aber nicht hochgeladen werden. Versuchen Sie es im Objekt erneut.",
+    wizParkingUnavailable: "Der Typ „Stellplatz oder Garage“ ist in Ihrem Bereich noch nicht verfügbar. Er ist es nach der nächsten Aktualisierung: Ihre Eingaben bleiben auf diesem Gerät erhalten.",
     kindBuilding: "Wohnhaus",
     kindHouse: "Haus",
     kindApartment: "Wohnung",
