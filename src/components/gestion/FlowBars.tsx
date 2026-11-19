@@ -77,3 +77,28 @@ export function ShareBars({ rows }: { rows: Array<{ key: string; label: string; 
     </ul>
   );
 }
+
+/** What each property brought in and cost over the period: two bars on one scale, the net beside the name. */
+export function PropertyFlows({ rows, legendIn, legendOut }: { rows: Array<{ key: string; label: string; href: string; net: string; negative: boolean; inLabel: string; outLabel: string; inShare: number; outShare: number }>; legendIn: string; legendOut: string }) {
+  const w = (share: number) => `${share <= 0 ? 0 : Math.max(1.5, Math.round(share * 100))}%`;
+  return (
+    <ul className="divide-y divide-sand-200/80 overflow-hidden rounded-3xl border border-sand-200/80 bg-white/75">
+      {rows.map((r) => (
+        <li key={r.key}>
+          <Link href={r.href} className="block px-5 py-4 transition hover:bg-brand-50/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600">
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0 truncate text-[15px] font-semibold text-ink">{r.label}</span>
+              <span className={"shrink-0 text-sm font-semibold tabular-nums " + (r.negative ? "text-red-700" : "text-ink")}>{r.net}</span>
+            </span>
+            <span className="mt-2.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5">
+              <span className="h-2 overflow-hidden rounded-full bg-sand-100"><span className="block h-full rounded-full bg-emerald-600" style={{ width: w(r.inShare) }} /></span>
+              <span className="text-right text-xs tabular-nums text-ink-soft"><span className="sr-only">{legendIn} </span>{r.inLabel}</span>
+              <span className="h-2 overflow-hidden rounded-full bg-sand-100"><span className="block h-full rounded-full bg-slate-400" style={{ width: w(r.outShare) }} /></span>
+              <span className="text-right text-xs tabular-nums text-ink-soft"><span className="sr-only">{legendOut} </span>{r.outLabel}</span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}

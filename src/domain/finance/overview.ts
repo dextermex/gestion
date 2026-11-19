@@ -99,3 +99,45 @@ export function periodResult(periods: FlowPeriod[], bills: FlowBill[], fromMonth
   }
   return { incomeCents, expenseCents, netCents: incomeCents - expenseCents };
 }
+
+/** Expenses dated within a stretch of months, by category, the largest first, with the share of each. */
+export function expensesByCategoryIn(bills: FlowBill[], months: string[]): Array<{ category: string; cents: number; share: number }> {
+  const wanted = new Set(months);
+  const sums = new Map<string, number>();
+  for (const b of bills) {
+    if (b.direction !== "expense" || !wanted.has(billDay(b).slice(0, 7))) continue;
+    sums.set(b.category, (sums.get(b.category) ?? 0) + b.amountCents);
+  }
+  const total = [...sums.values()].reduce((a, c) => a + c, 0);
+  return [...sums.entries()]
+    .map(([category, cents]) => ({ category, cents, share: total === 0 ? 0 : cents / total }))
+    .sort((a, b) => b.cents - a.cents);
+}
+
+/**
+ * The same flows, property by property, over a stretch of months: what each
+ * brought in and cost, the one that brought most first. A period or a bill
+ * that names no property is left out: it belongs to none of the rows.
+ */
+export function flowsByProperty(
+  periods: Array<FlowPeriod & { propertyId: string | null }>,
+  bills: Array<FlowBill & { propertyId: string | null }>,
+  months: string[],
+): Array<{ propertyId: string; inCents: number; outCents: number; netCents: number }> {
+  const wanted = new Set(months);
+  const rows = new Map<string, { inCents: number; outCents: number }>();
+  const row = (id: string) => {
+    let r = rows.get(id);
+    if (!r) rows.set(id, (r = { inCents: 0, outCents: 0 }));
+    return r;
+  };
+  for (const p of periods) if (p.propertyId && wanted.has(p.period)) row(p.propertyId).inCents += p.allocatedCents;
+  for (const b of bills) {
+    if (!b.propertyId || !b.cashflow || !b.paidOn || !wanted.has(b.paidOn.slice(0, 7))) continue;
+    if (b.direction === "income") row(b.propertyId).inCents += b.amountCents;
+    else row(b.propertyId).outCents += b.amountCents;
+  }
+  return [...rows.entries()]
+    .map(([propertyId, r]) => ({ propertyId, ...r, netCents: r.inCents - r.outCents }))
+    .sort((a, b) => b.netCents - a.netCents);
+}

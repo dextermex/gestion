@@ -3,20 +3,21 @@ import { Badge } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import BillActions from "@/components/gestion/BillActions";
 import BillUpload from "@/components/gestion/BillUpload";
-import { FlowBars, ShareBars, type FlowBar } from "@/components/gestion/FlowBars";
+import { FlowBars, PropertyFlows, ShareBars, type FlowBar } from "@/components/gestion/FlowBars";
+import QuerySelect from "@/components/gestion/QuerySelect";
 import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, MonthSwitch, Money, Row, Rows, Section, Segments } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
 import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/config";
 import { getI18n } from "@/lib/i18n";
-import { fmt } from "@/lib/i18n/config";
+import { INTL_LOCALE, fmt } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { billState, type BillCategory } from "@/lib/gestion/bills";
 import { managementFeeVat } from "@/domain/fiscal/vat";
 import { splitExact } from "@/domain/money";
 import { addMonths } from "@/domain/dates";
-import { billDay, expensesByCategory, monthlyFlows, unpaidBills, yearResult } from "@/domain/finance/overview";
+import { billDay, expensesByCategory, expensesByCategoryIn, flowsByProperty, monthlyFlows, unpaidBills, yearResult } from "@/domain/finance/overview";
 
 /**
  * Finance: what came in, what went out and what is left, month by month,
@@ -204,13 +205,15 @@ function Books({ statement, demo, d, locale }: { statement: NonNullable<ReturnTy
 
 const VIEWS = ["tresorerie", "revenus", "charges", "resultat", "comptabilite"] as const;
 type View = (typeof VIEWS)[number];
+const PERIODS = ["mois", "3m", "12m", "annee"] as const;
+type Period = (typeof PERIODS)[number];
 
-export default async function FinancePage({ searchParams }: { searchParams: Promise<{ vue?: string; mois?: string }> }) {
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ vue?: string; mois?: string; periode?: string; bien?: string }> }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
   const demo = await getDemo();
   const sample = await isSampleData();
-  const { BILLS, CONTACTS, ORG, RENT_PERIODS, TODAY, UNITS, leaseById, leaseTenantNames, leaseUnitLabel, propertyById } = demo;
+  const { BILLS, CONTACTS, LEASES, ORG, PROPERTIES, RENT_PERIODS, TODAY, UNITS, leaseById, leaseTenantNames, leaseUnitLabel, propertyById } = demo;
   const writable = !sample;
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
   const f = d.finance;
@@ -230,39 +233,61 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     : null;
   const categories = categoryLabels(d);
 
-  // The month on the screen and the view of the books; both live in the address.
+  // The month, the stretch of months, the property and the view of the books: all four live in the address.
   const liveMonth = TODAY.slice(0, 7);
   const MONTHS = [-5, -4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
   const past = MONTHS.filter((m) => m <= liveMonth);
   const month = params.mois && past.includes(params.mois) ? params.mois : liveMonth;
+  const period: Period = PERIODS.includes(params.periode as Period) ? (params.periode as Period) : "mois";
+  const property = PROPERTIES.find((p) => p.id === params.bien) ?? null;
   const views: View[] = statement ? [...VIEWS] : VIEWS.filter((v) => v !== "comptabilite");
   const view: View = views.includes(params.vue as View) ? (params.vue as View) : "tresorerie";
-  const hrefOf = (v: View, m: string) => {
+  const hrefFor = (next: { v?: View; m?: string; p?: Period; bien?: string | null }) => {
+    const v = next.v ?? view;
+    const p = next.p ?? period;
+    const m = next.m ?? month;
+    const b = next.bien === undefined ? (property?.id ?? null) : next.bien;
     const q = new URLSearchParams();
     if (v !== "tresorerie") q.set("vue", v);
-    if (m !== liveMonth) q.set("mois", m);
+    if (p !== "mois") q.set("periode", p);
+    if (p === "mois" && m !== liveMonth) q.set("mois", m);
+    if (b) q.set("bien", b);
     const qs = q.toString();
     return qs ? `/app/finance?${qs}` : "/app/finance";
   };
+  const hrefOf = (v: View, m: string) => hrefFor({ v, m });
   const at = past.indexOf(month);
   const year = month.slice(0, 4);
+  // The months the figures cover: the one on the screen, or the stretch chosen, ending this month.
+  const last = (n: number) => Array.from({ length: n }, (_, i) => addMonths(`${liveMonth}-01`, i - (n - 1)).slice(0, 7));
+  const span = period === "mois" ? [month] : period === "3m" ? last(3) : period === "12m" ? last(12) : last(Number(liveMonth.slice(5, 7)));
+  const spanLabel = period === "mois" ? formatMonth(month, locale) : period === "3m" ? f.span3 : period === "12m" ? f.span12 : liveMonth.slice(0, 4);
 
-  const flows = monthlyFlows(RENT_PERIODS, BILLS, MONTHS);
-  const flow = flows.find((x) => x.month === month) ?? { month, inCents: 0, outCents: 0, netCents: 0 };
-  const toPay = unpaidBills(BILLS, TODAY);
-  const paidThisMonth = BILLS.filter((b) => b.paidOn && b.paidOn.slice(0, 7) === month).sort((a, b) => (b.paidOn ?? "").localeCompare(a.paidOn ?? ""));
-  const rentsIn = RENT_PERIODS.filter((rp) => rp.period === month && rp.allocatedCents > 0).sort((a, b) => b.allocatedCents - a.allocatedCents);
-  const byCategory = expensesByCategory(BILLS, year);
-  const result = yearResult(RENT_PERIODS, BILLS, year, month);
-  const allBills = [...BILLS].sort((a, b) => billDay(b).localeCompare(billDay(a)));
+  // The rows of the property on the screen, each period carrying the property its lease belongs to.
+  const propertyOfLease = new Map(LEASES.map((l) => [l.id, UNITS.find((u) => u.id === l.unitId)?.propertyId ?? null]));
+  const periodsAll = RENT_PERIODS.map((rp) => ({ ...rp, propertyId: propertyOfLease.get(rp.leaseId) ?? null }));
+  const periods = property ? periodsAll.filter((rp) => rp.propertyId === property.id) : periodsAll;
+  const bills = property ? BILLS.filter((b) => b.propertyId === property.id) : BILLS;
+
+  const flows = monthlyFlows(periods, bills, period === "mois" ? MONTHS : span);
+  const flow = monthlyFlows(periods, bills, span).reduce((a, x) => ({ ...a, inCents: a.inCents + x.inCents, outCents: a.outCents + x.outCents, netCents: a.netCents + x.netCents }), { month, inCents: 0, outCents: 0, netCents: 0 });
+  const toPay = unpaidBills(bills, TODAY);
+  const paidThisMonth = bills.filter((b) => b.paidOn && b.paidOn.slice(0, 7) === month).sort((a, b) => (b.paidOn ?? "").localeCompare(a.paidOn ?? ""));
+  const rentsIn = periods.filter((rp) => rp.period === month && rp.allocatedCents > 0).sort((a, b) => b.allocatedCents - a.allocatedCents);
+  const byCategory = expensesByCategory(bills, year);
+  const breakdown = expensesByCategoryIn(bills, span);
+  const byProperty = property ? [] : flowsByProperty(periodsAll, BILLS, span);
+  const propertyMax = Math.max(1, ...byProperty.map((r) => Math.max(r.inCents, r.outCents)));
+  const result = yearResult(periods, bills, year, month);
+  const allBills = [...bills].sort((a, b) => billDay(b).localeCompare(billDay(a)));
 
   const bars: FlowBar[] = flows.map((x) => ({
     month: x.month,
-    label: formatMonth(x.month, locale).split(" ")[0],
+    label: flows.length > 7 ? new Date(`${x.month}-01T00:00:00`).toLocaleDateString(INTL_LOCALE[locale], { month: "short" }) : formatMonth(x.month, locale).split(" ")[0],
     inCents: x.inCents,
     outCents: x.outCents,
     future: x.month > liveMonth,
-    href: x.month > liveMonth ? null : hrefOf(view, x.month),
+    href: x.month > liveMonth ? null : hrefFor({ p: "mois", m: x.month }),
     inLabel: eurosWhole(x.inCents, locale),
     outLabel: eurosWhole(x.outCents, locale),
   }));
@@ -317,16 +342,19 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     <div className="space-y-8">
       <Hero
         title={f.title}
+        eyebrow={property?.name}
         top={
-          <MonthSwitch
-            label={formatMonth(month, locale)}
-            prev={at > 0 ? hrefOf(view, past[at - 1]) : null}
-            next={at < past.length - 1 ? hrefOf(view, past[at + 1]) : null}
-            prevLabel={d.home.prevMonth}
-            nextLabel={d.home.nextMonth}
-          />
+          period === "mois" ? (
+            <MonthSwitch
+              label={formatMonth(month, locale)}
+              prev={at > 0 ? hrefOf(view, past[at - 1]) : null}
+              next={at < past.length - 1 ? hrefOf(view, past[at + 1]) : null}
+              prevLabel={d.home.prevMonth}
+              nextLabel={d.home.nextMonth}
+            />
+          ) : undefined
         }
-        label={fmt(f.heroLabel, { month: formatMonth(month, locale) })}
+        label={fmt(f.heroLabel, { month: spanLabel })}
         figure={<Money value={eurosWhole(flow.netCents, locale)} />}
         actions={
           <>
@@ -340,36 +368,92 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         <HeroChip href={hrefOf("charges", month)} icon="documents">{fmt(f.chipOut, { amount: eurosWhole(flow.outCents, locale) })}</HeroChip>
       </Hero>
 
-      <Segments
-        label={f.tabsAria}
-        items={views.map((v) => ({
-          href: hrefOf(v, month),
-          label: v === "tresorerie" ? f.tabCash : v === "revenus" ? f.tabIncome : v === "charges" ? f.tabCosts : v === "resultat" ? f.tabResult : f.tabBooks,
-          count: v === "charges" ? BILLS.filter((b) => b.direction === "expense").length : undefined,
-          current: v === view,
-        }))}
-      />
+      {/* The views of the books on the left; the stretch of months and the property they are read for on the right. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 max-w-full">
+          <Segments
+            label={f.tabsAria}
+            items={views.map((v) => ({
+              href: hrefOf(v, month),
+              label: v === "tresorerie" ? f.tabCash : v === "revenus" ? f.tabIncome : v === "charges" ? f.tabCosts : v === "resultat" ? f.tabResult : f.tabBooks,
+              count: v === "charges" ? bills.filter((b) => b.direction === "expense").length : undefined,
+              current: v === view,
+            }))}
+          />
+        </div>
+        {view === "tresorerie" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <QuerySelect
+              label={f.periodAria}
+              value={period}
+              options={PERIODS.map((p) => ({ value: p, label: p === "mois" ? f.periodMonth : p === "3m" ? f.period3 : p === "12m" ? f.period12 : f.periodYear, href: hrefFor({ p }) }))}
+            />
+            {PROPERTIES.length > 1 && (
+              <QuerySelect
+                label={f.propertyAria}
+                value={property?.id ?? ""}
+                options={[{ value: "", label: f.allProperties, href: hrefFor({ bien: null }) }, ...PROPERTIES.map((p) => ({ value: p.id, label: p.name, href: hrefFor({ bien: p.id }) }))]}
+              />
+            )}
+          </div>
+        )}
+      </div>
 
       {view === "tresorerie" && (
-        <div className="grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10">
-          <Section title={f.chartAria} className="min-w-0">
-            <FlowBars bars={bars} selected={month} legendIn={f.legendIn} legendOut={f.legendOut} monthHeading={d.dash.cashflowMonth} ariaLabel={f.chartAria} />
-          </Section>
-          <div className="min-w-0">
-            <GroupHead title={f.toPay} total={toPay.length > 0 ? eurosWhole(toPay.reduce((a, b) => a + b.amountCents, 0), locale) : undefined} />
-            {BILLS.length === 0 ? <p className="px-1 text-sm text-ink-soft">{f.billsNone}</p> : toPay.length === 0 ? <p className="px-1 text-sm text-ink-soft">{f.toPayNone}</p> : <Rows>{toPay.map(billRow)}</Rows>}
+        <div className="space-y-9">
+          <div className="grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10">
+            <Section title={f.chartAria} className="min-w-0">
+              <FlowBars bars={bars} selected={period === "mois" ? month : ""} legendIn={f.legendIn} legendOut={f.legendOut} monthHeading={d.dash.cashflowMonth} ariaLabel={f.chartAria} />
+            </Section>
+            <Section title={f.breakdown} className="min-w-0">
+              {breakdown.length === 0 ? (
+                <p className="rounded-3xl border border-sand-200/80 bg-white/75 px-5 py-6 text-sm text-ink-soft">{f.breakdownNone}</p>
+              ) : (
+                <ShareBars rows={breakdown.map((c) => ({ key: c.category, label: categories[c.category as BillCategory] ?? c.category, amount: eurosWhole(c.cents, locale), share: c.share }))} />
+              )}
+            </Section>
+          </div>
 
-            <GroupHead title={f.movements} />
-            {rentsIn.length === 0 && paidThisMonth.length === 0 ? (
-              <p className="px-1 text-sm text-ink-soft">{f.movementsNone}</p>
-            ) : (
-              <Rows>
-                {paidThisMonth.map(billRow)}
-                {rentsIn.map((rp) => {
-                  const l = leaseById(rp.leaseId);
-                  return <Row key={rp.id} href={`/app/baux/${l.id}`} icon="euro" title={leaseTenantNames(l).join(", ") || leaseUnitLabel(l)} sub={leaseUnitLabel(l)} right={`+ ${eurosWhole(rp.allocatedCents, locale)}`} rightTone="in" />;
-                })}
-              </Rows>
+          {byProperty.length > 1 && (
+            <Section title={f.byProperty}>
+              <PropertyFlows
+                legendIn={f.legendIn}
+                legendOut={f.legendOut}
+                rows={byProperty.map((r) => ({
+                  key: r.propertyId,
+                  label: propertyById(r.propertyId).name,
+                  href: hrefFor({ bien: r.propertyId }),
+                  net: fmt(f.netOf, { amount: eurosWhole(r.netCents, locale) }),
+                  negative: r.netCents < 0,
+                  inLabel: eurosWhole(r.inCents, locale),
+                  outLabel: eurosWhole(r.outCents, locale),
+                  inShare: r.inCents / propertyMax,
+                  outShare: r.outCents / propertyMax,
+                }))}
+              />
+            </Section>
+          )}
+
+          <div className="grid grid-cols-1 gap-9 lg:grid-cols-2 lg:gap-10">
+            <div className="min-w-0">
+              <GroupHead title={f.toPay} total={toPay.length > 0 ? eurosWhole(toPay.reduce((a, b) => a + b.amountCents, 0), locale) : undefined} />
+              {BILLS.length === 0 ? <p className="px-1 text-sm text-ink-soft">{f.billsNone}</p> : toPay.length === 0 ? <p className="px-1 text-sm text-ink-soft">{f.toPayNone}</p> : <Rows>{toPay.map(billRow)}</Rows>}
+            </div>
+            {period === "mois" && (
+              <div className="min-w-0">
+                <GroupHead title={f.movements} />
+                {rentsIn.length === 0 && paidThisMonth.length === 0 ? (
+                  <p className="px-1 text-sm text-ink-soft">{f.movementsNone}</p>
+                ) : (
+                  <Rows>
+                    {paidThisMonth.map(billRow)}
+                    {rentsIn.map((rp) => {
+                      const l = leaseById(rp.leaseId);
+                      return <Row key={rp.id} href={`/app/baux/${l.id}`} icon="euro" title={leaseTenantNames(l).join(", ") || leaseUnitLabel(l)} sub={leaseUnitLabel(l)} right={`+ ${eurosWhole(rp.allocatedCents, locale)}`} rightTone="in" />;
+                    })}
+                  </Rows>
+                )}
+              </div>
             )}
           </div>
         </div>

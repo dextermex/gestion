@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expensesByCategory, monthlyFlows, periodResult, unpaidBills, yearResult, type FlowBill } from "@/domain/finance/overview";
+import { expensesByCategory, expensesByCategoryIn, flowsByProperty, monthlyFlows, periodResult, unpaidBills, yearResult, type FlowBill } from "@/domain/finance/overview";
 
 const bill = (over: Partial<FlowBill>): FlowBill => ({ direction: "expense", amountCents: 0, category: "other_frais", cashflow: true, docDate: null, dueOn: null, paidOn: null, createdAt: "2026-08-01", ...over });
 const periods = [
@@ -40,6 +40,27 @@ describe("the finance overview", () => {
     expect(periodResult(periods, bills, "2026-07", "2026-09")).toEqual({ incomeCents: 336_000, expenseCents: 138_900, netCents: 197_100 });
     expect(periodResult(periods, bills, "2026-01", "2026-06")).toEqual({ incomeCents: 0, expenseCents: 234_000, netCents: -234_000 });
     expect(periodResult(periods, bills, "2025-01", "2025-12")).toEqual({ incomeCents: 0, expenseCents: 0, netCents: 0 });
+  });
+  it("splits the expenses of the months named, and no others", () => {
+    expect(expensesByCategoryIn(bills, ["2026-07", "2026-08"]).map((r) => [r.category, r.cents])).toEqual([["maintenance_repairs", 124_000], ["other_frais", 14_900]]);
+    expect(expensesByCategoryIn(bills, ["2025-12"])).toEqual([]);
+  });
+  it("reads the flows property by property, the one that brought most first", () => {
+    const p = [
+      { period: "2026-08", allocatedCents: 100_000, propertyId: "a" },
+      { period: "2026-08", allocatedCents: 66_000, propertyId: "b" },
+      { period: "2026-07", allocatedCents: 50_000, propertyId: "a" },
+      { period: "2026-08", allocatedCents: 9_000, propertyId: null },
+    ];
+    const b = [
+      { ...bill({ amountCents: 120_000, paidOn: "2026-08-10" }), propertyId: "a" },
+      { ...bill({ amountCents: 5_000, paidOn: null }), propertyId: "b" },
+      { ...bill({ amountCents: 7_000, paidOn: "2026-08-11" }), propertyId: null },
+    ];
+    expect(flowsByProperty(p, b, ["2026-08"])).toEqual([
+      { propertyId: "b", inCents: 66_000, outCents: 0, netCents: 66_000 },
+      { propertyId: "a", inCents: 100_000, outCents: 120_000, netCents: -20_000 },
+    ]);
   });
   it("gives the year so far: rents up to the month, other receipts, expenses and the result", () => {
     expect(yearResult(periods, bills, "2026", "2026-07")).toEqual({ rentCents: 150_000, otherIncomeCents: 20_000, expenseCents: 372_900, resultCents: -202_900 });

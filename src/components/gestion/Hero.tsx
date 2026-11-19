@@ -33,11 +33,13 @@ export function Hero({ title, eyebrow, top, label, figure, children, actions, as
     <section className="hero-card relative overflow-hidden rounded-[28px] px-5 pb-7 pt-5 text-ink sm:px-9 sm:pb-9 sm:pt-7">
       <h1 className="sr-only">{title}</h1>
       {art && <GlassHouse className="hero-art" />}
-      <div className="relative flex min-h-10 items-center justify-between gap-3">
-        <p className="min-w-0 truncate text-[15px] font-medium text-ink-soft">{eyebrow}</p>
-        {top}
-      </div>
-      <div className={"relative mt-5 grid grid-cols-1 items-center gap-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12" + (art ? " lg:pr-[15.5rem]" : "")}>
+      {(eyebrow || top) && (
+        <div className="relative mb-5 flex min-h-10 items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-[15px] font-medium text-ink-soft">{eyebrow}</p>
+          {top}
+        </div>
+      )}
+      <div className={"relative grid grid-cols-1 items-center gap-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12" + (art ? " lg:pr-[15.5rem]" : "")}>
         <div className="min-w-0 max-lg:text-center">
           <p className="text-[15px] font-medium text-ink-soft">{label}</p>
           <p className="mt-1.5 text-5xl font-semibold leading-none tracking-[-0.045em] tabular-nums text-ink sm:text-6xl">{figure}</p>
