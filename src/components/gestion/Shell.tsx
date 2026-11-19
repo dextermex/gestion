@@ -22,7 +22,7 @@ import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
 import { ApiProblemNote } from "@/components/gestion/ApiErrors";
 import DateField from "@/components/gestion/DateField";
 import { networkProblem, readApiProblem, type ApiProblem } from "@/lib/api-errors";
-import { parseEuroInput } from "@/lib/gestion/euros";
+import { isZeroAmount, parseEuroInput } from "@/lib/gestion/euros";
 import { todayISO } from "@/lib/clock";
 
 /** Everything the shell needs from the active demo dataset, precomputed
@@ -969,9 +969,6 @@ function CommandPalette({
 
 /* ------------------------------ create dialog ------------------------------- */
 
-/** An amount typed as nothing or as zero ("0", "0,00"): no provision. */
-const isZero = (raw: string): boolean => /^0*([.,]0*)?$/.test(raw.replace(/[\s€]/g, ""));
-
 export function CreateDialog({
   kind,
   onClose,
@@ -1033,7 +1030,7 @@ export function CreateDialog({
     if (kind === "lease") {
       if (!startDate) return invalid(d.shell.fieldStartDate);
       if (parseEuroInput(v("rent")) === null) return invalid(d.shell.fieldRent);
-      if (!isZero(v("charges")) && parseEuroInput(v("charges")) === null) return invalid(d.shell.fieldCharges);
+      if (!isZeroAmount(v("charges")) && parseEuroInput(v("charges")) === null) return invalid(d.shell.fieldCharges);
     }
     if (kind === "payment") {
       if (parseEuroInput(v("amount")) === null) return invalid(d.shell.fieldAmount);
@@ -1067,7 +1064,7 @@ export function CreateDialog({
               startDate,
               rent: v("rent"),
               // "0" means no provision: the route reads an empty field as none.
-              charges: isZero(v("charges")) ? "" : v("charges"),
+              charges: isZeroAmount(v("charges")) ? "" : v("charges"),
               depositMonths: Number(v("depositMonths") || 2),
               depositForm: v("depositForm"),
             }

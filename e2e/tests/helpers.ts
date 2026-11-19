@@ -17,6 +17,8 @@ export function mail(who: string): string {
 
 export const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
 export const daysFromNow = (n: number): string => isoDate(new Date(Date.now() + n * 86_400_000));
+/** An ISO day as the product's own date field takes it: day, month, year. */
+export const frDay = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
 export interface Person {
   first: string;
@@ -179,7 +181,7 @@ export async function letLot(page: Page, unitId: string, tenant: Person, rent = 
   await page.getByLabel("E-mail").first().fill(tenant.email);
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // tenant → lease
   // A tenancy that began earlier opens its past months in the ledger: the arrears flows start from one.
-  if (startDate) await page.getByLabel("Début du bail").fill(startDate);
+  if (startDate) await page.getByLabel("Début du bail").fill(frDay(startDate));
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // lease → rent
   await page.getByLabel("Loyer hors charges").fill(rent);
   await page.getByLabel("Charges mensuelles").fill("150");

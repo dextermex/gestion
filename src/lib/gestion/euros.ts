@@ -26,3 +26,8 @@ export function parseEuroInput(raw: string): number | null {
   const cents = Math.round(parseFloat(normalized) * 100);
   return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
 }
+
+/** An amount typed as nothing or as zero ("", "0", "0,00"): no amount at all. */
+export function isZeroAmount(raw: string): boolean {
+  return /^0*([.,]0*)?$/.test(raw.replace(/[\s\u00a0\u202f€]/g, ""));
+}
