@@ -81,3 +81,21 @@ export function yearResult(periods: FlowPeriod[], bills: FlowBill[], year: strin
   }
   return { rentCents, otherIncomeCents, expenseCents, resultCents: rentCents + otherIncomeCents - expenseCents };
 }
+
+/**
+ * A stretch of months as the books read it: the rent allocated to its
+ * periods, the other receipts and the expenses dated in it, and what is
+ * left. A quarter and a year so far are the same sum over different months.
+ */
+export function periodResult(periods: FlowPeriod[], bills: FlowBill[], fromMonth: string, toMonth: string): { incomeCents: number; expenseCents: number; netCents: number } {
+  let incomeCents = 0;
+  let expenseCents = 0;
+  for (const p of periods) if (p.period >= fromMonth && p.period <= toMonth) incomeCents += p.allocatedCents;
+  for (const b of bills) {
+    const month = billDay(b).slice(0, 7);
+    if (month < fromMonth || month > toMonth) continue;
+    if (b.direction === "income") incomeCents += b.amountCents;
+    else expenseCents += b.amountCents;
+  }
+  return { incomeCents, expenseCents, netCents: incomeCents - expenseCents };
+}

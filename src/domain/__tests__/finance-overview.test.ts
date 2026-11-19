@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expensesByCategory, monthlyFlows, unpaidBills, yearResult, type FlowBill } from "@/domain/finance/overview";
+import { expensesByCategory, monthlyFlows, periodResult, unpaidBills, yearResult, type FlowBill } from "@/domain/finance/overview";
 
 const bill = (over: Partial<FlowBill>): FlowBill => ({ direction: "expense", amountCents: 0, category: "other_frais", cashflow: true, docDate: null, dueOn: null, paidOn: null, createdAt: "2026-08-01", ...over });
 const periods = [
@@ -35,6 +35,11 @@ describe("the finance overview", () => {
     expect(rows.map((r) => [r.category, r.cents])).toEqual([["insurance", 186_000], ["maintenance_repairs", 172_000], ["other_frais", 14_900]]);
     expect(rows.reduce((a, r) => a + r.share, 0)).toBeCloseTo(1);
     expect(expensesByCategory(bills, "2025")).toEqual([]);
+  });
+  it("sums a quarter and a year so far the same way, by the months named", () => {
+    expect(periodResult(periods, bills, "2026-07", "2026-09")).toEqual({ incomeCents: 336_000, expenseCents: 138_900, netCents: 197_100 });
+    expect(periodResult(periods, bills, "2026-01", "2026-06")).toEqual({ incomeCents: 0, expenseCents: 234_000, netCents: -234_000 });
+    expect(periodResult(periods, bills, "2025-01", "2025-12")).toEqual({ incomeCents: 0, expenseCents: 0, netCents: 0 });
   });
   it("gives the year so far: rents up to the month, other receipts, expenses and the result", () => {
     expect(yearResult(periods, bills, "2026", "2026-07")).toEqual({ rentCents: 150_000, otherIncomeCents: 20_000, expenseCents: 372_900, resultCents: -202_900 });
