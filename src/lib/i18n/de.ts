@@ -62,6 +62,17 @@ export const de: Dict = {
     removePhoto: "Foto entfernen",
   },
 
+  errors: {
+    notFoundTitle: "Seite nicht gefunden",
+    notFoundBody: "Diese Adresse führt nirgendwohin: Der Link ist vielleicht veraltet, oder was er öffnete, wurde entfernt.",
+    errorTitle: "Ein Fehler ist aufgetreten",
+    errorBody: "Die Seite konnte nicht angezeigt werden. Versuchen Sie es erneut: Besteht das Problem weiter, wurde es uns gemeldet.",
+    retry: "Erneut versuchen",
+    toHome: "Zur Übersicht",
+    toTenantHome: "Zurück zu meiner Wohnung",
+    toSpace: "Meinen Bereich öffnen",
+    toSignIn: "Anmelden",
+  },
   nav: {
     mortgages: "Immobilienkredite",
     acquisitions: "Kaufprojekte",

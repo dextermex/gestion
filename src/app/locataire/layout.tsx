@@ -77,9 +77,9 @@ export default async function TenantLayout({ children }: { children: React.React
           </span>
           {canManage && (
             <nav aria-label={d.shell.roleAria} className="ml-1 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 max-sm:hidden">
-              <a href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
+              <Link href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
                 {d.shell.roleOwner}
-              </a>
+              </Link>
               <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
                 {d.shell.roleTenant}
               </span>

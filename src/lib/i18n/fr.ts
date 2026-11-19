@@ -66,6 +66,17 @@ export const fr = {
     removePhoto: "Retirer la photo",
   },
 
+  errors: {
+    notFoundTitle: "Page introuvable",
+    notFoundBody: "Cette adresse ne mène nulle part : le lien est peut-être ancien, ou ce qu'il ouvrait a été supprimé.",
+    errorTitle: "Une erreur est survenue",
+    errorBody: "La page n'a pas pu s'afficher. Réessayez : si le problème persiste, il nous a été signalé.",
+    retry: "Réessayer",
+    toHome: "Retour à l'accueil",
+    toTenantHome: "Retour à mon logement",
+    toSpace: "Ouvrir mon espace",
+    toSignIn: "Se connecter",
+  },
   nav: {
     mortgages: "Crédits immobiliers",
     acquisitions: "Projets d’achat",

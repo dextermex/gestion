@@ -62,6 +62,17 @@ export const en: Dict = {
     removePhoto: "Remove the photo",
   },
 
+  errors: {
+    notFoundTitle: "Page not found",
+    notFoundBody: "This address leads nowhere: the link may be old, or what it opened has been removed.",
+    errorTitle: "Something went wrong",
+    errorBody: "The page could not be displayed. Try again: if the problem persists, it has been reported to us.",
+    retry: "Try again",
+    toHome: "Back to home",
+    toTenantHome: "Back to my home",
+    toSpace: "Open my space",
+    toSignIn: "Sign in",
+  },
   nav: {
     mortgages: "Mortgages",
     acquisitions: "Purchase projects",

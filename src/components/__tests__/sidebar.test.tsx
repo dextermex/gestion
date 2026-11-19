@@ -2,6 +2,7 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import Link from "next/link";
 import SidebarNav from "@/components/gestion/SidebarNav";
 import MobileDrawer from "@/components/gestion/MobileDrawer";
 
@@ -39,7 +40,7 @@ describe("Mobile navigation keyboard contract", () => {
       <button onClick={() => setOpen(true)}>Open menu</button>
       <MobileDrawer open={open} onClose={() => setOpen(false)} label="Menu" closeLabel="Close">
         <Navigation />
-        <a href="/app/reglages">Settings</a>
+        <Link href="/app/reglages">Settings</Link>
       </MobileDrawer>
     </>;
   }

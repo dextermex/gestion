@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { APP_SHORT_NAME } from "@/lib/constants";
-import { getLocale } from "@/lib/i18n";
+import { ErrorCopyProvider } from "@/components/RouteFallback";
+import { getDict, getLocale } from "@/lib/i18n";
 import { htmlLang } from "@/lib/i18n/config";
 import "./globals.css";
 
@@ -65,9 +66,13 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
+  const { errors } = getDict(locale);
   return (
     <html lang={htmlLang(locale)} className="scroll-smooth">
-      <body className="min-h-dvh bg-sand-50 text-ink antialiased">{children}</body>
+      <body className="min-h-dvh bg-sand-50 text-ink antialiased">
+        {/* An error screen is a client component: it gets its few lines, in the person's language, from here. */}
+        <ErrorCopyProvider copy={{ title: errors.errorTitle, body: errors.errorBody, retry: errors.retry, toHome: errors.toHome, toTenantHome: errors.toTenantHome, toSpace: errors.toSpace }}>{children}</ErrorCopyProvider>
+      </body>
     </html>
   );
 }

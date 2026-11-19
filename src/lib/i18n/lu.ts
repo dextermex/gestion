@@ -67,6 +67,17 @@ export const lu: Dict = {
     removePhoto: "Foto ewechhuelen",
   },
 
+  errors: {
+    notFoundTitle: "Säit net fonnt",
+    notFoundBody: "Dës Adress féiert néierens hin: de Link ass vläicht al, oder dat wat en opgemaach huet, gouf geläscht.",
+    errorTitle: "E Feeler ass opgetrueden",
+    errorBody: "D'Säit konnt net ugewise ginn. Probéiert nach eng Kéier: wann de Problem bleift, gouf en eis gemellt.",
+    retry: "Nach eng Kéier probéieren",
+    toHome: "Zréck op den Iwwerbléck",
+    toTenantHome: "Zréck bei meng Wunneng",
+    toSpace: "Mäi Beräich opmaachen",
+    toSignIn: "Umellen",
+  },
   nav: {
     mortgages: "Immobiliekreditter",
     acquisitions: "Kafprojeten",
