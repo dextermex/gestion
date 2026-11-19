@@ -66,6 +66,18 @@ export const lu: Dict = {
     draftDiscard: "Nei ufänken",
     removePhoto: "Foto ewechhuelen",
   },
+  access: {
+    spaceUnreadTitle: "Äre Beräich konnt net geluede ginn",
+    spaceUnreadBody: "Är Gestiounsberäicher konnten net gelies ginn. Et gouf näischt geännert. Probéiert et an engem Moment nach eng Kéier.",
+    noSpaceTitle: "Dir hutt kee Gestiounsberäich méi",
+    noSpaceBody: "Dëse Kont ass a kengem Gestiounsberäich méi Member. Wann dat e Feeler ass, mellt Iech bei der Persoun, déi de Beräich geréiert. Dir kënnt och e Beräich op Ären Numm opmaachen.",
+    noSpaceCreate: "Mäin eegene Beräich opmaachen",
+    switchFailed: "De Beräich konnt net gewiesselt ginn. Probéiert et nach eng Kéier.",
+    currentSpace: "Aktuelle Beräich",
+    forbidden: "Är Roll an dësem Beräich erlaabt dës Aktioun net.",
+    rateLimited: "Ze vill Ufroen a kuerzer Zäit. Probéiert et an e puer Minutten nach eng Kéier.",
+    readOnly: "Är Roll an dësem Beräich erlaabt ze liesen, net ze änneren.",
+  },
 
   nav: {
     mortgages: "Immobiliekreditter",

@@ -65,6 +65,20 @@ export const fr = {
     draftDiscard: "Recommencer",
     removePhoto: "Retirer la photo",
   },
+  // Who may do what, and how often: the workspace in use, a role that
+  // does not allow an action, a space that could not be read.
+  access: {
+    spaceUnreadTitle: "Votre espace n'a pas pu être chargé",
+    spaceUnreadBody: "La lecture de vos espaces de gestion n'a pas abouti. Rien n'a été modifié. Réessayez dans un instant.",
+    noSpaceTitle: "Vous n'avez plus d'espace de gestion",
+    noSpaceBody: "Ce compte n'est plus membre d'aucun espace de gestion. Si c'est une erreur, contactez la personne qui gère l'espace. Vous pouvez aussi ouvrir un espace à votre nom.",
+    noSpaceCreate: "Ouvrir mon propre espace",
+    switchFailed: "Le changement d'espace n'a pas abouti. Réessayez.",
+    currentSpace: "Espace actuel",
+    forbidden: "Votre rôle dans cet espace ne permet pas cette action.",
+    rateLimited: "Trop de demandes en peu de temps. Réessayez dans quelques minutes.",
+    readOnly: "Votre rôle dans cet espace permet de consulter, pas de modifier.",
+  },
 
   nav: {
     mortgages: "Crédits immobiliers",

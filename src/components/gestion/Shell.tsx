@@ -18,6 +18,7 @@ import type { Dict } from "@/lib/i18n/fr";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
 import type { DatasetId } from "@/lib/demo";
+import WorkspaceSwitch, { type WorkspaceChoice } from "@/components/gestion/WorkspaceSwitch";
 import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
 import { todayISO } from "@/lib/clock";
 
@@ -34,6 +35,8 @@ export interface ShellData {
   /** "owner" hides the cabinet-only surfaces (AML) everywhere. */
   workspaceKind: string;
   orgShortName: string;
+  /** The spaces this account may manage, when there are several: the account menu lets the person choose. */
+  workspaces?: WorkspaceChoice[];
   userName: string;
   userEmail: string;
   badges: { review: number; unread: number };
@@ -436,7 +439,7 @@ export default function GestionShell({
               label={d.shell.newButton}
               onPick={(k) => (k === "property" ? router.push("/app/biens/nouveau") : setCreateKind(k))}
             />
-            <UserMenu email={shell.userEmail} name={shell.userName} d={d} signedIn={shell.signedIn} />
+            <UserMenu email={shell.userEmail} name={shell.userName} d={d} signedIn={shell.signedIn} workspaces={shell.workspaces ?? []} />
           </ScrollHeader>
 
           {/* Sample data announces itself on every screen. Nobody should ever
@@ -638,11 +641,13 @@ function UserMenu({
   name,
   d,
   signedIn,
+  workspaces,
 }: {
   email: string;
   name: string;
   d: Dict;
   signedIn: boolean;
+  workspaces: WorkspaceChoice[];
 }) {
   const [open, setOpen] = useState(false);
   const [signedOutNote, setSignedOutNote] = useState(false);
@@ -685,6 +690,7 @@ function UserMenu({
         <Link href="/app/compte" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
           {d.shell.moradaAccount}
         </Link>
+        <WorkspaceSwitch workspaces={workspaces} labels={{ title: d.shell.switchSpace, current: d.access.currentSpace, failed: d.access.switchFailed }} />
         <div className="mt-1 border-t border-sand-100 pt-1">
           {!signedIn && signedOutNote ? (
             <p role="status" className="rounded-lg px-3 py-2 text-xs font-semibold text-emerald-800">

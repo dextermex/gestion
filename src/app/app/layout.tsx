@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import GestionShell from "@/components/gestion/Shell";
 import SessionKeeper from "@/components/gestion/SessionKeeper";
 import ProvisionError from "@/components/gestion/ProvisionError";
+import NoWorkspace from "@/components/gestion/NoWorkspace";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
-import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
-import { isTenant } from "@/lib/portal/tenant-space";
-import { authedClient, getSession } from "@/lib/supabase/server";
+import { WORKSPACE_SEEN, getIdentity, hadWorkspace, provisionDefaultWorkspace, tenantAnswer } from "@/lib/workspace";
+import { getSession } from "@/lib/supabase/server";
+import { updateSignupUser } from "@/lib/signup/update-user";
 import { REQUESTED_PATH_HEADER, signInAddress } from "@/lib/auth/return-path";
 import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
@@ -42,20 +44,50 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // predicate the tenant space starts from (`gestion.is_tenant()`), asked
   // once per request and answered yes or no.
   const session = process.env.MORADA_PREVIEW_EMPTY === "1" ? null : await getSession();
-  const tenant = session ? await isTenant(authedClient(session.accessToken).schema("gestion")) : false;
+  // Yes, no, or unknown (the question could not be asked): an unknown is not a "no".
+  const tenantKnown = session ? await tenantAnswer(session.accessToken) : false;
+  const tenant = tenantKnown === true;
 
   // A first-time account gets its management space silently and lands in the
   // dashboard like everyone else: one continuous product, no onboarding
   // screens between signing in and the existing Gestion page.
   if (!identity.active) {
+    const email = identity.email;
+    // "No space" is only acted on when it is a fact. When the memberships,
+    // or whether this account is a tenant, could not be read, nothing is
+    // created and nobody is sent elsewhere: the person is told, and retries.
+    if (identity.membershipUnread || tenantKnown === null) {
+      return <ProvisionError d={d} email={email} title={d.access.spaceUnreadTitle} body={d.access.spaceUnreadBody} />;
+    }
     // ...unless the account was created to accept a tenant invitation: it is
     // a tenant, not (yet) a manager, and is not given a workspace it never
     // asked for. Its own space is the tenant one; a management space is
     // opened on purpose, from there (POST /api/espace/creer), when wanted.
     if (tenant) redirect("/locataire");
-    const email = identity.email;
+    // An account that had a space and has none left was removed from it: it
+    // is told so, and opens a space of its own only if it asks to.
+    if (hadWorkspace(session?.metadata)) {
+      return (
+        <NoWorkspace
+          email={email}
+          labels={{ title: d.access.noSpaceTitle, body: d.access.noSpaceBody, create: d.access.noSpaceCreate, failed: d.auth.provisionFailedBody, signOut: d.shell.signOut }}
+        />
+      );
+    }
     identity = await provisionDefaultWorkspace();
     if (!identity?.active) return <ProvisionError d={d} email={email} />;
+  }
+
+  // Noted on the account once, after the response: this account has had a
+  // management space. Its absence on a later visit is then a removal, not a
+  // first visit, and nothing is created silently a second time.
+  if (session && !hadWorkspace(session.metadata)) {
+    const previous = (session.metadata?.morada_account as Record<string, unknown> | undefined) ?? {};
+    const token = session.accessToken;
+    after(async () => {
+      const saved = await updateSignupUser(token, { data: { morada_account: { ...previous, [WORKSPACE_SEEN]: new Date().toISOString() } } }).catch(() => ({ error: { code: "unreachable" } }));
+      if (saved.error) console.error("[workspace] could not note the first space on the account:", saved.error.code);
+    });
   }
 
   // The shell's own read: the portfolio, the people and the badges, no
@@ -88,6 +120,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // ORG is built from the signed-in workspace.
     workspaceKind: demo.ORG.kind,
     orgShortName: sampleCabinet ?? identity.active.name,
+    // A person who belongs to several spaces chooses the one on screen (never on a sample cabinet).
+    workspaces: sampleCabinet === null && identity.workspaces.length > 1 ? identity.workspaces.map((w) => ({ id: w.id, name: w.name, active: w.id === workspace.id })) : [],
     userName: identity.displayName,
     userEmail: identity.email,
     badges: {

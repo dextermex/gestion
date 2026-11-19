@@ -61,6 +61,18 @@ export const de: Dict = {
     draftDiscard: "Neu beginnen",
     removePhoto: "Foto entfernen",
   },
+  access: {
+    spaceUnreadTitle: "Ihr Bereich konnte nicht geladen werden",
+    spaceUnreadBody: "Ihre Verwaltungsbereiche konnten nicht gelesen werden. Es wurde nichts geändert. Versuchen Sie es gleich noch einmal.",
+    noSpaceTitle: "Sie haben keinen Verwaltungsbereich mehr",
+    noSpaceBody: "Dieses Konto ist in keinem Verwaltungsbereich mehr Mitglied. Falls das ein Irrtum ist, wenden Sie sich an die Person, die den Bereich verwaltet. Sie können auch einen Bereich auf Ihren Namen eröffnen.",
+    noSpaceCreate: "Eigenen Bereich eröffnen",
+    switchFailed: "Der Bereich konnte nicht gewechselt werden. Versuchen Sie es erneut.",
+    currentSpace: "Aktueller Bereich",
+    forbidden: "Ihre Rolle in diesem Bereich erlaubt diese Aktion nicht.",
+    rateLimited: "Zu viele Anfragen in kurzer Zeit. Versuchen Sie es in einigen Minuten erneut.",
+    readOnly: "Ihre Rolle in diesem Bereich erlaubt das Lesen, nicht das Ändern.",
+  },
 
   nav: {
     mortgages: "Immobilienkredite",

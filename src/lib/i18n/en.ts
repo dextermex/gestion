@@ -61,6 +61,18 @@ export const en: Dict = {
     draftDiscard: "Start again",
     removePhoto: "Remove the photo",
   },
+  access: {
+    spaceUnreadTitle: "Your space could not be loaded",
+    spaceUnreadBody: "Your management spaces could not be read. Nothing was changed. Try again in a moment.",
+    noSpaceTitle: "You no longer have a management space",
+    noSpaceBody: "This account is no longer a member of any management space. If this is a mistake, contact the person who runs the space. You can also open a space in your own name.",
+    noSpaceCreate: "Open my own space",
+    switchFailed: "The space could not be changed. Try again.",
+    currentSpace: "Current space",
+    forbidden: "Your role in this space does not allow this action.",
+    rateLimited: "Too many requests in a short time. Try again in a few minutes.",
+    readOnly: "Your role in this space lets you read, not change.",
+  },
 
   nav: {
     mortgages: "Mortgages",
