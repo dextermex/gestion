@@ -1492,6 +1492,7 @@ export const en: Dict = {
     subtitle: "One conversation per tenant, with their requests tracked in the same place.",
     replyPlaceholder: "Write a message…",
     replySent: "Message sent. The tenant sees it in their space.",
+    replySentNoMail: "Message sent, the tenant sees it in their space. The e-mail telling them so did not go out.",
     cardTenants: "Tenants",
     cardTenantsBody: "A single \"New request\" entry point, the category is inferred from the message. If gas is mentioned, emergency numbers appear while typing.",
     cardArtisans: "Contractors",

@@ -8,7 +8,7 @@ import { Icon } from "@/components/pro/icons";
 import { THREAD_PAGE, mergeLines, type ThreadMessageLine } from "@/lib/gestion/threads";
 import { isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
 import { initials, type Meta } from "@/lib/types";
-import { usePageRefresh } from "@/lib/page-refresh";
+import { usePageRefresh, useTabVisible } from "@/lib/page-refresh";
 import { useViewHistory } from "@/lib/view-history";
 
 /**
@@ -127,6 +127,8 @@ export interface MessagesLabels {
   replyPlaceholder: string;
   send: string;
   sent: string;
+  /** The message is in the tenant's space, but the e-mail that tells them so did not leave. */
+  sentNoMail: string;
   sendFailed: string;
   statusFailed: string;
   interventionFailed: string;
@@ -227,7 +229,13 @@ export default function MessagesCenter({
   const [activeId, setActiveId] = useState<string | null>(initialThreadId);
   const [focusRequestId, setFocusRequestId] = useState<string | null>(initialRequestId);
   const [openRequestId, setOpenRequestId] = useState<string | null>(null);
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  /**
+   * The last message each conversation was marked read through, on this
+   * screen: its dot goes at once, and comes back by itself when the page
+   * reports a newer message than that one.
+   */
+  const [readThrough, setReadThrough] = useState<Record<string, string>>({});
+  const visible = useTabVisible();
   const [statusOverrides, setStatusOverrides] = useState<Record<string, RequestStatus>>({});
   const [interventionOverrides, setInterventionOverrides] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -257,7 +265,9 @@ export default function MessagesCenter({
   const requestById = new Map(requests.map((r) => [r.id, r]));
   const statusOf = (r: RequestView): RequestStatus => statusOverrides[r.id] ?? r.status;
   const interventionOf = (r: RequestView): string | null => interventionOverrides[r.id] ?? r.interventionId;
-  const unreadOf = (t: ThreadView): number => (readIds.has(t.id) ? 0 : t.unread);
+  /** The last message of a conversation as the page lists it (its last word, or the last of the whole thread). */
+  const lastIdOf = (t: ThreadView): string => t.messages[t.messages.length - 1]?.id ?? "";
+  const unreadOf = (t: ThreadView): number => (readThrough[t.id] !== undefined && readThrough[t.id] === lastIdOf(t) ? 0 : t.unread);
 
   const active = threads.find((t) => t.id === activeId) ?? threads.find((t) => activeId !== null && t.id === aliases[activeId]) ?? threads[0] ?? null;
   const openRequest = openRequestId ? (requestById.get(openRequestId) ?? null) : null;
@@ -392,6 +402,40 @@ export default function MessagesCenter({
     }
   }, []);
 
+  // What is on the screen is read: the open conversation, once its messages
+  // are there, while its pane is the one shown (always on a laptop, on a
+  // phone once it has the screen) and the tab is being looked at. However it
+  // came to be open (a click, the address, by default), and again when a new
+  // message arrives in it. The mark is the messages' own, in the database:
+  // the list and the shell's count follow from the page read again.
+  const shownLast = activeReady ? activeMessages[activeMessages.length - 1] : undefined;
+  const shownLastId = shownLast?.id ?? "";
+  const shownLastAt = shownLast?.at ?? "";
+  const activeUnread = active?.unread ?? 0;
+  const marking = useRef<Record<string, string>>({});
+  const refreshPage = page.refresh;
+  useEffect(() => {
+    if (!activeKey || activeKey.startsWith("lease:") || shownLastId === "" || activeUnread === 0 || tab !== "conversations" || !visible) return;
+    if (view !== "chat" && onPhone()) return;
+    if (marking.current[activeKey] === shownLastId) return;
+    marking.current[activeKey] = shownLastId;
+    const done = () => setReadThrough((all) => (all[activeKey] === shownLastId ? all : { ...all, [activeKey]: shownLastId }));
+    // On a sample cabinet nothing is written: the dot goes on this screen only.
+    if (!writable) return done();
+    fetch(`/api/conversations/${encodeURIComponent(activeKey)}/lu`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ until: shownLastAt }) })
+      .then((res) => {
+        if (!res.ok) {
+          delete marking.current[activeKey];
+          return;
+        }
+        done();
+        refreshPage();
+      })
+      .catch(() => {
+        delete marking.current[activeKey];
+      });
+  }, [activeKey, shownLastId, shownLastAt, activeUnread, tab, view, visible, writable, refreshPage]);
+
   // A conversation the page did not read in full, or one something was
   // written to since this screen read it: read by its own request, once per
   // conversation and last message. Nothing here touches the address or the
@@ -446,14 +490,6 @@ export default function MessagesCenter({
       readFor.current[thread.id] = thread.messages[thread.messages.length - 1]?.id || "first";
       void loadThread(thread.id);
     }
-    if (thread.unread === 0 || readIds.has(thread.id)) return;
-    setReadIds((ids) => new Set(ids).add(thread.id));
-    if (!writable) return;
-    fetch(`/api/conversations/${thread.id}/lu`, { method: "POST" })
-      .then((res) => {
-        if (res.ok) page.refresh();
-      })
-      .catch(() => null);
   };
 
   /** The list on the screen, where a phone left it. The address is the caller's. */
@@ -525,7 +561,7 @@ export default function MessagesCenter({
       const target = thread.leaseId && thread.id.startsWith("lease:") ? `/api/baux/${thread.leaseId}/messages` : `/api/conversations/${thread.id}/messages`;
       const res = await fetch(target, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) });
       if (res.status === 401) return signInAgain();
-      const data = (await res.json().catch(() => ({}))) as { conversationId?: string };
+      const data = (await res.json().catch(() => ({}))) as { conversationId?: string; mail?: string };
       if (!res.ok) {
         setNotice({ tone: "error", text: labels.sendFailed });
         return;
@@ -543,7 +579,7 @@ export default function MessagesCenter({
           window.history.replaceState(null, "", url);
         }
       }
-      setNotice({ tone: "ok", text: labels.sent });
+      setNotice({ tone: "ok", text: data.mail === "not_sent" ? labels.sentNoMail : labels.sent });
       // The conversation is read back by its own request; the page follows for the list and the counts.
       if (!conversationId.startsWith("lease:")) void loadThread(conversationId);
       page.refresh();

@@ -1497,6 +1497,7 @@ export const lu: Dict = {
     subtitle: "Eng Conversatioun pro Locataire, mat sengen Ufroen op der selwechter Plaz suivéiert.",
     replyPlaceholder: "Message schreiwen…",
     replySent: "Message geschéckt. De Locataire gesäit en a sengem Espace.",
+    replySentNoMail: "Message geschéckt, de Locataire gesäit en a sengem Espace. D'E-Mail, déi him dat seet, ass net erausgaangen.",
     cardTenants: "Locatairen",
     cardTenantsBody: "Een eenzegen Entrée « Nei Demande », d'Kategorie gëtt aus dem Message ofgeleet. Bei Gasgeroch ginn d'Noutruffnummeren direkt beim Tippe gewisen.",
     cardArtisans: "Handwierker",

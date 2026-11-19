@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OrgContext } from "@/lib/gestion/api";
-import { addManagerMessage, readConversation } from "@/lib/gestion/requests";
-import { byMostRecent, lastSpokenAt, mergeLines, mostRecent, threadMessageLine } from "@/lib/gestion/threads";
+import { addManagerMessage, deskUnread, markConversationRead, readConversation } from "@/lib/gestion/requests";
+import { byMostRecent, lastSpokenAt, latestMoment, mergeLines, mostRecent, threadMessageLine, unreadSignature } from "@/lib/gestion/threads";
+import { markTenantRead, tenantUnread } from "@/lib/portal/thread";
 import { dayKey, timeOfDay, whenShort } from "@/lib/portal/format";
 import { formatDateTime } from "@/lib/types";
 import { FakeDb } from "./helpers/fake-postgrest";
-import { ORG, OTHER_ORG, ctxFor, hydrate, letTo, linkAccount, seedProperty } from "./helpers/tenancy";
+import { ORG, OTHER_ORG, ctxFor, hydrate, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
 
 /**
  * Which conversation is "the most recent", how one is read for the screen,
@@ -17,6 +18,8 @@ import { ORG, OTHER_ORG, ctxFor, hydrate, letTo, linkAccount, seedProperty } fro
 const ANNA = { firstName: "Anna", lastName: "Weber", email: "anna.weber@example.lu" };
 const LUC = { firstName: "Luc", lastName: "Weber", email: "luc.weber@example.lu" };
 const anna = { id: "user-anna", email: "anna.weber@example.lu" };
+const luc = { id: "user-luc", email: "luc.weber@example.lu" };
+const nora = { id: "user-nora", email: "nora.adam@example.lu" };
 const today = new Date().toISOString().slice(0, 10);
 const at = (hour: number, minute = 0): string => `${today}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`;
 
@@ -159,5 +162,126 @@ describe("the hour of a message", () => {
     expect(formatDateTime("2026-01-31T23:30:00Z", "fr")).toMatch(/^1 févr\. 2026/);
     expect(formatDateTime("2026-08-19T08:12:00", "fr")).toContain("08:12");
     expect(formatDateTime(null, "fr")).toBe("—");
+  });
+});
+
+describe("read and unread, the same on every device", () => {
+  let db: FakeDb;
+  let ctx: OrgContext;
+  let conv: string;
+
+  /** The desk writes at a given hour of today. */
+  const deskWrites = async (body: string, hour: number): Promise<string> => {
+    const sent = await addManagerMessage(ctx, { conversationId: conv }, body);
+    if ("error" in sent) throw new Error(sent.error);
+    db.table("messages").find((m) => m.id === sent.id)!.sent_at = at(hour);
+    return sent.id;
+  };
+  const tenantWrites = (user: { id: string }, body: string, hour: number) =>
+    db.insertRow("messages", { org_id: ORG, conversation_id: conv, sender_kind: "tenant", sender_user_id: user.id, body, sent_at: at(hour) });
+  const unreadOf = async (user: { id: string; email: string }) => (await space(db, user)).conversations.map((c) => [c.unread, c.readUntil]);
+
+  beforeEach(async () => {
+    db = new FakeDb(today);
+    ctx = ctxFor(db);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
+    const { unitId } = seedProperty(db);
+    // Anna and Luc share the tenancy; each has an account.
+    const rental = await letTo(ctx, unitId, [ANNA, LUC]);
+    await linkAccount(db, ctx, rental, anna, 0);
+    await linkAccount(db, ctx, rental, luc, 1);
+    const first = await addManagerMessage(ctx, { leaseId: rental.leaseId }, "Bonjour à vous deux");
+    if ("error" in first) throw new Error(first.error);
+    conv = first.conversationId;
+    db.table("messages").find((m) => m.id === first.id)!.sent_at = at(8);
+  });
+
+  it("keeps the tenant's read mark in the database: another device of the same account agrees, another account does not", async () => {
+    await deskWrites("Le relevé des compteurs est prévu jeudi.", 9);
+    expect(await unreadOf(anna)).toEqual([[2, ""]]);
+    // Anna's phone shows the conversation up to the first message only.
+    expect(await markTenantRead(db.tenantClient(anna), conv, at(8))).toEqual({ readUntil: at(8) });
+    // Her laptop, a new session of the same account, counts the same: nothing lives in a browser.
+    expect(await unreadOf(anna)).toEqual([[1, at(8)]]);
+    expect(await tenantUnread(db.tenantClient(anna))).toEqual({ unread: 1, latest: at(9) });
+    // Luc has read nothing: the mark is the account's own.
+    expect(await unreadOf(luc)).toEqual([[2, ""]]);
+    // The whole conversation on the screen: nothing is left.
+    expect(await markTenantRead(db.tenantClient(anna), conv, at(9))).toEqual({ readUntil: at(9) });
+    expect(await unreadOf(anna)).toEqual([[0, at(9)]]);
+  });
+
+  it("never lets the mark pass the last message written, nor move back", async () => {
+    await deskWrites("Deuxième message", 9);
+    const client = db.tenantClient(anna);
+    // A date in the future is brought back to the last message: one written later is unread.
+    expect(await markTenantRead(client, conv, `${today}T23:59:00.000Z`)).toEqual({ readUntil: at(9) });
+    await deskWrites("Troisième message", 10);
+    expect(await unreadOf(anna)).toEqual([[1, at(9)]]);
+    // An older moment does not unread what was read.
+    expect(await markTenantRead(client, conv, at(8))).toEqual({ readUntil: at(9) });
+    // No moment given: everything written so far.
+    expect(await markTenantRead(client, conv, null)).toEqual({ readUntil: at(10) });
+    expect(await unreadOf(anna)).toEqual([[0, at(10)]]);
+  });
+
+  it("counts a co-tenant's words until they are seen, and one's own never", async () => {
+    await markTenantRead(db.tenantClient(anna), conv, null);
+    tenantWrites(luc, "Je serai absent jeudi.", 11);
+    expect(await unreadOf(anna)).toEqual([[1, at(8)]]);
+    // Luc's own word answers everything before it.
+    expect(await unreadOf(luc)).toEqual([[0, ""]]);
+    await deskWrites("Bien noté.", 12);
+    expect(await unreadOf(luc)).toEqual([[1, ""]]);
+  });
+
+  it("refuses a mark on a conversation that is not one of the caller's tenancies", async () => {
+    expect(await markTenantRead(db.tenantClient(nora), conv, null)).toEqual({ error: "forbidden" });
+    expect(await markTenantRead(db.tenantClient(anna), "00000000-0000-4000-8000-000000000000", null)).toEqual({ error: "forbidden" });
+    expect(db.table("message_reads")).toEqual([]);
+    // A tenant reads their own marks and nobody else's.
+    await markTenantRead(db.tenantClient(anna), conv, null);
+    const mine = await db.tenantClient(anna).from("message_reads").select("conversation_id,user_id");
+    const theirs = await db.tenantClient(luc).from("message_reads").select("conversation_id,user_id");
+    const pairs = (rows: unknown) => ((rows as Array<Record<string, unknown>> | null) ?? []).map((r) => [r.conversation_id, r.user_id]);
+    expect([pairs(mine.data), pairs(theirs.data)]).toEqual([[[conv, anna.id]], []]);
+  });
+
+  it("reads what the same account wrote from the desk as the desk's, not as the tenant's own", async () => {
+    // Anna also manages the workspace and answers from the desk with her own account.
+    db.insertRow("messages", { org_id: ORG, conversation_id: conv, sender_kind: "manager", sender_user_id: anna.id, body: "Réponse du cabinet", sent_at: at(9) });
+    const mine = await space(db, anna);
+    expect(mine.conversations[0].messages.map((m) => [m.senderKind, m.mine])).toEqual([["manager", false], ["manager", false]]);
+    expect(mine.conversations[0].unread).toBe(2);
+  });
+
+  it("falls back to the tenant's own last word on a base that does not carry the read marks yet", async () => {
+    db.absentFunctions.add("my_unread_messages");
+    db.absentFunctions.add("mark_conversation_read");
+    await deskWrites("Deuxième message", 9);
+    expect(await unreadOf(anna)).toEqual([[2, ""]]);
+    tenantWrites(anna, "Merci.", 10);
+    expect(await unreadOf(anna)).toEqual([[0, ""]]);
+    expect(await markTenantRead(db.tenantClient(anna), conv, null)).toEqual({ error: "schema_outdated" });
+    expect(await tenantUnread(db.tenantClient(anna))).toBeNull();
+  });
+
+  it("marks at the desk what the screen shows, and leaves what arrived since", async () => {
+    tenantWrites(anna, "Une question.", 9);
+    tenantWrites(anna, "Et une autre.", 10);
+    expect(await deskUnread(ctx)).toEqual({ unread: 2, latest: at(10) });
+    // The screen showed the conversation up to the first of the two.
+    expect(await markConversationRead(ctx, conv, at(9))).toEqual({ marked: 1 });
+    expect(await deskUnread(ctx)).toEqual({ unread: 1, latest: at(10) });
+    expect(await markConversationRead(ctx, conv)).toEqual({ marked: 1 });
+    expect(await deskUnread(ctx)).toEqual({ unread: 0, latest: at(10) });
+    // The line the shell and the read route compare: the count, and the moment of the last message.
+    expect(unreadSignature(0, at(10))).toBe(unreadSignature(0, at(10).replace(".000Z", "+00:00")));
+    expect(unreadSignature(1, at(10))).not.toBe(unreadSignature(0, at(10)));
+    expect(unreadSignature(0, at(11))).not.toBe(unreadSignature(0, at(10)));
+    expect(unreadSignature(0, "")).toBe("0|0");
+    expect(latestMoment([at(9), "", null, at(11), at(10)])).toBe(at(11));
+    expect(latestMoment([])).toBe("");
   });
 });

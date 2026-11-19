@@ -3,7 +3,7 @@ import type { OrgContext } from "@/lib/gestion/api";
 import { leaseOfConversation, notifyTenantsOfMessage } from "@/lib/delivery/outbox";
 import { appendMessage, leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_STATUSES, leaseSubject, ticketStatusFor, type RequestStatus } from "@/lib/portal/types";
-import { THREAD_PAGE, type ThreadMessage } from "@/lib/gestion/threads";
+import { THREAD_PAGE, latestMoment, type ThreadMessage } from "@/lib/gestion/threads";
 
 /**
  * The desk's side of a tenant request: the same ticket row the tenant
@@ -14,6 +14,15 @@ import { THREAD_PAGE, type ThreadMessage } from "@/lib/gestion/threads";
  */
 
 export type RequestWriteFailure = "invalid" | "not_found" | "forbidden" | "storage_failed";
+
+/**
+ * What became of the e-mail that tells the tenants a message waits in their
+ * space: it left for at least one of them, it was due and left for none (no
+ * mail key on the deployment, an address refused), or none was due (the
+ * workspace switched it off, nobody to write to). The message itself is in
+ * the tenant's space either way; the desk is told when the mail did not go.
+ */
+export type MailNotice = "sent" | "not_sent" | "none";
 
 type Row = Record<string, unknown>;
 type Db = OrgContext["g"];
@@ -96,7 +105,7 @@ export async function addManagerMessage(
   ctx: OrgContext,
   target: { ticketId: string } | { conversationId: string } | { leaseId: string },
   body: unknown,
-): Promise<{ id: string; conversationId: string } | { error: RequestWriteFailure }> {
+): Promise<{ id: string; conversationId: string; mail: MailNotice } | { error: RequestWriteFailure }> {
   const text = str(body, 4000);
   if (!text) return { error: "invalid" };
 
@@ -133,8 +142,9 @@ export async function addManagerMessage(
   // A reply on a request also counts as activity on it.
   if ("ticketId" in target) await ctx.g.from("tickets").update({ updated_at: sent.sentAt }).eq("org_id", ctx.org.id).eq("id", target.ticketId);
   // The tenants are told by e-mail when the workspace wants it; the word stands whatever becomes of the mail.
-  if (leaseId) await notifyTenantsOfMessage(ctx, { leaseId, text });
-  return { id: sent.id, conversationId };
+  const outcomes = leaseId ? await notifyTenantsOfMessage(ctx, { leaseId, text }) : [];
+  const mail: MailNotice = outcomes.length === 0 ? "none" : outcomes.some((o) => o.status === "sent") ? "sent" : "not_sent";
+  return { id: sent.id, conversationId, mail };
 }
 
 const SENDER_KINDS: readonly ThreadMessage["kind"][] = ["tenant", "manager", "owner", "artisan", "system"];
@@ -191,18 +201,41 @@ export async function readConversation(
   };
 }
 
-/** Opening a conversation at the desk: what the other side wrote is now read. Unrelated to any request's status. */
-export async function markConversationRead(ctx: OrgContext, conversationId: string): Promise<{ marked: number } | { error: RequestWriteFailure }> {
-  const { data, error } = await ctx.g
+/**
+ * A conversation is on the desk's screen: what the other side wrote is now
+ * read, for every member and on every device (the mark is on the messages).
+ * `until` is the moment of the last message the screen shows: one that
+ * arrived since stays unread until it is shown too. Unrelated to any
+ * request's status.
+ */
+export async function markConversationRead(ctx: OrgContext, conversationId: string, until: string | null = null): Promise<{ marked: number } | { error: RequestWriteFailure }> {
+  let query = ctx.g
     .from("messages")
     .update({ read_at: new Date().toISOString() })
     .eq("org_id", ctx.org.id)
     .eq("conversation_id", conversationId)
     .is("read_at", null)
-    .in("sender_kind", ["tenant", "owner", "artisan", "system"])
-    .select("id");
+    .in("sender_kind", ["tenant", "owner", "artisan", "system"]);
+  if (until) query = query.lte("sent_at", until);
+  const { data, error } = await query.select("id");
   if (error) return failure(error, "conversation read mark");
   return { marked: ((data as unknown[] | null) ?? []).length };
+}
+
+/**
+ * What waits to be read at the desk and when anything was last written,
+ * over the workspace's conversations: the heads view, three columns. The
+ * figures the shell's badge and the list are drawn from. Null when the read
+ * fails: the caller then says nothing rather than something wrong.
+ */
+export async function deskUnread(ctx: OrgContext): Promise<{ unread: number; latest: string } | null> {
+  const { data, error } = await ctx.g.from("conversation_heads").select("conversation_id,unread,last_sent_at").eq("org_id", ctx.org.id).limit(2000);
+  if (error) {
+    console.error("conversation heads read failed:", error.code, error.message);
+    return null;
+  }
+  const rows = (data as Row[] | null) ?? [];
+  return { unread: rows.reduce((total, r) => total + (Number(r.unread) || 0), 0), latest: latestMoment(rows.map((r) => (typeof r.last_sent_at === "string" ? r.last_sent_at : ""))) };
 }
 
 /**

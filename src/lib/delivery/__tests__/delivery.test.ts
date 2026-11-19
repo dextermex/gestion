@@ -170,6 +170,8 @@ describe("the outbox on one database", () => {
   it("tells the tenant of the desk's word, in the tenant's language, and records it; not once the workspace turned it off", async () => {
     const r = await addManagerMessage(ctx, { leaseId }, "Bonjour Anna, la chaudière est réparée.");
     expect("error" in r).toBe(false);
+    // No mail key on this deployment: the word is in the tenant's space, and the desk is told the e-mail did not leave.
+    expect(r).toMatchObject({ mail: "not_sent" });
     expect(deliveries()).toHaveLength(1);
     expect(deliveries()[0]).toMatchObject({ org_id: ORG, kind: "message", lease_id: leaseId, recipient_kind: "tenant", recipient_contact_id: contactId, recipient_email: ANNA.email, lang: "de", status: "not_configured", provider: null, created_by: "user-1", sent_at: null });
     expect(String(deliveries()[0].subject)).toBe("Neue Nachricht von Cabinet Test: Maison · Maison Weber");
@@ -180,7 +182,7 @@ describe("the outbox on one database", () => {
     expect(deliveries()).toHaveLength(2);
     // Off: the word still goes through, nobody is mailed.
     db.insertRow("workspace_settings", { ...SETTINGS, notify_tenant_messages: false });
-    expect("error" in (await addManagerMessage(ctx, { leaseId }, "Un troisième."))).toBe(false);
+    expect(await addManagerMessage(ctx, { leaseId }, "Un troisième.")).toMatchObject({ mail: "none" });
     expect(deliveries()).toHaveLength(2);
   });
 

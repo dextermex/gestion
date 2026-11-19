@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
+import UnreadWatch from "@/components/gestion/UnreadWatch";
 import ProvisionError from "@/components/gestion/ProvisionError";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
@@ -9,6 +10,7 @@ import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
+import { latestMoment, unreadSignature } from "@/lib/gestion/threads";
 
 export const metadata: Metadata = {
   title: "Morada Gestion",
@@ -72,6 +74,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // On sample data the header names the sample cabinet, not the real agency:
   // the two must never be mistaken for each other on the same screen.
   const sampleCabinet = datasetId === "real" ? null : demo.ORG.shortName;
+  // The Messages badge, and its signature: what waits to be read and when the last message was written.
+  const unreadMessages = demo.CONVERSATIONS.reduce((a, c) => a + c.unread, 0);
+  const lastMessageAt = latestMoment(demo.CONVERSATIONS.filter((c) => c.messages.length > 0).map((c) => c.lastMessageAt));
 
   const shellData = {
     datasetId,
@@ -88,7 +93,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     userEmail: identity.email,
     badges: {
       review: demo.BANK_TXS.filter((t) => t.status === "review").length,
-      unread: demo.CONVERSATIONS.reduce((a, c) => a + c.unread, 0),
+      unread: unreadMessages,
     },
     unitOptions: demo.UNITS.map((u) => ({
       id: u.id,
@@ -118,8 +123,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <GestionShell locale={locale} dict={d} shell={shellData}>
-      {children}
-    </GestionShell>
+    <>
+      <GestionShell locale={locale} dict={d} shell={shellData}>
+        {children}
+      </GestionShell>
+      {/* The badge stays current without a reload: a light read now and then, the page read again when it differs. */}
+      {datasetId === "real" && session && <UnreadWatch endpoint="/api/conversations" signature={unreadSignature(unreadMessages, lastMessageAt)} fastOn="/app/messages" />}
+    </>
   );
 }

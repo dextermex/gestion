@@ -40,6 +40,7 @@ const labels: MessagesLabels = {
   replyPlaceholder: m.replyPlaceholder,
   send: fr.common.send,
   sent: m.replySent,
+  sentNoMail: m.replySentNoMail,
   sendFailed: m.sendFailed,
   statusFailed: m.statusFailed,
   interventionFailed: m.interventionFailed,

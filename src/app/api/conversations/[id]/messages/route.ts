@@ -36,5 +36,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const result = await addManagerMessage(ctx, { conversationId: id }, body.body);
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: statusOfFailure(result.error) });
-  return NextResponse.json({ ok: true, id: result.id, conversationId: result.conversationId });
+  return NextResponse.json({ ok: true, id: result.id, conversationId: result.conversationId, mail: result.mail });
 }

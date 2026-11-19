@@ -1,5 +1,6 @@
 import "server-only";
 import type { GestionReader } from "@/lib/demo/data-real";
+import { latestMoment } from "@/lib/gestion/threads";
 
 /**
  * One conversation per tenancy, on both sides of the portal. The tenant's
@@ -76,4 +77,40 @@ export async function appendMessage(
   if (error || !data) return failure(error, `${input.senderKind} message insert`);
   if (input.touch) await g.from("conversations").update({ last_message_at: now }).eq("id", input.conversationId);
   return { id: String((data as Row).id), sentAt: now };
+}
+
+/**
+ * The tenant read a conversation up to a moment (the last message their
+ * screen shows). The database decides: the conversation must be one of the
+ * caller's tenancies, and the mark never passes the last message written
+ * nor moves back (`gestion.mark_conversation_read`, 0031).
+ */
+export async function markTenantRead(
+  g: Pick<GestionReader, "rpc">,
+  conversationId: string,
+  until: string | null,
+): Promise<{ readUntil: string | null } | { error: ThreadFailure | "schema_outdated" }> {
+  const { data, error } = await g.rpc("mark_conversation_read", { p_conversation: conversationId, p_until: until });
+  if (error) {
+    // The function arrives with 0031: until then nothing is marked, and nothing is broken.
+    if (error.code === "PGRST202" || error.code === "42883") return { error: "schema_outdated" };
+    return failure(error, "tenant read mark");
+  }
+  return { readUntil: typeof data === "string" ? data : null };
+}
+
+/**
+ * What the tenant has not read, and when anything was last written, over
+ * their conversations: one light read, for the navigation's count and for
+ * the space asking now and then whether something arrived. Null when the
+ * base does not carry the function yet.
+ */
+export async function tenantUnread(g: Pick<GestionReader, "rpc">): Promise<{ unread: number; latest: string } | null> {
+  const { data, error } = await g.rpc("my_unread_messages");
+  if (error) {
+    if (error.code !== "PGRST202" && error.code !== "42883") console.error("tenant unread read failed:", error.code, error.message);
+    return null;
+  }
+  const rows = (data as Row[] | null) ?? [];
+  return { unread: rows.reduce((total, r) => total + (Number(r.unread) || 0), 0), latest: latestMoment(rows.map((r) => (typeof r.last_sent_at === "string" ? r.last_sent_at : ""))) };
 }

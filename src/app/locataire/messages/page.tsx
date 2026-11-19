@@ -79,6 +79,7 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
         previewIsRequest: request !== null,
         messages: toMessages(c.messages),
         lastAt: last?.sentAt ?? "",
+        unread: c.unread,
         openRequests: openRequestsOf(c.leaseId),
         newRequestHref: newRequestHrefOf(c.leaseId),
       };
@@ -88,7 +89,7 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
   // starts it.
   for (const leaseId of [lease.id, ...(params.bail && leases.some((l) => l.id === params.bail) ? [params.bail] : [])]) {
     if (conversations.some((c) => c.leaseId === leaseId)) continue;
-    conversations.push({ id: `lease:${leaseId}`, leaseId, label: homeOf(leaseId), lastLabel: "", preview: "", previewIsRequest: false, messages: [], lastAt: "", openRequests: openRequestsOf(leaseId), newRequestHref: newRequestHrefOf(leaseId) });
+    conversations.push({ id: `lease:${leaseId}`, leaseId, label: homeOf(leaseId), lastLabel: "", preview: "", previewIsRequest: false, messages: [], lastAt: "", unread: 0, openRequests: openRequestsOf(leaseId), newRequestHref: newRequestHrefOf(leaseId) });
   }
 
   const byRequest = params.demande ? conversations.find((c) => c.messages.some((m) => m.requestId === params.demande)) : undefined;

@@ -37,6 +37,8 @@ const conversations: TenantConversationView[] = [
       { id: "m-2", mine: true, kind: "tenant", from: t.threadYou, body: "Volet roulant bloqué", dayLabel: "22/09/2026", timeLabel: "09:00", requestId: "r-1" },
     ],
     lastAt: "2026-09-22T09:00:00.000Z",
+    // The manager answered since: one message waits to be read.
+    unread: 1,
     openRequests: [{ id: "r-1", title: "Volet roulant bloqué" }],
     newRequestHref: "/locataire/demandes?nouvelle=1",
   },
@@ -49,6 +51,7 @@ const conversations: TenantConversationView[] = [
     previewIsRequest: false,
     messages: [],
     lastAt: "",
+    unread: 0,
     openRequests: [],
     newRequestHref: null,
   },
@@ -62,6 +65,8 @@ let root: Root;
 let scrolls: Array<[number, number]>;
 /** How each scroll was asked for: a phone's list jumps back into place, it does not glide. */
 let scrollKinds: string[];
+/** The read marks the screen asked the database to keep. */
+let marks: Array<Record<string, unknown>>;
 
 beforeEach(() => {
   host = document.createElement("div");
@@ -76,6 +81,11 @@ beforeEach(() => {
     scrollKinds.push(typeof a === "object" ? (a.behavior ?? "auto") : "auto");
   }) as unknown as typeof window.scrollTo;
   Object.defineProperty(window, "scrollY", { value: 240, configurable: true });
+  marks = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/locataire/messages/lu") marks.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
   window.history.replaceState(null, "", "/locataire/messages");
 });
 afterEach(async () => {
@@ -195,13 +205,27 @@ describe("the tenant's Messages on a phone", () => {
     expect(ways[1].getAttribute("aria-label")).toBe(t.reqNew);
   });
 
-  it("marks the conversation seen on this browser once it has the screen, and not before", async () => {
-    document.cookie = "morada_tenant_seen=; path=/; max-age=0";
+  it("marks the conversation read in the database once it has the screen, up to its last message, and not before", async () => {
     await render();
     // The list alone: nothing has been read yet.
-    expect(document.cookie).not.toContain("morada_tenant_seen=l-3b");
+    expect(marks).toEqual([]);
     await click(document.querySelector("#tenant-conversations li button"));
-    expect(decodeURIComponent(document.cookie)).toContain("morada_tenant_seen=l-3b=2026-09-22T09:00:00.000Z");
+    await settle();
+    // The account's own mark, by the conversation and the moment of the last message shown: no cookie, the same on every device.
+    expect(marks).toEqual([{ conversationId: "c-3b", until: "2026-09-22T09:00:00.000Z" }]);
+    expect(document.cookie).not.toContain("morada_tenant_seen");
+    // Once, however long the conversation stays on the screen.
+    await click(backButton());
+    await settle();
+    await click(document.querySelector("#tenant-conversations li button"));
+    await settle();
+    expect(marks).toHaveLength(1);
+  });
+
+  it("marks nothing when nothing waits to be read, or on a sample cabinet", async () => {
+    await render({ conversations: conversations.map((c) => ({ ...c, unread: 0 })), initialView: "chat", initialId: "c-3b" });
+    await settle();
+    expect(marks).toEqual([]);
   });
 
   it("files a photo on a request: the camera asks which open request it is about, and is not offered on an ended tenancy", async () => {

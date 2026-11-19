@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Modal, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
+import { usePageRefresh, useTabVisible } from "@/lib/page-refresh";
 import { shrinkPhotos } from "@/lib/photo";
-import { SEEN_COOKIE, parseSeen, serializeSeen } from "@/lib/portal/seen";
 import { initials } from "@/lib/types";
 
 /**
@@ -25,9 +24,10 @@ import { initials } from "@/lib/types";
  * asks which open request the photo is about, files it there through the
  * request's own route, and leaves a line in the conversation saying so.
  *
- * Showing the conversation marks it seen on this browser (a cookie holding
- * the tenancy and the last message's time): what the space's navigation
- * counts as unread is what arrived after that.
+ * Showing the conversation marks it read, in the database, up to the last
+ * message on the screen: the account's own read mark, the same on every
+ * device. What the space's navigation counts as unread is what arrived
+ * after that. A conversation in a tab left in the background is not read.
  */
 
 const MAX_FILES = 5;
@@ -85,6 +85,8 @@ export interface TenantChatLabels {
 
 export default function TenantChat({
   leaseId,
+  conversationId,
+  unread,
   title,
   subtitle,
   messages,
@@ -100,6 +102,10 @@ export default function TenantChat({
   backLabel,
 }: {
   leaseId: string;
+  /** The conversation's id; null while no word has been written to the tenancy. */
+  conversationId: string | null;
+  /** What the other side wrote that this account has not read yet, as the database counts it. */
+  unread: number;
   title: string;
   subtitle: string;
   messages: TenantChatMessage[];
@@ -120,7 +126,11 @@ export default function TenantChat({
   onBack: () => void;
   backLabel: string;
 }) {
-  const router = useRouter();
+  // The page is read again after a write, and asked for again if the router dropped the refresh.
+  const page = usePageRefresh(messages);
+  const visible = useTabVisible();
+  /** The last message the read mark was asked for: one request per conversation and last message. */
+  const markedFor = useRef("");
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed" | "sample">("idle");
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -129,18 +139,24 @@ export default function TenantChat({
   const [photoFor, setPhotoFor] = useState<string>(openRequests[0]?.id ?? "");
   const [photoState, setPhotoState] = useState<"idle" | "uploading" | "failed" | "sample">("idle");
 
-  // The conversation is on the screen (always on a laptop, on a phone once it has the screen):
-  // this browser has seen it up to its last message. The navigation's count follows on refresh.
+  // The conversation is on the screen (always on a laptop, on a phone once it has the screen)
+  // and the tab is the one being looked at: the account has read it up to its last message.
+  // The mark is written in the database; the navigation's count follows on refresh.
   useEffect(() => {
-    if (!lastAt) return;
+    if (!conversationId || !lastAt || unread === 0 || sampleNote || !visible) return;
     const wide = typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1024px)").matches;
     if (!phoneOpen && !wide) return;
-    const raw = document.cookie.split("; ").find((c) => c.startsWith(`${SEEN_COOKIE}=`))?.slice(SEEN_COOKIE.length + 1);
-    const seen = parseSeen(raw);
-    if ((seen[leaseId] ?? "") >= lastAt) return;
-    document.cookie = `${SEEN_COOKIE}=${serializeSeen({ ...seen, [leaseId]: lastAt })}; path=/; max-age=31536000; samesite=lax`;
-    router.refresh();
-  }, [lastAt, leaseId, phoneOpen, router]);
+    if (markedFor.current === lastAt) return;
+    markedFor.current = lastAt;
+    fetch("/api/locataire/messages/lu", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId, until: lastAt }) })
+      .then((res) => {
+        if (res.ok) page.refresh();
+        else markedFor.current = "";
+      })
+      .catch(() => {
+        markedFor.current = "";
+      });
+  }, [conversationId, lastAt, unread, phoneOpen, sampleNote, visible, page]);
 
   const sendPhotos = async (input: HTMLInputElement) => {
     const chosen = Array.from(input.files ?? []).filter((f) => f.type.startsWith("image/")).slice(0, MAX_FILES);
@@ -173,7 +189,7 @@ export default function TenantChat({
       await fetch("/api/locataire/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: labels.photoMessage.replace("{title}", target.title), leaseId }) }).catch(() => null);
       setPhotoState("idle");
       setPhotoOpen(false);
-      router.refresh();
+      page.refresh();
     } catch {
       setPhotoState("failed");
     }
@@ -216,7 +232,7 @@ export default function TenantChat({
       }
       setDraft("");
       setState("sent");
-      router.refresh();
+      page.refresh();
     } catch {
       setState("failed");
     }

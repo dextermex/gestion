@@ -1,6 +1,7 @@
 import type { DemoData } from "./index";
 import { paymentsOf, type TenantLease, type TenantSpace } from "@/lib/portal/tenant-space";
 import { requestKindOf, requestState } from "@/lib/portal/types";
+import { unreadIn } from "@/lib/portal/view";
 
 /**
  * The sample cabinets' tenant: the first tenant of lease l-3b (Jean Muller
@@ -101,13 +102,11 @@ export function tenantSpaceFromSample(demo: DemoData): TenantSpace {
       }))
     : [];
   const conversations = current
-    ? demo.CONVERSATIONS.filter((c) => c.scopeType === "lease" && c.scopeId === current.id).map((c) => ({
-        id: c.id,
-        leaseId: current.id,
-        label: `${current.unit.label} · ${current.property.name}`,
-        lastMessageAt: c.lastMessageAt,
-        messages: c.messages.map((m) => ({ id: m.id, senderKind: m.kind, body: m.body, sentAt: m.at, mine: m.kind === "tenant" && m.from === name, ticketId: m.ticketId })),
-      }))
+    ? demo.CONVERSATIONS.filter((c) => c.scopeType === "lease" && c.scopeId === current.id).map((c) => {
+        const messages = c.messages.map((m) => ({ id: m.id, senderKind: m.kind, body: m.body, sentAt: m.at, mine: m.kind === "tenant" && m.from === name, ticketId: m.ticketId }));
+        // A sample cabinet keeps no read mark (nothing is written): what came after the tenant's own last word.
+        return { id: c.id, leaseId: current.id, label: `${current.unit.label} · ${current.property.name}`, lastMessageAt: c.lastMessageAt, messages, unread: unreadIn(messages, ""), readUntil: "" };
+      })
     : [];
   return {
     userId: "sample-tenant",

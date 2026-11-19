@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/portal/session";
 import { addTenantMessage } from "@/lib/portal/requests";
+import { tenantUnread } from "@/lib/portal/thread";
 import { leaseSubject } from "@/lib/portal/types";
+import { unreadSignature } from "@/lib/gestion/threads";
 
 /**
  * A message from the tenant to their manager, in the tenancy's own
@@ -12,6 +14,22 @@ import { leaseSubject } from "@/lib/portal/types";
  */
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const LIVE = new Set(["active", "notice"]);
+
+/**
+ * Whether anything changed in the tenant's conversations since their
+ * screen was drawn: the count of what they have not read and the moment of
+ * the last message, as one signature the space compares with its own. A
+ * light read, asked now and then while the space is open.
+ */
+export async function GET() {
+  const ctx = await withTenant();
+  if (ctx instanceof NextResponse) return ctx;
+  const state = await tenantUnread(ctx.g);
+  return NextResponse.json(
+    { ok: true, signature: state ? unreadSignature(state.unread, state.latest) : null, unread: state?.unread ?? null },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
 
 export async function POST(req: NextRequest) {
   const ctx = await withTenant();

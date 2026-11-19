@@ -79,3 +79,21 @@ export function mergeLines<T extends { id: string; at: string }>(...readings: Re
   for (const reading of readings) for (const line of reading) byId.set(line.id, line);
   return [...byId.values()].sort((a, b) => instant(a.at) - instant(b.at) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
+
+/**
+ * What a shell knows of the conversations, in one line: how many messages
+ * wait to be read and when the last one was written. The layout prints it
+ * for what it rendered and the light read route answers with the same
+ * line for what the database holds now; when the two differ, something
+ * arrived or was read elsewhere, and the page is read again.
+ */
+export function unreadSignature(unread: number, latest: string): string {
+  return `${unread}|${latest ? instant(latest) : 0}`;
+}
+
+/** The latest of several moments, as written; empty when there is none. */
+export function latestMoment(moments: ReadonlyArray<string | null | undefined>): string {
+  let latest = "";
+  for (const m of moments) if (m && (latest === "" || instant(m) > instant(latest))) latest = m;
+  return latest;
+}

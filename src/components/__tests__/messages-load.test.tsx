@@ -56,6 +56,7 @@ const labels: MessagesLabels = {
   replyPlaceholder: m.replyPlaceholder,
   send: fr.common.send,
   sent: m.replySent,
+  sentNoMail: m.replySentNoMail,
   sendFailed: m.sendFailed,
   statusFailed: m.statusFailed,
   interventionFailed: m.interventionFailed,
@@ -135,6 +136,9 @@ let root: Root;
 /** The read requests the screen made, each answered when the test says so. */
 let reads: Array<{ url: string; signal: AbortSignal | null; answer: (messages: MessageView[] | number) => void }>;
 let restoreHistory: () => void;
+/** Every other request the screen made: the read marks, the sends. */
+let posts: Array<{ url: string; body: Record<string, unknown> }>;
+let visibility: DocumentVisibilityState;
 
 const render = async (threads: ThreadView[], props: Partial<React.ComponentProps<typeof MessagesCenter>> = {}) => {
   await act(async () =>
@@ -192,7 +196,10 @@ beforeEach(() => {
   document.body.appendChild(host);
   root = createRoot(host);
   reads = [];
+  posts = [];
   pendingRefreshes = [];
+  visibility = "visible";
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
   // A laptop: the list and the open conversation side by side.
   window.matchMedia = ((query: string) => ({
     matches: false,
@@ -208,6 +215,7 @@ beforeEach(() => {
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (!/^\/api\/conversations\/[^/]+\/messages/.test(url) || (init?.method && init.method !== "GET")) {
+      posts.push({ url, body: JSON.parse(typeof init?.body === "string" ? init.body : "{}") as Record<string, unknown> });
       return Promise.resolve(new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }));
     }
     return new Promise<Response>((resolve, reject) => {
@@ -360,5 +368,69 @@ describe("opening a conversation the page did not read in full", () => {
     await flush();
     expect(body()?.textContent).toContain("Encore une question.");
     expect(readsOf("t-bauer")).toHaveLength(2);
+  });
+});
+
+describe("what is on the screen is read", () => {
+  const unreadDot = (name: string) => rowOf(name)?.querySelector("[role=img]") ?? null;
+  const marksOf = (id: string) => posts.filter((p) => p.url === `/api/conversations/${id}/lu`);
+
+  it("marks the conversation a laptop opens by itself, with no click, up to its last message", async () => {
+    const waiting: ThreadView = { ...thill, unread: 1 };
+    await render([waiting, bauerHead()]);
+    await flush();
+    expect(marksOf("t-thill")).toEqual([{ url: "/api/conversations/t-thill/lu", body: { until: "2026-09-22T07:00:00.000Z" } }]);
+    // The dot goes at once; the page is asked again for the list and the shell's count.
+    expect(unreadDot("Marc Thill")).toBeNull();
+    expect(pendingRefreshes.length).toBeGreaterThan(0);
+    // Asked once, however many times the screen is drawn again with the same last message.
+    await render([waiting, bauerHead()]);
+    await flush();
+    expect(marksOf("t-thill")).toHaveLength(1);
+  });
+
+  it("shows a message that arrives later as unread again, and reads it since it is on the screen", async () => {
+    await render([{ ...thill, unread: 1 }, bauerHead()]);
+    await flush();
+    // The page comes back: read. Then Marc writes again.
+    await render([thill, bauerHead()]);
+    const next = { ...line("m-2", "Encore moi.", "2026-09-22T09:30:00.000Z"), from: "Marc Thill" };
+    await render([{ ...thill, unread: 1, lastMessageAt: next.at, messages: [...thill.messages, next] }, bauerHead()]);
+    await flush();
+    expect(marksOf("t-thill").map((p) => p.body.until)).toEqual(["2026-09-22T07:00:00.000Z", "2026-09-22T09:30:00.000Z"]);
+    expect(unreadDot("Marc Thill")).toBeNull();
+  });
+
+  it("reads a conversation opened from the list once its messages are there, not before", async () => {
+    await render([thill, { ...bauerHead(), unread: 2 }]);
+    await click(rowOf("Lena Bauer"));
+    // Still loading: nothing is on the screen to have been read.
+    expect(marksOf("t-bauer")).toEqual([]);
+    expect(unreadDot("Lena Bauer")).not.toBeNull();
+    readsOf("t-bauer")[0].answer(BAUER);
+    await flush();
+    expect(marksOf("t-bauer").map((p) => p.body.until)).toEqual(["2026-09-21T15:10:00.000Z"]);
+    expect(unreadDot("Lena Bauer")).toBeNull();
+  });
+
+  it("does not read a conversation in a tab left in the background, and reads it when the tab is looked at again", async () => {
+    visibility = "hidden";
+    await render([{ ...thill, unread: 1 }, bauerHead()]);
+    await flush();
+    expect(marksOf("t-thill")).toEqual([]);
+    expect(unreadDot("Marc Thill")).not.toBeNull();
+    visibility = "visible";
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await flush();
+    expect(marksOf("t-thill")).toHaveLength(1);
+  });
+
+  it("writes nothing on a sample cabinet: the dot goes on this screen only", async () => {
+    await render([{ ...thill, unread: 1 }, bauerHead()], { writable: false, sampleNote: "Exemple" });
+    await flush();
+    expect(posts).toEqual([]);
+    expect(unreadDot("Marc Thill")).toBeNull();
   });
 });

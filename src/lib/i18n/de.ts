@@ -1492,6 +1492,7 @@ export const de: Dict = {
     subtitle: "Eine Unterhaltung pro Mieter, mit seinen Anfragen an derselben Stelle verfolgt.",
     replyPlaceholder: "Nachricht schreiben…",
     replySent: "Nachricht gesendet. Der Mieter sieht sie in seinem Bereich.",
+    replySentNoMail: "Nachricht gesendet, der Mieter sieht sie in seinem Bereich. Die E-Mail, die ihn darauf hinweist, wurde nicht versendet.",
     cardTenants: "Mieter",
     cardTenantsBody: "Ein einziger Einstieg „Neue Anfrage“, die Kategorie wird aus der Nachricht abgeleitet. Bei Gasgeruch erscheinen die Notrufnummern schon beim Tippen.",
     cardArtisans: "Handwerker",

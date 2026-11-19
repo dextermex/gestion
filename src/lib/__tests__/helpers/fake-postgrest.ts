@@ -194,6 +194,8 @@ export class FakeDb {
   private tables = new Map<string, Row[]>();
   /** Tables the base does not carry yet (a migration not applied): every query on them fails as PostgREST says. */
   readonly absent = new Set<string>();
+  /** Functions the base does not carry yet: calling one fails as PostgREST says (PGRST202). */
+  readonly absentFunctions = new Set<string>();
   private leaseSeq = 0;
 
   constructor(public today: string) {}
@@ -255,6 +257,9 @@ export class FakeDb {
         return this.tenantScope(row, userId);
       case "messages":
         return this.tenantConversation(row.conversation_id, userId);
+      // 0031: each account reads its own read marks, and writes none directly.
+      case "message_reads":
+        return row.user_id === userId;
       default:
         return false; // leases, units, properties, contacts, payments, bank tables, invites: nothing
     }
@@ -288,7 +293,45 @@ export class FakeDb {
   callRpc(name: string, args: Row, principal: Principal): Result {
     const raise = (message: string): Result => ({ data: null, error: { code: "P0001", message } });
     const uid = principal.kind === "tenant" ? principal.userId : null;
+    if (this.absentFunctions.has(name)) return { data: null, error: { code: "PGRST202", message: `Could not find the function gestion.${name} in the schema cache` } };
     switch (name) {
+      // 0031: the tenant's read mark, bounded by the last message written, never moving back.
+      case "mark_conversation_read": {
+        const denied: Result = { data: null, error: { code: "42501", message: "gestion: conversation not found" } };
+        if (!uid) return denied;
+        const cv = this.table("conversations").find((c) => c.id === args.p_conversation && c.scope_type === "lease" && c.scope_id != null && this.tenantLease(c.scope_id, uid));
+        if (!cv) return denied;
+        const times = this.table("messages").filter((m) => m.conversation_id === cv.id).map((m) => String(m.sent_at)).sort((a, b) => Date.parse(a) - Date.parse(b));
+        const last = times[times.length - 1];
+        if (!last) return { data: null, error: null };
+        const asked = typeof args.p_until === "string" && args.p_until ? args.p_until : last;
+        let mark = Date.parse(asked) < Date.parse(last) ? asked : last;
+        const rows = this.table("message_reads");
+        const row = rows.find((r) => r.conversation_id === cv.id && r.user_id === uid);
+        if (row) {
+          if (Date.parse(String(row.read_until)) > Date.parse(mark)) mark = String(row.read_until);
+          row.read_until = mark;
+        } else rows.push({ conversation_id: cv.id, user_id: uid, org_id: cv.org_id, read_until: mark });
+        return { data: mark, error: null };
+      }
+      // 0031: what the signed-in tenant has not read, conversation by conversation.
+      case "my_unread_messages": {
+        if (!uid) return { data: [], error: null };
+        const at = (v: unknown): number => (typeof v === "string" && v ? Date.parse(v) : -Infinity);
+        return {
+          data: this.table("conversations")
+            .filter((c) => c.scope_type === "lease" && c.scope_id != null && this.tenantLease(c.scope_id, uid))
+            .map((c) => {
+              const own = this.table("messages").filter((m) => m.conversation_id === c.id);
+              const mineOf = (m: Row) => m.sender_kind === "tenant" && m.sender_user_id === uid;
+              const read = this.table("message_reads").find((r) => r.conversation_id === c.id && r.user_id === uid);
+              const mark = Math.max(at(read?.read_until), ...own.filter(mineOf).map((m) => at(m.sent_at)));
+              const last = own.map((m) => String(m.sent_at)).sort((a, b) => Date.parse(a) - Date.parse(b)).pop() ?? null;
+              return { conversation_id: c.id, lease_id: c.scope_id, unread: own.filter((m) => !mineOf(m) && at(m.sent_at) > mark).length, last_sent_at: last, read_until: read?.read_until ?? null };
+            }),
+          error: null,
+        };
+      }
       case "my_home": {
         if (!uid) return { data: [], error: null };
         const rows = this.table("leases")

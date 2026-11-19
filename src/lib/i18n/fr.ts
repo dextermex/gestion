@@ -1503,6 +1503,7 @@ export const fr = {
     subtitle: "Une conversation par locataire, avec ses demandes suivies au même endroit.",
     replyPlaceholder: "Écrire un message…",
     replySent: "Message envoyé. Le locataire le voit dans son espace.",
+    replySentNoMail: "Message envoyé, le locataire le voit dans son espace. L'e-mail qui l'en avertit n'est pas parti.",
     cardTenants: "Locataires",
     cardTenantsBody: "Une seule entrée « Nouvelle demande », la catégorie est déduite du message. En cas d'odeur de gaz, les numéros d'urgence s'affichent dès la saisie.",
     cardArtisans: "Artisans",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Reading the page again, in a way that is not lost. `router.refresh()` is
@@ -71,5 +71,21 @@ export function usePageRefresh(answer: unknown): { refresh: () => void; reissue:
     };
   }, [disarm, reissue]);
 
-  return { refresh, reissue };
+  return useMemo(() => ({ refresh, reissue }), [refresh, reissue]);
+}
+
+/**
+ * Whether the tab is the one being looked at. A conversation shown in a tab
+ * left in the background is not read, and is read when the person comes back.
+ */
+export function useTabVisible(): boolean {
+  // Nothing of this is drawn, so the server's "visible" and a hidden tab's "hidden" never disagree on screen.
+  const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
+  useEffect(() => {
+    const read = () => setVisible(document.visibilityState === "visible");
+    read();
+    document.addEventListener("visibilitychange", read);
+    return () => document.removeEventListener("visibilitychange", read);
+  }, []);
+  return visible;
 }
