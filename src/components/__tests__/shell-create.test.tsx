@@ -9,7 +9,7 @@ import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push }), usePathname: () => "/app", useSearchParams: () => new URLSearchParams() }));
-vi.mock("next/link", () => ({ default: ({ href, children, scroll: _scroll, ...rest }: { href: string; children: React.ReactNode; scroll?: boolean }) => <a href={href} {...rest}>{children}</a> }));
+vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let root: Root;
