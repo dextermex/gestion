@@ -9,7 +9,7 @@
  */
 
 import type { Dict } from "@/lib/i18n/fr";
-import { INTL_LOCALE, type Locale } from "@/lib/i18n/config";
+import { INTL_LOCALE, NUMBER_LOCALE, dateInWords, type Locale } from "@/lib/i18n/config";
 import type { InviteState, RequestState, RequestStatus } from "@/lib/portal/types";
 
 export type Meta = { label: string; color: string };
@@ -273,13 +273,13 @@ export const METER_UNITS: Record<MeterKind, string> = {
 /** Cents in, localized currency out — "1 850,00 €" (fr) / "€1,850.00" (en). */
 export function euros(cents: number | null | undefined, locale: Locale = "fr"): string {
   if (cents == null) return "—";
-  return (cents / 100).toLocaleString(INTL_LOCALE[locale], { style: "currency", currency: "EUR" });
+  return (cents / 100).toLocaleString(NUMBER_LOCALE[locale], { style: "currency", currency: "EUR" });
 }
 
 /** Whole-euro display for KPIs. */
 export function eurosWhole(cents: number | null | undefined, locale: Locale = "fr"): string {
   if (cents == null) return "—";
-  return (cents / 100).toLocaleString(INTL_LOCALE[locale], {
+  return (cents / 100).toLocaleString(NUMBER_LOCALE[locale], {
     style: "currency",
     currency: "EUR",
     maximumFractionDigits: 0,
@@ -297,7 +297,7 @@ export function toCents(input: string): number | null {
 export function formatDate(iso: string | null | undefined, locale: Locale = "fr"): string {
   if (!iso) return "—";
   const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
-  return d.toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "short", year: "numeric" });
+  return dateInWords(d, locale, { day: "numeric", month: "short", year: "numeric" });
 }
 
 /** A moment of the journal: the day and the minute, in the reader's language. */
@@ -310,18 +310,18 @@ export function formatDateTime(iso: string | null | undefined, locale: Locale = 
 
 export function formatMonth(isoMonth: string, locale: Locale = "fr"): string {
   const d = new Date(isoMonth.length === 7 ? `${isoMonth}-01T00:00:00` : isoMonth + "T00:00:00");
-  const s = d.toLocaleDateString(INTL_LOCALE[locale], { month: "long", year: "numeric" });
+  const s = dateInWords(d, locale, { month: "long", year: "numeric" });
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function formatNumber(n: number, locale: Locale = "fr"): string {
-  return n.toLocaleString(INTL_LOCALE[locale]);
+  return n.toLocaleString(NUMBER_LOCALE[locale]);
 }
 
 export function formatPct(pct: number, locale: Locale = "fr"): string {
   const v = Math.round(pct * 10) / 10;
   // French typography keeps the space before %; EN drops it.
-  return locale === "en" ? `${v.toLocaleString(INTL_LOCALE[locale])}%` : `${v.toLocaleString(INTL_LOCALE[locale])} %`;
+  return locale === "en" ? `${v.toLocaleString(NUMBER_LOCALE[locale])}%` : `${v.toLocaleString(NUMBER_LOCALE[locale])} %`;
 }
 
 export function initials(name: string): string {

@@ -11,7 +11,7 @@ import type { DemoData } from "@/lib/demo";
 import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/config";
 import { getI18n } from "@/lib/i18n";
-import { INTL_LOCALE, fmt } from "@/lib/i18n/config";
+import { dateInWords, fmt } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { billState, type BillCategory } from "@/lib/gestion/bills";
 import { managementFeeVat } from "@/domain/fiscal/vat";
@@ -287,7 +287,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
 
   const bars: FlowBar[] = flows.map((x) => ({
     month: x.month,
-    label: flows.length > 7 ? new Date(`${x.month}-01T00:00:00`).toLocaleDateString(INTL_LOCALE[locale], { month: "short" }) : formatMonth(x.month, locale).split(" ")[0],
+    label: flows.length > 7 ? dateInWords(new Date(`${x.month}-01T00:00:00`), locale, { month: "short" }) : formatMonth(x.month, locale).split(" ")[0],
     inCents: x.inCents,
     outCents: x.outCents,
     future: x.month > liveMonth,
