@@ -15,6 +15,7 @@ export default function FiscalControls({
   years,
   taxYear,
   runningFrom,
+  detail = false,
   labels,
 }: {
   owners: Array<{ id: string; name: string }>;
@@ -23,10 +24,12 @@ export default function FiscalControls({
   taxYear: number;
   /** Years from this one on are the running exercise, provisional. */
   runningFrom: number;
+  /** The view on screen is the detail by property: changing owner or exercise stays in it. */
+  detail?: boolean;
   labels: { owner: string; year: string; running: string };
 }) {
   const router = useRouter();
-  const href = (owner: string, year: number) => `/app/fiscalite?proprietaire=${encodeURIComponent(owner)}&exercice=${year}`;
+  const href = (owner: string, year: number) => `/app/fiscalite?proprietaire=${encodeURIComponent(owner)}&exercice=${year}${detail ? "&vue=detail" : ""}`;
   return (
     <div className="crm-fiscal-controls">
       <Select value={ownerId} onChange={(e) => router.push(href(e.target.value, taxYear))} aria-label={labels.owner} className="crm-filter crm-fiscal-owner">

@@ -1,0 +1,124 @@
+// @vitest-environment jsdom
+import { renderToString } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fr } from "@/lib/i18n/fr";
+import { fmt } from "@/lib/i18n/config";
+import { buildEmptyData, orgFromWorkspace } from "@/lib/demo/data-empty";
+import type { DemoData } from "@/lib/demo";
+import { todayISO } from "@/lib/clock";
+
+/**
+ * Where the manager screens lead on an account's own data. Every card,
+ * chip and link of these pages must open something that exists: a screen
+ * with content, never an empty page or a control that does nothing. The
+ * rows are what the real loader produces, read through the same seam.
+ */
+const today = todayISO();
+const month = today.slice(0, 7);
+/** The markup as text: React escapes quotes and ampersands, the dictionary does not. */
+const text = (html: string): string => html.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+/** Every in-app address a rendered page links to. */
+const hrefs = (html: string): string[] => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&"));
+
+const property: DemoData["PROPERTIES"][number] = { id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", commune: "Luxembourg", cadastralRef: "", type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: true, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null };
+const lease: DemoData["LEASES"][number] = {
+  id: "lease-1", seq: 1, unitId: "unit-1", type: "residential", status: "active", tenantContactIds: ["c-tenant"], guarantorContactIds: [], colocation: false,
+  startDate: `${Number(month.slice(0, 4)) - 2}-01-01`, endDate: null, rentCents: 125000, chargesCents: 15000, chargesRegime: "advances", depositMonths: 2, depositForm: "cash",
+  paymentDay: 1, rfReference: "RF00 1234 0001", lastAdjustmentOn: null, previousRentCents: null, capitalComponents: [], vatRegime: "exempt",
+};
+
+/** An empty workspace: what a new account reads. */
+function empty(): DemoData {
+  return buildEmptyData(orgFromWorkspace({ id: "org-1", name: "Espace test", kind: "owner" }));
+}
+
+/** One let house, this month's rent paid, one bill: no fiscal year, no sample record. */
+function account(): DemoData {
+  return {
+    ...empty(),
+    CONTACTS: [{ id: "c-tenant", kind: "natural", name: "Lena Schmit", email: null, phone: null, language: "fr", roles: ["tenant"] }],
+    PROPERTIES: [property],
+    UNITS: [{ id: "unit-1", propertyId: "prop-1", label: "Maison", kind: "dwelling", floor: "", areaSqm: 120, rooms: 4, furnished: false, photoUrl: null }],
+    LEASES: [lease],
+    RENT_PERIODS: [{ id: "rp-1", leaseId: "lease-1", period: month, dueDate: `${month}-01`, rentCents: 125000, chargesCents: 15000, vatCents: 0, totalCents: 140000, allocatedCents: 140000, status: "paid" }],
+    BILLS: [
+      { id: "bill-1", direction: "expense", supplierContactId: null, supplierName: "Jos Kirsch", propertyId: "prop-1", unitId: "unit-1", unitLabel: "Maison · Maison Schmit", category: "maintenance_repairs", subject: "Chaudière", docNo: "K-1", docDate: `${month}-02`, dueOn: null, paidOn: null, cashflow: true, vatRatePct: 17, amountCents: 40000, vatCents: 5812, documentId: null, hasDocument: false, createdAt: today },
+    ],
+    leaseById: () => lease,
+    propertyById: () => property,
+    leaseTenantNames: () => ["Lena Schmit"],
+    leaseUnitLabel: () => "Maison · Maison Schmit",
+  };
+}
+
+let data: DemoData = account();
+let sample = false;
+vi.mock("@/lib/demo", () => ({ getDemo: async () => data, isSampleData: async () => sample, getDatasetId: async () => (sample ? "fr" : "real") }));
+vi.mock("@/lib/i18n", () => ({ getI18n: async () => ({ locale: "fr", d: fr }) }));
+vi.mock("@/lib/workspace", () => ({ getIdentity: async () => ({ userId: "u-1", email: "lena@example.invalid", displayName: "Nadia Kremer", workspaces: [], active: { id: "org-1", name: "Espace test", kind: "owner", role: "owner" } }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }), usePathname: () => "/app", redirect: (to: string) => { throw new Error(`redirect:${to}`); }, notFound: () => { throw new Error("not-found"); } }));
+
+beforeEach(() => {
+  data = account();
+  sample = false;
+});
+
+describe("Fiscalité on an account's own data", () => {
+  const render = async (params: Record<string, string> = {}) => {
+    const { default: Page } = await import("@/app/app/fiscalite/page");
+    return text(renderToString(await Page({ searchParams: Promise.resolve(params) })));
+  };
+
+  it("reads this quarter and the year so far from the rent periods and the bills", async () => {
+    const html = await render();
+    expect(html).toContain(fr.fiscalite.quarterTitle);
+    expect(html).toContain(fr.fiscalite.ytdTitle);
+    // 1 400 € of rent in, 400 € of bills out: 1 000 € left, on both cards.
+    expect(html.match(/1[\s  .]?000/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(html).toContain(fr.fiscalite.stepsTitle);
+    expect(html).toContain(fr.fiscalite.calendarTitle);
+    expect(hrefs(html)).toEqual(expect.arrayContaining(["/app/finance?vue=revenus", "/app/finance?vue=charges"]));
+  });
+
+  it("says the pack is not produced yet and offers no control for it", async () => {
+    const html = await render();
+    expect(html).toContain(fr.fiscalite.packSoonTitle);
+    expect(html).toContain(fr.fiscalite.packSoonBody);
+    expect(html).not.toContain("/api/fiscalite/pack");
+    expect(html).not.toContain(fr.fiscalite.downloadPdf);
+    expect(html).not.toContain(fr.fiscalite.tabDetail);
+  });
+
+  it("counts one annex per property let in the exercise the next return covers", async () => {
+    const html = await render();
+    const running = Number(today.slice(0, 4));
+    // The return for last year is due on 31 December of this one: it is the one ahead until then.
+    expect(html).toContain(fmt(fr.fiscalite.calReturn, { year: running - 1 }));
+    expect(html).toContain(fr.fiscalite.stateUpcoming);
+    expect(html).not.toContain(fr.fiscalite.stateLate);
+  });
+
+  it("keeps the plain empty state for a workspace with nothing recorded", async () => {
+    data = empty();
+    const html = await render();
+    expect(html).toContain(fmt(fr.common.emptyTitle, { section: fr.fiscalite.title }));
+    expect(html).not.toContain(fr.fiscalite.quarterTitle);
+  });
+});
+
+describe("Rapports", () => {
+  const render = async () => {
+    const { default: Page } = await import("@/app/app/rapports/page");
+    return text(renderToString(await Page({ searchParams: Promise.resolve({}) })));
+  };
+
+  it("links the tax summary and lists the tax pack as not built on an account without a prepared exercise", async () => {
+    const html = await render();
+    expect(hrefs(html)).toContain("/app/fiscalite");
+    expect(hrefs(html)).not.toContain("/app/fiscalite?vue=detail");
+    // The pack's card is there, marked, and is not a link.
+    const card = html.slice(html.indexOf(fr.reports.items.taxPack.title) - 600, html.indexOf(fr.reports.items.taxPack.title) + 200);
+    expect(card).toContain('aria-disabled="true"');
+    expect(card).toContain(fr.reports.soon);
+  });
+});

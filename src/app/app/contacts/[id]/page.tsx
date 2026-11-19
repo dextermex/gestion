@@ -3,7 +3,7 @@ import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel, Timeline } from "@/components/gestion/bits";
-import { getDemo } from "@/lib/demo";
+import { getDemo, isSampleData } from "@/lib/demo";
 import {
   amlTierMeta,
   contactRoleMeta,
@@ -22,7 +22,7 @@ import { fmt } from "@/lib/i18n/config";
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
-  const { CONTACTS, LEASES, TICKETS, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { CONTACTS, FISCAL_YEARS, LEASES, TICKETS, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const contact = CONTACTS.find((c) => c.id === id);
   if (!contact) notFound();
   const c = contact!;
@@ -34,6 +34,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const leases = LEASES.filter((l) => l.tenantContactIds.includes(c.id));
   const tickets = TICKETS.filter((t) => t.artisanContactId === c.id);
   const isOwner = c.roles.includes("owner");
+  // Where an owner's buttons lead must exist: the management statements are the sample
+  // mandate's (Finance, Comptabilité), the tax pack exists for an owner with a prepared exercise.
+  const statementsHref = isOwner && (await isSampleData()) ? "/app/finance?vue=comptabilite" : null;
+  const taxPackHref = isOwner && FISCAL_YEARS.some((y) => y.ownerContactId === c.id) ? `/app/fiscalite?proprietaire=${encodeURIComponent(c.id)}&vue=detail` : null;
 
   const timeline = [
     ...(c.id === "c-muller"
@@ -131,7 +135,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-ink">
-                        {t.ref} — {t.title}
+                        {t.ref} · {t.title}
                       </p>
                       <p className="text-xs text-ink-soft">{t.unitLabel}</p>
                     </div>
@@ -146,20 +150,26 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           {isOwner && (
             <Panel title={d.contacts.mandateTitle}>
               <p className="text-sm leading-relaxed text-ink">{c.notes ?? d.contacts.mandateDefault}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link
-                  href="/app/finance"
-                  className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
-                >
-                  {d.contacts.mandateStatements}
-                </Link>
-                <Link
-                  href="/app/fiscalite"
-                  className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
-                >
-                  {d.contacts.mandateTaxPack}
-                </Link>
-              </div>
+              {(statementsHref || taxPackHref) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {statementsHref && (
+                    <Link
+                      href={statementsHref}
+                      className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
+                    >
+                      {d.contacts.mandateStatements}
+                    </Link>
+                  )}
+                  {taxPackHref && (
+                    <Link
+                      href={taxPackHref}
+                      className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
+                    >
+                      {d.contacts.mandateTaxPack}
+                    </Link>
+                  )}
+                </div>
+              )}
             </Panel>
           )}
 

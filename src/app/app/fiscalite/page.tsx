@@ -8,7 +8,8 @@ import { Rows, Row, Section, Segments, Step, Steps } from "@/components/gestion/
 import { periodResult } from "@/domain/finance/overview";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
-import { fmt, plural } from "@/lib/i18n/config";
+import { fmt, plural, type Locale } from "@/lib/i18n/config";
+import type { Dict } from "@/lib/i18n/fr";
 import { amortReasonText, energyReasonText } from "@/lib/i18n/engine";
 import { euros, eurosWhole, formatDate } from "@/lib/types";
 import { getParamValue } from "@/domain/legal/params";
@@ -16,15 +17,53 @@ import { selectFiscal, type FiscalOwnerYear } from "@/lib/fiscal/pack";
 import { attachmentLabel, filingDeadline, flatText, lineLabel, regimeLabel, sectionLabel, warningText } from "@/lib/fiscal/labels";
 
 type Params = { proprietaire?: string; exercice?: string; vue?: string };
+type Books = ReturnType<typeof periodResult>;
+
+/** This quarter and the year so far, as the books read them: the result, then what came in and what went out. */
+function BooksCards({ d, locale, label, cards }: { d: Dict; locale: Locale; label: string; cards: Array<{ title: string; when: string; result: Books }> }) {
+  return (
+    <section aria-label={label}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {cards.map(({ title, when, result: r }) => (
+          <div key={title} className="rounded-3xl border border-sand-200/80 bg-white/75 p-5">
+            <p className="flex items-baseline justify-between gap-3 text-sm font-semibold text-ink-soft">
+              <span>{title}</span>
+              <span className="font-medium tabular-nums">{when}</span>
+            </p>
+            <p className="mt-2 text-[13px] text-ink-soft">{d.fiscalite.sumNet}</p>
+            <p className={"text-3xl font-semibold tracking-tight tabular-nums " + (r.netCents < 0 ? "text-red-700" : "text-ink")}>{eurosWhole(r.netCents, locale)}</p>
+            <dl className="mt-4 space-y-1.5 border-t border-sand-200/80 pt-3 text-sm">
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-ink-soft">{d.fiscalite.sumIncome}</dt>
+                <dd className="tabular-nums text-ink">{eurosWhole(r.incomeCents, locale)}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-ink-soft">{d.fiscalite.sumCosts}</dt>
+                <dd className="tabular-nums text-ink">{eurosWhole(r.expenseCents, locale)}</dd>
+              </div>
+            </dl>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 px-1 text-[13px] text-ink-soft">{d.fiscalite.booksNote}</p>
+    </section>
+  );
+}
+
+const STEP_ACTION = "mt-2 inline-flex min-h-10 items-center rounded-full bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800";
 
 /**
- * Fiscalité: one owner and one exercise at a time, only the real estate
- * let. The net rental income leads, the year's amortisation and the
- * pieces still to gather beside it; then one ledger per property (the
- * modèle 190/210 statement the engine builds), the taxpayer's
- * amortisation plan, the residence-state annex when it applies, the
- * checklist, the downloads, every owner for the exercise, and how the
- * engine decides, folded. No other income, no estimate of tax due.
+ * Fiscalité. The summary (this quarter, the year so far, the steps to the
+ * return, its calendar) is read from the workspace's own rent periods and
+ * bills, on every account. The pack is one owner and one exercise at a
+ * time, only the real estate let: the net rental income, one ledger per
+ * property (the modèle 190/210 statement the engine builds), the
+ * taxpayer's amortisation plan, the residence-state annex when it applies,
+ * the checklist, the downloads, every owner for the exercise, and how the
+ * engine decides, folded. It needs each property's acquisition facts: an
+ * account that has not recorded them gets the summary and is told, in
+ * plain words, that the pack is not produced yet. No other income, no
+ * estimate of tax due.
  */
 export default async function FiscalitePage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
@@ -33,11 +72,66 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
   const selection = selectFiscal(data, { ownerId: params.proprietaire, taxYear: Number(params.exercice) || undefined });
   const money = (c: number) => euros(c, locale);
 
+  // "This quarter" and "since January" are about now: the running year's books, whatever exercise is open below.
+  const runningFrom = Number(data.TODAY.slice(0, 4));
+  const todayMonth = data.TODAY.slice(0, 7);
+  const q = Math.floor((Number(todayMonth.slice(5, 7)) - 1) / 3);
+  const quarterFrom = `${runningFrom}-${String(q * 3 + 1).padStart(2, "0")}`;
+  const quarterTo = `${runningFrom}-${String(q * 3 + 3).padStart(2, "0")}`;
+  const books = [
+    { title: d.fiscalite.quarterTitle, when: fmt(d.fiscalite.quarterOf, { q: q + 1, year: runningFrom }), result: periodResult(data.RENT_PERIODS, data.BILLS, quarterFrom, quarterTo) },
+    { title: d.fiscalite.ytdTitle, when: String(runningFrom), result: periodResult(data.RENT_PERIODS, data.BILLS, `${runningFrom}-01`, todayMonth) },
+  ];
+
   if (!selection.current || selection.ownerId === null || selection.taxYear === null) {
+    // Nothing recorded yet: no figure to show, and nothing to prepare.
+    if (data.RENT_PERIODS.length === 0 && data.BILLS.length === 0) {
+      return (
+        <div>
+          <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.summaryLead} />
+          <EmptyState icon="euro" title={fmt(d.common.emptyTitle, { section: d.fiscalite.title })} body={d.common.emptyBody} />
+        </div>
+      );
+    }
+    // The return that comes next: last year's while its deadline is ahead, else the running year's.
+    const exercise = filingDeadline(runningFrom - 1) >= data.TODAY ? runningFrom - 1 : runningFrom;
+    const due = filingDeadline(exercise);
+    // One annex per property let in the exercise: the properties whose tenancies had a rent called in it.
+    const propertyOfLease = new Map(data.LEASES.map((l) => [l.id, data.UNITS.find((u) => u.id === l.unitId)?.propertyId ?? null]));
+    const let_ = new Set(data.RENT_PERIODS.filter((rp) => rp.period.startsWith(String(exercise))).map((rp) => propertyOfLease.get(rp.leaseId)).filter(Boolean)).size;
     return (
       <div>
-        <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.subtitle} />
-        <EmptyState icon="euro" title={d.fiscalite.emptyTitle} body={d.fiscalite.emptyBody} />
+        <PageHeader title={d.fiscalite.title} subtitle={d.fiscalite.summaryLead} />
+        <div className="grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-10">
+          <div className="min-w-0 space-y-9">
+            <BooksCards d={d} locale={locale} label={d.fiscalite.tabSummary} cards={books} />
+            <Section title={d.fiscalite.stepsTitle}>
+              <div className="rounded-3xl border border-sand-200/80 bg-white/75 px-5 py-5">
+                <Steps label={d.fiscalite.stepsTitle}>
+                  <Step state="next" title={d.fiscalite.step1}>
+                    <Link href="/app/finance?vue=revenus" className={STEP_ACTION}>{d.fiscalite.step1Action}</Link>
+                  </Step>
+                  <Step state="next" title={d.fiscalite.step2}>
+                    <Link href="/app/finance?vue=charges" className={STEP_ACTION}>{d.fiscalite.step2Action}</Link>
+                  </Step>
+                  {/* The pack is not produced on this account: said so, with no control to press. */}
+                  <Step state="next" title={d.fiscalite.packSoonTitle} date={d.reports.soon}>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{d.fiscalite.packSoonBody}</p>
+                  </Step>
+                </Steps>
+              </div>
+            </Section>
+          </div>
+          <div className="min-w-0">
+            <Section title={d.fiscalite.calendarTitle}>
+              <Rows>
+                <Row icon="calendar" title={fmt(d.fiscalite.calReturn, { year: exercise })} sub={fmt(d.fiscalite.calReturnDue, { date: formatDate(due, locale) })} right={d.fiscalite.stateUpcoming} rightTone="soft" />
+                {let_ > 0 && <Row icon="documents" title={d.fiscalite.calAnnex} sub={plural(locale, let_, d.fiscalite.calAnnexOne, d.fiscalite.calAnnexMany)} />}
+              </Rows>
+              <p className="mt-3 px-1 text-[13px] leading-relaxed text-ink-soft">{d.fiscalite.scopeNote}</p>
+            </Section>
+          </div>
+        </div>
       </div>
     );
   }
@@ -48,7 +142,6 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
   const maxSlots = getParamValue("amort.accelerated_max_buildings_per_taxpayer", jan1);
   const abattementCap = getParamValue("amort.abattement_special_cap_eur_per_taxpayer", jan1) * 100 * (owner.year.jointlyTaxed ? 2 : 1);
   const vefaCap = eurosWhole(getParamValue("amort.vefa2024_base_cap_eur_per_year", jan1) * 100, locale);
-  const runningFrom = Number(data.TODAY.slice(0, 4));
   const packHref = (o: FiscalOwnerYear, format: "pdf" | "csv", propertyId?: string) =>
     `/api/fiscalite/pack?proprietaire=${encodeURIComponent(o.ownerId)}&exercice=${o.year.taxYear}&format=${format}${propertyId ? `&bien=${encodeURIComponent(propertyId)}` : ""}`;
   const loss = owner.summary.ownerShareNet < 0;
@@ -60,13 +153,6 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
   // The summary: the books by quarter and for the year so far, the steps to the return, its calendar.
   const detail = params.vue === "detail";
   const viewHref = (v: "resume" | "detail") => `/app/fiscalite?proprietaire=${encodeURIComponent(owner.ownerId)}&exercice=${year}${v === "detail" ? "&vue=detail" : ""}`;
-  // "This quarter" and "since January" are about now: the running year's books, whatever exercise is open below.
-  const todayMonth = data.TODAY.slice(0, 7);
-  const q = Math.floor((Number(todayMonth.slice(5, 7)) - 1) / 3);
-  const quarterFrom = `${runningFrom}-${String(q * 3 + 1).padStart(2, "0")}`;
-  const quarterTo = `${runningFrom}-${String(q * 3 + 3).padStart(2, "0")}`;
-  const quarter = periodResult(data.RENT_PERIODS, data.BILLS, quarterFrom, quarterTo);
-  const toDate = periodResult(data.RENT_PERIODS, data.BILLS, `${runningFrom}-01`, todayMonth);
   const deadline = filingDeadline(year);
   const propertiesLet = owner.statements.length;
 
@@ -90,6 +176,7 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
           years={selection.years}
           taxYear={year}
           runningFrom={runningFrom}
+          detail={params.vue === "detail"}
           labels={{ owner: d.fiscalite.ownerLabel, year: d.fiscalite.yearLabel, running: d.fiscalite.yearRunning }}
         />
       </div>
@@ -107,45 +194,16 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
       {!detail && (
         <div className="grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-10">
           <div className="min-w-0 space-y-9">
-            <section aria-label={fmt(d.fiscalite.heroTitle, { year })}>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {(
-                  [
-                    [d.fiscalite.quarterTitle, fmt(d.fiscalite.quarterOf, { q: q + 1, year: runningFrom }), quarter],
-                    [d.fiscalite.ytdTitle, String(runningFrom), toDate],
-                  ] as const
-                ).map(([title, when, r]) => (
-                  <div key={title} className="rounded-3xl border border-sand-200/80 bg-white/75 p-5">
-                    <p className="flex items-baseline justify-between gap-3 text-sm font-semibold text-ink-soft">
-                      <span>{title}</span>
-                      <span className="font-medium tabular-nums">{when}</span>
-                    </p>
-                    <p className="mt-2 text-[13px] text-ink-soft">{d.fiscalite.sumNet}</p>
-                    <p className={"text-3xl font-semibold tracking-tight tabular-nums " + (r.netCents < 0 ? "text-red-700" : "text-ink")}>{eurosWhole(r.netCents, locale)}</p>
-                    <dl className="mt-4 space-y-1.5 border-t border-sand-200/80 pt-3 text-sm">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <dt className="text-ink-soft">{d.fiscalite.sumIncome}</dt>
-                        <dd className="tabular-nums text-ink">{eurosWhole(r.incomeCents, locale)}</dd>
-                      </div>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <dt className="text-ink-soft">{d.fiscalite.sumCosts}</dt>
-                        <dd className="tabular-nums text-ink">{eurosWhole(r.expenseCents, locale)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 px-1 text-[13px] text-ink-soft">{d.fiscalite.booksNote}</p>
-            </section>
+            <BooksCards d={d} locale={locale} label={d.fiscalite.tabSummary} cards={books} />
 
             <Section title={d.fiscalite.stepsTitle}>
               <div className="rounded-3xl border border-sand-200/80 bg-white/75 px-5 py-5">
                 <Steps label={d.fiscalite.stepsTitle}>
                   <Step state="next" title={d.fiscalite.step1}>
-                    <Link href="/app/finance?vue=revenus" className="mt-2 inline-flex min-h-10 items-center rounded-full bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800">{d.fiscalite.step1Action}</Link>
+                    <Link href="/app/finance?vue=revenus" className={STEP_ACTION}>{d.fiscalite.step1Action}</Link>
                   </Step>
                   <Step state="next" title={d.fiscalite.step2}>
-                    <Link href="/app/finance?vue=charges" className="mt-2 inline-flex min-h-10 items-center rounded-full bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800">{d.fiscalite.step2Action}</Link>
+                    <Link href="/app/finance?vue=charges" className={STEP_ACTION}>{d.fiscalite.step2Action}</Link>
                   </Step>
                   <Step state={owner.missing > 0 ? "next" : "done"} title={d.fiscalite.step3} date={owner.missing > 0 ? fmt(d.fiscalite.step3Missing, { n: owner.missing }) : d.fiscalite.step3Done}>
                     <Link href={`${viewHref("detail")}#pieces`} className="mt-2 inline-flex min-h-10 items-center rounded-full border border-sand-300 bg-white px-4 text-sm font-semibold text-ink hover:border-brand-300">{d.fiscalite.step3Action}</Link>
@@ -515,7 +573,7 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
                 {selection.all.map((o) => (
                   <tr key={o.ownerId} className="border-b border-sand-100 last:border-0" aria-current={o.ownerId === owner.ownerId ? "true" : undefined}>
                     <td className="px-3 py-3">
-                      <Link href={`/app/fiscalite?proprietaire=${encodeURIComponent(o.ownerId)}&exercice=${year}`} className="font-semibold text-ink hover:text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
+                      <Link href={`/app/fiscalite?proprietaire=${encodeURIComponent(o.ownerId)}&exercice=${year}&vue=detail`} className="font-semibold text-ink hover:text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
                         {o.ownerName}
                       </Link>
                     </td>
