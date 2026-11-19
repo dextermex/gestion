@@ -3,7 +3,8 @@
  * (v5 answers UnsupportedApiVersion for apps created today; the deployed
  * probe at /api/banking/health confirmed it.)
  *
- * SERVER ONLY. The App-id and Secret come from the environment
+ * SERVER ONLY (the `server-only` marker below fails a build that imports it
+ * from a client component). The App-id and Secret come from the environment
  * (SALTEDGE_APP_ID / SALTEDGE_SECRET, set in the deployment, never in the
  * repository and never in any NEXT_PUBLIC_* variable) and must not reach a
  * client bundle: import this module from route handlers only.
@@ -15,6 +16,8 @@
  * deployment says so with SALTEDGE_FAKE_PROVIDERS=1, and the sample cabinet
  * always runs its demonstration journey on one of them.
  */
+
+import "server-only";
 
 const BASE = "https://www.saltedge.com/api/v6";
 
@@ -61,18 +64,29 @@ export function returnToFor(origin: string): string {
 
 type Json = Record<string, unknown>;
 
+/** No call to the provider waits longer than this; a slow answer is a refusal with a name ("timeout"). */
+export const SALTEDGE_TIMEOUT_MS = 15_000;
+
 async function se<T>(path: string, init?: { method?: string; body?: Json }): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: init?.method ?? "GET",
-    headers: {
-      "App-id": process.env.SALTEDGE_APP_ID ?? "",
-      Secret: process.env.SALTEDGE_SECRET ?? "",
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: init?.method ?? "GET",
+      headers: {
+        "App-id": process.env.SALTEDGE_APP_ID ?? "",
+        Secret: process.env.SALTEDGE_SECRET ?? "",
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(SALTEDGE_TIMEOUT_MS),
+    });
+  } catch (e) {
+    // Never the cause's own text: it can carry the address called. A class the screens can word.
+    const name = e instanceof Error ? e.name : "";
+    throw new SaltEdgeError(name === "TimeoutError" || name === "AbortError" ? "timeout" : "network", name === "TimeoutError" || name === "AbortError" ? "the provider did not answer in time" : "the provider could not be reached");
+  }
 
   let parsed: Json = {};
   try {
@@ -165,7 +179,7 @@ export async function saltEdgeProbe(): Promise<
     return { ok: true };
   } catch (e) {
     if (e instanceof SaltEdgeError) return { ok: false, code: e.code, message: e.message };
-    return { ok: false, code: "network", message: e instanceof Error ? e.message : String(e) };
+    return { ok: false, code: "network", message: "the provider could not be reached" };
   }
 }
 

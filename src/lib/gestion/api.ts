@@ -136,6 +136,26 @@ export async function withOrgAndClient(access: Access = "read"): Promise<(OrgCon
   return { g: client.schema("gestion"), org, userId: session.userId, client };
 }
 
+/**
+ * Whether the caller holds a permission in the workspace, asked of the
+ * database: `gestion.can` is the predicate behind every policy, so the
+ * answer here is the one a write would get. Fails closed.
+ */
+export async function can(ctx: Pick<OrgContext, "g" | "org">, permission: string): Promise<boolean> {
+  try {
+    const { data, error } = await ctx.g.rpc("can", { p_org: ctx.org.id, p_perm: permission });
+    if (error) console.error("permission check failed:", permission, error.code);
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+/** What a role may not do is refused before anything is attempted: the 403 to answer, or null. */
+export async function refuseWithout(ctx: Pick<OrgContext, "g" | "org">, permission: string): Promise<NextResponse | null> {
+  return (await can(ctx, permission)) ? null : NextResponse.json({ error: "forbidden", permission }, { status: 403 });
+}
+
 /** Uniform PostgREST error mapping, logging the detail server-side only. */
 export function dbError(context: string, error: { code?: string; message?: string } | null): NextResponse {
   const code = error?.code;
