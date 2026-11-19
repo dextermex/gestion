@@ -55,3 +55,14 @@ export function nextDueOn(today: string, paymentDay: number, startDate?: string,
   }
   return null;
 }
+
+/**
+ * Whether a tenancy is still in force today. A lease that carries an end date
+ * (a departure recorded ahead, a term that was not renewed) stays in force
+ * until that day and is over from it on: the nightly
+ * `gestion.end_due_leases()` writes `ended` on the row, and until it has run
+ * the date itself decides, so no screen waits for the job.
+ */
+export function effectiveLeaseStatus<S extends string>(status: S, endDate: string | null, today: string): S | "ended" {
+  return (status === "active" || status === "notice") && endDate !== null && endDate !== "" && endDate <= today ? "ended" : status;
+}

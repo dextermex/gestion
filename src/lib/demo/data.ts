@@ -18,6 +18,7 @@ import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
 import { summariseDocuments, type DocumentSummary } from "@/lib/documents/summary";
 import type { PageInfo } from "./scope";
+import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
 import type { InviteRow } from "@/lib/portal/types";
 import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
 import type {
@@ -135,7 +136,7 @@ export const CONTACTS: DemoContact[] = [
   { id: "c-notaire", kind: "natural", name: "Me Nathalie Thill", email: "etude@thill-notaire.lu", phone: "+352 26 00 11 22", language: "fr", roles: ["notary"] },
 ];
 
-export const contactById = (id: string) => CONTACTS.find((c) => c.id === id)!;
+export const contactById = (id: string) => CONTACTS.find((c) => c.id === id) ?? missingContact(id);
 
 // ─── Properties & units ─────────────────────────────────────────────────────
 
@@ -281,8 +282,20 @@ export const UNITS: DemoUnit[] = [
   { id: "u-gare", propertyId: "p-gare", label: "Studio 4A", kind: "dwelling", floor: "4e", areaSqm: 34, rooms: 1, furnished: true, vacantSince: "2026-01-10" },
 ];
 
-export const propertyById = (id: string) => PROPERTIES.find((p) => p.id === id)!;
-export const unitById = (id: string) => UNITS.find((u) => u.id === id)!;
+export const propertyById = (id: string) => PROPERTIES.find((p) => p.id === id) ?? missingProperty(id);
+export const unitById = (id: string) => UNITS.find((u) => u.id === id) ?? missingUnit(id);
+
+/** A property taken off the screens: nothing of it is deleted, and it can be brought back. */
+export interface DemoArchivedProperty {
+  id: string;
+  name: string;
+  address: string;
+  type: string;
+  archivedOn: string;
+  unitsCount: number;
+}
+
+export const ARCHIVED_PROPERTIES: DemoArchivedProperty[] = [];
 
 // ─── Leases ─────────────────────────────────────────────────────────────────
 
@@ -441,7 +454,7 @@ for (const l of LEASES) {
   if (!l.rfReference) l.rfReference = leaseRF(1, l.seq);
 }
 
-export const leaseById = (id: string) => LEASES.find((l) => l.id === id)!;
+export const leaseById = (id: string) => LEASES.find((l) => l.id === id) ?? missingLease(id);
 
 export function leaseTenantNames(l: DemoLease): string[] {
   return l.tenantContactIds.map((id) => contactById(id).name);
@@ -518,6 +531,33 @@ function mkPeriods(): DemoRentPeriod[] {
 }
 
 export const RENT_PERIODS: DemoRentPeriod[] = mkPeriods();
+
+/** A payment received on a tenancy, as the ledger keeps it. */
+export interface DemoPayment {
+  id: string;
+  leaseId: string;
+  receivedOn: string;
+  amountCents: number;
+  /** What of it sits on rent periods today; the rest is the tenancy's credit. */
+  allocatedCents: number;
+  /** The payment recognises a bank operation (it was matched, by hand or by the engine). */
+  fromBank: boolean;
+  /** The day it was cancelled, when it was; a cancelled payment counts for nothing. */
+  cancelledOn: string | null;
+  note: string | null;
+}
+
+/** The payments a sheet shows: read for the tenancy on screen, empty elsewhere. */
+export const PAYMENTS: DemoPayment[] = [];
+
+/**
+ * Money received above what was due, by tenancy (cents): kept as a credit and
+ * applied to the next periods as they open.
+ */
+export const LEASE_CREDITS: Record<string, number> = {};
+
+/** The reads that failed while the dataset was assembled: the screens say their figures are incomplete. */
+export const DEGRADED: string[] = [];
 
 // ─── Bank ───────────────────────────────────────────────────────────────────
 
