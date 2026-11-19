@@ -68,10 +68,12 @@ type NavItem = {
   also?: string[];
 };
 
-function destinations(d: Dict, badges: { review: number; unread: number }, workspaceKind: string): NavItem[] {
+function destinations(d: Dict, badges: { review: number; unread: number }, workspaceKind: string, sample: boolean): NavItem[] {
   // AML/KYC is a cabinet obligation: on an owner-kind workspace the entry
-  // simply does not exist — same product, two densities, zero configuration.
-  const cabinet = workspaceKind !== "owner";
+  // simply does not exist. The screen has no backend on an account's own
+  // data yet, so the rail lists it on a sample cabinet only: nobody is led
+  // to a screen with nothing behind it.
+  const cabinet = workspaceKind !== "owner" && sample;
   // One flat list, as a landlord names things: the places of every day
   // first, each a single line; only what really has several rooms (the
   // books, the documents, the settings) opens on sub-entries. A bail, a
@@ -255,8 +257,8 @@ export default function GestionShell({
   const reduced = useReducedMotion();
 
   const NAV = useMemo(
-    () => destinations(d, shell.badges, shell.workspaceKind),
-    [d, shell.badges, shell.workspaceKind],
+    () => destinations(d, shell.badges, shell.workspaceKind, shell.sampleCabinet !== null),
+    [d, shell.badges, shell.workspaceKind, shell.sampleCabinet],
   );
   const NAVIGABLE = useMemo(() => navigable(NAV, d), [NAV, d]);
 
@@ -264,7 +266,7 @@ export default function GestionShell({
   // opens it. Explicit choices last for this visit.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    const active = destinations(d, shell.badges, shell.workspaceKind).find(
+    const active = NAV.find(
       (i) => i.children && within(pathname, i),
     );
     if (active) setExpanded((prev) => (prev[active.href] ? prev : { ...prev, [active.href]: true }));

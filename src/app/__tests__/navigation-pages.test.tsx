@@ -278,3 +278,14 @@ describe("Finance", () => {
     expect(html).not.toContain(`aria-label="${fr.finance.periodAria}"`);
   });
 });
+
+describe("AML", () => {
+  it("says in plain words that the screen is not available on an account's own data", async () => {
+    const { default: Page } = await import("@/app/app/aml/page");
+    const html = text(renderToString(await Page()));
+    expect(html).toContain(fr.aml.soonTitle);
+    expect(html).toContain(fr.aml.soonBody);
+    // Not the empty state that promises to fill as records arrive: no record would ever fill it.
+    expect(html).not.toContain(fr.common.emptyBody);
+  });
+});

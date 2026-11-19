@@ -9,7 +9,6 @@ const labels: ConnectLabels = {
   requestInvalid: "request invalid",
   signatureRequired: "signature required",
   failedWithCode: "could not start ({code})",
-  diagnostic: "diagnostic",
 };
 
 describe("explainConnectFailure", () => {

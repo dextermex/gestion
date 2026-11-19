@@ -9,7 +9,6 @@ import { getIdentity } from "@/lib/workspace";
 import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { settlementNotes } from "@/lib/i18n/engine";
 import { cpeExpiryDeadline, vacancyClock } from "@/domain/compliance/deadlines";
 import { computeSettlement } from "@/domain/deposits/settlement";
 import { monthlyCashflow } from "@/domain/finance/cashflow";
@@ -82,14 +81,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const occupiedCount = lettable.filter((u) => occupied.has(u.id)).length;
 
   // ── Recommended actions: each row exists because its signal exists ──
-  const todo: Array<{ priority?: number; href: string; title: string; sub: string; amount?: string; badge: { label: string; color: string } }> = [];
+  const todo: Array<{ priority?: number; href: string; title: string; amount?: string; badge: { label: string; color: string } }> = [];
 
   const reviewQueue = BANK_TXS.filter((t) => t.status === "review");
   if (reviewQueue.length > 0) {
     todo.push({
       href: "/app/banque",
       title: fmt(d.dash.todoReview, { n: reviewQueue.length }),
-      sub: d.dash.todoReviewSub,
       badge: { label: d.dash.badgeBank, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -107,7 +105,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         unit: leaseUnitLabel(lagLease),
         amount: euros(lagLease.rentCents - (lagLease.previousRentCents ?? 0), locale),
       }),
-      sub: d.dash.todoLagSub,
       badge: { label: d.dash.badgeIndexation, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -124,7 +121,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       priority: 1,
       href: "/app/loyers?vue=impayes",
       title: earlierOpen.length === 1 ? d.home.arrearsOne : fmt(d.home.arrearsMany, { n: earlierOpen.length }),
-      sub: d.home.arrearsSub,
       amount: eurosWhole(earlierOpen.reduce((sum, rp) => sum + rp.totalCents - rp.allocatedCents, 0), locale),
       badge: { label: d.dash.badgeArrears, color: "bg-red-100 text-red-700" },
     });
@@ -163,7 +159,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         priority: 2,
         href: "/app/garanties",
         title: fmt(d.dash.todoDeposit, { unit: labelOfLease(dep.leaseId), n: pending }),
-        sub: settlementNotes(d, locale, input, settlement)[0] ?? "",
         badge: { label: d.dash.badgeDeposit, color: "bg-sand-100 text-ink-soft" },
       });
       break;
@@ -177,7 +172,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     todo.push({
       href: "/app/banque",
       title: fmt(d.dash.todoConsent, { date: formatDate(consentAccount.consentExpiresAt, locale) }),
-      sub: d.dash.todoConsentSub,
       badge: { label: d.dash.badgeConnection, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -193,7 +187,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         date: formatDate(agProperty.nextAgDate, locale),
         deadline: formatDate(addDays(agProperty.nextAgDate, -15), locale),
       }),
-      sub: d.dash.todoAgSub,
       badge: { label: d.dash.badgeSyndic, color: "bg-sand-100 text-ink-soft" },
     });
   }

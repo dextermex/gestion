@@ -106,3 +106,15 @@ describe("the getting-started card", () => {
     expect([...host.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toContain("/app/contacts");
   });
 });
+
+describe("the rail", () => {
+  const aml = () => document.querySelector('a[href="/app/aml"]');
+
+  it("lists AML for a cabinet on a sample cabinet only: an account's own data has nothing behind that screen yet", async () => {
+    await act(async () => root.render(<GestionShell locale="fr" dict={fr} shell={shell({ workspaceKind: "manager" })}><p>page</p></GestionShell>));
+    expect(aml()).toBeNull();
+    expect(document.querySelector('a[href="/app/conformite"]')).not.toBeNull();
+    await act(async () => root.render(<GestionShell locale="fr" dict={fr} shell={shell({ workspaceKind: "manager", datasetId: "fr", sampleCabinet: "Cabinet Reuter" })}><p>page</p></GestionShell>));
+    expect(aml()).not.toBeNull();
+  });
+});
