@@ -56,9 +56,13 @@ export type IconName =
   | "camera"
   | "globe"
   | "devices"
-  | "folder";
+  | "folder"
+  | "arrow-in"
+  | "arrow-out";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  "arrow-in": <path d="M17 7 7 17M7 17h8M7 17V9" />,
+  "arrow-out": <path d="M7 17 17 7M17 7H9M17 7v8" />,
   folder: <path d="M3.5 7.5a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7l.9 1.1a1 1 0 0 0 .8.4h6.2a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />,
   copy: (
     <>

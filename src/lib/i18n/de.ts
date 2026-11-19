@@ -1542,6 +1542,8 @@ export const de: Dict = {
   },
 
   finance: {
+    outstanding: "{amount} offen",
+    upcoming: "{amount} zu zahlen",
     periodMonth: "Dieser Monat",
     period3: "3 Monate",
     period12: "12 Monate",
@@ -1557,8 +1559,6 @@ export const de: Dict = {
     netOf: "Netto {amount}",
     toPayNone: "Keine Rechnung offen.",
     heroLabel: "Liquidität · {month}",
-    chipIn: "Eingänge {amount}",
-    chipOut: "Ausgänge {amount}",
     tabCash: "Liquidität",
     tabIncome: "Einnahmen",
     tabCosts: "Kosten",

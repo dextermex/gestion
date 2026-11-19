@@ -1547,6 +1547,8 @@ export const lu: Dict = {
   },
 
   finance: {
+    outstanding: "{amount} oppen",
+    upcoming: "{amount} ze bezuelen",
     periodMonth: "Dëse Mount",
     period3: "3 Méint",
     period12: "12 Méint",
@@ -1562,8 +1564,6 @@ export const lu: Dict = {
     netOf: "Netto {amount}",
     toPayNone: "Keng Rechnung ze bezuelen.",
     heroLabel: "Tresorerie · {month}",
-    chipIn: "Entréeën {amount}",
-    chipOut: "Sortien {amount}",
     tabCash: "Tresorerie",
     tabIncome: "Recetten",
     tabCosts: "Käschten",

@@ -5,7 +5,7 @@ import BillActions from "@/components/gestion/BillActions";
 import BillUpload from "@/components/gestion/BillUpload";
 import { FlowBars, PropertyFlows, ShareBars, type FlowBar } from "@/components/gestion/FlowBars";
 import QuerySelect from "@/components/gestion/QuerySelect";
-import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, MonthSwitch, Money, Row, Rows, Section, Segments } from "@/components/gestion/Hero";
+import { FoldRow, GroupHead, Hero, HeroAction, HeroStat, MonthSwitch, Money, Row, Rows, Section, Segments } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
 import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
@@ -272,6 +272,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const flows = monthlyFlows(periods, bills, period === "mois" ? MONTHS : span);
   const flow = monthlyFlows(periods, bills, span).reduce((a, x) => ({ ...a, inCents: a.inCents + x.inCents, outCents: a.outCents + x.outCents, netCents: a.netCents + x.netCents }), { month, inCents: 0, outCents: 0, netCents: 0 });
   const toPay = unpaidBills(bills, TODAY);
+  // Rent called for the months on the screen and not yet received.
+  const outstandingCents = periods.filter((rp) => span.includes(rp.period)).reduce((a, rp) => a + Math.max(0, rp.totalCents - rp.allocatedCents), 0);
   const paidThisMonth = bills.filter((b) => b.paidOn && b.paidOn.slice(0, 7) === month).sort((a, b) => (b.paidOn ?? "").localeCompare(a.paidOn ?? ""));
   const rentsIn = periods.filter((rp) => rp.period === month && rp.allocatedCents > 0).sort((a, b) => b.allocatedCents - a.allocatedCents);
   const byCategory = expensesByCategory(bills, year);
@@ -364,8 +366,10 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           </>
         }
       >
-        <HeroChip href={hrefOf("revenus", month)} icon="trending-up">{fmt(f.chipIn, { amount: eurosWhole(flow.inCents, locale) })}</HeroChip>
-        <HeroChip href={hrefOf("charges", month)} icon="documents">{fmt(f.chipOut, { amount: eurosWhole(flow.outCents, locale) })}</HeroChip>
+        <div className="grid w-full max-w-xl grid-cols-1 gap-x-8 gap-y-3 border-t border-white/80 pt-4 sm:grid-cols-2">
+          <HeroStat href={hrefOf("revenus", month)} tone="in" label={f.legendIn} value={eurosWhole(flow.inCents, locale)} sub={fmt(f.outstanding, { amount: eurosWhole(outstandingCents, locale) })} />
+          <HeroStat href={hrefOf("charges", month)} tone="out" label={f.legendOut} value={eurosWhole(flow.outCents, locale)} sub={fmt(f.upcoming, { amount: eurosWhole(toPay.reduce((a, b) => a + b.amountCents, 0), locale) })} />
+        </div>
       </Hero>
 
       {/* The views of the books on the left; the stretch of months and the property they are read for on the right. */}

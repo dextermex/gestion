@@ -1553,6 +1553,8 @@ export const fr = {
   },
 
   finance: {
+    outstanding: "{amount} à encaisser",
+    upcoming: "{amount} à payer",
     periodMonth: "Ce mois",
     period3: "3 mois",
     period12: "12 mois",
@@ -1568,8 +1570,6 @@ export const fr = {
     netOf: "Net {amount}",
     toPayNone: "Aucune facture à payer.",
     heroLabel: "Trésorerie · {month}",
-    chipIn: "Entrées {amount}",
-    chipOut: "Sorties {amount}",
     tabCash: "Trésorerie",
     tabIncome: "Revenus",
     tabCosts: "Charges",

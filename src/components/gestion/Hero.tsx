@@ -83,6 +83,28 @@ export function HeroChip({ href, icon, tone = "plain", children }: { href?: stri
   return href ? <Link href={href} className={`tactile ${CHIP} ${look}`}>{body}</Link> : <span className={`${CHIP} ${look}`}>{body}</span>;
 }
 
+/**
+ * What came in or went out, under the figure: a tinted arrow, the word, the
+ * amount, and what is still open under it. Green for money in; a soft red
+ * for money out, so the two read apart at a glance.
+ */
+export function HeroStat({ href, tone, label, value, sub }: { href?: string; tone: "in" | "out"; label: string; value: string; sub?: string }) {
+  const body = (
+    <>
+      <span className={"grid h-11 w-11 shrink-0 place-items-center rounded-full " + (tone === "in" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
+        <Icon name={tone === "in" ? "arrow-in" : "arrow-out"} size={20} />
+      </span>
+      <span className="min-w-0 text-left">
+        <span className="block text-[13px] font-medium text-ink-soft">{label}</span>
+        <span className="block text-xl font-semibold tracking-tight tabular-nums text-ink">{value}</span>
+        {sub && <span className="block text-[13px] tabular-nums text-ink-soft">{sub}</span>}
+      </span>
+    </>
+  );
+  const cls = "flex min-w-0 items-center gap-3 rounded-2xl px-1 py-1";
+  return href ? <Link href={href} className={`tactile ${cls} transition hover:bg-white/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600`}>{body}</Link> : <div className={cls}>{body}</div>;
+}
+
 /** The round button of a screen's action row; shared with the controls that open their own sheet. */
 export const HERO_ROUND = "hero-round tactile grid h-14 w-14 place-items-center rounded-full bg-white text-brand-700 transition";
 export const HERO_ACTION = "group block w-16 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600";
