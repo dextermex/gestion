@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
   const premiumRaw = String(body.premium ?? "").trim();
   const premiumCents = premiumRaw === "" ? 0 : parseEuroInput(premiumRaw) ?? -1;
   const propertyId = String(body.propertyId ?? "") || null;
+  // A tenancy's policy (the rental dossier, "Assurance locative") names its lease.
+  const leaseId = String(body.leaseId ?? "") || null;
   const expiresOn = /^\d{4}-\d{2}-\d{2}$/.test(String(body.expiresOn)) ? String(body.expiresOn) : null;
   const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(String(body.startsOn)) ? String(body.startsOn) : null;
   if (!provider || premiumCents < 0) return NextResponse.json({ error: "invalid" }, { status: 400 });
@@ -32,11 +34,18 @@ export async function POST(req: NextRequest) {
     if (!property) return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
 
+  if (leaseId) {
+    const { data: lease, error } = await g.from("leases").select("id").eq("org_id", org.id).eq("id", leaseId).maybeSingle();
+    if (error) return dbError("insurance lease lookup", error);
+    if (!lease) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  }
+
   const { data: policy, error } = await g
     .from("insurance_policies")
     .insert({
       org_id: org.id,
       property_id: propertyId,
+      lease_id: leaseId,
       kind,
       provider,
       policy_number: policyNumber,

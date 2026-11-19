@@ -38,31 +38,34 @@ export const ORG = {
 // ─── Contacts ───────────────────────────────────────────────────────────────
 
 export const CONTACTS: DemoContact[] = overlay(fr.CONTACTS, {
-  "c-muller": { name: "Jang Weis", email: "jang.weis@pt.lu" },
-  "c-jeanne": { name: "Nathalie Klein", email: "nathalie.klein@gmail.com" },
+  "c-muller": { name: "Jang Weis", firstName: "Jang", lastName: "Weis", email: "jang.weis@pt.lu" },
+  "c-jeanne": { name: "Nathalie Klein", firstName: "Nathalie", lastName: "Klein", email: "nathalie.klein@gmail.com" },
   // Ana Santos stays: the Portuguese community is as real in the Minett as anywhere.
-  "c-weber": { name: "Luc Wagener", email: "l.wagener@education.lu" },
-  "c-dubois": { name: "Chantal Kremer", email: "chantal.kremer@outlook.com" },
-  "c-hoffmann": { name: "Marco Steffen", email: "marco.steffen@pt.lu" },
-  "c-krier": { name: "Pol Kirsch", email: "p.kirsch@kirsch-jong.lu", notes: "Heizung a Sanitär, kënnt bannent 48 Stonnen" },
+  "c-weber": { name: "Luc Wagener", firstName: "Luc", lastName: "Wagener", email: "l.wagener@education.lu" },
+  "c-dubois": { name: "Chantal Kremer", firstName: "Chantal", lastName: "Kremer", email: "chantal.kremer@outlook.com" },
+  "c-hoffmann": { name: "Marco Steffen", firstName: "Marco", lastName: "Steffen", email: "marco.steffen@pt.lu" },
+  "c-krier": { name: "Pol Kirsch", firstName: "Pol", lastName: "Kirsch", email: "p.kirsch@kirsch-jong.lu", notes: "Heizung a Sanitär, kënnt bannent 48 Stonnen" },
   "c-da-silva": { name: "José Da Silva", email: "contact@dasilva-molerei.lu", notes: "Molerei, Buedem" },
-  "c-elektro": { name: "Elektro Wagener Sàrl", email: "info@elektrowagener.lu" },
+  "c-elektro": { name: "Elektro Wagener Sàrl", legalName: "Elektro Wagener Sàrl", email: "info@elektrowagener.lu" },
   "c-sci-bealieu": {
     name: "SCI Uelzecht",
+    legalName: "SCI Uelzecht",
     email: "sci.uelzecht@fiduciaire-majerus.lu",
     notes: "Société civile immobilière, transparent (Art. 175 LIR), Modell 200",
   },
-  "c-faber": { name: "Marie-Josée Kieffer", email: "mj.kieffer@pt.lu" },
-  "c-faber-p": { name: "Pierre Kieffer", email: "pierre.kieffer@pt.lu" },
+  "c-faber": { name: "Marie-Josée Kieffer", firstName: "Marie-Josée", lastName: "Kieffer", email: "mj.kieffer@pt.lu" },
+  "c-faber-p": { name: "Pierre Kieffer", firstName: "Pierre", lastName: "Kieffer", email: "pierre.kieffer@pt.lu" },
   "c-lambert": {
     name: "Sabine Peeters",
+    firstName: "Sabine",
+    lastName: "Peeters",
     email: "sabine.peeters@skynet.be",
     country: "Belsch",
     notes: "Net-Residentin (BE), duebele Steierpack: Modell 100 LU + Cadre III BE",
   },
-  "c-bock": { name: "Bäckerei Kremer Sàrl", email: "info@baeckerei-kremer.lu" },
-  "c-wagner": { name: "Lynn Wampach", email: "lynn.wampach@gmail.com" },
-  "c-notaire": { name: "Me Josée Konsbruck", email: "etude@konsbruck-notaire.lu" },
+  "c-bock": { name: "Bäckerei Kremer Sàrl", legalName: "Bäckerei Kremer Sàrl", email: "info@baeckerei-kremer.lu" },
+  "c-wagner": { name: "Lynn Wampach", firstName: "Lynn", lastName: "Wampach", email: "lynn.wampach@gmail.com" },
+  "c-notaire": { name: "Me Josée Konsbruck", firstName: "Josée", lastName: "Konsbruck", email: "etude@konsbruck-notaire.lu" },
 });
 
 export const contactById = (id: string) => CONTACTS.find((c) => c.id === id)!;

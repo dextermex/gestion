@@ -263,7 +263,7 @@ export async function buildRealDataFrom(
     shell
       ? q("rent_period_status", "id,allocated_cents,status", (b) => b.in("status", ["paid", "partial", "partial_late"]), 1)
       : byLease("rent_period_status", "id,allocated_cents,status", (b) => b.or(`period.gte.${from},status.in.(late,partial_late)`)),
-    byLease("deposits", "id,lease_id,form,amount_cents,status,key_handover_on,decompte_issued_on,mise_en_demeure_ar_on,released_first_tranche_cents,released_balance_cents", (b) => b),
+    byLease("deposits", "id,lease_id,form,amount_cents,status,received_on,key_handover_on,decompte_issued_on,mise_en_demeure_ar_on,released_first_tranche_cents,released_balance_cents", (b) => b),
     byLease("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256", (b) => b),
     shell
       ? none()
@@ -385,6 +385,9 @@ export async function buildRealDataFrom(
       sOr(c.display_name, null) ??
       sOr(c.legal_name, null) ??
       [s(c.first_name), s(c.last_name)].filter(Boolean).join(" "),
+    firstName: s(c.first_name),
+    lastName: s(c.last_name),
+    legalName: s(c.legal_name),
     email: sOr(c.email, null),
     phone: sOr(c.phone, null),
     language: sOr(c.language, "fr") as string,
@@ -563,6 +566,7 @@ export async function buildRealDataFrom(
     form: s(d.form) as DemoDeposit["form"],
     amountCents: n(d.amount_cents),
     status: s(d.status) as DemoDeposit["status"],
+    receivedOn: d.received_on ? day(d.received_on) : null,
     keyHandoverOn: sOr(d.key_handover_on, undefined),
     decompteIssuedOn: d.decompte_issued_on ? day(d.decompte_issued_on) : null,
     miseEnDemeureArOn: d.mise_en_demeure_ar_on ? day(d.mise_en_demeure_ar_on) : null,

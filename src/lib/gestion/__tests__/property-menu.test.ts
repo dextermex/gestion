@@ -119,3 +119,92 @@ describe("the stored parts of an address", () => {
     }
   });
 });
+
+describe("the other editors behind Modifier", () => {
+  it("opens the cadastral reference on its three stored parts and leaves it alone when another field is saved", () => {
+    const data = withProperty("p-bertrange", { cadastralParts: { commune: "Bertrange", section: "B", number: "214/889" } });
+    const topic = topicOf(menuOf(data, "p-bertrange"), "technical");
+    const values = opened(topic);
+    expect(values.cadastralCommune).toBe("Bertrange");
+    expect(values.cadastralSection).toBe("B");
+    expect(values.cadastralNumber).toBe("214/889");
+    expect(topicBody(topic, { ...values, smokeDetectorsConfirmed: !values.smokeDetectorsConfirmed })).toEqual({
+      smokeDetectorsConfirmed: !values.smokeDetectorsConfirmed,
+    });
+  });
+
+  it("opens the guarantee on its reception date and never sends a date nobody typed", () => {
+    const card = buildPortfolio(demo).find((c) => c.property.id === "p-bertrange")!;
+    const leaseId = card.lots.find((l) => l.lease)!.lease!.id;
+    const guarantee = (receivedOn: string | null): DemoData => ({
+      ...demo,
+      DEPOSITS: [
+        ...demo.DEPOSITS.filter((x) => x.leaseId !== leaseId),
+        { id: "dep-test", leaseId, form: "cash", amountCents: 250000, status: "held", receivedOn, entryEdlExists: true, deductions: [], releasedFirstTrancheCents: 0, releasedBalanceCents: 0 },
+      ],
+    });
+    const dated = topicOf(menuOf(guarantee("2024-03-01"), "p-bertrange"), "deposit");
+    expect(opened(dated).receivedOn).toBe("2024-03-01");
+    expect(topicBody(dated, { ...opened(dated), status: "disputed" })).toEqual({ status: "disputed" });
+
+    const undated = topicOf(menuOf(guarantee(null), "p-bertrange"), "deposit");
+    expect(opened(undated).receivedOn).toBe("");
+    expect(topicBody(undated, { ...opened(undated), amount: "3 000,00" })).toEqual({ amount: "3 000,00" });
+  });
+
+  it("opens a tenant on the stored parts of the name, and a company on its own name", () => {
+    const card = buildPortfolio(demo).find((c) => c.property.id === "p-bertrange")!;
+    const tenantId = card.lots.find((l) => l.lease)!.lease!.tenantContactIds[0];
+    const person: DemoData = {
+      ...demo,
+      CONTACTS: demo.CONTACTS.map((c) => (c.id === tenantId ? { ...c, kind: "natural", name: "Maria Dos Santos", firstName: "Maria", lastName: "Dos Santos", legalName: "" } : c)),
+    };
+    const personTopic = topicOf(menuOf(person, "p-bertrange"), "tenant-0");
+    expect(opened(personTopic).firstName).toBe("Maria");
+    expect(opened(personTopic).lastName).toBe("Dos Santos");
+    // The two parts are one name: they travel together, and nothing else does.
+    expect(topicBody(personTopic, { ...opened(personTopic), firstName: "Maria Luisa" })).toEqual({ firstName: "Maria Luisa", lastName: "Dos Santos" });
+    expect(topicBody(personTopic, { ...opened(personTopic), phone: "+352 621 000 000" })).toEqual({ phone: "+352 621 000 000" });
+
+    const company: DemoData = {
+      ...demo,
+      CONTACTS: demo.CONTACTS.map((c) => (c.id === tenantId ? { ...c, kind: "legal", name: "Boulangerie Schmit S.à r.l.", firstName: "", lastName: "", legalName: "Boulangerie Schmit S.à r.l." } : c)),
+    };
+    const companyTopic = topicOf(menuOf(company, "p-bertrange"), "tenant-0");
+    expect(opened(companyTopic)).toEqual({ legalName: "Boulangerie Schmit S.à r.l.", email: opened(companyTopic).email, phone: opened(companyTopic).phone });
+    expect(topicBody(companyTopic, { ...opened(companyTopic), email: "contact@schmit.lu" })).toEqual({ email: "contact@schmit.lu" });
+  });
+
+  it("writes a company's name when it only exists as a person's two parts", () => {
+    const card = buildPortfolio(demo).find((c) => c.property.id === "p-bertrange")!;
+    const tenantId = card.lots.find((l) => l.lease)!.lease!.tenantContactIds[0];
+    const data: DemoData = {
+      ...demo,
+      CONTACTS: demo.CONTACTS.map((c) => (c.id === tenantId ? { ...c, kind: "legal", name: "Boulangerie Schmit", firstName: "Boulangerie", lastName: "Schmit", legalName: "" } : c)),
+    };
+    const topic = topicOf(menuOf(data, "p-bertrange"), "tenant-0");
+    expect(opened(topic).legalName).toBe("Boulangerie Schmit");
+    expect(topicBody(topic, opened(topic))).toBeNull();
+    expect(topicBody(topic, { ...opened(topic), phone: "+352 26 00 00 00" })).toEqual({
+      legalName: "Boulangerie Schmit",
+      firstName: "",
+      lastName: "",
+      phone: "+352 26 00 00 00",
+    });
+  });
+
+  it("sends a whole form when it creates, with what the form does not show", () => {
+    const topic: EditTopic = {
+      id: "insurance",
+      title: "Assurance",
+      endpoint: "/api/assurances/create",
+      method: "POST",
+      extra: { leaseId: "l-1" },
+      fields: [
+        { kind: "text", name: "provider", label: "Assureur", value: "" },
+        { kind: "date", name: "expiresOn", label: "Échéance", value: "" },
+      ],
+    };
+    expect(topicBody(topic, { ...opened(topic), provider: "Foyer" })).toEqual({ leaseId: "l-1", provider: "Foyer", expiresOn: "" });
+  });
+});

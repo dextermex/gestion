@@ -74,6 +74,11 @@ export interface DemoContact {
   id: string;
   kind: "natural" | "legal";
   name: string;
+  /** The name as it is stored: a person's two parts, or a company's own name.
+   *  An editor opens on these; the label above is for reading only. */
+  firstName?: string;
+  lastName?: string;
+  legalName?: string;
   email: string | null;
   phone: string | null;
   language: string;
@@ -107,32 +112,32 @@ export interface DemoBilling {
 export const BILLING: DemoBilling = { trialDay: 12, rhythm: "quarter" };
 
 export const CONTACTS: DemoContact[] = [
-  { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
-  { id: "c-jeanne", kind: "natural", name: "Jeanne Muller", email: "jeanne.muller@gmail.com", phone: "+352 621 654 321", language: "fr", roles: ["tenant"] },
-  { id: "c-santos", kind: "natural", name: "Ana Santos", email: "ana.santos@gmail.com", phone: "+352 691 222 333", language: "pt", roles: ["tenant"] },
-  { id: "c-weber", kind: "natural", name: "Lucas Weber", email: "l.weber@education.lu", phone: "+352 621 888 111", language: "lu", roles: ["tenant"] },
-  { id: "c-dubois", kind: "natural", name: "Claire Dubois", email: "claire.dubois@outlook.com", phone: "+352 691 444 555", language: "fr", roles: ["tenant"] },
-  { id: "c-hoffmann", kind: "natural", name: "Marc Hoffmann", email: "marc.hoffmann@pt.lu", phone: "+352 621 777 999", language: "de", roles: ["tenant"], portalLinked: true },
-  { id: "c-krier", kind: "natural", name: "Paul Krier", email: "p.krier@krier-fils.lu", phone: "+352 621 300 200", language: "lu", roles: ["artisan"], notes: "Chauffage et sanitaire, intervient sous 48 h" },
-  { id: "c-da-silva", kind: "natural", name: "José Da Silva", email: "contact@dasilva-peinture.lu", phone: "+352 691 600 700", language: "pt", roles: ["artisan"], notes: "Peinture, sols" },
-  { id: "c-elektro", kind: "legal", name: "Elektro Thill Sàrl", email: "info@elektrothill.lu", phone: "+352 26 44 55 66", language: "de", roles: ["artisan"] },
+  { id: "c-muller", kind: "natural", name: "Jean Muller", firstName: "Jean", lastName: "Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
+  { id: "c-jeanne", kind: "natural", name: "Jeanne Muller", firstName: "Jeanne", lastName: "Muller", email: "jeanne.muller@gmail.com", phone: "+352 621 654 321", language: "fr", roles: ["tenant"] },
+  { id: "c-santos", kind: "natural", name: "Ana Santos", firstName: "Ana", lastName: "Santos", email: "ana.santos@gmail.com", phone: "+352 691 222 333", language: "pt", roles: ["tenant"] },
+  { id: "c-weber", kind: "natural", name: "Lucas Weber", firstName: "Lucas", lastName: "Weber", email: "l.weber@education.lu", phone: "+352 621 888 111", language: "lu", roles: ["tenant"] },
+  { id: "c-dubois", kind: "natural", name: "Claire Dubois", firstName: "Claire", lastName: "Dubois", email: "claire.dubois@outlook.com", phone: "+352 691 444 555", language: "fr", roles: ["tenant"] },
+  { id: "c-hoffmann", kind: "natural", name: "Marc Hoffmann", firstName: "Marc", lastName: "Hoffmann", email: "marc.hoffmann@pt.lu", phone: "+352 621 777 999", language: "de", roles: ["tenant"], portalLinked: true },
+  { id: "c-krier", kind: "natural", name: "Paul Krier", firstName: "Paul", lastName: "Krier", email: "p.krier@krier-fils.lu", phone: "+352 621 300 200", language: "lu", roles: ["artisan"], notes: "Chauffage et sanitaire, intervient sous 48 h" },
+  { id: "c-da-silva", kind: "natural", name: "José Da Silva", firstName: "José", lastName: "Da Silva", email: "contact@dasilva-peinture.lu", phone: "+352 691 600 700", language: "pt", roles: ["artisan"], notes: "Peinture, sols" },
+  { id: "c-elektro", kind: "legal", name: "Elektro Thill Sàrl", legalName: "Elektro Thill Sàrl", email: "info@elektrothill.lu", phone: "+352 26 44 55 66", language: "de", roles: ["artisan"] },
   {
-    id: "c-sci-bealieu", kind: "legal", name: "SCI Beaulieu", email: "sci.beaulieu@fiduciaire-reuter.lu", phone: null, language: "fr",
+    id: "c-sci-bealieu", kind: "legal", name: "SCI Beaulieu", legalName: "SCI Beaulieu", email: "sci.beaulieu@fiduciaire-reuter.lu", phone: null, language: "fr",
     roles: ["owner"], amlTier: "full_cdd", riskBand: "low",
     notes: "Société civile immobilière transparente (art. 175 LIR), modèle 200",
   },
-  { id: "c-faber", kind: "natural", name: "Marie Faber", email: "marie.faber@pt.lu", phone: "+352 621 100 100", language: "fr", roles: ["owner"], residency: "resident" },
-  { id: "c-faber-p", kind: "natural", name: "Pierre Faber", email: "pierre.faber@pt.lu", phone: "+352 621 100 101", language: "fr", roles: ["owner"], residency: "resident" },
+  { id: "c-faber", kind: "natural", name: "Marie Faber", firstName: "Marie", lastName: "Faber", email: "marie.faber@pt.lu", phone: "+352 621 100 100", language: "fr", roles: ["owner"], residency: "resident" },
+  { id: "c-faber-p", kind: "natural", name: "Pierre Faber", firstName: "Pierre", lastName: "Faber", email: "pierre.faber@pt.lu", phone: "+352 621 100 101", language: "fr", roles: ["owner"], residency: "resident" },
   {
-    id: "c-lambert", kind: "natural", name: "Sophie Lambert", email: "sophie.lambert@skynet.be", phone: "+32 475 12 34 56", language: "fr",
+    id: "c-lambert", kind: "natural", name: "Sophie Lambert", firstName: "Sophie", lastName: "Lambert", email: "sophie.lambert@skynet.be", phone: "+32 475 12 34 56", language: "fr",
     roles: ["owner"], residency: "non_resident", country: "Belgique",
     notes: "Non-résidente (BE), pack fiscal double : modèle 100 LU + cadre III BE",
     amlTier: "full_cdd", riskBand: "medium",
   },
-  { id: "c-bock", kind: "legal", name: "Boulangerie Bock Sàrl", email: "info@bock.lu", phone: "+352 26 12 34 56", language: "lu", roles: ["tenant"], amlTier: "light" },
-  { id: "c-schmit", kind: "natural", name: "Tom Schmit", email: "tom.schmit@gmail.com", phone: "+352 691 010 203", language: "en", roles: ["lead"] },
-  { id: "c-wagner", kind: "natural", name: "Lea Wagner", email: "lea.wagner@gmail.com", phone: "+352 621 040 506", language: "de", roles: ["lead"] },
-  { id: "c-notaire", kind: "natural", name: "Me Nathalie Thill", email: "etude@thill-notaire.lu", phone: "+352 26 00 11 22", language: "fr", roles: ["notary"] },
+  { id: "c-bock", kind: "legal", name: "Boulangerie Bock Sàrl", legalName: "Boulangerie Bock Sàrl", email: "info@bock.lu", phone: "+352 26 12 34 56", language: "lu", roles: ["tenant"], amlTier: "light" },
+  { id: "c-schmit", kind: "natural", name: "Tom Schmit", firstName: "Tom", lastName: "Schmit", email: "tom.schmit@gmail.com", phone: "+352 691 010 203", language: "en", roles: ["lead"] },
+  { id: "c-wagner", kind: "natural", name: "Lea Wagner", firstName: "Lea", lastName: "Wagner", email: "lea.wagner@gmail.com", phone: "+352 621 040 506", language: "de", roles: ["lead"] },
+  { id: "c-notaire", kind: "natural", name: "Me Nathalie Thill", firstName: "Nathalie", lastName: "Thill", email: "etude@thill-notaire.lu", phone: "+352 26 00 11 22", language: "fr", roles: ["notary"] },
 ];
 
 export const contactById = (id: string) => CONTACTS.find((c) => c.id === id)!;
@@ -636,6 +641,8 @@ export interface DemoDeposit {
   form: DemoLease["depositForm"];
   amountCents: number;
   status: DepositStatus;
+  /** The day the guarantee was received, when one is recorded. */
+  receivedOn?: string | null;
   keyHandoverOn?: string;
   decompteIssuedOn?: string | null;
   miseEnDemeureArOn?: string | null;

@@ -108,9 +108,9 @@ export function propertyMenu(
       { kind: "date", name: "cpeIssuedOn", label: d.modify.cpeIssuedOn, value: p.cpeIssuedOn || "" },
       { kind: "number", name: "constructionYear", label: d.biens.wizYear, value: p.constructionYear ? String(p.constructionYear) : "" },
       { kind: "text", name: "syndicName", label: d.biens.syndic, value: p.syndicName ?? "", maxLength: 120 },
-      { kind: "text", name: "cadastralCommune", label: d.bien.commune, value: "", maxLength: 80 },
-      { kind: "text", name: "cadastralSection", label: d.biens.wizSection, value: "", maxLength: 20 },
-      { kind: "text", name: "cadastralNumber", label: d.biens.wizParcel, value: "", maxLength: 40 },
+      { kind: "text", name: "cadastralCommune", label: d.bien.commune, value: p.cadastralParts.commune, maxLength: 80 },
+      { kind: "text", name: "cadastralSection", label: d.biens.wizSection, value: p.cadastralParts.section, maxLength: 20 },
+      { kind: "text", name: "cadastralNumber", label: d.biens.wizParcel, value: p.cadastralParts.number, maxLength: 40 },
       { kind: "toggle", name: "smokeDetectorsConfirmed", label: d.modify.smokeConfirmed, value: p.smokeDetectorsConfirmed, span: 2 },
     ],
     note: d.modify.metersNote,
@@ -179,22 +179,7 @@ export function propertyMenu(
     const entries: MenuEntry[] = [
       ...tenants.map((tenant, i) => {
         const label = tenants.length > 1 ? `${d.modify.tenant} \u00b7 ${tenant.name}` : d.modify.tenant;
-        return {
-          id: `tenant-${i}`,
-          label,
-          topic: {
-            id: `tenant-${i}`,
-            title: label,
-            endpoint: `/api/contacts/${tenant.id}`,
-            method: "PATCH" as const,
-            fields: [
-              { kind: "text" as const, name: "firstName", label: d.location.firstName, value: firstOf(tenant.name), maxLength: 80 },
-              { kind: "text" as const, name: "lastName", label: d.location.lastName, value: lastOf(tenant.name), maxLength: 80 },
-              { kind: "text" as const, name: "email", label: d.location.email, value: tenant.email ?? "", maxLength: 160, span: 2 as const },
-              { kind: "text" as const, name: "phone", label: d.location.phone, value: tenant.phone ?? "", maxLength: 40, span: 2 as const },
-            ],
-          },
-        };
+        return { id: `tenant-${i}`, label, topic: tenantTopic(d, tenant, `tenant-${i}`, label) };
       }),
       ...identities,
       {
@@ -279,7 +264,7 @@ export function propertyMenu(
                       (s) => ({ value: s, label: d.status.deposit[s] }),
                     ),
                   },
-                  { kind: "date" as const, name: "receivedOn", label: d.modify.receivedOn, value: "" },
+                  { kind: "date" as const, name: "receivedOn", label: d.modify.receivedOn, value: deposit.receivedOn ?? "" },
                 ],
               },
             },
@@ -435,7 +420,7 @@ function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string):
   const fields: EditField[] = legal
     ? [
         kind,
-        { kind: "text", name: "legalName", label: d.modify.legalName, value: tenant.name, required: true, maxLength: 160, span: 2 },
+        { kind: "text", name: "legalName", label: d.modify.legalName, value: tenant.legalName || tenant.name, required: true, maxLength: 160, span: 2 },
         { kind: "select", name: "legalForm", label: d.modify.legalForm, value: idn?.legalForm ?? "", options: [choose, ...LEGAL_FORMS.map((f) => ({ value: f, label: d.modify.legalForms[f] }))] },
         { kind: "text", name: "rcsNumber", label: d.modify.rcsNumber, value: idn?.rcsNumber ?? "", hint: d.modify.rcsHint, maxLength: 40 },
         { kind: "text", name: "representativeName", label: d.modify.representative, value: idn?.representativeName ?? "", maxLength: 160 },
@@ -456,14 +441,63 @@ function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string):
         { kind: "text", name: "nationality", label: d.modify.nationality, value: idn?.nationality ?? "", hint: d.modify.nationalityHint, maxLength: 80 },
         ...address,
       ];
-  return { id, title, endpoint: `/api/contacts/${tenant.id}`, method: "PATCH", fields, note: legal ? d.modify.identityNoteLegal : d.modify.identityNote };
+  return {
+    id,
+    title,
+    endpoint: `/api/contacts/${tenant.id}`,
+    method: "PATCH",
+    fields,
+    together: [address.map((f) => f.name)],
+    ...(legal ? legalNameRule(tenant) : {}),
+    note: legal ? d.modify.identityNoteLegal : d.modify.identityNote,
+  };
 }
 
-function firstOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts.length > 1 ? parts.slice(0, -1).join(" ") : name;
+/**
+ * Who the tenant is and how to reach them, from the stored parts of the name:
+ * a person's first and last name as they were typed ("Maria" and "Dos
+ * Santos"), a company's own name in one field. The printed name is never
+ * taken apart.
+ */
+function tenantTopic(d: Dict, tenant: DemoContact, id: string, title: string): EditTopic {
+  const reach: EditField[] = [
+    { kind: "text", name: "email", label: d.location.email, value: tenant.email ?? "", maxLength: 160, span: 2 },
+    { kind: "text", name: "phone", label: d.location.phone, value: tenant.phone ?? "", maxLength: 40, span: 2 },
+  ];
+  if (tenant.kind === "legal") {
+    return {
+      id,
+      title,
+      endpoint: `/api/contacts/${tenant.id}`,
+      method: "PATCH",
+      fields: [{ kind: "text", name: "legalName", label: d.modify.legalName, value: tenant.legalName || tenant.name, required: true, maxLength: 160, span: 2 }, ...reach],
+      ...legalNameRule(tenant),
+    };
+  }
+  return {
+    id,
+    title,
+    endpoint: `/api/contacts/${tenant.id}`,
+    method: "PATCH",
+    fields: [
+      { kind: "text", name: "firstName", label: d.location.firstName, value: tenant.firstName ?? "", maxLength: 80 },
+      { kind: "text", name: "lastName", label: d.location.lastName, value: tenant.lastName ?? "", maxLength: 80 },
+      ...reach,
+    ],
+    // The two parts make one name: the route refuses a person left with neither.
+    together: [["firstName", "lastName"]],
+  };
 }
-function lastOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts.length > 1 ? parts[parts.length - 1] : "";
+
+/**
+ * A company recorded before it was said to be one has its name in the two
+ * parts of a person's name and none of its own. The editor then shows that
+ * name as the company's: it is written with every save, and the two parts it
+ * came from are emptied, so the name on screen is the one that is stored.
+ * A company that has its own name is left alone.
+ */
+function legalNameRule(tenant: DemoContact): Pick<EditTopic, "always" | "extra"> {
+  if (tenant.legalName) return {};
+  const parts = Boolean(tenant.firstName || tenant.lastName);
+  return { always: ["legalName"], ...(parts ? { extra: { firstName: "", lastName: "" } } : {}) };
 }
