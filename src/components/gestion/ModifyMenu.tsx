@@ -7,7 +7,9 @@ import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/
 import { Icon } from "@/components/pro/icons";
 import { useDismiss } from "@/lib/useDismiss";
 import { PHONE_SHEET_QUERY, useMediaQuery } from "@/lib/hooks";
-import { shrinkPhoto } from "@/lib/photo";
+import { COVER_PHOTO_MAX_MB, shrinkPhoto } from "@/lib/photo";
+import { ApiProblemNote, useApiProblems } from "@/components/gestion/ApiErrors";
+import type { ApiProblem } from "@/lib/api-errors";
 import { initialValues, topicBody, type EditField, type EditTopic, type EditValues, type MenuGroup, type SpecialEditor } from "@/lib/gestion/editors";
 
 /**
@@ -233,7 +235,8 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
   const router = useRouter();
   const [values, setValues] = useState<EditValues>(() => initialValues(topic));
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const problems = useApiProblems();
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
 
   const submit = async () => {
     // Only what changed is sent: a field left as it opened is never written back.
@@ -243,7 +246,7 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
       return;
     }
     setSaving(true);
-    setError(null);
+    setProblem(null);
     try {
       const res = await fetch(topic.endpoint, {
         method: topic.method,
@@ -255,15 +258,17 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
         router.refresh();
         return;
       }
-      if (res.status === 401) {
-        // The session lapsed while the editor was open: sign in and come back here.
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-        return;
-      }
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(data.error === "email_taken" ? labels.emailTaken : data.error === "schema_outdated" ? labels.schemaOutdated : labels.failed);
+      // The refusal in words: which field, what conflicts, a session that ended (the form stays as typed).
+      setProblem(
+        await problems.read(res, {
+          keepsInput: true,
+          fallback: labels.failed,
+          fields: Object.fromEntries(topic.fields.map((f) => [f.name, f.label])),
+          codes: { email_taken: labels.emailTaken, schema_outdated: labels.schemaOutdated },
+        }),
+      );
     } catch {
-      setError(labels.failed);
+      setProblem(problems.network({ fallback: labels.failed }));
     }
     setSaving(false);
   };
@@ -285,11 +290,7 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
           ))}
         </div>
         {topic.note && <p className="pt-2 text-xs leading-relaxed text-ink-soft">{topic.note}</p>}
-        {error && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-            {error}
-          </p>
-        )}
+        <ApiProblemNote problem={problem} />
         <div className="flex justify-end gap-2 pt-4">
           <Button type="button" variant="ghost" onClick={onClose}>
             {labels.cancel}
@@ -318,24 +319,21 @@ function SpecialEditorView({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const problems = useApiProblems();
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
   const done = () => {
     onClose();
     router.refresh();
   };
   const call = async (input: RequestInfo, init: RequestInit) => {
     setBusy(true);
-    setError(null);
+    setProblem(null);
     try {
       const res = await fetch(input, init);
       if (res.ok) return true;
-      if (res.status === 401) {
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-        return false;
-      }
-      setError(labels.failed);
+      setProblem(await problems.read(res, { keepsInput: true, fallback: labels.failed, maxMb: COVER_PHOTO_MAX_MB }));
     } catch {
-      setError(labels.failed);
+      setProblem(problems.network({ fallback: labels.failed }));
     }
     setBusy(false);
     return false;
@@ -411,10 +409,10 @@ function SpecialEditorView({
           </div>
         </div>
       )}
-      {error && (
-        <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-          {error}
-        </p>
+      {problem && (
+        <div className="mt-3">
+          <ApiProblemNote problem={problem} />
+        </div>
       )}
     </Modal>
   );

@@ -19,6 +19,10 @@ import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
 import type { DatasetId } from "@/lib/demo";
 import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
+import { ApiProblemNote } from "@/components/gestion/ApiErrors";
+import DateField from "@/components/gestion/DateField";
+import { networkProblem, readApiProblem, type ApiProblem } from "@/lib/api-errors";
+import { parseEuroInput } from "@/lib/gestion/euros";
 import { todayISO } from "@/lib/clock";
 
 /** Everything the shell needs from the active demo dataset, precomputed
@@ -39,7 +43,9 @@ export interface ShellData {
   badges: { review: number; unread: number };
   unitOptions: Array<{ id: string; label: string }>;
   leaseOptions: Array<{ id: string; label: string }>;
-  contactOptions: Array<{ id: string; label: string }>;
+  /** The quick "Bail" sheet: lots that can be let and have no lease in force, contacts recorded as tenants. */
+  vacantUnitOptions: Array<{ id: string; label: string }>;
+  tenantOptions: Array<{ id: string; label: string }>;
   /** What the account's own rows attest for the getting-started card. */
   progress: Progress;
   /** The workspace's subscription, when subscriptions are on and the data is its own. */
@@ -493,7 +499,8 @@ export default function GestionShell({
           real={real}
           unitOptions={shell.unitOptions}
           leaseOptions={shell.leaseOptions}
-          contactOptions={shell.contactOptions}
+          vacantUnitOptions={shell.vacantUnitOptions}
+          tenantOptions={shell.tenantOptions}
         />
 
         {shell.billing && <Paywall billing={shell.billing} d={d} locale={locale} />}
@@ -962,14 +969,18 @@ function CommandPalette({
 
 /* ------------------------------ create dialog ------------------------------- */
 
-function CreateDialog({
+/** An amount typed as nothing or as zero ("0", "0,00"): no provision. */
+const isZero = (raw: string): boolean => /^0*([.,]0*)?$/.test(raw.replace(/[\s€]/g, ""));
+
+export function CreateDialog({
   kind,
   onClose,
   d,
   real,
   unitOptions,
   leaseOptions,
-  contactOptions,
+  vacantUnitOptions,
+  tenantOptions,
 }: {
   kind: CreateKind | null;
   onClose: () => void;
@@ -977,19 +988,33 @@ function CreateDialog({
   real: boolean;
   unitOptions: Array<{ id: string; label: string }>;
   leaseOptions: Array<{ id: string; label: string }>;
-  contactOptions: Array<{ id: string; label: string }>;
+  /** Lots that can be let and have no lease in force: all the "Bail" sheet offers. */
+  vacantUnitOptions: Array<{ id: string; label: string }>;
+  /** Contacts recorded as tenants: the only people the "Bail" sheet offers. */
+  tenantOptions: Array<{ id: string; label: string }>;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [leaseStep, setLeaseStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal in words (src/lib/api-errors.ts), or a field the sheet itself finds wrong.
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  // The two days of the sheets: the product's own date field hands back an ISO day, or nothing.
+  const [startDate, setStartDate] = useState("");
+  const [receivedOn, setReceivedOn] = useState("");
+  // A lease recorded with points the rule engine raised: the sheet stays open to say them.
+  const [created, setCreated] = useState<{ id: string; issues: string[] } | null>(null);
   useEffect(() => {
     setLeaseStep(0);
     setSubmitted(false);
     setSaving(false);
-    setError(null);
+    setProblem(null);
+    setFieldError(null);
+    setCreated(null);
+    setStartDate(todayISO());
+    setReceivedOn(todayISO());
   }, [kind]);
 
   useEffect(() => {
@@ -997,13 +1022,34 @@ function CreateDialog({
     formRef.current?.querySelector<HTMLElement>('fieldset:not([hidden]) input, fieldset:not([hidden]) select')?.focus();
   }, [kind, leaseStep]);
 
+  const invalid = (label: string) => {
+    setProblem(null);
+    setFieldError(fmt(d.apiErrors.invalidField, { field: label }));
+    return false;
+  };
+  /** What the sheet can check before the route does, so the refusal names the field. */
+  const check = (v: (name: string) => string): boolean => {
+    setFieldError(null);
+    if (kind === "lease") {
+      if (!startDate) return invalid(d.shell.fieldStartDate);
+      if (parseEuroInput(v("rent")) === null) return invalid(d.shell.fieldRent);
+      if (!isZero(v("charges")) && parseEuroInput(v("charges")) === null) return invalid(d.shell.fieldCharges);
+    }
+    if (kind === "payment") {
+      if (parseEuroInput(v("amount")) === null) return invalid(d.shell.fieldAmount);
+      if (!receivedOn) return invalid(d.shell.fieldReceivedOn);
+    }
+    return true;
+  };
+
   // On a real account the form persists through the API, under the caller's
   // own session; the sample cabinets keep their explicitly-fake dialog.
   const submitReal = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!kind) return;
+    if (!kind || saving) return;
     const f = new FormData(e.currentTarget);
     const v = (name: string) => String(f.get(name) ?? "");
+    if (!check(v)) return;
     const endpoint: Partial<Record<CreateKind, string>> = {
       contact: "/api/contacts/create",
       lease: "/api/baux/create",
@@ -1018,17 +1064,18 @@ function CreateDialog({
               unitId: v("unitId"),
               tenantContactId: v("tenantContactId"),
               type: v("type"),
-              startDate: v("startDate"),
+              startDate,
               rent: v("rent"),
-              charges: v("charges"),
+              // "0" means no provision: the route reads an empty field as none.
+              charges: isZero(v("charges")) ? "" : v("charges"),
               depositMonths: Number(v("depositMonths") || 2),
               depositForm: v("depositForm"),
             }
           : kind === "payment"
-            ? { leaseId: v("leaseId"), amount: v("amount"), receivedOn: v("receivedOn") }
+            ? { leaseId: v("leaseId"), amount: v("amount"), receivedOn }
             : { unitId: v("unitId"), title: v("title") };
     setSaving(true);
-    setError(null);
+    setProblem(null);
     try {
       const res = await fetch(endpoint[kind]!, {
         method: "POST",
@@ -1036,14 +1083,23 @@ function CreateDialog({
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        setError(d.shell.createFailed);
+        // The sheet stays as typed: a session that ended is signed in again beside it.
+        setProblem(await readApiProblem(res, d.apiErrors, { keepsInput: true, fallback: d.shell.createFailed }));
+        setSaving(false);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { id?: string; issues?: Array<{ message?: string }> };
+      // What the rule engine raised on the lease just recorded is said, never dropped with the sheet.
+      const issues = kind === "lease" ? (data.issues ?? []).map((i) => i.message ?? "").filter(Boolean) : [];
+      router.refresh();
+      if (issues.length > 0 && data.id) {
+        setCreated({ id: data.id, issues });
         setSaving(false);
         return;
       }
       onClose();
-      router.refresh();
     } catch {
-      setError(d.shell.createFailed);
+      setProblem(networkProblem(d.apiErrors));
       setSaving(false);
     }
   };
@@ -1064,8 +1120,53 @@ function CreateDialog({
       title={kind ? d.shell.createDialogTitle.replace("{what}", labels[kind]) : ""}
       closeLabel={d.common.close}
     >
-      {kind && (
-        <form ref={formRef} className="space-y-4 crm-create-form" onSubmit={(event) => { if (kind === "lease" && leaseStep === 0) { event.preventDefault(); setLeaseStep(1); } else if (real) void submitReal(event); else { event.preventDefault(); setSubmitted(true); } }}>
+      {kind === "lease" && created && (
+        <div className="space-y-4" data-lease-created={created.id}>
+          <p role="status" className="rounded-xl bg-brand-50 px-4 py-3 text-sm font-medium text-brand-800">{d.shell.leaseCreated}</p>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-900">{d.location.complianceTitle}</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">
+              {created.issues.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              {d.common.close}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push(`/app/baux/${created.id}`);
+              }}
+            >
+              {d.loyers.openLease}
+            </Button>
+          </div>
+        </div>
+      )}
+      {kind && !created && (
+        <form
+          ref={formRef}
+          className="space-y-4 crm-create-form"
+          onSubmit={(event) => {
+            if (kind === "lease" && leaseStep === 0) {
+              event.preventDefault();
+              // The first step holds the day the lease starts: it is checked before the second opens.
+              if (!startDate) invalid(d.shell.fieldStartDate);
+              else {
+                setFieldError(null);
+                setLeaseStep(1);
+              }
+            } else if (real) void submitReal(event);
+            else {
+              event.preventDefault();
+              setSubmitted(true);
+            }
+          }}
+        >
           {kind === "contact" && (
             <>
               <div className="create-intro"><span className="crm-symbol"><Icon name="contacts" size={24} /></span><p>{d.experience.contactHint}</p></div>
@@ -1098,18 +1199,22 @@ function CreateDialog({
             <>
               <ol className="create-progress"><li aria-current={leaseStep === 0 ? "step" : undefined}>1 · {d.experience.leaseDetails}</li><li aria-current={leaseStep === 1 ? "step" : undefined}>2 · {d.experience.leaseMoney}</li></ol>
               <fieldset hidden={leaseStep !== 0} className="space-y-4">
-              <Field label={d.shell.fieldUnit}>
-                <Select name="unitId" required defaultValue={unitOptions[0]?.id}>
-                  {unitOptions.map((u) => (
+              {/* Only what can take a lease is offered, and nothing is chosen for the owner:
+                  a lot that can be let and has no lease in force, a contact recorded as a tenant. */}
+              <Field label={d.shell.fieldUnit} hint={vacantUnitOptions.length === 0 ? d.shell.noVacantUnit : undefined}>
+                <Select name="unitId" required defaultValue="">
+                  <option value="">{d.shell.pickUnit}</option>
+                  {vacantUnitOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.label}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label={d.shell.fieldTenant}>
-                <Select name="tenantContactId" required defaultValue={contactOptions[0]?.id}>
-                  {contactOptions.map((c) => (
+              <Field label={d.shell.fieldTenant} hint={tenantOptions.length === 0 ? d.shell.noTenant : undefined}>
+                <Select name="tenantContactId" required defaultValue="">
+                  <option value="">{d.shell.pickTenant}</option>
+                  {tenantOptions.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.label}
                     </option>
@@ -1124,7 +1229,7 @@ function CreateDialog({
                   </Select>
                 </Field>
                 <Field label={d.shell.fieldStartDate}>
-                  <Input name="startDate" type="date" required defaultValue={todayISO()} />
+                  <DateField value={startDate} onChange={setStartDate} placeholder={d.loyers.datePlaceholder} />
                 </Field>
               </div>
               </fieldset>
@@ -1172,7 +1277,7 @@ function CreateDialog({
                   <Input name="amount" required inputMode="decimal" placeholder="1 850,00" />
                 </Field>
                 <Field label={d.shell.fieldReceivedOn}>
-                  <Input name="receivedOn" type="date" required defaultValue={todayISO()} />
+                  <DateField value={receivedOn} onChange={setReceivedOn} placeholder={d.loyers.datePlaceholder} />
                 </Field>
               </div>
             </>
@@ -1195,7 +1300,8 @@ function CreateDialog({
           )}
           {(kind === "property" || kind === "document") && null}
 
-          <InlineError>{error}</InlineError>
+          <InlineError>{fieldError}</InlineError>
+          <ApiProblemNote problem={problem} />
           {submitted && !real && <p role="status" className="rounded-xl bg-brand-50 px-4 py-3 text-sm font-medium text-brand-800">{d.common.demoCreateNotice}</p>}
           <div className="flex flex-wrap justify-end gap-2">
             {kind === "lease" && leaseStep === 1 && <Button type="button" variant="ghost" onClick={() => setLeaseStep(0)}>{d.common.back}</Button>}

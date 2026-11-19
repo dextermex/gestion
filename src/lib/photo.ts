@@ -12,6 +12,8 @@ export const PHOTO_MAX_EDGE = 2048;
 /** Below this size a photograph is sent as it is (bytes). */
 export const PHOTO_SMALL_ENOUGH = 1024 * 1024;
 export const PHOTO_QUALITY = 0.85;
+/** What the cover photograph route accepts once the photograph is prepared, in megabytes (api/biens/photo). */
+export const COVER_PHOTO_MAX_MB = 10;
 
 /** The size `width` x `height` takes once its longest edge is at most `maxEdge`. */
 export function fitWithin(width: number, height: number, maxEdge: number): { width: number; height: number; scaled: boolean } {
