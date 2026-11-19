@@ -46,6 +46,9 @@ export function propertyMenu(
 
   /* ------------------------------- the property ------------------------------ */
 
+  // The address opens on its stored parts and travels as one: the column is
+  // replaced whole, so a change to one part carries the four others as they are.
+  const address = p.addressParts;
   const info: EditTopic = {
     id: "info",
     title: d.modify.propertyInfo,
@@ -53,23 +56,19 @@ export function propertyMenu(
     method: "PATCH",
     fields: [
       { kind: "text", name: "name", label: d.biens.wizNameLabel, value: p.name, required: true, maxLength: 120, span: 2 },
-      { kind: "text", name: "street", label: d.biens.wizStreet, value: addressPart(p.address, "street"), required: true, maxLength: 160, span: 2 },
-      { kind: "text", name: "number", label: d.biens.wizNumber, value: addressPart(p.address, "number"), maxLength: 10 },
-      { kind: "text", name: "postal", label: d.biens.wizPostal, value: addressPart(p.address, "postal"), maxLength: 10 },
-      { kind: "text", name: "city", label: d.biens.wizCity, value: p.commune, required: true, maxLength: 80 },
+      { kind: "text", name: "street", label: d.biens.wizStreet, value: address.street, required: true, maxLength: 160, span: 2 },
+      { kind: "text", name: "number", label: d.biens.wizNumber, value: address.number, maxLength: 10 },
+      { kind: "text", name: "postal", label: d.biens.wizPostal, value: address.postalCode, maxLength: 10 },
+      { kind: "text", name: "city", label: d.biens.wizCity, value: address.city || p.commune, required: true, maxLength: 80 },
       {
         kind: "select",
         name: "country",
         label: d.biens.wizCountry,
-        value: "LU",
-        options: [
-          { value: "LU", label: "Luxembourg" },
-          { value: "FR", label: "France" },
-          { value: "BE", label: "Belgique" },
-          { value: "DE", label: "Deutschland" },
-        ],
+        value: PROPERTY_COUNTRIES.some((c) => c.value === address.country) ? address.country : "LU",
+        options: PROPERTY_COUNTRIES,
       },
     ],
+    together: [["street", "number", "postal", "city", "country"]],
   };
 
   const characteristics: MenuEntry = single
@@ -377,17 +376,13 @@ function insuranceTopic(
   };
 }
 
-/** The demo shape stores a formatted address; the editor needs its parts. */
-function addressPart(formatted: string, part: "street" | "number" | "postal"): string {
-  const [first = ""] = formatted.split(",");
-  if (part === "number") {
-    const m = first.trim().match(/^(\d+[A-Za-z]?)\b/);
-    return m ? m[1] : "";
-  }
-  if (part === "street") return first.replace(/^\d+[A-Za-z]?[,\s]+/, "").trim();
-  const m = formatted.match(/\b([A-Z]{1,2}-\d{4,5})\b/);
-  return m ? m[1] : "";
-}
+/** Where a property can stand: the countries the property routes accept. */
+const PROPERTY_COUNTRIES = [
+  { value: "LU", label: "Luxembourg" },
+  { value: "FR", label: "France" },
+  { value: "BE", label: "Belgique" },
+  { value: "DE", label: "Deutschland" },
+];
 
 /** Where a tenant can live before moving in, or where a company has its seat: the usual countries, named in their own language. */
 const COUNTRIES = [

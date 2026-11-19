@@ -65,7 +65,7 @@ function account(): DemoData {
     BILLS: [
       { id: "bill-1", direction: "expense", supplierContactId: "c-artisan", supplierName: "Jos Kirsch", propertyId: "prop-1", unitId: "unit-1", unitLabel: "Maison · Maison Schmit", category: "maintenance_repairs", subject: "Chaudière", docNo: "K-1", docDate: today, dueOn: null, paidOn: null, cashflow: true, vatRatePct: 17, amountCents: 124000, vatCents: 18017, documentId: "doc-3", hasDocument: true, createdAt: today },
     ],
-    PROPERTIES: [{ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", commune: "Luxembourg", cadastralRef: "", type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }],
+    PROPERTIES: [{ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", addressParts: { street: "rue du Test", number: "1", postalCode: "", city: "", country: "LU" }, commune: "Luxembourg", cadastralRef: "", cadastralParts: { commune: "", section: "", number: "" }, type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }],
     UNITS: [{ id: "unit-1", propertyId: "prop-1", label: "Maison", kind: "dwelling", floor: "", areaSqm: 120, rooms: 4, furnished: false, photoUrl: null }],
     TICKETS: [
       {
@@ -74,7 +74,7 @@ function account(): DemoData {
       },
     ],
     leaseById: (id: string) => [lease].find((l) => l.id === id)!,
-    propertyById: () => ({ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", commune: "Luxembourg", cadastralRef: "", type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }),
+    propertyById: () => ({ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", addressParts: { street: "rue du Test", number: "1", postalCode: "", city: "", country: "LU" }, commune: "Luxembourg", cadastralRef: "", cadastralParts: { commune: "", section: "", number: "" }, type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }),
     leaseTenantNames: () => ["Lena Schmit"],
     leaseUnitLabel: () => "Maison · Maison Schmit",
   };

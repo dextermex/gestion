@@ -143,8 +143,13 @@ export interface DemoProperty {
   id: string;
   name: string;
   address: string;
+  /** The address as it is stored, part by part. An editor opens on these: the
+   *  printed line above is for reading and is never taken apart again. */
+  addressParts: { street: string; number: string; postalCode: string; city: string; country: string };
   commune: string;
   cadastralRef: string;
+  /** The cadastral reference as it is stored: commune, section, parcel. */
+  cadastralParts: { commune: string; section: string; number: string };
   type: string;
   constructionYear: number;
   completionDate: string;
@@ -170,8 +175,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-beaulieu",
     name: "Résidence Beaulieu",
     address: "12, rue de la Gare, L-1611 Luxembourg",
+    addressParts: { street: "rue de la Gare", number: "12", postalCode: "L-1611", city: "Luxembourg", country: "LU" },
     commune: "Luxembourg",
     cadastralRef: "Luxembourg / Section HoA / n° 372/1145",
+    cadastralParts: { commune: "Luxembourg", section: "HoA", number: "372/1145" },
     type: "Immeuble de rapport",
     constructionYear: 2008,
     completionDate: "2008-09-01",
@@ -191,8 +198,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-bertrange",
     name: "Maison Bertrange",
     address: "8, rue des Champs, L-8053 Bertrange",
+    addressParts: { street: "rue des Champs", number: "8", postalCode: "L-8053", city: "Bertrange", country: "LU" },
     commune: "Bertrange",
     cadastralRef: "Bertrange / Section B / n° 214/889",
+    cadastralParts: { commune: "Bertrange", section: "B", number: "214/889" },
     type: "Maison",
     constructionYear: 2022,
     completionDate: "2022-05-15",
@@ -209,8 +218,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-kirchberg",
     name: "Bureaux Kirchberg",
     address: "4, avenue J.F. Kennedy, L-1855 Luxembourg",
+    addressParts: { street: "avenue J.F. Kennedy", number: "4", postalCode: "L-1855", city: "Luxembourg", country: "LU" },
     commune: "Luxembourg",
     cadastralRef: "Luxembourg / Section EiB / n° 501/2231",
+    cadastralParts: { commune: "Luxembourg", section: "EiB", number: "501/2231" },
     type: "Commercial",
     constructionYear: 2015,
     completionDate: "2015-11-01",
@@ -229,8 +240,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-gare",
     name: "Studio Quartier Gare",
     address: "31, rue de Strasbourg, L-2561 Luxembourg",
+    addressParts: { street: "rue de Strasbourg", number: "31", postalCode: "L-2561", city: "Luxembourg", country: "LU" },
     commune: "Luxembourg",
     cadastralRef: "Luxembourg / Section HoA / n° 388/2020",
+    cadastralParts: { commune: "Luxembourg", section: "HoA", number: "388/2020" },
     type: "Appartement",
     constructionYear: 2024,
     completionDate: "2024-04-30",

@@ -8,7 +8,7 @@ import { Icon } from "@/components/pro/icons";
 import { useDismiss } from "@/lib/useDismiss";
 import { PHONE_SHEET_QUERY, useMediaQuery } from "@/lib/hooks";
 import { shrinkPhoto } from "@/lib/photo";
-import type { EditField, EditTopic, MenuGroup, SpecialEditor } from "@/lib/gestion/editors";
+import { initialValues, topicBody, type EditField, type EditTopic, type EditValues, type MenuGroup, type SpecialEditor } from "@/lib/gestion/editors";
 
 /**
  * One button for changing anything about a property.
@@ -231,20 +231,24 @@ function FieldView({
 
 function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: ModifyLabels; onClose: () => void }) {
   const router = useRouter();
-  const [values, setValues] = useState<Record<string, string | boolean>>(() =>
-    Object.fromEntries(topic.fields.map((f) => [f.name, f.kind === "toggle" ? f.value : String(f.value)])),
-  );
+  const [values, setValues] = useState<EditValues>(() => initialValues(topic));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
+    // Only what changed is sent: a field left as it opened is never written back.
+    const body = topicBody(topic, values);
+    if (!body) {
+      onClose();
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const res = await fetch(topic.endpoint, {
         method: topic.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(topic.extra ?? {}), ...values }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         onClose();

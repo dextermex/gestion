@@ -1,7 +1,7 @@
 import "server-only";
 import { authedClient } from "@/lib/supabase/server";
 import { signMedia, signThumbnails } from "@/lib/gestion/media";
-import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
+import { addressParts, formatAddress, type PropertyAddress } from "@/lib/gestion/address";
 import type { OpenInvoice } from "@/domain/banking/matching";
 import type { DemoData } from "./index";
 import type {
@@ -412,10 +412,12 @@ export async function buildRealDataFrom(
     id: s(p.id),
     name: s(p.name),
     address: formatAddress(p.address as PropertyAddress | null),
+    addressParts: addressParts(p.address as PropertyAddress | null),
     commune: s(p.commune),
     cadastralRef: [s(p.cadastral_commune), s(p.cadastral_section), s(p.cadastral_number)]
       .filter(Boolean)
       .join(" / "),
+    cadastralParts: { commune: s(p.cadastral_commune), section: s(p.cadastral_section), number: s(p.cadastral_number) },
     type: s(p.type),
     constructionYear: n(p.construction_year),
     completionDate: day(p.completion_date),
