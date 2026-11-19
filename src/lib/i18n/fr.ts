@@ -120,7 +120,6 @@ export const fr = {
     quickAddContact: "Contact",
     quickAddPayment: "Paiement",
     quickAddTicket: "Intervention",
-    quickAddDocument: "Document",
     newButton: "Nouveau",
     searchAria: "Rechercher",
     searchPlaceholder: "Rechercher un bien, un locataire, une action…",

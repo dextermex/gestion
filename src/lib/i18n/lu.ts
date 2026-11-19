@@ -119,7 +119,6 @@ export const lu: Dict = {
     quickAddContact: "Kontakt",
     quickAddPayment: "Bezuelung",
     quickAddTicket: "Intervention",
-    quickAddDocument: "Dokument",
     newButton: "Nei",
     searchAria: "Sichen",
     searchPlaceholder: "Eng Immobilie, e Locataire oder eng Aktioun sichen…",

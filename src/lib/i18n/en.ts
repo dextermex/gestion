@@ -114,7 +114,6 @@ export const en: Dict = {
     quickAddContact: "Contact",
     quickAddPayment: "Payment",
     quickAddTicket: "Work order",
-    quickAddDocument: "Document",
     newButton: "New",
     searchAria: "Search",
     searchPlaceholder: "Search a property, a tenant, an action…",
