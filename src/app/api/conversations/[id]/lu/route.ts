@@ -8,7 +8,7 @@ import { markConversationRead, statusOfFailure } from "@/lib/gestion/requests";
  * status.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("act");
   if (ctx instanceof NextResponse) return ctx;
   const { id } = await params;
 

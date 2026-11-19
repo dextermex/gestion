@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
 import { getSession } from "@/lib/supabase/server";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 
@@ -9,7 +10,9 @@ import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
  * has property to manage. Idempotent: an account that already has a space
  * simply gets it back.
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const refused = refuseCrossOrigin(req);
+  if (refused) return refused;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const existing = await getIdentity();

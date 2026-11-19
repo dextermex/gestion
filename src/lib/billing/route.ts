@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { BILLED_UNIT_KINDS, billedRents } from "@/domain/billing/pricing";
 import type { Cents } from "@/domain/money";
-import { withOrgAndClient, type OrgContext } from "@/lib/gestion/api";
+import { refuseCrossOrigin, withOrgAndClient, type OrgContext } from "@/lib/gestion/api";
 import { getSession } from "@/lib/supabase/server";
 import { getI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -31,8 +31,9 @@ export interface BillingRoute {
 }
 
 export async function billingRoute(req: NextRequest): Promise<BillingRoute | NextResponse> {
-  if (req.method !== "GET" && req.headers.get("origin") !== req.nextUrl.origin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const ctx = await withOrgAndClient();
+  const refused = refuseCrossOrigin(req);
+  if (refused) return refused;
+  const ctx = await withOrgAndClient("act");
   if (ctx instanceof NextResponse) return ctx;
   if (!canManageBilling(ctx.org.role)) return NextResponse.json({ error: "not_manager" }, { status: 403 });
   if ((await getDatasetId()) !== "real") return NextResponse.json({ error: "sample_read_only" }, { status: 403 });

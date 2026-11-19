@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { updateSignupUser } from "@/lib/signup/update-user";
 import { emailConfirmed, profileInput } from "@/lib/signup/model";
 
 export async function POST(request: NextRequest) {
-  if (request.headers.get("origin") !== request.nextUrl.origin) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const refused = refuseCrossOrigin(request);
+  if (refused) return refused;
   const input = profileInput.safeParse(await request.json().catch(() => null));
   if (!input.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const session = await getSession();

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
 import { getSession, authedClient } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
 import {
@@ -19,7 +20,9 @@ import { reconcileUnmatched } from "@/lib/banking/reconcile";
  * idempotent: accounts key on (org, provider, provider_account_id),
  * transactions on (bank_account_id, bank_tx_id).
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const refused = refuseCrossOrigin(req);
+  if (refused) return refused;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   if (!saltEdgeConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isSampleData } from "@/lib/demo";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
 import { updateSignupUser } from "@/lib/signup/update-user";
 import { authedClient, getSession } from "@/lib/supabase/server";
 
@@ -30,7 +31,8 @@ const input = z.discriminatedUnion("action", [
 ]);
 
 export async function POST(request: NextRequest) {
-  if (request.headers.get("origin") !== request.nextUrl.origin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const refused = refuseCrossOrigin(request);
+  if (refused) return refused;
   const parsed = input.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const session = await getSession();

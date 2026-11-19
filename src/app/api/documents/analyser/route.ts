@@ -33,7 +33,10 @@ function candidatesOf(raw: unknown): RecognitionCandidate[] {
 }
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  // A write: the reader costs money per file, so it follows the same rules
+  // as storing the piece (this application's own pages, a workspace whose
+  // trial has not lapsed).
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   if (!recognitionConfigured()) return NextResponse.json({ configured: false, supported: false, recognition: null });
   const form = await req.formData().catch(() => null);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
 import { getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
 import { DATASET_COOKIE, sampleDataEnabled } from "@/lib/demo";
@@ -16,6 +17,8 @@ import { SaltEdgeError, createConnectSession, demoProviderCode, fakeProvidersWan
  * ever stored, the sample never writes.
  */
 export async function POST(req: NextRequest) {
+  const refused = refuseCrossOrigin(req);
+  if (refused) return refused;
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });

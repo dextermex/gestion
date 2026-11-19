@@ -14,7 +14,7 @@ export const maxDuration = 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrgAndClient();
+  const ctx = await withOrgAndClient("act");
   if (ctx instanceof NextResponse) return ctx;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const ids = Array.isArray(body.envelopeIds) ? body.envelopeIds.filter((v): v is string => typeof v === "string" && UUID.test(v)).slice(0, 20) : undefined;
