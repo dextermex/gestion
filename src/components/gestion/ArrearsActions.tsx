@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input } from "@/components/pro/ui";
+import { Button } from "@/components/pro/ui";
+import DateField from "@/components/gestion/DateField";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { formatDate as formatIso } from "@/lib/types";
 
@@ -33,6 +34,7 @@ export interface ArrearsLabels {
   already: string;
   needsAr: string;
   sampleConfirmed: string;
+  datePlaceholder: string;
 }
 
 export default function ArrearsActions({
@@ -100,7 +102,7 @@ export default function ArrearsActions({
   const dateField = (label: string, min?: string) => (
     <label className="block">
       <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{label}</span>
-      <Input type="date" value={date} min={min} max={todayISO} onChange={(e) => setDate(e.target.value)} className="w-44 max-sm:w-full" disabled={busy} />
+      <DateField value={date} min={min} max={todayISO} onChange={setDate} placeholder={labels.datePlaceholder} className="w-40 max-sm:w-full" disabled={busy} />
     </label>
   );
   const sampleOnly = (message: string) => {

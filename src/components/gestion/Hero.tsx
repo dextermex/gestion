@@ -9,7 +9,9 @@ import HeroCreate from "@/components/gestion/HeroCreate";
  * the two to four actions that belong to the screen as a round row. It is
  * the one raised element of the page; everything under it is a flat list.
  */
-export function Hero({ eyebrow, top, label, figure, children, actions, aside }: {
+export function Hero({ title, eyebrow, top, label, figure, children, actions, aside }: {
+  /** The page's name, for a reader that does not see the layout. */
+  title: string;
   /** A quiet line over everything (the greeting). */
   eyebrow?: ReactNode;
   /** Top right: the month switch. */
@@ -24,6 +26,7 @@ export function Hero({ eyebrow, top, label, figure, children, actions, aside }: 
 }) {
   return (
     <section className="hero-card relative overflow-hidden rounded-[28px] px-5 pb-7 pt-5 text-white sm:px-9 sm:pb-9 sm:pt-7">
+      <h1 className="sr-only">{title}</h1>
       <div className="flex min-h-10 items-center justify-between gap-3">
         <p className="min-w-0 truncate text-sm font-medium text-white/70">{eyebrow}</p>
         {top}
@@ -154,4 +157,76 @@ export function Row({ href, icon, tone = "plain", title, sub, right, rightTone =
   );
   const cls = "flex min-h-[3.75rem] items-center gap-3 px-4 py-2.5";
   return <li>{href ? <Link href={href} className={`${cls} transition hover:bg-brand-50/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600`}>{body}</Link> : <div className={cls}>{body}</div>}</li>;
+}
+
+/** A group's heading with its total, as the app writes it ("Août 2026 · 3.530 €"). */
+export function GroupHead({ id, title, total, tone = "plain" }: { id?: string; title: string; total?: string; tone?: "plain" | "late" }) {
+  return (
+    <div id={id} className="mb-2 mt-7 flex scroll-mt-24 items-baseline justify-between gap-3 px-1 first:mt-0">
+      <h2 className="text-sm font-semibold text-ink-soft">{title}</h2>
+      {total && <p className={"text-sm font-semibold tabular-nums " + (tone === "late" ? "text-red-700" : "text-ink-soft")}>{total}</p>}
+    </div>
+  );
+}
+
+/**
+ * A row that opens on what belongs to it: a person or an object, where, its
+ * state in words, the amount on the right and one action at most. What the
+ * row can do (the reminder ladder, its papers) waits inside, so the list
+ * stays a list.
+ */
+export function FoldRow({ id, open, initials, tone = "plain", title, sub, right, rightSub, rightTone = "plain", action, children }: {
+  id?: string;
+  open?: boolean;
+  initials: string;
+  tone?: "plain" | "late" | "quiet";
+  title: string;
+  sub: string;
+  right: string;
+  rightSub?: string;
+  rightTone?: "plain" | "late" | "soft";
+  /** The row's one action, in a word ("Relancer"). */
+  action?: string;
+  children: ReactNode;
+}) {
+  const badge = tone === "late" ? "bg-red-50 text-red-700" : tone === "quiet" ? "bg-sand-100 text-ink-soft" : "bg-brand-50 text-brand-800";
+  const amount = rightTone === "late" ? "text-red-700" : rightTone === "soft" ? "text-ink-soft" : "text-ink";
+  return (
+    <li id={id} className="scroll-mt-24">
+      <details className="group" open={open}>
+        <summary className="flex min-h-[4.25rem] cursor-pointer list-none items-center gap-3 px-4 py-3 transition hover:bg-brand-50/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 [&::-webkit-details-marker]:hidden">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-bold ${badge}`}>{initials || "·"}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold text-ink">{title}</span>
+            <span className="block truncate text-[13px] text-ink-soft">{sub}</span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className={`block text-[15px] font-semibold tabular-nums ${amount}`}>{right}</span>
+            {rightSub && <span className="block text-xs text-ink-soft">{rightSub}</span>}
+          </span>
+          {action && <span className="hidden shrink-0 rounded-full bg-brand-700 px-3.5 py-1.5 text-[13px] font-semibold text-white group-open:bg-brand-50 group-open:text-brand-800 sm:inline-block">{action}</span>}
+          <Icon name="chevron-right" size={16} className="shrink-0 text-ink-soft/70 transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="border-t border-sand-200/70 bg-sand-50/50 px-4 py-4 sm:pl-[4.25rem]">{children}</div>
+      </details>
+    </li>
+  );
+}
+
+/** What was done and what comes next, as a line of dated steps. */
+export function Steps({ label, children }: { label: string; children: ReactNode }) {
+  return <ol aria-label={label} className="relative ml-1.5 space-y-3.5 border-l border-sand-300 pl-5">{children}</ol>;
+}
+
+export function Step({ state, title, date, children }: { state: "done" | "next"; title: string; date?: string; children?: ReactNode }) {
+  return (
+    <li className="relative">
+      <span className={"absolute -left-[1.6rem] top-1 h-2.5 w-2.5 rounded-full " + (state === "done" ? "bg-brand-700" : "border-2 border-brand-700 bg-white")} aria-hidden />
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <p className={"text-sm " + (state === "next" ? "font-semibold text-ink" : "text-ink")}>{title}</p>
+        {date && <p className="text-[13px] tabular-nums text-ink-soft">{date}</p>}
+      </div>
+      {children}
+    </li>
+  );
 }

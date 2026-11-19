@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextUntil, signIn, signOutFromShell, signUp, createAccountFromInvitation } from "./helpers";
+import { createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextUntil, signIn, signOutFromShell, signUp, createAccountFromInvitation, unfold } from "./helpers";
 
 /**
  * The paper trail, on the real database and the real bucket. Nothing is
@@ -71,6 +71,8 @@ type Produced = { status: number; body: { documentId?: string; name?: string; sh
 /** Ask the register for a document from its control; what the route answered. */
 async function produce(page: Page, control: Locator, again = false): Promise<Produced> {
   const done = page.waitForResponse((r) => r.url().endsWith("/api/documents/generer") && r.request().method() === "POST");
+  // On Loyers a rent's papers wait inside its row.
+  await unfold(control);
   await control.getByRole("button", { name: again ? "Nouvelle version" : /Produire/ }).click();
   const res = await done;
   return { status: res.status(), body: (await res.json()) as Produced["body"] };
@@ -213,6 +215,7 @@ test("arrears: the formal reminder's letter from the ladder's rows, the mise en 
   expect(same.status()).toBe(200);
   expect(((await same.json()) as { documentId: string; existing: boolean })).toMatchObject({ documentId: letter.body.documentId, existing: true });
   await page.reload();
+  await unfold(docControl(page, "arrears_mise_en_demeure", letterId));
   await expect(docControl(page, "arrears_mise_en_demeure", letterId).locator(`[data-doc-open="${letter.body.documentId}"]`)).toBeVisible();
 });
 
@@ -230,6 +233,7 @@ test("rents: the notice of the month, a new version beside the first, the receip
   const bytes = await fileOf(page, noticeId);
   expect(createHash("sha256").update(bytes).digest("hex")).toBe(first.body.sha256);
   await page.reload();
+  await unfold(docControl(page, "rent_notice", periodId));
   await expect(docControl(page, "rent_notice", periodId).locator(`[data-doc-open="${noticeId}"]`)).toBeVisible();
   const again = await produce(page, docControl(page, "rent_notice", periodId), true);
   expect(again.status, "a new version is another document").toBe(201);
@@ -246,7 +250,7 @@ test("rents: the notice of the month, a new version beside the first, the receip
   expect(paid.ok(), "the payment is recorded").toBe(true);
   expect(await paid.json()).toMatchObject({ allocated: 12 * MONTHLY, credit: 0 });
   await page.reload();
-  await expect(page.locator("tr").filter({ has: docControl(page, "rent_notice", periodId) })).toContainText("Payé");
+  await expect(page.locator("li").filter({ has: docControl(page, "rent_notice", periodId) })).toContainText("Payé");
   const receipt = await produce(page, docControl(page, "rent_receipt", periodId));
   expect(receipt.status, "the receipt is produced").toBe(201);
   expect(receipt.body.name).toContain("Quittance");

@@ -17,7 +17,6 @@ test.use(phone);
 const owner = { first: "Lily", last: "Schmit", email: mail("owner") };
 
 const STACKED: Array<[string, string, string | null]> = [
-  ["loyers", "/app/loyers", "Avis d'échéance"],
   ["indexation", "/app/indexation", null],
   ["interventions", "/app/interventions", "Ouvrir"],
   ["baux", "/app/baux", null],

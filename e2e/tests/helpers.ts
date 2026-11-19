@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * The moves every flow is made of, written once. Each one drives the real
@@ -209,6 +209,20 @@ export async function leaseIdOf(page: Page, propertyId: string): Promise<string>
  * it with its own button; so does the flow, once per browser (the choice is
  * remembered), before reaching for anything at the bottom of a page.
  */
+/**
+ * A row that keeps its tools folded until it is opened (a rent on Loyers,
+ * its reminder ladder and its papers inside): open every fold around or
+ * under the element, so what is inside can be read and used.
+ */
+export async function unfold(target: Locator): Promise<void> {
+  await target.first().evaluate((el) => {
+    for (let d = el.closest("details"); d; d = d.parentElement ? d.parentElement.closest("details") : null) d.open = true;
+    el.querySelectorAll("details").forEach((d) => {
+      d.open = true;
+    });
+  });
+}
+
 export async function foldGettingStarted(page: Page): Promise<void> {
   const card = page.getByRole("region", { name: "Bien démarrer avec Morada Gestion" });
   const fold = card.getByRole("button", { name: "Réduire", exact: true });
