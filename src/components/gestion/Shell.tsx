@@ -291,7 +291,7 @@ export default function GestionShell({
 
   const sidebar = (
     // Two zones: the sections at the top, each folding its sub-sections;
-    // the dataset switch and ecosystem links stay below. On short landscape
+    // the ecosystem links stay below. On short landscape
     // screens the entire drawer scrolls so destinations retain enough room.
     <div className="crm-sidebar-inner flex h-full flex-col">
     <nav className="crm-navigation flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y select-none [-webkit-touch-callout:none]" aria-label="Morada Gestion">
@@ -328,7 +328,6 @@ export default function GestionShell({
           </Link>
         </nav>
       )}
-      <DatasetSwitch d={d} datasetId={shell.datasetId} />
       <div className="pt-2.5 text-[11px] text-ink-soft">
         <p className="px-3">{d.nav.ecosystem}</p>
         <div className="flex gap-3 px-3 pt-0.5">
@@ -714,56 +713,6 @@ function UserMenu({
           )}
         </div>
       </Dropdown>
-    </div>
-  );
-}
-
-/* ----------------------------- dataset switch ------------------------------- */
-
-function DatasetSwitch({ d, datasetId }: { d: Dict; datasetId: DatasetId }) {
-  const router = useRouter();
-  const pick = (id: DatasetId) => {
-    if (id === datasetId) return;
-    document.cookie = `morada_dataset=${id}; path=/; max-age=31536000; samesite=lax`;
-    router.refresh();
-  };
-  const describe: Record<DatasetId, string> = {
-    real: d.shell.datasetRealDesc,
-    fr: d.shell.datasetFr,
-    lu: d.shell.datasetLu,
-  };
-  return (
-    <div className="px-3">
-      <div className="flex items-center gap-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-          {d.shell.datasetTitle}
-        </p>
-        <span className="rounded-full bg-accent-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-accent-700">
-          {d.shell.datasetBeta}
-        </span>
-      </div>
-      <div
-        role="radiogroup"
-        aria-label={d.shell.datasetAria}
-        className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1"
-      >
-        {(["real", "fr", "lu"] as const).map((id) => (
-          <button
-            key={id}
-            role="radio"
-            aria-checked={id === datasetId}
-            onClick={() => pick(id)}
-            title={describe[id]}
-            className={
-              "rounded-lg px-2 py-1.5 text-xs font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:min-h-10 " +
-              (id === datasetId ? "bg-white text-brand-800 shadow-sm" : "text-ink-soft hover:text-ink")
-            }
-          >
-            {id === "real" ? d.shell.datasetReal : id.toUpperCase()}
-          </button>
-        ))}
-      </div>
-      <p className="mt-1.5 text-[10px] leading-snug text-ink-soft">{describe[datasetId]}</p>
     </div>
   );
 }
