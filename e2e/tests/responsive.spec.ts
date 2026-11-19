@@ -24,6 +24,7 @@ const DESK = [
   "/app/baux", "/app/baux/l-3b", "/app/loyers", "/app/banque", "/app/finance", "/app/charges", "/app/compteurs", "/app/contacts", "/app/contacts/c-muller",
   "/app/documents", "/app/contrats", "/app/conformite", "/app/fiscalite", "/app/garanties", "/app/indexation", "/app/interventions", "/app/edl",
   "/app/assurances", "/app/workflows", "/app/aml", "/app/reglages", "/app/utilisateurs", "/app/integrations", "/app/messages", "/app/messages?onglet=demandes",
+  "/app/calculateurs", "/app/rapports", "/app/fiscalite?vue=detail", "/app/finance?vue=charges", "/app/finance?vue=comptabilite",
 ];
 const TENANT = ["/locataire", "/locataire/bail", "/locataire/paiements", "/locataire/demandes", "/locataire/demandes/t-1", "/locataire/messages", "/locataire/documents", "/locataire/profil", "/locataire/parametres", "/locataire/aide"];
 
