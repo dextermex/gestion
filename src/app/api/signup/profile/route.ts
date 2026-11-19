@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { refuseCrossOrigin } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { updateSignupUser } from "@/lib/signup/update-user";
 import { emailConfirmed, profileInput } from "@/lib/signup/model";
@@ -43,6 +44,9 @@ export async function POST(request: NextRequest) {
       const email = body.email.toLowerCase();
       const already = emailConfirmed(user) && user.email === email;
       if (!already && user.new_email !== email) {
+        // The account system mails a confirmation to the address typed: counted on the person.
+        const limited = await refuseOverRate(db.schema("gestion"), RATE.mailAccount, null);
+        if (limited) return limited;
         const changed = await updateSignupUser(session.accessToken, { email });
         if (changed.error) {
           const code = changed.error.code;

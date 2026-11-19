@@ -21,7 +21,9 @@ function database() {
     select: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: { id: "verified-user", first_name: "Alex", last_name: "Example" }, error: null }),
   };
-  return { from: vi.fn(() => query), query, auth: { getUser: vi.fn(async () => ({ data: { user: current }, error: null })) } };
+  // The confirmation e-mails are counted in the database, under the caller's token.
+  const rpc = vi.fn(async (): Promise<{ data: unknown; error: null }> => ({ data: true, error: null }));
+  return { from: vi.fn(() => query), query, rpc, schema: vi.fn(() => ({ rpc })), auth: { getUser: vi.fn(async () => ({ data: { user: current }, error: null })) } };
 }
 const details = { action: "details", firstName: "Alex", lastName: "Example", locale: "en", role: "landlord" };
 function request(body: unknown, origin = "https://app.morada.lu") {
@@ -123,5 +125,15 @@ describe("authenticated profile completion", () => {
     const response = await POST(request({ action: "email", email: "existing@example.test" }));
     expect(await response.json()).toEqual({ error: "email_exists" });
     expect(updateSignupUser).toHaveBeenCalledTimes(1);
+  });
+  it("counts the confirmation e-mails it asks for, and stops over the limit before asking for another", async () => {
+    expect((await POST(request({ action: "email", email: "alex@example.com" }))).status).toBe(200);
+    expect(db.rpc).toHaveBeenCalledWith("rate_take", expect.objectContaining({ p_action: "mail.account", p_org: null, p_user_max: 6 }));
+    vi.mocked(updateSignupUser).mockClear();
+    db.rpc.mockResolvedValueOnce({ data: false, error: null });
+    const refused = await POST(request({ action: "email", email: "another@example.com" }));
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toMatchObject({ error: "rate_limited" });
+    expect(updateSignupUser).not.toHaveBeenCalled();
   });
 });

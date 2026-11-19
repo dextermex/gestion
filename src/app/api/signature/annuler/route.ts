@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg } from "@/lib/gestion/api";
+import { withOrg, jsonBody, refuseWithout } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import { connectedProvider } from "@/lib/signature/connect";
 import { cancelSending } from "@/lib/signature/service";
 
@@ -11,9 +12,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function POST(req: NextRequest) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const body = await jsonBody(req);
   const envelopeId = typeof body.envelopeId === "string" ? body.envelopeId.trim() : "";
   if (!UUID.test(envelopeId)) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const refused = await refuseWithout(ctx, "gestion.leases.edit");
+  if (refused) return refused;
+  const limited = await refuseOverRate(ctx.g, RATE.signatureCancel, ctx.org.id);
+  if (limited) return limited;
   const result = await cancelSending(ctx, connectedProvider(), envelopeId);
   if ("error" in result) {
     if (result.error === "not_found") return NextResponse.json(result, { status: 404 });

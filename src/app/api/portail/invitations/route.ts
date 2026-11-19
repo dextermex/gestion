@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import { getDict, getI18n } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { formatDate } from "@/lib/types";
@@ -23,6 +24,9 @@ export async function POST(req: NextRequest) {
   const leaseId = str(body.leaseId, 64);
   const contactId = str(body.contactId, 64);
   if (!leaseId || !contactId) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  // An invitation is an e-mail to the contact's address: counted per person and per workspace.
+  const limited = await refuseOverRate(g, RATE.mailInvitation, org.id);
+  if (limited) return limited;
 
   // What the e-mail says, read under the owner's own token.
   const [{ data: lease }, { data: contact }] = await Promise.all([

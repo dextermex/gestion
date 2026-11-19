@@ -27,6 +27,9 @@ export interface MailMessage {
 
 export type MailResult = { sent: true; id: string | null } | { sent: false; reason: "not_configured" | "rejected" | "unreachable" };
 
+/** No request waits longer than this for the mail provider: past it the e-mail is "unreachable", and the write it follows stands. */
+export const MAIL_TIMEOUT_MS = 10_000;
+
 export function mailConfigured(): boolean {
   return typeof process.env.RESEND_API_KEY === "string" && process.env.RESEND_API_KEY.trim() !== "";
 }
@@ -50,15 +53,20 @@ export async function sendMail(message: MailMessage): Promise<MailResult> {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: AbortSignal.timeout(MAIL_TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.error("mail rejected:", res.status, (await res.text()).slice(0, 300));
+      // The provider's own class of refusal (a status and its error name): never the message, which can quote the recipient.
+      const refusal = (await res.json().catch(() => null)) as { name?: unknown } | null;
+      console.error("mail rejected:", res.status, typeof refusal?.name === "string" ? refusal.name.slice(0, 80) : "");
       return { sent: false, reason: "rejected" };
     }
     const data = (await res.json().catch(() => ({}))) as { id?: string };
     return { sent: true, id: data.id ?? null };
   } catch (e) {
-    console.error("mail unreachable:", e);
+    // A deadline passed or the network failed: the kind of failure, not its text.
+    console.error("mail unreachable:", e instanceof Error ? e.name : "error");
     return { sent: false, reason: "unreachable" };
   }
 }
