@@ -25,6 +25,8 @@ export interface ApiProblems {
   read: (res: Response, options?: ApiProblemOptions) => Promise<ApiProblem>;
   /** The problem behind a request that never got an answer. */
   network: (options?: ApiProblemOptions) => ApiProblem;
+  /** The label of a "try again" control, "" outside a provider. */
+  retry: string;
 }
 
 /** With no sentences at hand, the form's own line stands for every refusal. */
@@ -43,6 +45,7 @@ export function useApiProblems(): ApiProblems {
       of,
       read: async (res: Response, options?: ApiProblemOptions) => of(res.status, await res.json().catch(() => null), options),
       network: (options?: ApiProblemOptions) => of(0, null, options),
+      retry: copy?.retry ?? "",
     };
   }, [copy]);
 }

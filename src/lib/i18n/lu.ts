@@ -102,6 +102,7 @@ export const lu: Dict = {
     unavailable: "Dës Funktioun ass an Ärem Beräich nach net disponibel. Si ass et no der nächster Aktualiséierung.",
     network: "D'Verbindung gouf ënnerbrach. Kontrolléiert d'Netz a probéiert nach eng Kéier.",
     generic: "D'Operatioun ass net duerchgaangen. Probéiert gläich nach eng Kéier.",
+    retry: "Nach eng Kéier probéieren",
   },
   nav: {
     mortgages: "Immobiliekreditter",

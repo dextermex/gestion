@@ -97,6 +97,7 @@ export const de: Dict = {
     unavailable: "Diese Funktion ist in Ihrem Bereich noch nicht verfügbar. Sie ist es nach der nächsten Aktualisierung.",
     network: "Die Verbindung wurde unterbrochen. Prüfen Sie das Netz und versuchen Sie es noch einmal.",
     generic: "Der Vorgang ist nicht gelungen. Versuchen Sie es gleich noch einmal.",
+    retry: "Erneut versuchen",
   },
   nav: {
     mortgages: "Immobilienkredite",

@@ -97,6 +97,7 @@ export const en: Dict = {
     unavailable: "This feature is not available in your space yet. It will be after the next update.",
     network: "The connection was interrupted. Check the network, then retry.",
     generic: "The operation did not go through. Try again in a moment.",
+    retry: "Try again",
   },
   nav: {
     mortgages: "Mortgages",

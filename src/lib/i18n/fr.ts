@@ -101,6 +101,7 @@ export const fr = {
     unavailable: "Cette fonction n'est pas encore disponible sur votre espace. Elle le sera après la prochaine mise à jour.",
     network: "La connexion a été interrompue. Vérifiez le réseau, puis réessayez.",
     generic: "L'opération n'a pas abouti. Réessayez dans un instant.",
+    retry: "Réessayer",
   },
   nav: {
     mortgages: "Crédits immobiliers",

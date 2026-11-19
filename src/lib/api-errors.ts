@@ -78,6 +78,8 @@ export interface ApiProblemOptions {
 const SAME_AS: Record<string, string> = {
   lease_not_live: "not_live",
   no_live_lease: "not_live",
+  // An update that names the version it read, refused because the row moved on (or is gone).
+  conflict_or_not_found: "changed",
 };
 
 /** The sign-in page, returning to `returnTo` (an internal path) afterwards. */
@@ -183,4 +185,18 @@ export async function readApiProblem(res: Response, copy: ApiErrorCopy, options:
 /** The problem behind a request that never got an answer (the network, a closed laptop). */
 export function networkProblem(copy: ApiErrorCopy): ApiProblem {
   return apiProblem(0, null, copy);
+}
+
+/**
+ * A refusal carried as an exception, for a save that is awaited through a
+ * callback (`onSave`): the form that catches it shows `problem.message`
+ * instead of its general line.
+ */
+export class ApiRefusal extends Error {
+  readonly problem: ApiProblem;
+  constructor(problem: ApiProblem) {
+    super(problem.message);
+    this.name = "ApiRefusal";
+    this.problem = problem;
+  }
 }

@@ -14,6 +14,7 @@ import {
   type AcquisitionRecord, type AcquisitionStage,
 } from "@/lib/investment/acquisition";
 import { todayISO } from "@/lib/clock";
+import { ApiRefusal } from "@/lib/api-errors";
 
 const NOTARY_DIRECTORY = "https://www.notariat.lu/trouver-notaire";
 const COMPROMIS_GUIDE = "https://guichet.public.lu/fr/citoyens/logement/acquisition/aspects-contractuels/compromis-vente.html";
@@ -288,7 +289,7 @@ function AcquisitionEditor({ record, d, locale, onClose, onSave }: {
     setSaving(true);
     setSaveError("");
     try { await onSave(valid, record?.id); }
-    catch { setSaving(false); setSaveError(d.saveError); requestAnimationFrame(() => errorRef.current?.focus()); }
+    catch (e) { setSaving(false); setSaveError(e instanceof ApiRefusal && e.problem.kind !== "generic" ? e.problem.message : d.saveError); requestAnimationFrame(() => errorRef.current?.focus()); }
   }
 
   const labelForField = (field: DraftField): string => {

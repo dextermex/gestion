@@ -1,6 +1,7 @@
 import type { InvestmentCopy } from "./fr";
 
 export const investmentDe = {
+  datePlaceholder: "TT/MM/JJJJ",
   allocationNeeded: "Diese Einheit teilt einen Gebäudekredit. Verwenden Sie die Gesamtübersicht, bis die Finanzierung auf die Einheiten aufgeteilt ist.", unitScopeHint: "Prognose für die gewählte Einheit und ihre direkt zugeordneten Kredite. Kautionen und Mietnebenkosten sind ausgeschlossen.",
   loans: "Immobilienkredite", acquisitions: "Kaufprojekte", simulator: "Kauf planen",
   loansHint: "Ihre Rückzahlungen, Restschulden und verfügbaren Mieteinnahmen.",
