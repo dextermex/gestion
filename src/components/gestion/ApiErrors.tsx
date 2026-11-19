@@ -50,6 +50,16 @@ export function useApiProblems(): ApiProblems {
   }, [copy]);
 }
 
+/**
+ * The sentence for a refusal a component has no words of its own for: by its
+ * status and code, or the component's general line (`fallback`) when nothing
+ * more can be said. For the components that answer a 400 or a 409 themselves
+ * and only need the rest explained.
+ */
+export function refusalLine(problems: ApiProblems, res: { status: number; payload: unknown }, fallback: string): string {
+  return problems.of(res.status, res.payload, { fallback }).message;
+}
+
 /** A problem as a form shows it: the sentence, and the way out when there is one. */
 export function ApiProblemNote({ problem, className }: { problem: ApiProblem | null; className?: string }) {
   if (!problem || !problem.message) return null;

@@ -6,6 +6,7 @@ import { Button, Input, Select } from "@/components/pro/ui";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { euros, formatDate as formatIso, type DepositStatus } from "@/lib/types";
 import { callForm, callJson } from "./call";
+import { refusalLine, useApiProblems } from "./ApiErrors";
 
 /**
  * What the desk does with a guarantee, as writes: received on a date; a
@@ -85,6 +86,7 @@ function Notice({ note, error }: { note: string | null; error: string | null }) 
 /** A guarantee still pending: the day it was received makes it held. */
 export function DepositReceive({ depositId, todayISO, locale, writable, sampleNote, labels }: { depositId: string; todayISO: string; locale: Locale; writable: boolean; sampleNote: string | null; labels: DepositLabels }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [date, setDate] = useState(todayISO);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -104,9 +106,9 @@ export function DepositReceive({ depositId, todayISO, locale, writable, sampleNo
       if (res.ok) {
         setNote(done);
         router.refresh();
-      } else setError(res.status === 409 ? labels.actRefused : labels.actFailed);
+      } else setError(res.status === 409 ? labels.actRefused : refusalLine(problems, res, labels.actFailed));
     } catch {
-      setError(labels.actFailed);
+      setError(problems.network({ fallback: labels.actFailed }).message);
     }
     setBusy(false);
   };
@@ -143,6 +145,7 @@ export function DepositLineActions({
   labels: DepositLabels;
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [open, setOpen] = useState(false);
   const [ref, setRef] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -177,7 +180,7 @@ export function DepositLineActions({
         const stored = await callForm("/api/documents", form, BACK);
         if (!stored) return;
         if (!stored.ok) {
-          setError(stored.status === 415 ? labels.actJustifyBadFile : labels.actFailed);
+          setError(stored.status === 415 ? labels.actJustifyBadFile : refusalLine(problems, stored, labels.actFailed));
           setBusy(false);
           return;
         }
@@ -191,9 +194,9 @@ export function DepositLineActions({
       } else if (res.status === 409 && res.payload.error === "expired") {
         setError(labels.actJustifyLate);
         router.refresh();
-      } else setError(res.status === 409 ? (res.payload.error === "already" ? labels.actAlready : labels.actRefused) : labels.actFailed);
+      } else setError(res.status === 409 ? (res.payload.error === "already" ? labels.actAlready : labels.actRefused) : refusalLine(problems, res, labels.actFailed));
     } catch {
-      setError(labels.actFailed);
+      setError(problems.network({ fallback: labels.actFailed }).message);
     }
     setBusy(false);
   };
@@ -272,6 +275,7 @@ export function DepositSettlementActions({
   labels: DepositLabels;
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -298,9 +302,9 @@ export function DepositSettlementActions({
       if (res.ok) {
         setNote(typeof done === "string" ? done : done(res.payload));
         router.refresh();
-      } else setError(res.status === 409 ? conflict(res.payload.error) : labels.actFailed);
+      } else setError(res.status === 409 ? conflict(res.payload.error) : refusalLine(problems, res, labels.actFailed));
     } catch {
-      setError(labels.actFailed);
+      setError(problems.network({ fallback: labels.actFailed }).message);
     }
     setBusy(false);
   };

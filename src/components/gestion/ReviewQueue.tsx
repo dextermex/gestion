@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { fmt } from "@/lib/i18n/config";
+import { useApiProblems } from "./ApiErrors";
 
 export interface ReviewCandidate {
   leaseId: string;
@@ -104,6 +105,7 @@ export function ReviewQueue({
 }) {
   const router = useRouter();
   const reduced = useReducedMotion();
+  const problems = useApiProblems();
   const [state, setState] = useState<Record<string, RowState>>(() => Object.fromEntries(rows.map((r) => [r.id, initialRowState(r)])));
   const patch = (row: ReviewRow, next: Partial<RowState>) => setState((v) => ({ ...v, [row.id]: { ...rowStateOf(v, row), ...next } }));
   const labelOf = (leaseId: string) => leases.find((l) => l.id === leaseId)?.label ?? leaseId;
@@ -129,13 +131,14 @@ export function ReviewQueue({
       }
       const body = (await res.json().catch(() => ({}))) as { error?: string; bound?: boolean };
       if (!res.ok) {
-        patch(row, { status: action === "reopen" ? "ignored" : "open", error: body.error === "already_matched" ? labels.already : labels.failed });
+        // The queue's own sentence for a row decided elsewhere; the rest by its status (a subscription, a role).
+        patch(row, { status: action === "reopen" ? "ignored" : "open", error: problems.of(res.status, body, { fallback: labels.failed, codes: { already_matched: labels.already } }).message });
         return;
       }
       patch(row, { status: action === "reopen" ? "open" : action === "match" ? "matched" : "ignored", matchedLabel: labelOf(s.leaseId), bound: body.bound === true });
       router.refresh();
     } catch {
-      patch(row, { status: action === "reopen" ? "ignored" : "open", error: labels.failed });
+      patch(row, { status: action === "reopen" ? "ignored" : "open", error: problems.network({ fallback: labels.failed }).message });
     }
   };
 

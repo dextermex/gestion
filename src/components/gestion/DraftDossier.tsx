@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/pro/ui";
+import { useApiProblems } from "@/components/gestion/ApiErrors";
+import { signInHref } from "@/lib/api-errors";
 
 /**
  * What an owner can do with a rental dossier in preparation. Resuming
@@ -52,6 +54,7 @@ export default function DraftDossierActions({
   const [busy, setBusy] = useState<"activate" | "discard" | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const problems = useApiProblems();
 
   const act = async (action: "activate" | "discard") => {
     setBusy(action);
@@ -68,12 +71,22 @@ export default function DraftDossierActions({
         router.refresh();
         return;
       }
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (action === "discard" && data.error === "not_empty") setError(labels.discardBlocked);
-      else if (action === "activate" && data.error === "incomplete") setError(labels.activateIncomplete);
-      else setError(action === "activate" ? labels.activateFailed : labels.failed);
+      if (res.status === 401) {
+        // Nothing is typed here: signing in again comes back to the same sheet.
+        window.location.assign(signInHref(window.location.pathname + window.location.search));
+        return;
+      }
+      // The dossier's own sentences for what it knows; the rest by its status (a subscription, a role, a lot let meanwhile).
+      setError(
+        (
+          await problems.read(res, {
+            fallback: action === "activate" ? labels.activateFailed : labels.failed,
+            codes: { not_empty: labels.discardBlocked, incomplete: labels.activateIncomplete },
+          })
+        ).message,
+      );
     } catch {
-      setError(labels.failed);
+      setError(problems.network({ fallback: labels.failed }).message);
     }
     setBusy(null);
   };

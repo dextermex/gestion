@@ -6,6 +6,7 @@ import { Button, Field, Input, Modal, Select } from "@/components/pro/ui";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { euros, formatDate, formatMonth } from "@/lib/types";
 import { callJson } from "./call";
+import { refusalLine, useApiProblems } from "./ApiErrors";
 
 /**
  * The residential adjustment as steps the desk records: the capital investi
@@ -73,6 +74,7 @@ export function CapitalEditor({
   labels: IndexationLabels;
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<CapitalDraft[]>(
     components.length > 0
@@ -99,9 +101,9 @@ export function CapitalEditor({
         setNote(labels.capitalSaved);
         setOpen(false);
         router.refresh();
-      } else setError(res.status === 400 ? labels.capitalInvalid : labels.capitalFailed);
+      } else setError(res.status === 400 ? labels.capitalInvalid : refusalLine(problems, res, labels.capitalFailed));
     } catch {
-      setError(labels.capitalFailed);
+      setError(problems.network({ fallback: labels.capitalFailed }).message);
     }
     setBusy(false);
   };
@@ -179,6 +181,7 @@ export function AdjustmentSteps({
   labels: IndexationLabels;
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [date, setDate] = useState(todayISO);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -199,9 +202,9 @@ export function AdjustmentSteps({
       if (res.ok) {
         setNote(done(res.payload));
         router.refresh();
-      } else setError(res.status === 409 ? conflict(res.payload.error) : labels.failed);
+      } else setError(res.status === 409 ? conflict(res.payload.error) : refusalLine(problems, res, labels.failed));
     } catch {
-      setError(labels.failed);
+      setError(problems.network({ fallback: labels.failed }).message);
     }
     setBusy(false);
   };
@@ -286,6 +289,7 @@ export function AdjustmentSteps({
 /** The standing-order reminder, posted in the tenancy's conversation. */
 export function LagReminder({ leaseId, message, writable, labels }: { leaseId: string; message: string; writable: boolean; labels: IndexationLabels }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -303,9 +307,9 @@ export function LagReminder({ leaseId, message, writable, labels }: { leaseId: s
       if (res.ok) {
         setNote(labels.lagReminded);
         router.refresh();
-      } else setError(labels.failed);
+      } else setError(refusalLine(problems, res, labels.failed));
     } catch {
-      setError(labels.failed);
+      setError(problems.network({ fallback: labels.failed }).message);
     }
     setBusy(false);
   };

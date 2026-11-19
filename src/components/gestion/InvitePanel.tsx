@@ -8,6 +8,7 @@ import { fmt } from "@/lib/i18n/config";
 import type { Meta } from "@/lib/types";
 import type { InviteLabels, PartyInvitation } from "@/lib/portal/owner";
 import type { InviteState } from "@/lib/portal/types";
+import { useApiProblems } from "@/components/gestion/ApiErrors";
 
 /**
  * The owner's control of each tenant's access to their space: the state of
@@ -39,6 +40,7 @@ export default function InvitePanel({
   const [confirming, setConfirming] = useState<string | null>(null);
   const [sent, setSent] = useState<Record<string, Sent>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const problems = useApiProblems();
   const [copied, setCopied] = useState<string | null>(null);
 
   const send = async (contactId: string) => {
@@ -58,11 +60,12 @@ export default function InvitePanel({
         window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         return;
       } else {
-        const message = data.error === "no_email" ? labels.noEmail : data.error === "not_live" ? labels.notLive : labels.failed;
+        // The panel's own sentences for what it knows; the rest by its status (a subscription, a role).
+        const message = problems.of(res.status, data, { fallback: labels.failed, codes: { no_email: labels.noEmail, not_live: labels.notLive } }).message;
         setErrors((e) => ({ ...e, [contactId]: message }));
       }
     } catch {
-      setErrors((e) => ({ ...e, [contactId]: labels.failed }));
+      setErrors((e) => ({ ...e, [contactId]: problems.network({ fallback: labels.failed }).message }));
     }
     setBusy(null);
   };
@@ -80,10 +83,11 @@ export default function InvitePanel({
         });
         router.refresh();
       } else {
-        setErrors((e) => ({ ...e, [contactId]: labels.failed }));
+        const message = (await problems.read(res, { fallback: labels.failed })).message;
+        setErrors((e) => ({ ...e, [contactId]: message }));
       }
     } catch {
-      setErrors((e) => ({ ...e, [contactId]: labels.failed }));
+      setErrors((e) => ({ ...e, [contactId]: problems.network({ fallback: labels.failed }).message }));
     }
     setBusy(null);
   };

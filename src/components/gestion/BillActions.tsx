@@ -6,6 +6,7 @@ import { Button } from "@/components/pro/ui";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { formatDate } from "@/lib/types";
 import { callJson } from "./call";
+import { useApiProblems } from "./ApiErrors";
 
 /** A bill paid today: written on the row, the page re-reads the books. */
 export default function BillActions({
@@ -25,6 +26,7 @@ export default function BillActions({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const problems = useApiProblems();
 
   const markPaid = async () => {
     const done = fmt(labels.markedPaid, { date: formatDate(todayISO, locale) });
@@ -40,9 +42,9 @@ export default function BillActions({
       if (res.ok) {
         setNote(done);
         router.refresh();
-      } else setError(labels.failed);
+      } else setError(problems.of(res.status, res.payload, { fallback: labels.failed }).message);
     } catch {
-      setError(labels.failed);
+      setError(problems.network({ fallback: labels.failed }).message);
     }
     setBusy(false);
   };

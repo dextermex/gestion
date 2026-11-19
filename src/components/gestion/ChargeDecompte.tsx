@@ -6,6 +6,7 @@ import { Button, Field, Input, Modal, Select } from "@/components/pro/ui";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { euros, formatDate } from "@/lib/types";
 import { callJson } from "./call";
+import { refusalLine, useApiProblems } from "./ApiErrors";
 
 /**
  * A charges décompte, entered by the desk and saved as a draft: the lines as
@@ -70,6 +71,7 @@ export function ChargeDecompteForm({
   labels: ChargeLabels;
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [open, setOpen] = useState(false);
   const [leaseId, setLeaseId] = useState(leases[0]?.id ?? "");
   const [year, setYear] = useState(String(defaultYear));
@@ -95,9 +97,9 @@ export function ChargeDecompteForm({
         setOpen(false);
         setLines([emptyLine(categories[0]?.value ?? "other")]);
         router.refresh();
-      } else setError(res.status === 400 ? labels.formInvalid : res.status === 409 ? labels.formExists : labels.formFailed);
+      } else setError(res.status === 400 ? labels.formInvalid : res.status === 409 ? labels.formExists : refusalLine(problems, res, labels.formFailed));
     } catch {
-      setError(labels.formFailed);
+      setError(problems.network({ fallback: labels.formFailed }).message);
     }
     setBusy(false);
   };
@@ -201,6 +203,7 @@ export function ChargeDecompteForm({
 /** A draft's two fates: issued (dated, its balance carried onto the ledger), or discarded. */
 export function ChargePeriodActions({ periodId, locale, writable, labels }: { periodId: string; locale: Locale; writable: boolean; labels: ChargeLabels }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -220,9 +223,9 @@ export function ChargePeriodActions({ periodId, locale, writable, labels }: { pe
       if (res.ok) {
         setNote(done(res.payload));
         router.refresh();
-      } else setError(res.status === 409 ? labels.issueRefused : labels.formFailed);
+      } else setError(res.status === 409 ? labels.issueRefused : refusalLine(problems, res, labels.formFailed));
     } catch {
-      setError(labels.formFailed);
+      setError(problems.network({ fallback: labels.formFailed }).message);
     }
     setBusy(false);
   };
