@@ -1547,6 +1547,7 @@ export const fr = {
     tlLambertReviewSub: "Bande moyenne : revue à 24 mois",
     tlCreated: "Fiche créée",
     tlCreatedSub: "Source : saisie manuelle",
+    editIdentity: "Identité et coordonnées",
   },
 
   messages: {

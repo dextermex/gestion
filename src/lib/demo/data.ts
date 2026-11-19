@@ -92,6 +92,9 @@ export interface DemoContact {
   notes?: string;
   /** A Morada account is attached to this person: their tenant space is open. */
   portalLinked?: boolean;
+  /** The day the record was created and how it came in, when the base says so. */
+  createdAt?: string;
+  source?: string;
   /** What a lease contract names of them, when the base carries it. */
   identity?: ContactIdentity;
 }

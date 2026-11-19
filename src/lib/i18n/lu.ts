@@ -1541,6 +1541,7 @@ export const lu: Dict = {
     tlLambertReviewSub: "Mëttel Band: Revue no 24 Méint",
     tlCreated: "Fiche ugeluecht",
     tlCreatedSub: "Quell: manuell Saisie",
+    editIdentity: "Identitéit a Kontaktdaten",
   },
 
   messages: {

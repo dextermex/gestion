@@ -1536,6 +1536,7 @@ export const de: Dict = {
     tlLambertReviewSub: "Mittlere Stufe: Prüfung nach 24 Monaten",
     tlCreated: "Datensatz angelegt",
     tlCreatedSub: "Quelle: manuelle Eingabe",
+    editIdentity: "Identität und Kontaktdaten",
   },
 
   messages: {

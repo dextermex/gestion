@@ -396,6 +396,8 @@ export async function buildRealDataFrom(
     bankHolderName: sOr(c.bank_holder_name, undefined),
     notes: sOr(c.notes, undefined),
     portalLinked: typeof c.user_id === "string" && c.user_id !== "",
+    createdAt: sOr(day(c.created_at), undefined),
+    source: sOr(c.source, undefined),
     identity: "civility" in c ? identityOf(c) : undefined,
   }));
   // The base carries the identity columns once 0028 is applied; with no contact yet, nothing is offered anyway.

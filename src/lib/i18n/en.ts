@@ -1536,6 +1536,7 @@ export const en: Dict = {
     tlLambertReviewSub: "Medium band: review at 24 months",
     tlCreated: "Record created",
     tlCreatedSub: "Source: manual entry",
+    editIdentity: "Identity and contact details",
   },
 
   messages: {

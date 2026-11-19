@@ -9,6 +9,7 @@ import type { Locale } from "@/lib/i18n/config";
 import { euros } from "@/lib/types";
 import { computeCapitalInvesti, proposeResidentialAdjustment } from "@/domain/indexation/engine";
 import { adjustmentBlockedText } from "@/lib/i18n/engine";
+import { contactTopic, legalNameRule } from "@/lib/gestion/contact-menu";
 
 /**
  * What "Modifier" offers on one property.
@@ -180,7 +181,7 @@ export function propertyMenu(
     const entries: MenuEntry[] = [
       ...tenants.map((tenant, i) => {
         const label = tenants.length > 1 ? `${d.modify.tenant} \u00b7 ${tenant.name}` : d.modify.tenant;
-        return { id: `tenant-${i}`, label, topic: tenantTopic(d, tenant, `tenant-${i}`, label) };
+        return { id: `tenant-${i}`, label, topic: contactTopic(d, tenant, `tenant-${i}`, label) };
       }),
       ...identities,
       {
@@ -457,53 +458,4 @@ function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string):
     ...(legal ? legalNameRule(tenant) : {}),
     note: legal ? d.modify.identityNoteLegal : d.modify.identityNote,
   };
-}
-
-/**
- * Who the tenant is and how to reach them, from the stored parts of the name:
- * a person's first and last name as they were typed ("Maria" and "Dos
- * Santos"), a company's own name in one field. The printed name is never
- * taken apart.
- */
-function tenantTopic(d: Dict, tenant: DemoContact, id: string, title: string): EditTopic {
-  const reach: EditField[] = [
-    { kind: "text", name: "email", label: d.location.email, value: tenant.email ?? "", maxLength: 160, span: 2 },
-    { kind: "text", name: "phone", label: d.location.phone, value: tenant.phone ?? "", maxLength: 40, span: 2 },
-  ];
-  if (tenant.kind === "legal") {
-    return {
-      id,
-      title,
-      endpoint: `/api/contacts/${tenant.id}`,
-      method: "PATCH",
-      fields: [{ kind: "text", name: "legalName", label: d.modify.legalName, value: tenant.legalName || tenant.name, required: true, maxLength: 160, span: 2 }, ...reach],
-      ...legalNameRule(tenant),
-    };
-  }
-  return {
-    id,
-    title,
-    endpoint: `/api/contacts/${tenant.id}`,
-    method: "PATCH",
-    fields: [
-      { kind: "text", name: "firstName", label: d.location.firstName, value: tenant.firstName ?? "", maxLength: 80 },
-      { kind: "text", name: "lastName", label: d.location.lastName, value: tenant.lastName ?? "", maxLength: 80 },
-      ...reach,
-    ],
-    // The two parts make one name: the route refuses a person left with neither.
-    together: [["firstName", "lastName"]],
-  };
-}
-
-/**
- * A company recorded before it was said to be one has its name in the two
- * parts of a person's name and none of its own. The editor then shows that
- * name as the company's: it is written with every save, and the two parts it
- * came from are emptied, so the name on screen is the one that is stored.
- * A company that has its own name is left alone.
- */
-function legalNameRule(tenant: DemoContact): Pick<EditTopic, "always" | "extra"> {
-  if (tenant.legalName) return {};
-  const parts = Boolean(tenant.firstName || tenant.lastName);
-  return { always: ["legalName"], ...(parts ? { extra: { firstName: "", lastName: "" } } : {}) };
 }
