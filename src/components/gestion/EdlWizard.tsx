@@ -13,6 +13,8 @@ import { stepParser, useStepHistory } from "@/lib/wizard-history";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 import { todayISO } from "@/lib/clock";
+import DateField from "@/components/gestion/DateField";
+import { networkProblem, readApiProblem, signInHref } from "@/lib/api-errors";
 
 /**
  * The état des lieux, walked rather than filled in.
@@ -244,11 +246,13 @@ export default function EdlWizard({
         }),
       });
       if (res.status === 401) {
-        window.location.assign(`/connexion?next=/app/biens/etat-des-lieux?bail=${leaseId}`);
+        // The walk is kept on the device (the draft) and offered back after signing in. The return
+        // address is this page with its lease, encoded: unencoded, the lease became a parameter of the sign-in page.
+        window.location.assign(signInHref(window.location.pathname + window.location.search));
         return;
       }
       if (!res.ok) {
-        setError(d.edlWizard.saveFailed);
+        setError((await readApiProblem(res, d.apiErrors, { fallback: d.edlWizard.saveFailed })).message);
         setSaving(false);
         return;
       }
@@ -260,6 +264,10 @@ export default function EdlWizard({
       // that room and category. A failed upload is named, never dropped
       // silently, and the inventory stands without it.
       const failed: string[] = [];
+      // An answer without the inventory's id leaves the photographs nowhere to go: they are named as not sent.
+      if (!sessionId && photoCount > 0) {
+        for (const shots of Object.values(photos)) for (const { file } of shots) failed.push(file.name);
+      }
       if (sessionId && photoCount > 0) {
         setPhase("photos");
         for (const r of rooms) {
@@ -289,11 +297,11 @@ export default function EdlWizard({
           const sealed = (await sealRes.json().catch(() => ({}))) as { sha256?: string; report?: { documentId: string; name: string } | null };
           setSealResult({ sha256: String(sealed.sha256 ?? ""), report: sealed.report ?? null });
         } else setSealFailed(true);
-      }
+      } else if (!sessionId && signed && recordedItems.length > 0) setSealFailed(true);
       setPhase("idle");
       setStep(doneStep);
     } catch {
-      setError(d.edlWizard.saveFailed);
+      setError(networkProblem(d.apiErrors).message);
     }
     setPhase("idle");
     setSaving(false);
@@ -552,7 +560,7 @@ export default function EdlWizard({
               {Heading}
               <StepCard>
                 <Field label={d.edlWizard.completedOn}>
-                  <Input type="date" value={completedAt} onChange={(e) => setCompletedAt(e.target.value)} />
+                  <DateField value={completedAt} onChange={setCompletedAt} placeholder={d.loyers.datePlaceholder} />
                 </Field>
                 <div className="mt-3">
                   <Field label={d.edlWizard.observations}>
