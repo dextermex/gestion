@@ -381,6 +381,36 @@ appliquée, l'éditeur « Identité au contrat » ne s'affiche pas, Réglages en
 reste sans l'identité au contrat et le dit, et le contrat d'habitation n'est pas produit
 (la réponse nomme les champs qui manquent).
 
+## 0029 · proposée, NON appliquée · la date de passage lue par le locataire
+
+`0029_portail_visites.sql` n'est pas appliquée en production : elle attend une
+approbation explicite. Elle ajoute une seule fonction, `gestion.my_visits()` (security
+definer, `search_path` fixé, exécutable par `authenticated` seulement), qui rend au
+locataire connecté, pour les demandes posées sur ses propres baux, le statut de l'ordre
+de travail, sa date planifiée et le nom de l'intervenant. Aucune table ni policy
+modifiée : `gestion.work_orders` reste fermée au portail (montant, lien magique,
+créneaux proposés et photos de fin de chantier ne sortent pas). Rien dans `public` ;
+`g_can` non touchée. Le repli est noté en tête du fichier. Tant qu'elle n'est pas
+appliquée, l'espace locataire fonctionne sans elle : le suivi d'une demande et la
+rubrique « À venir » n'affichent simplement aucune date de passage.
+
+Revue du 10 nov. 2026, sur une base PostgreSQL 16 locale où tout le schéma de test
+(`e2e/supabase/migrations`, 0029 comprise) a été rejoué, avec des substituts pour les
+rôles, `auth` et `storage` de la plateforme. Elle reste NON appliquée en production.
+
+- L'audit `e2e/db/rls-audit.sql` passe avec la fonction en place.
+- Deux locataires de deux baux : chacun ne lit que l'ordre daté et non refusé de sa
+  propre demande. Un ordre refusé, un ordre sans date, l'ordre d'un autre locataire et
+  l'ordre d'une demande sans bail ne sortent pas. Un compte sans bail lit zéro ligne.
+- `anon` n'a ni l'usage du schéma ni l'exécution ; le locataire lit toujours zéro ligne
+  de `gestion.work_orders` et de la fiche de l'intervenant en direct.
+- Quatre colonnes rendues, pas une de plus. Le nom rendu est la raison sociale de
+  l'intervenant, à défaut son nom affiché, à défaut rien.
+- Le repli (`drop function if exists gestion.my_visits()`) s'exécute sans dépendance.
+- À savoir : `gestion.work_orders` n'a pas d'index sur `ticket_id`. Sans effet aux
+  volumes actuels ; à ajouter le jour où la table grossit. Non vérifié ici : la version
+  de PostgreSQL du projet hébergé et son comportement sous charge.
+
 ## 0024 · 2026-09-28 · crédits immobiliers et projets d'achat
 
 `0024_investment_workspace.sql` (migration `0024_investment_workspace`, version

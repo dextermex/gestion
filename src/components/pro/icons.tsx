@@ -50,9 +50,45 @@ export type IconName =
   | "contract"
   | "pin"
   | "home"
-  | "more";
+  | "more"
+  | "copy"
+  | "upload"
+  | "camera"
+  | "globe"
+  | "devices";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  copy: (
+    <>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </>
+  ),
+  camera: (
+    <>
+      <rect x="3" y="6" width="18" height="14" rx="3" />
+      <circle cx="12" cy="13" r="3.5" />
+      <path d="M8.5 6 10 4h4l1.5 2" />
+    </>
+  ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </>
+  ),
+  devices: (
+    <>
+      <rect x="2" y="4" width="14" height="10" rx="2" />
+      <path d="M6 18h6M18 9h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" />
+    </>
+  ),
   home: (
     <>
       <path d="M4 11.5 12 5l8 6.5" />

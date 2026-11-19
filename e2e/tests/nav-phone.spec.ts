@@ -85,6 +85,8 @@ test("the search takes the caret as it opens, locks the page, reads its corpus o
   expect(parseFloat(await field.evaluate((el) => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
   expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("hidden");
   const close = palette.getByRole("button", { name: "Fermer" });
+  // The palette rises on a spring from 98 % of its size: a 44 px button reads 43 until it has settled.
+  await expect.poll(async () => (await box(close)).width, { timeout: 3_000 }).toBeGreaterThanOrEqual(44);
   const cb = await box(close);
   expect(cb.width).toBeGreaterThanOrEqual(44);
   expect(cb.height).toBeGreaterThanOrEqual(44);

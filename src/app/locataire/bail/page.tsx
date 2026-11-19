@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Icon } from "@/components/pro/icons";
 import { Badge, Card } from "@/components/pro/ui";
 import { MetaBadge, Panel } from "@/components/gestion/bits";
 import TenantEmpty from "@/components/gestion/TenantEmpty";
@@ -9,7 +11,8 @@ import { depositStatusMeta, edlStatusMeta, euros, formatDate, leaseTypeMeta } fr
 /**
  * "Mon bail": the dossier the owner keeps, read as the tenant may read it.
  * Same lease row, same guarantee, same inventories, same insurance, same
- * documents; nothing copied, nothing summarised by hand.
+ * documents; nothing copied, nothing summarised by hand. The documents come
+ * first: the signed lease is what a tenant most often opens this page for.
  */
 export default async function TenantLeasePage() {
   const { locale, d } = await getI18n();
@@ -32,7 +35,10 @@ export default async function TenantLeasePage() {
     [d.tenant.leaseRent, euros(lease.rentCents, locale)],
     [d.tenant.leaseCharges, euros(lease.chargesCents, locale)],
     [d.tenant.leaseTotal, <span key="tot" className="font-display text-base font-bold">{euros(lease.rentCents + lease.chargesCents, locale)}</span>],
-    [d.tenant.leaseRegime, lease.chargesRegime === "forfait" ? d.tenant.regimeForfait : d.tenant.regimeAdvances],
+    [
+      d.tenant.leaseRegime,
+      lease.chargesRegime === "forfait" ? d.tenant.regimeForfait : d.tenant.regimeAdvances,
+    ],
     [d.tenant.leaseDueDay, fmt(d.tenant.leaseDueDayValue, { n: ordinalDay(locale, lease.paymentDay) })],
     [d.tenant.leaseFurnished, lease.furnished ? d.common.yes : d.common.no],
   ];
@@ -54,12 +60,48 @@ export default async function TenantLeasePage() {
         {ended && <Badge className="mt-2">{d.tenant.currentEnded}</Badge>}
       </div>
 
+      <Panel
+        title={d.tenant.docsTitle}
+        action={
+          <Link href="/locataire/documents" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 hover:underline">
+            {d.tenant.docsAll}
+          </Link>
+        }
+      >
+        {lease.documents.length === 0 ? (
+          <p className="text-sm text-ink-soft">{d.tenant.docsNone}</p>
+        ) : (
+          <ul className="divide-y divide-sand-100">
+            {lease.documents.map((doc) => (
+              <li key={doc.id} className="flex items-center gap-3 py-2.5">
+                <svg className="h-4 w-4 shrink-0 text-ink-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+                </svg>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">{doc.name}</p>
+                  <p className="text-xs text-ink-soft">{formatDate(doc.createdAt, locale)}</p>
+                </div>
+                {doc.url && (
+                  <a href={doc.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-sand-200 bg-white px-3.5 text-sm font-semibold text-brand-700 transition hover:border-brand-300">
+                    {d.tenant.docOpen}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
       <Card className="p-5">
         <dl className="divide-y divide-sand-100">
           {rows.map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-4 py-2.5">
-              <dt className="text-sm text-ink-soft">{label}</dt>
-              <dd className="text-right text-sm font-semibold text-ink">{value}</dd>
+            <div key={label} className="py-2.5">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-sm text-ink-soft">{label}</dt>
+                <dd className="text-right text-sm font-semibold text-ink">{value}</dd>
+              </div>
+              {/* The plain words under a term of the lease take the row's whole width, so the label keeps its line on a phone. */}
+              {label === d.tenant.leaseRegime && lease.chargesRegime !== "forfait" && <p className="mt-0.5 text-right text-xs text-ink-soft">{d.tenant.regimeAdvancesHint}</p>}
             </div>
           ))}
         </dl>
@@ -81,6 +123,7 @@ export default async function TenantLeasePage() {
                 <dt className="text-sm text-ink-soft">{d.tenant.depositStatus}</dt>
                 <dd>{depMeta[lease.deposit.status] ? <MetaBadge meta={depMeta[lease.deposit.status]} /> : <Badge>{lease.deposit.status}</Badge>}</dd>
               </div>
+              {lease.deposit.status === "held" && <p className="pt-2 text-right text-xs text-ink-soft">{d.tenant.depositHeldHint}</p>}
             </dl>
           ) : (
             <p className="text-sm text-ink-soft">{d.tenant.depositNone}</p>
@@ -134,6 +177,15 @@ export default async function TenantLeasePage() {
               ))}
             </ul>
           )}
+          {!ended && (
+            <Link
+              href="/locataire/demandes?nouvelle=attestation"
+              className="tactile mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            >
+              <Icon name="upload" size={18} className="shrink-0" />
+              {d.tenant.sendCertificate}
+            </Link>
+          )}
         </Panel>
       </div>
 
@@ -145,31 +197,6 @@ export default async function TenantLeasePage() {
           {lease.property.syndicName && <Badge>{fmt(d.tenant.syndic, { name: lease.property.syndicName })}</Badge>}
           {lease.property.smokeDetectorsConfirmed && <Badge className="bg-emerald-100 text-emerald-800">{d.tenant.smokeDetectors}</Badge>}
         </div>
-      </Panel>
-
-      <Panel title={d.tenant.docsTitle}>
-        {lease.documents.length === 0 ? (
-          <p className="text-sm text-ink-soft">{d.tenant.docsNone}</p>
-        ) : (
-          <ul className="divide-y divide-sand-100">
-            {lease.documents.map((doc) => (
-              <li key={doc.id} className="flex items-center gap-3 py-2.5">
-                <svg className="h-4 w-4 shrink-0 text-ink-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
-                </svg>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{doc.name}</p>
-                  <p className="text-xs text-ink-soft">{formatDate(doc.createdAt, locale)}</p>
-                </div>
-                {doc.url && (
-                  <a href={doc.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
-                    {d.tenant.docOpen}
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
       </Panel>
     </div>
   );

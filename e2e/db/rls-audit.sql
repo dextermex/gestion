@@ -93,7 +93,7 @@ begin
   for r in
     select unnest(array[
       'gestion.portal_tenant_lease(uuid)', 'gestion.portal_tenant_live_lease(uuid)', 'gestion.portal_tenant_property(uuid)',
-      'gestion.my_home()', 'gestion.my_lease_parties()', 'gestion.my_managers()', 'gestion.is_tenant()',
+      'gestion.my_home()', 'gestion.my_lease_parties()', 'gestion.my_managers()', 'gestion.my_visits()', 'gestion.is_tenant()',
       'gestion.portal_invite_lease(uuid,uuid)', 'gestion.portal_revoke(uuid)', 'gestion.portal_accept(text)', 'gestion.can(uuid,text)'
     ]) as fn
   loop

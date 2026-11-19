@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Badge, Card } from "@/components/pro/ui";
-import TenantChat, { type TenantChatMessage, type TenantChatRequest } from "@/components/gestion/TenantChat";
+import TenantChat, { type TenantChatLabels, type TenantChatMessage, type TenantChatRequest } from "@/components/gestion/TenantChat";
 import { initials } from "@/lib/types";
 import { useViewHistory } from "@/lib/view-history";
 
@@ -30,6 +30,10 @@ export interface TenantConversationView {
   preview: string;
   previewIsRequest: boolean;
   messages: TenantChatMessage[];
+  /** When the last message was written (ISO); empty before the first word. */
+  lastAt: string;
+  /** This tenancy's requests still open: where a photo from the conversation is filed. */
+  openRequests: Array<{ id: string; title: string }>;
   /** The way to a new request while this tenancy is in force. */
   newRequestHref: string | null;
 }
@@ -65,7 +69,7 @@ export default function TenantMessages({
   title: string;
   subtitle: string;
   pickLabel: string;
-  labels: { empty: string; noneYet: string; write: string; send: string; sent: string; failed: string; view: string; requestBadge: string; newRequest: string };
+  labels: TenantChatLabels & { noneYet: string };
   backLabel: string;
   sampleNote: string | null;
 }) {
@@ -214,6 +218,8 @@ export default function TenantMessages({
           subtitle={active.label}
           messages={active.messages}
           requests={requests}
+          openRequests={active.openRequests}
+          lastAt={active.lastAt}
           labels={labels}
           newRequestHref={active.newRequestHref}
           sampleNote={sampleNote}

@@ -19,7 +19,10 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push:
 
 const t = fr.tenant;
 const manager = "Cabinet Reuter";
-const labels = { empty: t.threadEmpty, noneYet: t.msgNoneYet, write: t.threadWrite, send: t.threadSend, sent: t.threadSent, failed: t.threadFailed, view: t.msgView, requestBadge: fr.messages.requestBadge, newRequest: t.reqNew };
+const labels = {
+  empty: t.threadEmpty, noneYet: t.msgNoneYet, write: t.threadWrite, send: t.threadSend, sent: t.threadSent, failed: t.threadFailed, view: t.msgView, requestBadge: fr.messages.requestBadge, newRequest: t.reqNew,
+  photo: t.chatPhoto, photoTitle: t.chatPhotoTitle, photoPick: t.chatPhotoPick, photoNone: t.chatPhotoNone, photoMessage: t.chatPhotoMessage, photoChoose: t.photoPick, photoFailed: t.photoFailed, uploading: t.uploading, close: fr.common.close,
+};
 
 const conversations: TenantConversationView[] = [
   {
@@ -33,6 +36,8 @@ const conversations: TenantConversationView[] = [
       { id: "m-1", mine: true, kind: "tenant", from: t.threadYou, body: "Bonjour, une question sur le bail.", dayLabel: "22/09/2026", timeLabel: "08:40", requestId: null },
       { id: "m-2", mine: true, kind: "tenant", from: t.threadYou, body: "Volet roulant bloqué", dayLabel: "22/09/2026", timeLabel: "09:00", requestId: "r-1" },
     ],
+    lastAt: "2026-09-22T09:00:00.000Z",
+    openRequests: [{ id: "r-1", title: "Volet roulant bloqué" }],
     newRequestHref: "/locataire/demandes?nouvelle=1",
   },
   {
@@ -43,6 +48,8 @@ const conversations: TenantConversationView[] = [
     preview: "",
     previewIsRequest: false,
     messages: [],
+    lastAt: "",
+    openRequests: [],
     newRequestHref: null,
   },
 ];
@@ -186,5 +193,32 @@ describe("the tenant's Messages on a phone", () => {
     const ways = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href="/locataire/demandes?nouvelle=1"]'));
     expect(ways.map((a) => a.className.includes("lg:hidden") && !a.className.includes("max-lg:hidden"))).toEqual([false, true]);
     expect(ways[1].getAttribute("aria-label")).toBe(t.reqNew);
+  });
+
+  it("marks the conversation seen on this browser once it has the screen, and not before", async () => {
+    document.cookie = "morada_tenant_seen=; path=/; max-age=0";
+    await render();
+    // The list alone: nothing has been read yet.
+    expect(document.cookie).not.toContain("morada_tenant_seen=l-3b");
+    await click(document.querySelector("#tenant-conversations li button"));
+    expect(decodeURIComponent(document.cookie)).toContain("morada_tenant_seen=l-3b=2026-09-22T09:00:00.000Z");
+  });
+
+  it("files a photo on a request: the camera asks which open request it is about, and is not offered on an ended tenancy", async () => {
+    await render({ initialView: "chat", initialId: "c-3b" });
+    const camera = document.querySelector<HTMLButtonElement>(`button[aria-label="${t.chatPhoto}"]`);
+    expect(camera).not.toBeNull();
+    // The send arrow keeps its size inside the round button.
+    expect(document.querySelector(`button[aria-label="${t.threadSend}"]`)?.className).toContain("px-0!");
+    await click(camera);
+    const dialog = document.querySelector("[role=dialog]")!;
+    expect(dialog.getAttribute("aria-label")).toBe(t.chatPhotoTitle);
+    expect(Array.from(dialog.querySelectorAll("input[type=radio]")).map((r) => (r as HTMLInputElement).value)).toEqual(["r-1"]);
+    expect(dialog.querySelector("input[type=file]")?.getAttribute("accept")).toBe("image/*");
+  });
+
+  it("offers no camera where no request can be written", async () => {
+    await render({ initialView: "chat", initialId: "lease:l-old" });
+    expect(document.querySelector(`button[aria-label="${t.chatPhoto}"]`)).toBeNull();
   });
 });
