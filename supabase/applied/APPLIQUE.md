@@ -267,7 +267,7 @@ SQL ci-dessus. Réversible : les deux `grant` notés en tête de 0021, puis le r
 noté en tête de 0020 (drop des deux vues et de la table, bucket ramené à 10 Mo et
 aux quatre images).
 
-## 0022 · proposée, NON appliquée · la trace papier
+## 0022 · 2026-11-19 · la trace papier (appliquée, voir la fin du fichier)
 
 `0022_trace_papier.sql` n'est pas appliquée en production : elle attend une
 approbation explicite. Elle est rejouée sur la base jetable de CI par
@@ -290,7 +290,7 @@ policies, `g_can` à 60d98f80cccaa74f02b4afb1ebd6b859), appliquer, vérifier RLS
 grants des nouveaux objets, puis rejouer les parcours sous les policies de production
 dans une transaction annulée, comme pour 0020.
 
-## 0023 · proposée, NON appliquée · les envois
+## 0023 · 2026-11-19 · les envois (appliquée, voir la fin du fichier)
 
 `0023_envois.sql` n'est pas appliquée en production : elle attend une approbation
 explicite, après 0022 dont elle dépend (`workspace_settings`). Elle est rejouée sur la
@@ -309,7 +309,7 @@ non touchée. Le repli est noté en tête du fichier. Côté serveur, l'envoi r�
 (aucune des deux n'est posée en production à ce jour) ; sans elles, chaque e-mail est
 composé et consigné avec le statut « non configuré », et Réglages le dit.
 
-## 0025 · proposée, NON appliquée · la lecture des pièces
+## 0025 · 2026-11-19 · la lecture des pièces (appliquée, voir la fin du fichier)
 
 `0025_documents_lecture.sql` n'est pas appliquée en production : elle attend une
 approbation explicite. Elle est rejouée sur la base jetable de CI, où l'audit RLS la
@@ -324,7 +324,7 @@ fichier. Côté serveur, la lecture elle-même demande `ANTHROPIC_API_KEY` dans 
 variables d'environnement Vercel (non posée en production à ce jour) ; sans elle, le
 dialogue d'ajout fonctionne sans proposition.
 
-## 0026 · proposée, NON appliquée · un parking comme bien
+## 0026 · 2026-11-19 · un parking comme bien (appliquée, voir la fin du fichier)
 
 `0026_properties_parking.sql` n'est pas appliquée en production : elle attend une
 approbation explicite. Elle est rejouée sur la base jetable de CI, où l'audit RLS la
@@ -336,7 +336,7 @@ modifiée ; rien dans `public` ; `g_can` non touchée. Tant qu'elle n'est pas ap
 `POST /api/biens/create` répond 503 `schema_outdated` pour ce type, jamais une erreur de
 saisie. Le repli est noté en tête du fichier.
 
-## 0027 · proposée, NON appliquée · la signature électronique
+## 0027 · 2026-11-19 · la signature électronique (appliquée, voir la fin du fichier)
 
 `0027_signatures.sql` n'est pas appliquée en production : elle attend une approbation
 explicite, après 0022 dont elle dépend (`gestion.audit_row()`, et les contrats produits
@@ -361,7 +361,7 @@ Vercel, et `YOUSIGN_ENV=production` pour sortir de l'environnement de test. Tant
 n'est pas appliquée, Modèles & contrats n'offre aucun envoi, même avec la clé posée, et
 dit que la base n'est pas encore prête.
 
-## 0028 · proposée, NON appliquée · les parties au contrat de bail
+## 0028 · 2026-11-19 · les parties au contrat de bail (appliquée, voir la fin du fichier)
 
 `0028_parties_au_contrat.sql` n'est pas appliquée en production : elle attend une
 approbation explicite, après 0022 dont elle dépend (`gestion.workspace_settings`). Elle
@@ -381,7 +381,7 @@ appliquée, l'éditeur « Identité au contrat » ne s'affiche pas, Réglages en
 reste sans l'identité au contrat et le dit, et le contrat d'habitation n'est pas produit
 (la réponse nomme les champs qui manquent).
 
-## 0029 · proposée, NON appliquée · la date de passage lue par le locataire
+## 0029 · 2026-11-19 · la date de passage lue par le locataire (appliquée, voir la fin du fichier)
 
 `0029_portail_visites.sql` n'est pas appliquée en production : elle attend une
 approbation explicite. Elle ajoute une seule fonction, `gestion.my_visits()` (security
@@ -465,3 +465,67 @@ Edge Functions : `bank`, `notify`, `revenuecat`, `scan-receipt` (déployées par
 `supabase functions deploy`). Rien dans `supabase/applied/` ni dans `public` n'est
 modifié par ce rapatriement ; `g_can` reste intouchée. L'app mobile doit ensuite
 retirer son `supabase/` et rester un pur client.
+
+## Remise à niveau du 19 novembre 2026 · 0022, 0023, 0025 à 0029, puis 0030
+
+Sur mandat écrit d'Alexandre du 19 novembre 2026 (« proceed with the necessary
+code changes, database migrations, and fixes »), après l'audit du même jour.
+Morada Gestion n'a pas encore de client : seules des données de test vivent
+dans le schéma `gestion`.
+
+Sauvegarde prise avant toute écriture : schéma `gestion_backup_20261119` dans
+la base hébergée, soit les 72 tables de `gestion` copiées ligne pour ligne et
+une table `_ddl` de 742 définitions (fonctions, policies de `gestion` et de
+`storage.objects`, déclencheurs, vues, contraintes, registre des migrations).
+Aucun droit pour `anon` ni `authenticated`, RLS active sans policy. À
+supprimer (`drop schema gestion_backup_20261119 cascade`) une fois la remise
+à niveau acceptée.
+
+Appliquées dans cet ordre par l'outil de migration Supabase, chacune dans sa
+transaction : `gestion_0022_trace_papier`, `gestion_0023_envois`,
+`gestion_0025_documents_lecture`, `gestion_0026_properties_parking`,
+`gestion_0027_signatures`, `gestion_0028_parties_au_contrat`,
+`gestion_0029_portail_visites`, `gestion_0030_integrite`.
+
+Deux fichiers ont été corrigés avant application (le texte de ce dépôt est
+celui qui a été appliqué) :
+
+- 0022 : `gestion.portal_document_readable(path)` exige désormais que la
+  ligne soit celle d'un bail dont l'appelant est locataire et que le chemin
+  soit dans le dossier de l'espace qui porte la ligne.
+- 0023 : `gestion.portal_record_delivery` consigne le destinataire que
+  l'espace désigne (`portal_notification_target`), plus celui que l'appelant
+  annonce.
+
+0030 (`0030_integrite.sql`) fait tenir dans la base ce qui ne tenait que par
+l'application : le jour civil luxembourgeois (`gestion.today()`, vue
+`rent_period_status`), l'appartenance d'une ligne fille à l'espace de sa
+ligne mère (92 gardes posés par `gestion.install_org_guards()`, à rappeler
+après toute migration qui crée une clé étrangère entre deux tables portant
+`org_id`), le lien fiche / compte réservé à l'acceptation d'une invitation,
+l'heure et le rattachement de ce qu'un locataire écrit, l'horloge des
+conversations, l'archivage d'un bien avec ses lots, l'intangibilité de ce
+qui est scellé, le journal étendu à cinq tables et les droits du dossier
+`documents` du bucket. Sa section 2 reprend, sans rien changer sur la base
+hébergée, les sections 1, 2 et 7 de
+`supabase/shared/migrations/20261011120000_security_tenant_isolation.sql` :
+la base de test de la CI porte ainsi les mêmes règles d'isolement que la
+production.
+
+Vérifié après application, dans des sous-transactions annulées : une
+échéance, une conversation, une partie au bail écrites dans un espace sur le
+bail d'un autre sont refusées (42501) ; un gestionnaire ne peut pas poser
+`contacts.user_id` et peut le retirer ; archiver un bien archive ses lots,
+le restaurer les rend, un bien loué ne s'archive pas (23514) ; le message
+d'un locataire prend l'heure de la base et l'horloge de sa conversation le
+suit. État du registre : 0001 à 0030 appliquées, sans exception. Aucune
+ligne de `gestion` n'a été modifiée hors `conversations.last_message_at`
+(recalé sur le dernier message réel). Rien de `public` n'a été touché.
+
+`supabase/shared` : les trois migrations datées d'octobre sont bien en
+production (objets constatés au catalogue le 19 novembre : `push_devices`,
+`notifications`, `notification_prefs`, `referral_codes`, `referral_uses`,
+`guard_link_org`, tâche `gestion-notify-tick`) ; `billing_status` ne l'est
+pas. Fonctions Edge déployées : `bank` (v6), `notify` (v8), `scan-receipt`
+(v5) ; `revenuecat` ne l'est pas.
+
