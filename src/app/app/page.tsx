@@ -114,15 +114,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const lateOpen = RENT_PERIODS.filter(
     (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth && rp.allocatedCents < rp.totalCents,
   ).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
-  if (lateOpen.length > 0) {
-    // Late tenants once, as one row: who is late is the Loyers screen's to say.
-    const tenants = new Set(lateOpen.map((rp) => rp.leaseId)).size;
+  // This month's late rents are the head's own chip. What is still unpaid
+  // from earlier months is a different fact, said once, here.
+  const earlierOpen = lateOpen.filter((rp) => rp.period < shownMonth);
+  if (earlierOpen.length > 0) {
     todo.push({
       priority: 1,
       href: "/app/loyers?vue=impayes",
-      title: tenants === 1 ? d.home.arrearsOne : fmt(d.home.arrearsMany, { n: tenants }),
+      title: earlierOpen.length === 1 ? d.home.arrearsOne : fmt(d.home.arrearsMany, { n: earlierOpen.length }),
       sub: d.home.arrearsSub,
-      amount: eurosWhole(lateOpen.reduce((sum, rp) => sum + rp.totalCents - rp.allocatedCents, 0), locale),
+      amount: eurosWhole(earlierOpen.reduce((sum, rp) => sum + rp.totalCents - rp.allocatedCents, 0), locale),
       badge: { label: d.dash.badgeArrears, color: "bg-red-100 text-red-700" },
     });
   }

@@ -55,9 +55,11 @@ export type IconName =
   | "upload"
   | "camera"
   | "globe"
-  | "devices";
+  | "devices"
+  | "folder";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  folder: <path d="M3.5 7.5a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7l.9 1.1a1 1 0 0 0 .8.4h6.2a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />,
   copy: (
     <>
       <rect x="9" y="9" width="11" height="11" rx="2" />

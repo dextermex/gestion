@@ -95,6 +95,7 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
         { href: "/app/finance", label: d.nav.cash },
         { href: "/app/banque", label: d.hubs.banking, badge: badges.review || undefined },
         { href: "/app/charges", label: d.hubs.statements },
+        { href: "/app/rapports", label: d.nav.reportsNav },
         { href: "/app/fiscalite", label: d.hubs.reports },
         { href: "/app/emprunts", label: d.nav.mortgages },
         { href: "/app/acquisitions", label: d.nav.acquisitions },
@@ -112,6 +113,7 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
         { href: "/app/contrats", label: d.hubs.contracts },
       ],
     },
+    { href: "/app/calculateurs", label: d.nav.calculatorsNav, icon: "percent" },
     cabinet
       ? {
           href: "/app/conformite",

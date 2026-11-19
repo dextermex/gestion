@@ -159,7 +159,7 @@ export function Row({ href, icon, tone = "plain", title, sub, right, rightTone =
     <>
       <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${well}`}><Icon name={icon} size={19} /></span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-semibold text-ink">{title}</span>
+        <span className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink">{title}</span>
         {sub && <span className="block truncate text-[13px] text-ink-soft">{sub}</span>}
       </span>
       {right && <span className={`shrink-0 text-sm font-semibold tabular-nums ${rightCls}`}>{right}</span>}
