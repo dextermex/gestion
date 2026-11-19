@@ -122,3 +122,26 @@ describe("Rapports", () => {
     expect(card).toContain(fr.reports.soon);
   });
 });
+
+describe("Baux", () => {
+  const render = async (params: Record<string, string> = {}) => {
+    const { default: Page } = await import("@/app/app/baux/page");
+    return text(renderToString(await Page({ searchParams: Promise.resolve(params) })));
+  };
+
+  it("says there is no lease yet and where one starts, instead of a filter that cannot be reset", async () => {
+    data = empty();
+    const html = await render();
+    expect(html).toContain(fr.baux.noneTitle);
+    expect(html).toContain(fr.baux.noneBody);
+    expect(html).not.toContain(fr.common.resetFilters);
+    expect(hrefs(html)).toContain("/app/biens");
+  });
+
+  it("keeps the reset link for a filter that matched nothing", async () => {
+    const html = await render({ statut: "preavis" });
+    expect(html).toContain(fr.baux.emptyTitle);
+    expect(html).toContain(fr.common.resetFilters);
+    expect(html).not.toContain(fr.baux.noneTitle);
+  });
+});

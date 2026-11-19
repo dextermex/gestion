@@ -178,6 +178,11 @@ export const de: Dict = {
     datasetFr: "Frankophones Büro",
     datasetLu: "Luxemburgisches Büro",
     datasetAria: "Demo-Datensatz wählen",
+    needProperty: "Legen Sie zuerst ein Objekt an: Ein Mietvertrag, eine Zahlung und ein Einsatz gehören immer zu einer Wohnung.",
+    needContact: "Legen Sie zuerst den Kontakt des Mieters an: Der Mietvertrag benennt ihn.",
+    needLease: "Noch kein laufender Mietvertrag: Eine Zahlung gehört zu einem Mietverhältnis. Fügen Sie von der Seite eines Objekts aus einen Mieter hinzu.",
+    needContactAction: "Kontakt anlegen",
+    needLeaseAction: "Meine Objekte ansehen",
   },
 
   status: {
@@ -760,6 +765,8 @@ export const de: Dict = {
     portalNotLive: "Die Einladung geht ab, sobald der Bail aktiv ist.",
     portalFailed: "Die Einladung konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal.",
     portalSample: "Bei einem Beispielbüro werden Einladungen nur dargestellt: nichts wird gesendet.",
+    noneTitle: "Kein laufender Mietvertrag",
+    noneBody: "Ein Mietvertrag entsteht aus einer Vermietung: Öffnen Sie ein freies Objekt und fügen Sie den Mieter hinzu, der Assistent bereitet den Mietvertrag mit vor.",
   },
 
   bien: {
@@ -2492,7 +2499,7 @@ export const de: Dict = {
   onboarding: {
     title: "Erste Schritte mit Morada Gestion",
     stepProfile: "Vervollständigen Sie das Büroprofil",
-    stepProfileSub: "Zulassung, Haftpflicht und die Angaben für Ihre Briefe.",
+    stepProfileSub: "Name, Adresse und Zahlungskonto: Jedes erstellte Dokument trägt sie.",
     stepProperty: "Fügen Sie Ihr erstes Objekt hinzu",
     stepPropertySub: "Gebäude, Haus oder Einheit: der Assistent führt in zwei Schritten.",
     stepContact: "Legen Sie einen Kontakt an",
@@ -2503,12 +2510,13 @@ export const de: Dict = {
     stepBankSub: "Nur lesend: Mieten gleichen sich von selbst ab.",
     stepRent: "Ziehen Sie die erste Miete ein",
     stepRentSub: "Verfolgen Sie jede Fälligkeit und ihren Status unter Mieten.",
-    help: "Hilfe",
+    help: "Eine Frage? Schreiben Sie uns",
     ignore: "Alle Aufgaben ignorieren",
     reopen: "Erste Schritte fortsetzen",
     collapse: "Einklappen",
     stepDone: "Schritt erledigt",
     stepTodo: "Als erledigt markieren",
+    stepProfileOwner: "Ergänzen Sie Ihre Vermieterangaben",
   },
 
   auth: {

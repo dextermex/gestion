@@ -178,6 +178,11 @@ export const en: Dict = {
     datasetFr: "French-speaking firm",
     datasetLu: "Luxembourgish firm",
     datasetAria: "Choose the demo dataset",
+    needProperty: "Add a property first: a lease, a payment and a repair always belong to a home.",
+    needContact: "Create the tenant's contact first: the lease names it.",
+    needLease: "No running lease yet: a payment belongs to a tenancy. Add a tenant from a property's page.",
+    needContactAction: "Create a contact",
+    needLeaseAction: "See my properties",
   },
 
   status: {
@@ -760,6 +765,8 @@ export const en: Dict = {
     portalNotLive: "The invitation goes out once the lease is active.",
     portalFailed: "The invitation could not be sent. Try again in a moment.",
     portalSample: "On a sample cabinet, invitations are illustrated: nothing is sent.",
+    noneTitle: "No running lease",
+    noneBody: "A lease comes from a tenancy: open a vacant property and add its tenant, the guide prepares the lease with it.",
   },
 
   bien: {
@@ -2492,7 +2499,7 @@ export const en: Dict = {
   onboarding: {
     title: "Getting started with Morada Gestion",
     stepProfile: "Complete the firm's profile",
-    stepProfileSub: "Authorisation, liability insurance and the details used on your letters.",
+    stepProfileSub: "Name, address and the account to pay: every document produced carries them.",
     stepProperty: "Add your first property",
     stepPropertySub: "Building, house or unit: the assistant guides you in two steps.",
     stepContact: "Create a contact",
@@ -2503,12 +2510,13 @@ export const en: Dict = {
     stepBankSub: "Read-only: rents reconcile on their own.",
     stepRent: "Collect the first rent",
     stepRentSub: "Follow every period and its status in Rents.",
-    help: "Help",
+    help: "A question? Write to us",
     ignore: "Ignore all tasks",
     reopen: "Resume getting started",
     collapse: "Collapse",
     stepDone: "Step done",
     stepTodo: "Mark as done",
+    stepProfileOwner: "Complete your landlord details",
   },
 
   auth: {

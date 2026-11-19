@@ -184,6 +184,11 @@ export const fr = {
     datasetFr: "Cabinet francophone",
     datasetLu: "Cabinet luxembourgeois",
     datasetAria: "Choisir le jeu de données de démonstration",
+    needProperty: "Ajoutez d'abord un bien : un bail, un paiement et une intervention se rattachent toujours à un logement.",
+    needContact: "Créez d'abord le contact du locataire : le bail le désigne.",
+    needLease: "Aucun bail en cours pour l'instant : un paiement se rattache à une location. Ajoutez un locataire depuis la fiche d'un bien.",
+    needContactAction: "Créer un contact",
+    needLeaseAction: "Voir mes biens",
   },
 
   status: {
@@ -771,6 +776,8 @@ export const fr = {
     portalNotLive: "L'invitation s'envoie une fois le bail actif.",
     portalFailed: "L'invitation n'a pas pu être envoyée. Réessayez dans un instant.",
     portalSample: "Sur un cabinet d'exemple, les invitations sont illustrées : aucun envoi ne part.",
+    noneTitle: "Aucun bail en cours",
+    noneBody: "Un bail naît d'une location : ouvrez un bien vacant et ajoutez son locataire, l'assistant prépare le bail avec lui.",
   },
 
   bien: {
@@ -2503,7 +2510,7 @@ export const fr = {
   onboarding: {
     title: "Bien démarrer avec Morada Gestion",
     stepProfile: "Complétez le profil du cabinet",
-    stepProfileSub: "Autorisation, assurance RC et coordonnées pour vos courriers.",
+    stepProfileSub: "Nom, adresse et compte à payer : chaque document produit les porte.",
     stepProperty: "Ajoutez votre premier bien",
     stepPropertySub: "Immeuble, maison ou lot : l'assistant vous guide en deux étapes.",
     stepContact: "Créez un contact",
@@ -2514,12 +2521,13 @@ export const fr = {
     stepBankSub: "Lecture seule : les loyers se rapprochent tout seuls.",
     stepRent: "Encaissez le premier loyer",
     stepRentSub: "Suivez chaque échéance et son statut dans Loyers.",
-    help: "Aide",
+    help: "Une question ? Écrivez-nous",
     ignore: "Ignorer toutes les étapes",
     reopen: "Reprendre la mise en route",
     collapse: "Réduire",
     stepDone: "Étape faite",
     stepTodo: "Marquer comme faite",
+    stepProfileOwner: "Complétez vos coordonnées de bailleur",
   },
 
   auth: {

@@ -183,6 +183,11 @@ export const lu: Dict = {
     datasetFr: "Frankophone Cabinet",
     datasetLu: "Lëtzebuergesche Cabinet",
     datasetAria: "Demo-Dataset wielen",
+    needProperty: "Leet fir d'éischt e Bien un: e Bail, eng Bezuelung an eng Interventioun gehéieren ëmmer zu enger Wunneng.",
+    needContact: "Leet fir d'éischt de Kontakt vum Locataire un: de Bail nennt en.",
+    needLease: "Nach kee lafende Bail: eng Bezuelung gehéiert zu enger Locatioun. Setzt vun der Säit vun engem Bien aus e Locataire bäi.",
+    needContactAction: "Kontakt uleeën",
+    needLeaseAction: "Meng Biene kucken",
   },
 
   status: {
@@ -765,6 +770,8 @@ export const lu: Dict = {
     portalNotLive: "D'Invitatioun geet fort, soubal de Bail aktiv ass.",
     portalFailed: "D'Invitatioun konnt net geschéckt ginn. Probéiert et gläich nach eng Kéier.",
     portalSample: "Bei engem Beispill-Cabinet ginn Invitatiounen nëmmen duergestallt: näischt geet fort.",
+    noneTitle: "Kee lafende Bail",
+    noneBody: "E Bail entsteet aus enger Locatioun: maacht e fräie Bien op a setzt säi Locataire bäi, den Assistent bereet de Bail mat vir.",
   },
 
   bien: {
@@ -2497,7 +2504,7 @@ export const lu: Dict = {
   onboarding: {
     title: "Gutt ufänke mat Morada Gestion",
     stepProfile: "Kompletéiert de Profil vum Cabinet",
-    stepProfileSub: "Autorisatioun, RC-Assurance an d'Donnéeë fir Är Bréiwer.",
+    stepProfileSub: "Numm, Adress a Kont fir ze bezuelen: all erstallt Dokument dréit se.",
     stepProperty: "Setzt Ären éischte Bien dobäi",
     stepPropertySub: "Gebai, Haus oder Lot: den Assistent féiert Iech an zwee Schrëtt.",
     stepContact: "Legt e Kontakt un",
@@ -2508,12 +2515,13 @@ export const lu: Dict = {
     stepBankSub: "Nëmme liesend: d'Loyere rapprochéiere sech vum selwen.",
     stepRent: "Encaisséiert deen éischte Loyer",
     stepRentSub: "Verfollegt all Echeance an hire Status ënner Loyeren.",
-    help: "Hëllef",
+    help: "Eng Fro? Schreift eis",
     ignore: "All Schrëtter ignoréieren",
     reopen: "Mise en route weiderféieren",
     collapse: "Zesummeklappen",
     stepDone: "Schrëtt gemaach",
     stepTodo: "Als gemaach markéieren",
+    stepProfileOwner: "Fëllt Är Donnéeën als Proprietär aus",
   },
 
   auth: {

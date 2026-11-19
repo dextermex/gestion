@@ -493,6 +493,7 @@ export default function GestionShell({
         <CreateDialog
           kind={createKind}
           onClose={() => setCreateKind(null)}
+          onCreate={setCreateKind}
           d={d}
           real={real}
           unitOptions={shell.unitOptions}
@@ -504,7 +505,7 @@ export default function GestionShell({
 
         {/* A "0% done" checklist on top of a full sample cabinet contradicts
             itself. It belongs to the real account only. */}
-        {!shell.sampleCabinet && <GettingStarted d={d} progress={shell.progress} />}
+        {!shell.sampleCabinet && <GettingStarted d={d} progress={shell.progress} kind={shell.workspaceKind} />}
       </div>
     </MotionConfig>
   );
@@ -966,9 +967,28 @@ function CommandPalette({
 
 /* ------------------------------ create dialog ------------------------------- */
 
+/**
+ * What a creation sheet cannot do without: a lease needs a lot and a
+ * contact, a payment a running lease, an intervention a lot. A sheet opened
+ * on an empty required list could only raise the browser's own "fill in
+ * this field": it says what is missing instead, with the way to add it.
+ */
+function CreateBlocked({ text, href, action, onAction, onClose }: { text: string; href?: string; action: string; onAction?: () => void; onClose: () => void }) {
+  const cls = "ui-button inline-flex min-h-11 items-center justify-center rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600";
+  return (
+    <div className="space-y-5" data-create-blocked>
+      <p className="text-sm leading-relaxed text-ink">{text}</p>
+      <div className="flex flex-wrap justify-end gap-2">
+        {href ? <Link href={href} onClick={onClose} className={cls}>{action}</Link> : <button type="button" onClick={onAction} className={cls}>{action}</button>}
+      </div>
+    </div>
+  );
+}
+
 function CreateDialog({
   kind,
   onClose,
+  onCreate,
   d,
   real,
   unitOptions,
@@ -977,6 +997,8 @@ function CreateDialog({
 }: {
   kind: CreateKind | null;
   onClose: () => void;
+  /** Opens another creation sheet in place of this one (the contact a lease is waiting for). */
+  onCreate: (kind: CreateKind) => void;
   d: Dict;
   real: boolean;
   unitOptions: Array<{ id: string; label: string }>;
@@ -1060,6 +1082,13 @@ function CreateDialog({
     ticket: d.shell.quickAddTicket,
   };
 
+  // The record a sheet needs before it can be filled in, if it is not there yet.
+  const missing: "property" | "contact" | "lease" | null =
+    kind === "lease" ? (unitOptions.length === 0 ? "property" : contactOptions.length === 0 ? "contact" : null)
+    : kind === "ticket" ? (unitOptions.length === 0 ? "property" : null)
+    : kind === "payment" ? (leaseOptions.length === 0 ? (unitOptions.length === 0 ? "property" : "lease") : null)
+    : null;
+
   return (
     <Modal
       open={kind !== null}
@@ -1067,7 +1096,10 @@ function CreateDialog({
       title={kind ? d.shell.createDialogTitle.replace("{what}", labels[kind]) : ""}
       closeLabel={d.common.close}
     >
-      {kind && (
+      {kind && missing === "property" && <CreateBlocked text={d.shell.needProperty} href="/app/biens/nouveau" action={d.biens.addProperty} onClose={onClose} />}
+      {kind && missing === "contact" && <CreateBlocked text={d.shell.needContact} action={d.shell.needContactAction} onAction={() => onCreate("contact")} onClose={onClose} />}
+      {kind && missing === "lease" && <CreateBlocked text={d.shell.needLease} href="/app/biens" action={d.shell.needLeaseAction} onClose={onClose} />}
+      {kind && !missing && (
         <form ref={formRef} className="space-y-4 crm-create-form" onSubmit={(event) => { if (kind === "lease" && leaseStep === 0) { event.preventDefault(); setLeaseStep(1); } else if (real) void submitReal(event); else { event.preventDefault(); setSubmitted(true); } }}>
           {kind === "contact" && (
             <>
