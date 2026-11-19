@@ -16,6 +16,7 @@ import * as reference from "./data";
 import { DOCUMENT_KINDS } from "@/lib/documents/kinds";
 import { availableLanguages, templateVersion } from "@/lib/documents/wording";
 import { summariseDocuments } from "@/lib/documents/summary";
+import { todayISO } from "@/lib/clock";
 
 export type Org = typeof reference.ORG;
 
@@ -45,7 +46,7 @@ export function orgFromWorkspace(input: {
 
 /** Today, in the ISO form the engines expect. */
 function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 export function buildEmptyData(org: Org): DemoData {

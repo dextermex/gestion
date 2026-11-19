@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withOrgAndClient, dbError } from "@/lib/gestion/api";
 import { parseBillInput } from "@/lib/gestion/bills";
 import { discardDocument, storeDocument } from "@/lib/gestion/documents";
+import { todayISO } from "@/lib/clock";
 
 /**
  * A bill enters the books: its piece stored in the register when one is
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   for (const [key, value] of form.entries()) if (typeof value === "string") fields[key] = value;
   const parsed = parseBillInput(fields);
   if ("problem" in parsed) return NextResponse.json({ error: "invalid", problem: parsed.problem }, { status: 400 });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   // The lot and the supplier are this workspace's, or nothing.
   let propertyId: string | null = null;

@@ -4,6 +4,7 @@ import { loadSettlement } from "@/lib/gestion/deposit-settlement";
 import { ownedDocument } from "@/lib/gestion/documents";
 import { settlementOpen } from "@/lib/gestion/deposits";
 import { computeSettlement } from "@/domain/deposits/settlement";
+import { todayISO } from "@/lib/clock";
 
 /**
  * One retention line: justified on a date by a piece (an invoice or an
@@ -26,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { g, org } = ctx;
   const { id, lineId } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const justifiedOn = str(body.justifiedOn, 10);
   const documentId = str(body.documentId, 64);
   if (!ISO.test(justifiedOn) || Number.isNaN(Date.parse(justifiedOn)) || justifiedOn > today) {
@@ -76,7 +77,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id, lineId } = await params;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const loaded = await loadSettlement(ctx, id, today);
   if ("error" in loaded) return loaded.error === "not_found" ? NextResponse.json({ error: "not_found" }, { status: 404 }) : dbError(loaded.context, loaded.detail);

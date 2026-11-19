@@ -3,6 +3,7 @@ import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { advancesBilledForYear, CHARGE_SOURCES, computeChargePeriod, decompteBalance, type ChargeLineInput, type ChargeSource } from "@/lib/gestion/charges";
 import type { ChargeCategory } from "@/domain/charges/recharge";
+import { todayISO } from "@/lib/clock";
 
 /**
  * A charges décompte for a tenancy and a year, saved as a draft: its lines
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const leaseId = str(body.leaseId, 64);
   const year = int(body.year);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const thisYear = Number(today.slice(0, 4));
   const rawLines = Array.isArray(body.lines) ? (body.lines as unknown[]) : [];
   if (!leaseId || year === null || year < 2000 || year > thisYear + 1 || rawLines.length === 0 || rawLines.length > MAX_LINES) {

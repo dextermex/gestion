@@ -3,6 +3,7 @@ import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { createLease, normalizeDepositForm, normalizePaymentDay } from "@/lib/gestion/lease";
 import { getI18n } from "@/lib/i18n";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The quick-add lease: an existing contact on an existing lot.
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { locale, d } = await getI18n();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const unitId = String(body.unitId ?? "");

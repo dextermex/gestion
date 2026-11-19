@@ -12,6 +12,7 @@ import { getInvestmentCopy } from "@/lib/i18n/investment";
 import type { InvestmentCopy } from "@/lib/i18n/investment/fr";
 import type { Locale } from "@/lib/i18n/config";
 import { euros, formatDate, formatPct } from "@/lib/types";
+import { todayISO } from "@/lib/clock";
 
 type Props = { locale: Locale; records: LoanRecord[]; properties: FinanceProperty[]; readOnly?: boolean; onSave: (draft: LoanDraft, id?: string) => Promise<void> };
 const paymentOf = (r: LoanRecord) => amortize({ balanceCents: r.balanceCents, annualRatePct: r.annualRatePct, remainingMonths: r.remainingMonths }).monthlyPaymentCents;
@@ -72,7 +73,7 @@ function LoanEditor({loan, properties, locale, onClose, onSave}: {loan?: LoanRec
   const bankListId = useId();
   const discardCopy = getAcquisitionDict(locale);
   const [discard, setDiscard] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({propertyId: loan?.propertyId ?? properties[0]?.id ?? "", unitId: loan?.unitId ?? "", name: loan?.name ?? "", bankName: loan?.bankName ?? "", originalCents: loan ? String(loan.originalCents / 100) : "", balanceCents: loan ? String(loan.balanceCents / 100) : "", balanceDate: loan?.balanceDate ?? new Date().toISOString().slice(0, 10), annualRatePct: loan ? String(loan.annualRatePct) : "", rateType: loan?.rateType ?? "fixed", remainingMonths: loan ? String(loan.remainingMonths) : "", insuranceCents: loan ? String(loan.insuranceCents / 100) : "0", nextPaymentDate: loan?.nextPaymentDate ?? "", fixedUntil: loan?.fixedUntil ?? "", notes: loan?.notes ?? ""});
+  const [values, setValues] = useState<Record<string, string>>({propertyId: loan?.propertyId ?? properties[0]?.id ?? "", unitId: loan?.unitId ?? "", name: loan?.name ?? "", bankName: loan?.bankName ?? "", originalCents: loan ? String(loan.originalCents / 100) : "", balanceCents: loan ? String(loan.balanceCents / 100) : "", balanceDate: loan?.balanceDate ?? todayISO(), annualRatePct: loan ? String(loan.annualRatePct) : "", rateType: loan?.rateType ?? "fixed", remainingMonths: loan ? String(loan.remainingMonths) : "", insuranceCents: loan ? String(loan.insuranceCents / 100) : "0", nextPaymentDate: loan?.nextPaymentDate ?? "", fixedUntil: loan?.fixedUntil ?? "", notes: loan?.notes ?? ""});
   const initialValues = useRef(values).current;
   const requestClose = () => {if (busy) return; if (JSON.stringify(values) !== JSON.stringify(initialValues)) setDiscard(true); else onClose();};
   const set = (name: string, value: string) => setValues((v) => ({...v, [name]: value, ...(name === "propertyId" ? {unitId: ""} : {})}));

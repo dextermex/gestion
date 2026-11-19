@@ -4,6 +4,7 @@ import { repriceOpenPeriods } from "@/lib/gestion/lease";
 import { adjustmentLetterState, type AdjustmentLetter } from "@/lib/gestion/indexation";
 import { computeCapitalInvesti, proposeResidentialAdjustment } from "@/domain/indexation/engine";
 import type { CapitalComponent } from "@/domain/indexation/engine";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Applying a rent adjustment.
@@ -28,7 +29,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const { data: lease, error: findErr } = await g
     .from("leases")

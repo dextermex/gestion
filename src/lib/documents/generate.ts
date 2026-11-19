@@ -12,6 +12,7 @@ import type { DocumentModel } from "./model";
 import { renderPdf, type RenderLabels } from "./render";
 import { missingForDocuments } from "./settings-rules";
 import { templateFor, wordingFor } from "./wording";
+import { todayISO } from "@/lib/clock";
 
 /**
  * One document, start to finish: the template the workspace validated in
@@ -91,7 +92,7 @@ export async function generateDocument(
     signing?: { anchorFor: (position: number) => string };
   },
 ): Promise<Generated | GenerateFailure> {
-  const today = req.today ?? new Date().toISOString().slice(0, 10);
+  const today = req.today ?? todayISO();
   const settingsRow = await readSettings(ctx);
   const { settings } = lessorOf(settingsRow, ctx.org.name);
   const lang: Locale = req.lang && LANGS.includes(req.lang) ? req.lang : settings.documentLang;

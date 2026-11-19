@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { isPaymentError, recordPaymentFifo } from "@/lib/banking/allocate";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Records a manual payment on a lease and allocates it FIFO to the oldest
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const leaseId = String(body.leaseId ?? "");

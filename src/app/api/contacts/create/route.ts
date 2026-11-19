@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { todayISO } from "@/lib/clock";
 
 const ROLES = ["tenant", "owner", "guarantor", "artisan", "supplier", "syndic", "lead", "other"] as const;
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     org_id: org.id,
     contact_id: contact.id,
     role,
-    started_on: new Date().toISOString().slice(0, 10),
+    started_on: todayISO(),
   });
   if (roleErr) console.error("contact role insert failed:", roleErr.code, roleErr.message);
 

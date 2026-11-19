@@ -12,6 +12,7 @@ import { shrinkPhotos } from "@/lib/photo";
 import { stepParser, useStepHistory } from "@/lib/wizard-history";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The état des lieux, walked rather than filled in.
@@ -96,7 +97,7 @@ export default function EdlWizard({
   const [keysHandedOver, setKeysHandedOver] = useState(kind === "entry");
   const [observations, setObservations] = useState("");
   const [signed, setSigned] = useState(false);
-  const [completedAt, setCompletedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [completedAt, setCompletedAt] = useState(() => todayISO());
 
   // 0 = rooms, 1..n = one room each, n+1 = meters, n+2 = keys, n+3 = done
   const [step, setStep] = useState(0);

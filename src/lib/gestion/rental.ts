@@ -15,6 +15,7 @@ import {
   type LeaseIssue,
 } from "@/lib/gestion/lease";
 import { completedOnSave, firstIncomplete, stepNamed, type RentalStep } from "@/lib/gestion/rental-flow";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The rental dossier: the guided tenancy, saved as the owner goes.
@@ -196,7 +197,7 @@ const fail = (context: string, detail: { code?: string; message?: string } | nul
 
 export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierInput): Promise<DossierResult | DossierFailure> {
   const { g, org } = ctx;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   // The lot decides the property and whether the home is furnished; the
   // request is not believed about either.

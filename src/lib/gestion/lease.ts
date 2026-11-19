@@ -4,6 +4,7 @@ import { validateLeaseDraft, type ValidationIssue } from "@/domain/lease/rules";
 import { leaseRF } from "@/domain/banking/rf";
 import { getParamValue } from "@/domain/legal/params";
 import { dueDateFor, ledgerMonths } from "@/lib/gestion/ledger";
+import { todayISO } from "@/lib/clock";
 
 export { dueDateFor, ledgerMonths };
 import { leaseIssueText } from "@/lib/i18n/engine";
@@ -90,7 +91,7 @@ export function normalizePaymentDay(raw: unknown): number {
   return Number.isFinite(n) && n >= 1 && n <= 28 ? n : 1;
 }
 
-const isoToday = (): string => new Date().toISOString().slice(0, 10);
+const isoToday = (): string => todayISO();
 
 /** The guided form collects seven of the eight mandatory mentions; the
  *  capital investi declaration is the one it cannot. */
@@ -721,7 +722,7 @@ export async function repriceOpenPeriods(
 
 /** The month a change takes effect from: today's month, or later. */
 export function effectiveMonth(from: string | null): string {
-  const today = new Date().toISOString().slice(0, 10).slice(0, 7);
+  const today = todayISO().slice(0, 7);
   const asked = (from ?? "").slice(0, 7);
   return asked && asked > today ? `${asked}-01` : `${today}-01`;
 }

@@ -19,6 +19,7 @@ import {
   stepNumber,
   type RentalStep,
 } from "@/lib/gestion/rental-flow";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Putting a tenant into a lot, as a conversation the owner can pause.
@@ -118,7 +119,7 @@ export default function TenantWizard({
   const [colocation, setColocation] = useState(existing?.colocation ?? false);
 
   const [type, setType] = useState<"residential" | "commercial">(existing?.type ?? "residential");
-  const [startDate, setStartDate] = useState(existing?.startDate ?? (() => new Date().toISOString().slice(0, 10))());
+  const [startDate, setStartDate] = useState(existing?.startDate ?? (() => todayISO())());
   const [endDate, setEndDate] = useState(existing?.endDate ?? "");
 
   const [rent, setRent] = useState(existing?.rent ?? "");

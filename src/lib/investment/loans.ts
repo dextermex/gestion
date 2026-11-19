@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { todayISO } from "@/lib/clock";
 
 // Technical input ceiling in cents, not a regulatory or lending limit.
 export const money = z.number().finite().int().nonnegative().max(100_000_000_000);
@@ -28,7 +29,7 @@ export const loanSchema = z.object({
   if ((v.balanceCents > 0 && v.remainingMonths === 0) || (v.balanceCents === 0 && v.remainingMonths !== 0)) {
     ctx.addIssue({code: "custom", path: ["remainingMonths"], message: "balance_term"});
   }
-  if (v.balanceDate > new Date().toISOString().slice(0, 10)) {
+  if (v.balanceDate > todayISO()) {
     ctx.addIssue({code: "custom", path: ["balanceDate"], message: "future_balance"});
   }
 });

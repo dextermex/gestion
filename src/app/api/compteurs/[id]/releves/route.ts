@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { todayISO } from "@/lib/clock";
 
 /**
  * A meter reading.
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const raw = String(body.value ?? "").replace(/\s/g, "").replace(",", ".");
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) return NextResponse.json({ error: "invalid_value" }, { status: 400 });
-  const readOn = ISO.test(String(body.readOn ?? "")) ? String(body.readOn) : new Date().toISOString().slice(0, 10);
+  const readOn = ISO.test(String(body.readOn ?? "")) ? String(body.readOn) : todayISO();
   const source = (SOURCES as readonly string[]).includes(String(body.source)) ? String(body.source) : "manual";
 
   const { data: meter, error: meterErr } = await g

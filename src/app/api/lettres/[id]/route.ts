@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { todayISO } from "@/lib/clock";
 
 /**
  * A registered letter's fate: the AR came back on a date (from which legal
@@ -14,7 +15,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { g, org } = ctx;
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const { data: letter, error: readErr } = await g.from("registered_letters").select("id,status,dispatched_on").eq("org_id", org.id).eq("id", id).maybeSingle();
   if (readErr) return dbError("registered letter lookup", readErr);

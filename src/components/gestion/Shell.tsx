@@ -19,6 +19,7 @@ import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
 import type { DatasetId } from "@/lib/demo";
 import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
+import { todayISO } from "@/lib/clock";
 
 /** Everything the shell needs from the active demo dataset, precomputed
  *  server-side in the layout — the client bundle never ships the datasets. */
@@ -1123,7 +1124,7 @@ function CreateDialog({
                   </Select>
                 </Field>
                 <Field label={d.shell.fieldStartDate}>
-                  <Input name="startDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                  <Input name="startDate" type="date" required defaultValue={todayISO()} />
                 </Field>
               </div>
               </fieldset>
@@ -1171,7 +1172,7 @@ function CreateDialog({
                   <Input name="amount" required inputMode="decimal" placeholder="1 850,00" />
                 </Field>
                 <Field label={d.shell.fieldReceivedOn}>
-                  <Input name="receivedOn" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                  <Input name="receivedOn" type="date" required defaultValue={todayISO()} />
                 </Field>
               </div>
             </>

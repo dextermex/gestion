@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { adjustmentLetterState, type AdjustmentLetter } from "@/lib/gestion/indexation";
 import { computeCapitalInvesti, proposeResidentialAdjustment, type CapitalComponent } from "@/domain/indexation/engine";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The adjustment letter: the engine's proposal, sent to the tenant by
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { g, org } = ctx;
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const dispatchedOn = ISO.test(str(body.dispatchedOn, 10)) && !Number.isNaN(Date.parse(str(body.dispatchedOn, 10))) ? str(body.dispatchedOn, 10) : today;
   if (dispatchedOn > today) return NextResponse.json({ error: "invalid" }, { status: 400 });
 

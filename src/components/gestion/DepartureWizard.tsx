@@ -9,6 +9,7 @@ import { Button, Field, Input, Select } from "@/components/pro/ui";
 import { StepCard, WizardFooter } from "@/components/gestion/WizardChrome";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
+import { todayISO } from "@/lib/clock";
 
 /**
  * A tenant leaves.
@@ -95,7 +96,7 @@ export default function DepartureWizard({
   const ex = lease.existing;
 
   const [step, setStep] = useState(Math.min(Math.max(lease.startStep, 1), TOTAL));
-  const [endDate, setEndDate] = useState(ex?.endDate ?? new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(ex?.endDate ?? todayISO());
   const [keysReturned, setKeysReturned] = useState(ex?.keysReturned ?? true);
   const [keysReturnedOn, setKeysReturnedOn] = useState(ex?.keysReturnedOn ?? "");
   const [depositOutcome, setDepositOutcome] = useState<Outcome>(

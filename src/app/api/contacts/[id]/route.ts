@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { isCivility, isLegalForm } from "@/lib/documents/contract-parties";
+import { todayISO } from "@/lib/clock";
 
 /** A contact's identity and reach. `display_name` is a generated column, so
  *  the parts go in and the label comes back out on its own.
@@ -50,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (has(body, "birthDate")) {
     const v = line(body.birthDate, 10);
-    if (v && (!ISO.test(v) || v <= "1900-01-01" || v > new Date().toISOString().slice(0, 10))) return NextResponse.json({ error: "invalid", field: "birthDate" }, { status: 400 });
+    if (v && (!ISO.test(v) || v <= "1900-01-01" || v > todayISO())) return NextResponse.json({ error: "invalid", field: "birthDate" }, { status: 400 });
     patch.birth_date = v || null;
   }
   if (has(body, "birthPlace")) patch.birth_place = line(body.birthPlace, 120) || null;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { loadSettlement } from "@/lib/gestion/deposit-settlement";
 import { releaseDecision, settlementOpen, type Tranche } from "@/lib/gestion/deposits";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Money leaves the guarantee here and nowhere else: the first tranche once
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const tranche = body.tranche === "balance" ? "balance" : body.tranche === "first" ? "first" : null;
   if (!tranche) return NextResponse.json({ error: "invalid" }, { status: 400 });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const loaded = await loadSettlement(ctx, id, today);
   if ("error" in loaded) return loaded.error === "not_found" ? NextResponse.json({ error: "not_found" }, { status: 404 }) : dbError(loaded.context, loaded.detail);

@@ -29,6 +29,7 @@ import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
 import type { ContactIdentity, DemoAuditEntry, DemoDelivery, DemoGenerated, DemoLessor, DemoSignatureEnvelope, DemoTemplate } from "./data";
 import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -131,7 +132,7 @@ export async function buildRealDataFrom(
   signThumbs: (paths: string[]) => Promise<Map<string, string>> = async () => new Map(),
 ): Promise<DemoData> {
   const oid = org.id;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   // The history window: the ledger, the bank, the requests and the readings
   // are read from here on. Arrears older than that still owe and come
   // along by id; a sheet that looks at one tenancy reads its whole past.

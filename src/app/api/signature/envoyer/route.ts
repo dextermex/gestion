@@ -3,6 +3,7 @@ import { withOrgAndClient, dbError } from "@/lib/gestion/api";
 import { connectedProvider } from "@/lib/signature/connect";
 import { isSignatureLevel, type SignerLocale } from "@/lib/signature/envelope";
 import { sendLeaseForSignature, type SignerForm } from "@/lib/signature/service";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Sends a dossier's contract to be signed: the lease, the tenants' level,
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   if (!UUID.test(leaseId) || !isSignatureLevel(level) || tenants.length === 0 || tenants.some((t) => !t) || !lessor) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const result = await sendLeaseForSignature(ctx, ctx.client, connectedProvider(), { leaseId, level, tenants: tenants as SignerForm[], lessor }, today);
   if ("error" in result) {
     switch (result.error) {

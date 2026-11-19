@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { todayISO } from "@/lib/clock";
 
 /** A bill is paid on a date, or that is taken back. Nothing else about a bill changes after entry. */
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -10,7 +11,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { g, org } = ctx;
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   if (!Object.prototype.hasOwnProperty.call(body, "paidOn")) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
   let paidOn: string | null = null;
   if (body.paidOn !== null) {

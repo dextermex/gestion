@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { todayISO } from "@/lib/clock";
 
 /**
  * One step of the arrears ladder, recorded on a rent period of the lease:
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const stage = str(body.stage, 24) as Stage;
   const rentPeriodId = str(body.rentPeriodId, 64);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const doneOn = isoDay(body.doneOn) ?? today;
   const arReceivedOn = isoDay(body.arReceivedOn);
   if (!STAGES.includes(stage) || !rentPeriodId) return NextResponse.json({ error: "invalid" }, { status: 400 });
