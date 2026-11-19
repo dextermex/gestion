@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
-import { DATASET_COOKIE } from "@/lib/demo";
+import { DATASET_COOKIE, sampleDataEnabled } from "@/lib/demo";
 import { SaltEdgeError, createConnectSession, demoProviderCode, fakeProvidersWanted, registerCustomer, returnToFor, saltEdgeConfigured } from "@/lib/banking/saltedge";
 
 /**
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   const cookieLocale = req.cookies.get("morada_locale")?.value;
   const locale = cookieLocale === "en" || cookieLocale === "de" ? cookieLocale : "fr";
   const dataset = req.cookies.get(DATASET_COOKIE)?.value;
-  const sample = dataset === "fr" || dataset === "lu";
+  const sample = sampleDataEnabled() && (dataset === "fr" || dataset === "lu");
   // One return address for both journeys, on this deployment's own origin:
   // the page behind it tells a demonstration from a real return by the
   // dataset cookie. Salt Edge only sends the visitor back to an address

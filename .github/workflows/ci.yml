@@ -51,9 +51,10 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      # A fixed release: resolving "latest" asks GitHub's API without a token and is refused when the runner's address is over its hourly limit.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.2.0
       - name: Assemble the database (Morada schema, then this repository's migrations)
         run: node e2e/db/prepare.mjs
       - name: Start a throwaway Supabase and apply the schema

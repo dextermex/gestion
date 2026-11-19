@@ -70,6 +70,7 @@ export default function TenantProfileForm({
   canNotify,
   labels,
   sampleNote,
+  endpoint = "/api/locataire/profil",
 }: {
   account: { firstName: string; lastName: string; email: string; phone: string | null };
   /** There is a tenancy in force with a conversation to tell the manager in. */
@@ -77,6 +78,8 @@ export default function TenantProfileForm({
   labels: ProfileLabels;
   /** On a sample cabinet, the form works but nothing is written. */
   sampleNote: string | null;
+  /** Where the form saves: the tenant's route by default, the account page's own for a manager. */
+  endpoint?: string;
 }) {
   const router = useRouter();
   const [firstName, setFirstName] = useState(account.firstName);
@@ -94,7 +97,7 @@ export default function TenantProfileForm({
   const move = (channel: Channel, to: Step) => setStep((s) => ({ ...s, [channel]: to }));
 
   const post = async (body: Record<string, unknown>): Promise<boolean> => {
-    const res = await fetch("/api/locataire/profil", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (res.status === 401) {
       window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
       return false;
