@@ -353,6 +353,14 @@ export const fr = {
       SALE_NOT_A_GROUND: "« Le bailleur vend » n'est pas un motif de congé valable en habitation : les motifs sont limitatifs ; la vente transfère le bail à l'acquéreur.",
       ART_12_3_VERBATIM_MISSING: "Un congé pour besoin personnel doit reproduire l'art. 12(3) mot pour mot, à peine de nullité.",
       FIXED_TERM_DATE_GUARD: "Le congé prend effet au terme du CDD ({date}) ; manquer l'échéance exacte proroge le bail indéfiniment (prorogation légale).",
+      PAS_DE_PORTE_VOID: "Tout supplément de loyer payé pour la conclusion d'un bail commercial (pas-de-porte) est nul de plein droit et doit être remboursé.",
+      PAS_DE_PORTE_GRANDFATHERED: "Bail conclu avant le 1.3.2018 : le pas-de-porte n'est pas touché par la loi de 2018.",
+    },
+    leaseIssueUnknown: "Point de conformité à vérifier (code {code}).",
+    adjustmentBlocked: {
+      too_soon: "Un ajustement n'est permis qu'une fois tous les {months} mois. Le prochain sera possible à partir du {date}.",
+      at_ceiling: "Le loyer atteint déjà le plafond légal de {pct} % du capital investi.",
+      none: "Aucune hausse n'est permise pour l'instant.",
     },
     deadlineKind: {
       cpe_expiry: "Le CPE (passeport énergétique) expire",

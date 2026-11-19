@@ -352,6 +352,14 @@ export const lu: Dict = {
       SALE_NOT_A_GROUND: "« De Bailleur verkeeft » ass kee gëltege Kënnegungsgrond beim Wunnen: D'Grënn si limitativ; e Verkaf iwwerdréit de Bail op de Keefer.",
       ART_12_3_VERBATIM_MISSING: "E Congé fir Besoin personnel muss den Art. 12(3) Wuert fir Wuert widderginn, soss null.",
       FIXED_TERM_DATE_GUARD: "De Congé wierkt zum Enn vum CDD ({date}); gëtt den exakten Datum verpasst, verlängert de Bail sech onbefrist (prorogatioun légale).",
+      PAS_DE_PORTE_VOID: "All Zousaz zum Loyer, dee fir den Ofschloss vun engem kommerzielle Bail bezuelt gëtt (pas-de-porte), ass vu Rechts wéinst ongülteg a muss zréckbezuelt ginn.",
+      PAS_DE_PORTE_GRANDFATHERED: "Bail virum 1.3.2018 ofgeschloss: de pas-de-porte ass vum Gesetz vun 2018 net betraff.",
+    },
+    leaseIssueUnknown: "Konformitéitspunkt fir ze kontrolléieren (Code {code}).",
+    adjustmentBlocked: {
+      too_soon: "Eng Upassung ass nëmmen eemol all {months} Méint erlaabt. Déi nächst ass vum {date} u méiglech.",
+      at_ceiling: "De Loyer erreecht schonn de legale Plafong ({pct} % vum capital investi).",
+      none: "Am Moment ass keng Erhéijung erlaabt.",
     },
     deadlineKind: {
       cpe_expiry: "De CPE (Energiepass) leeft of",

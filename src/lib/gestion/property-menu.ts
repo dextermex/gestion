@@ -8,6 +8,7 @@ import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { euros } from "@/lib/types";
 import { computeCapitalInvesti, proposeResidentialAdjustment } from "@/domain/indexation/engine";
+import { adjustmentBlockedText } from "@/lib/i18n/engine";
 
 /**
  * What "Modifier" offers on one property.
@@ -279,7 +280,12 @@ export function propertyMenu(
           allowed: Boolean(proposal?.allowed && proposal.proposedMonthlyRent > lease.rentCents),
           currentLabel: euros(lease.rentCents, locale),
           proposedLabel: proposal ? euros(proposal.proposedMonthlyRent, locale) : "",
-          reason: proposal?.blockedReason ?? d.bien.indexationNone,
+          // From the proposal's structure, in the reader's language: the engine's own note is English and internal.
+          reason: proposal
+            ? adjustmentBlockedText(d, locale, proposal, demo.TODAY) || d.bien.indexationNone
+            : lease.type === "residential"
+              ? d.indexation.capitalNone
+              : d.bien.indexationNone,
         },
       },
       { id: "edl", label: d.hubs.edl, href: `/app/biens/etat-des-lieux?bail=${lease.id}` },

@@ -347,6 +347,14 @@ export const de: Dict = {
       SALE_NOT_A_GROUND: "„Der Vermieter verkauft“ ist kein gültiger Kündigungsgrund im Wohnraum: Die Gründe sind abschließend; ein Verkauf überträgt den Vertrag auf den Erwerber.",
       ART_12_3_VERBATIM_MISSING: "Eine Eigenbedarfskündigung muss Art. 12(3) wortwörtlich wiedergeben, bei Strafe der Nichtigkeit.",
       FIXED_TERM_DATE_GUARD: "Die Kündigung wirkt zum Ablauf der Befristung ({date}); wird der exakte Termin verpasst, verlängert sich der Vertrag unbefristet (gesetzliche Verlängerung).",
+      PAS_DE_PORTE_VOID: "Jeder Mietzuschlag, der für den Abschluss eines gewerblichen Mietvertrags gezahlt wird (pas-de-porte), ist von Rechts wegen nichtig und muss erstattet werden.",
+      PAS_DE_PORTE_GRANDFATHERED: "Vor dem 1.3.2018 geschlossener Mietvertrag: Der pas-de-porte ist vom Gesetz von 2018 nicht betroffen.",
+    },
+    leaseIssueUnknown: "Zu prüfender Konformitätspunkt (Code {code}).",
+    adjustmentBlocked: {
+      too_soon: "Eine Anpassung ist nur einmal alle {months} Monate erlaubt. Die nächste ist ab dem {date} möglich.",
+      at_ceiling: "Die Miete erreicht bereits die gesetzliche Obergrenze von {pct} % des capital investi.",
+      none: "Derzeit ist keine Erhöhung erlaubt.",
     },
     deadlineKind: {
       cpe_expiry: "Der Energiepass (CPE) läuft ab",

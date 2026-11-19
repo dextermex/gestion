@@ -347,6 +347,14 @@ export const en: Dict = {
       SALE_NOT_A_GROUND: "“The landlord is selling” is not a valid termination ground for residential leases: the grounds are exhaustive; a sale transfers the lease to the buyer.",
       ART_12_3_VERBATIM_MISSING: "A personal-need notice must reproduce art. 12(3) verbatim, on pain of nullity.",
       FIXED_TERM_DATE_GUARD: "The notice takes effect at the fixed-term expiry ({date}); missing the exact date renews the lease indefinitely (statutory renewal).",
+      PAS_DE_PORTE_VOID: "Any rent supplement paid for the conclusion of a commercial lease (pas-de-porte) is void by operation of law and must be reimbursed.",
+      PAS_DE_PORTE_GRANDFATHERED: "Lease concluded before 1.3.2018: the pas-de-porte is not affected by the 2018 law.",
+    },
+    leaseIssueUnknown: "Compliance point to check (code {code}).",
+    adjustmentBlocked: {
+      too_soon: "An adjustment is allowed only once every {months} months. The next one will be possible from {date}.",
+      at_ceiling: "The rent already reaches the legal ceiling of {pct} % of the capital investi.",
+      none: "No increase is allowed for now.",
     },
     deadlineKind: {
       cpe_expiry: "The energy passport (CPE) expires",
