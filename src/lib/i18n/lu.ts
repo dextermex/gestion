@@ -74,6 +74,8 @@ export const lu: Dict = {
     patrimoine: "Patrimoine",
     relations: "Relatiounen",
     finances: "Finanzen",
+    rents: "Loyeren",
+    cash: "Tresorerie",
     locative: "Gestioun locative",
     documents: "Dokumenter",
     compliance: "Konformitéit & Steieren",

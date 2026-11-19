@@ -69,6 +69,8 @@ export const de: Dict = {
     patrimoine: "Immobilien",
     relations: "Beziehungen",
     finances: "Finanzen",
+    rents: "Mieten",
+    cash: "Liquidität",
     locative: "Mietverwaltung",
     documents: "Dokumente",
     compliance: "Compliance & Steuern",

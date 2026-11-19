@@ -1496,3 +1496,7 @@ summary {
 /* The product's own date field (DateField.tsx) inside a floating-label group: the label stays raised and the day, month, year pattern shows, as a native date field's does. */
 .ui-field-group:has(input[data-day]) > .ui-field-label { top: .4rem; transform: scale(.8); }
 .ui-field-group .ui-field[data-day]::placeholder { color: color-mix(in srgb, var(--color-ink-soft) 70%, transparent); }
+
+/* A property without a photograph (PropertyPhoto.tsx): the glass house on the sky ground, never an empty grey frame. */
+.property-cover { background: linear-gradient(160deg, #fafdff 0%, #e1f0ff 60%, #cfe5f8 100%); }
+.property-cover .property-cover-art { width: min(62%, 15rem); height: auto; margin-bottom: -4%; }

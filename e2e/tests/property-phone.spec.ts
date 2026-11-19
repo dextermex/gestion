@@ -3,8 +3,8 @@ import { mail } from "./helpers";
 import { box, enter, overflow, phone } from "./phone";
 
 /**
- * The property on a phone: the name and the facts before the photograph
- * (and no empty frame without one), one full-width Modifier button that
+ * The property on a phone: the cover first (the photograph, or the drawn
+ * house when there is none), the name and the facts, one full-width Modifier button that
  * opens a sheet of entries a thumb can hit, each opening its editor; the
  * lots as rows that say who lives there and what they pay; an e-mail
  * address and a phone number that a tap writes to or calls.
@@ -20,7 +20,7 @@ for (const [name, route] of [
   ["the house", "/app/biens/p-bertrange"],
   ["the lot", "/app/biens/p-beaulieu/lots/u-b-3b"],
 ] as const) {
-  test(`${name}: the name first, no empty frame, a full-width Modifier that opens a sheet of entries`, async ({ page, context }) => {
+  test(`${name}: a drawn cover, the name, a full-width Modifier that opens a sheet of entries`, async ({ page, context }) => {
     await enter(page, context, owner, name === "the building");
     await page.goto(route);
     const title = page.getByRole("heading", { level: 1 });
@@ -32,9 +32,11 @@ for (const [name, route] of [
     expect(mb.y, "the name comes before the button").toBeGreaterThan(tb.y);
     expect(mb.width, "the button runs the width of the screen").toBeGreaterThanOrEqual(300);
     expect(mb.height).toBeGreaterThanOrEqual(44);
-    // The sample cabinet has no photograph: no frame stands in for one.
-    const frame = page.locator("div[class*='aspect-[4/3]']").first();
-    if (await frame.count()) await expect(frame).toBeHidden();
+    // The sample cabinet has no photograph: the cover is drawn, never an empty frame, and it leads the page.
+    const frame = page.locator("[data-cover]").first();
+    await expect(frame).toBeVisible();
+    await expect(frame.getByRole("img")).toBeVisible();
+    expect((await box(frame)).y, "the cover comes before the name").toBeLessThan(tb.y);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     await test.info().attach(`${name.replace(/\s+/g, "-")}-hero`, { body: await page.screenshot(), contentType: "image/png" });
     // The sheet: every entry a thumb's size, within the screen.

@@ -69,6 +69,8 @@ export const en: Dict = {
     patrimoine: "Portfolio",
     relations: "Relations",
     finances: "Finances",
+    rents: "Rents",
+    cash: "Cash flow",
     locative: "Rental management",
     documents: "Documents",
     compliance: "Compliance & tax",

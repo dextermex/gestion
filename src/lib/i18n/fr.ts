@@ -73,6 +73,8 @@ export const fr = {
     patrimoine: "Patrimoine",
     relations: "Relations",
     finances: "Finances",
+    rents: "Loyers",
+    cash: "Trésorerie",
     locative: "Gestion locative",
     documents: "Documents",
     compliance: "Conformité & fiscalité",

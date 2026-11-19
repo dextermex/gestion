@@ -15,7 +15,6 @@ import ScrollHeader from "./ScrollHeader";
 import GettingStarted, { type Progress } from "./GettingStarted";
 import { BillingBanner, Paywall, TrialChip, TrialPrompt, type ShellBilling } from "./BillingShell";
 import type { Dict } from "@/lib/i18n/fr";
-import { MORADA_URL, PRO_URL, WELCOME_URL } from "@/lib/constants";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
 import type { DatasetId } from "@/lib/demo";
@@ -71,48 +70,29 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
   // AML/KYC is a cabinet obligation: on an owner-kind workspace the entry
   // simply does not exist — same product, two densities, zero configuration.
   const cabinet = workspaceKind !== "owner";
+  // One flat list, as a landlord names things: the places of every day
+  // first, each a single line; only what really has several rooms (the
+  // books, the documents, the settings) opens on sub-entries. A bail, a
+  // compteur, une garantie, un EDL, une assurance and l'indexation belong
+  // to a property and open from it: the routes stay, the rail does not
+  // list them.
   return [
     { href: "/app", label: d.nav.home, icon: "dashboard" },
     {
-      // Patrimoine is deliberately two lines. A bail, a compteur, une
-      // garantie, un EDL, une assurance and l'indexation are not modules an
-      // owner goes looking for: they belong to a property, and they open
-      // from it. The routes stay, the rail stops listing them.
       href: "/app/biens",
-      label: d.nav.patrimoine,
+      label: d.hubs.portfolio,
       icon: "properties",
-      children: [
-        { href: "/app/biens", label: d.hubs.portfolio },
-        { href: "/app/interventions", label: d.hubs.interventions },
-      ],
-      also: [
-        "/app/baux",
-        "/app/compteurs",
-        "/app/indexation",
-        "/app/garanties",
-        "/app/edl",
-        "/app/assurances",
-      ],
+      also: ["/app/baux", "/app/compteurs", "/app/indexation", "/app/garanties", "/app/edl", "/app/assurances", "/app/workflows"],
     },
+    { href: "/app/loyers", label: d.nav.rents, icon: "key" },
     {
-      href: "/app/contacts",
-      label: d.nav.relations,
-      icon: "contacts",
-      badge: badges.unread || undefined,
-      children: [
-        { href: "/app/contacts", label: d.hubs.people },
-        { href: "/app/messages", label: d.hubs.messages, badge: badges.unread || undefined },
-      ],
-    },
-    {
-      href: "/app/loyers",
+      href: "/app/finance",
       label: d.nav.finances,
       also: ["/app/financement"],
       icon: "euro",
       badge: badges.review || undefined,
       children: [
-        { href: "/app/loyers", label: d.hubs.collections },
-        { href: "/app/finance", label: d.hubs.expenses },
+        { href: "/app/finance", label: d.nav.cash },
         { href: "/app/banque", label: d.hubs.banking, badge: badges.review || undefined },
         { href: "/app/charges", label: d.hubs.statements },
         { href: "/app/fiscalite", label: d.hubs.reports },
@@ -120,6 +100,9 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
         { href: "/app/acquisitions", label: d.nav.acquisitions },
       ],
     },
+    { href: "/app/interventions", label: d.hubs.interventions, icon: "tasks" },
+    { href: "/app/messages", label: d.hubs.messages, icon: "messages", badge: badges.unread || undefined },
+    { href: "/app/contacts", label: d.hubs.people, icon: "contacts" },
     {
       href: "/app/documents",
       label: d.nav.documents,
@@ -129,19 +112,22 @@ function destinations(d: Dict, badges: { review: number; unread: number }, works
         { href: "/app/contrats", label: d.hubs.contracts },
       ],
     },
-    {
-      href: "/app/conformite",
-      label: d.nav.compliance,
-      icon: "shield-check",
-      children: [
-        { href: "/app/conformite", label: d.hubs.compliance },
-        ...(cabinet ? [{ href: "/app/aml", label: d.hubs.aml }] : []),
-      ],
-    },
+    cabinet
+      ? {
+          href: "/app/conformite",
+          label: d.dash.vigilanceTitle,
+          icon: "shield-check",
+          children: [
+            { href: "/app/conformite", label: d.hubs.compliance },
+            { href: "/app/aml", label: d.hubs.aml },
+          ],
+        }
+      : { href: "/app/conformite", label: d.dash.vigilanceTitle, icon: "shield-check" },
     {
       href: "/app/reglages",
       label: d.nav.settings,
       icon: "settings",
+      also: ["/app/compte"],
       children: [
         { href: "/app/reglages", label: d.hubs.general },
         { href: "/app/abonnement", label: d.hubs.subscription },
@@ -265,13 +251,9 @@ export default function GestionShell({
   );
   const NAVIGABLE = useMemo(() => navigable(NAV, d), [NAV, d]);
 
-  // The everyday destinations are visible from the first render. Explicit
-  // choices last for this visit; arriving in another group reveals its location.
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    "/app/biens": true,
-    "/app/contacts": true,
-    "/app/loyers": true,
-  });
+  // The rail opens flat; a group shows its rooms once the person is in it or
+  // opens it. Explicit choices last for this visit.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   useEffect(() => {
     const active = destinations(d, shell.badges, shell.workspaceKind).find(
       (i) => i.children && matchesOf(i).some((m) => pathname.startsWith(m)),
@@ -323,11 +305,11 @@ export default function GestionShell({
       <SidebarNav items={NAV} pathname={pathname} expanded={expanded} onNavigate={() => setMobileOpen(false)}
         onToggle={(href) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }))} />
     </nav>
-    <div className="crm-sidebar-footer shrink-0 border-t border-sand-100 px-3 pb-[max(0.75rem,var(--safe-bottom))] pt-2">
+    {shell.tenant && (
+    <div className="crm-sidebar-footer shrink-0 border-t border-sand-100 px-3 pb-[max(0.75rem,var(--safe-bottom))] pt-2 xl:hidden">
       {/* The role switch lives here below `xl`, and in the toolbar above: the
           same two segments, one thumb's size each, so the tenant space is
           as reachable from a phone as from a laptop. */}
-      {shell.tenant && (
         <nav aria-label={d.shell.roleAria} className="mb-2 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 select-none [-webkit-touch-callout:none] xl:hidden">
           <span aria-current="true" className="flex min-h-10 flex-1 items-center justify-center rounded-lg bg-white px-3 text-xs font-semibold text-brand-800 shadow-sm">
             {d.shell.roleOwner}
@@ -339,15 +321,8 @@ export default function GestionShell({
             {d.shell.roleTenant}
           </Link>
         </nav>
-      )}
-      <div className="pt-2.5 text-[11px] text-ink-soft">
-        <p className="px-3">{d.nav.ecosystem}</p>
-        <div className="flex gap-3 px-3 pt-0.5">
-          <a href={MORADA_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center max-sm:px-1">Morada</a>
-          <a href={PRO_URL} className="rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center max-sm:px-1">Pro</a>
-        </div>
-      </div>
     </div>
+    )}
     </div>
   );
 
@@ -706,10 +681,6 @@ function UserMenu({
         <Link href="/app/compte" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
           {d.shell.moradaAccount}
         </Link>
-        {/* Back to the gateway: one account, three spaces. */}
-        <a href={WELCOME_URL} className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand-50 max-sm:flex max-sm:min-h-11 max-sm:items-center">
-          {d.shell.switchSpace}
-        </a>
         <div className="mt-1 border-t border-sand-100 pt-1">
           {!signedIn && signedOutNote ? (
             <p role="status" className="rounded-lg px-3 py-2 text-xs font-semibold text-emerald-800">
