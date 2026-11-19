@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge, Button } from "@/components/pro/ui";
 import type { DemoTemplate } from "@/lib/demo/data";
 import { callJson } from "./call";
+import { useApiProblems } from "./ApiErrors";
 
 /**
  * The templates the workspace's documents are produced from: one row per
@@ -43,6 +44,7 @@ export default function TemplatesPanel({ rows, writable, sampleNote, labels }: {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const problems = useApiProblems();
 
   const act = async (row: TemplateRow, validate: boolean) => {
     setError(null);
@@ -59,9 +61,9 @@ export default function TemplatesPanel({ rows, writable, sampleNote, labels }: {
       if (res.ok) {
         setNote(validate ? labels.validatedNote : labels.withdrawnNote);
         router.refresh();
-      } else setError(labels.failed);
+      } else setError(problems.of(res.status, res.payload, { fallback: labels.failed }).message);
     } catch {
-      setError(labels.failed);
+      setError(problems.network({ fallback: labels.failed }).message);
     }
     setBusy(null);
   };
