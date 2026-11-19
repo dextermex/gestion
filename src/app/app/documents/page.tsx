@@ -227,6 +227,8 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
               </div>
               <div className="rounded-3xl border border-sand-200/80 bg-white/75 p-4 sm:p-5">
                 <DocumentFilters
+                  // Keyed on the address's own search and shelf: the box never keeps words the list is no longer filtered by.
+                  key={`${group ?? ""}:${query}:${purge ? "purge" : ""}`}
                   shelf={false}
                   group={group ?? ""}
                   q={query}

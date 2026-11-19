@@ -4,7 +4,7 @@ import { Icon } from "@/components/pro/icons";
 import { CollapsiblePanel, LegalNote } from "@/components/gestion/bits";
 import { DemoAction } from "@/components/gestion/DemoAction";
 import BankImport from "@/components/gestion/BankImport";
-import BankWorkspace, { type WorkspaceLabels, type TxRow } from "@/components/gestion/BankWorkspace";
+import BankWorkspace, { ReviewJump, type WorkspaceLabels, type TxRow } from "@/components/gestion/BankWorkspace";
 import { isBankView } from "@/lib/banking/views";
 import type { LeaseOption, ReviewRow } from "@/components/gestion/ReviewQueue";
 import SaltEdgeConnect from "@/components/gestion/SaltEdgeConnect";
@@ -358,10 +358,10 @@ export default async function BanquePage({
               <p className="crm-metric-value">{review.length}</p>
               <p className="crm-metric-sub">{review.length > 0 ? fmt(d.banque.kpiReviewBody, { amount: euros(reviewCents, locale) }) : d.banque.kpiReviewNone}</p>
               {review.length > 0 && (
-                <a href="#a-verifier" className="crm-metric-action">
+                <ReviewJump shown={initialView === "all" || initialView === "review"} className="crm-metric-action">
                   {d.banque.kpiReviewAction}
                   <Icon name="chevron-right" size={15} />
-                </a>
+                </ReviewJump>
               )}
             </Card>
           </section>

@@ -7,6 +7,7 @@ import { buildEmptyData, orgFromWorkspace } from "@/lib/demo/data-empty";
 import type { DemoData } from "@/lib/demo";
 import { todayISO } from "@/lib/clock";
 import { formatMonth } from "@/lib/types";
+import * as cabinet from "@/lib/demo/data";
 
 /**
  * Where the manager screens lead on an account's own data. Every card,
@@ -227,5 +228,53 @@ describe("Accueil", () => {
     expect(hrefs(html)).toContain("/app/biens");
     expect(hrefs(html)).not.toContain("/app/biens?occupation=vacants");
     expect(hrefs(html)).toContain(`/app/loyers?mois=${oldest}`);
+  });
+});
+
+describe("États des lieux", () => {
+  it("links a session to its lease sheet only when that sheet exists", async () => {
+    // The sample cabinet keeps an exit inspection for a tenancy it no longer lists.
+    data = cabinet;
+    sample = true;
+    const { default: Page } = await import("@/app/app/edl/page");
+    const html = text(renderToString(await Page()));
+    const sheets = new Set(cabinet.LEASES.map((l) => l.id));
+    const orphan = cabinet.EDLS.find((e) => !sheets.has(e.leaseId))!;
+    expect(orphan, "the sample has such a session").toBeDefined();
+    expect(html).toContain(orphan.unitLabel);
+    expect(hrefs(html)).not.toContain(`/app/baux/${orphan.leaseId}?onglet=edl`);
+    for (const e of cabinet.EDLS.filter((x) => sheets.has(x.leaseId))) expect(hrefs(html)).toContain(`/app/baux/${e.leaseId}?onglet=edl`);
+  });
+});
+
+describe("Finance", () => {
+  const render = async (params: Record<string, string> = {}) => {
+    const { default: Page } = await import("@/app/app/finance/page");
+    return text(renderToString(await Page({ searchParams: Promise.resolve(params) })));
+  };
+  const twoProperties = (): DemoData => {
+    const base = account();
+    return { ...base, PROPERTIES: [...base.PROPERTIES, { ...property, id: "prop-2", name: "Studio Gare" }] };
+  };
+
+  it("keeps a stretch of months to Trésorerie: the other views are not opened on it", async () => {
+    data = twoProperties();
+    const html = await render({ periode: "12m", bien: "prop-1" });
+    expect(html).toContain(fmt(fr.finance.heroLabel, { month: fr.finance.span12 }));
+    const views = hrefs(html).filter((h) => h.startsWith("/app/finance?") && h.includes("vue="));
+    expect(views.length).toBeGreaterThan(0);
+    for (const h of views) expect(h, h).not.toContain("periode=");
+    // The property stays: it is shown, and can be changed, on every view.
+    for (const h of views) expect(h, h).toContain("bien=prop-1");
+  });
+
+  it("reads Revenus for the month on screen even when the address still names a stretch", async () => {
+    data = twoProperties();
+    const html = await render({ vue: "revenus", periode: "12m" });
+    expect(html).toContain(fmt(fr.finance.heroLabel, { month: formatMonth(month, "fr") }));
+    expect(html).not.toContain(fmt(fr.finance.heroLabel, { month: fr.finance.span12 }));
+    // The property select is there outside Trésorerie; the period select is not.
+    expect(html).toContain(`aria-label="${fr.finance.propertyAria}"`);
+    expect(html).not.toContain(`aria-label="${fr.finance.periodAria}"`);
   });
 });

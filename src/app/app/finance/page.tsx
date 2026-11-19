@@ -238,13 +238,15 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const MONTHS = [-5, -4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
   const past = MONTHS.filter((m) => m <= liveMonth);
   const month = params.mois && past.includes(params.mois) ? params.mois : liveMonth;
-  const period: Period = PERIODS.includes(params.periode as Period) ? (params.periode as Period) : "mois";
   const property = PROPERTIES.find((p) => p.id === params.bien) ?? null;
   const views: View[] = statement ? [...VIEWS] : VIEWS.filter((v) => v !== "comptabilite");
   const view: View = views.includes(params.vue as View) ? (params.vue as View) : "tresorerie";
+  // A stretch of months is Trésorerie's own reading. The other views list one month (Revenus) or the
+  // year (Charges, Résultat): there the head stays on the month, so it never totals what the lists do not show.
+  const period: Period = view === "tresorerie" && PERIODS.includes(params.periode as Period) ? (params.periode as Period) : "mois";
   const hrefFor = (next: { v?: View; m?: string; p?: Period; bien?: string | null }) => {
     const v = next.v ?? view;
-    const p = next.p ?? period;
+    const p = v === "tresorerie" ? (next.p ?? period) : "mois";
     const m = next.m ?? month;
     const b = next.bien === undefined ? (property?.id ?? null) : next.bien;
     const q = new URLSearchParams();
@@ -385,13 +387,16 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
             }))}
           />
         </div>
-        {view === "tresorerie" && (
+        {/* The property the books are read for is chosen, and seen, on every view of them. */}
+        {view !== "comptabilite" && (view === "tresorerie" || PROPERTIES.length > 1) && (
           <div className="flex flex-wrap items-center gap-2">
-            <QuerySelect
-              label={f.periodAria}
-              value={period}
-              options={PERIODS.map((p) => ({ value: p, label: p === "mois" ? f.periodMonth : p === "3m" ? f.period3 : p === "12m" ? f.period12 : f.periodYear, href: hrefFor({ p }) }))}
-            />
+            {view === "tresorerie" && (
+              <QuerySelect
+                label={f.periodAria}
+                value={period}
+                options={PERIODS.map((p) => ({ value: p, label: p === "mois" ? f.periodMonth : p === "3m" ? f.period3 : p === "12m" ? f.period12 : f.periodYear, href: hrefFor({ p }) }))}
+              />
+            )}
             {PROPERTIES.length > 1 && (
               <QuerySelect
                 label={f.propertyAria}
