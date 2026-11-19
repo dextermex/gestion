@@ -19,6 +19,7 @@ import { MORADA_URL, PRO_URL, WELCOME_URL } from "@/lib/constants";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
 import type { DatasetId } from "@/lib/demo";
+import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
 
 /** Everything the shell needs from the active demo dataset, precomputed
  *  server-side in the layout — the client bundle never ships the datasets. */
@@ -184,6 +185,7 @@ function navigable(nav: NavItem[], d: Dict): Array<{ href: string; label: string
 const SEARCH_INDEX_TTL = 60_000;
 
 type CreateKind = "property" | "lease" | "contact" | "payment" | "ticket" | "document";
+const QUICK_KINDS = new Set<string>(["lease", "contact", "payment", "ticket", "document"]);
 
 function quickAdd(d: Dict): Array<{ kind: CreateKind; label: string }> {
   return [
@@ -245,6 +247,16 @@ export default function GestionShell({
     return () => window.removeEventListener("pageshow", onShow);
   }, [router]);
   const [createKind, setCreateKind] = useState<CreateKind | null>(null);
+  // A screen's own action row (Hero.tsx) opens the same creation sheets as "+ Nouveau".
+  useEffect(() => {
+    const open = (e: Event) => {
+      const kind = (e as CustomEvent<string>).detail as CreateKind;
+      if (kind === "property") router.push("/app/biens/nouveau");
+      else if (QUICK_KINDS.has(kind)) setCreateKind(kind);
+    };
+    window.addEventListener(CREATE_EVENT, open);
+    return () => window.removeEventListener(CREATE_EVENT, open);
+  }, [router]);
   const reduced = useReducedMotion();
 
   const NAV = useMemo(

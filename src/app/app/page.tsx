@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { Badge, EmptyState, PageHeader } from "@/components/pro/ui";
-import { LinkRow, Panel, Timeline } from "@/components/gestion/bits";
+import { EmptyState, PageHeader } from "@/components/pro/ui";
+import { Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Row, Rows, Section } from "@/components/gestion/Hero";
+import MonthBars, { type MonthBar } from "@/components/gestion/MonthBars";
 import GlassHouse from "@/components/gestion/GlassHouse";
-import OverviewMetric from "@/components/gestion/OverviewMetric";
-import { Icon } from "@/components/pro/icons";
-import { CashflowChart } from "@/components/gestion/Cashflow";
+import { Icon, type IconName } from "@/components/pro/icons";
 import { getDemo } from "@/lib/demo";
 import { getIdentity } from "@/lib/workspace";
 import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
@@ -12,7 +11,6 @@ import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { settlementNotes } from "@/lib/i18n/engine";
 import { cpeExpiryDeadline, vacancyClock } from "@/domain/compliance/deadlines";
-import { assessArrears } from "@/domain/arrears/ladder";
 import { computeSettlement } from "@/domain/deposits/settlement";
 import { monthlyCashflow } from "@/domain/finance/cashflow";
 import { addDays, addMonths, diffDays } from "@/domain/dates";
@@ -22,7 +20,8 @@ import { addDays, addMonths, diffDays } from "@/domain/dates";
  * because the data carries its signal, on the sample cabinets and on a real
  * account alike. Nothing here names a record that might not exist.
  */
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ mois?: string }> }) {
+  const params = await searchParams;
   const { locale, d } = await getI18n();
   const demo = await getDemo();
   const identity = await getIdentity();
@@ -53,7 +52,11 @@ export default async function DashboardPage() {
   } = demo;
 
   const liveMonth = TODAY.slice(0, 7);
-  const chartMonths = [-3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  const chartMonths = [-4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  // The month on the screen: the one the address names when it is one of the bars and has begun, else this one.
+  const pastMonths = chartMonths.filter((m) => m <= liveMonth);
+  const shownMonth = params.mois && pastMonths.includes(params.mois) ? params.mois : liveMonth;
+  const monthHref = (m: string) => (m === liveMonth ? "/app" : `/app?mois=${m}`);
   const leaseIndex = new Map(LEASES.map((l) => [l.id, l]));
   const labelOfLease = (id: string): string => {
     const l = leaseIndex.get(id);
@@ -62,21 +65,22 @@ export default async function DashboardPage() {
   };
 
   // ── Overview: computed from the ledger, never hand-written ──
-  const month = RENT_PERIODS.filter((rp) => rp.period === liveMonth);
+  const month = RENT_PERIODS.filter((rp) => rp.period === shownMonth);
   const expected = month.reduce((a, rp) => a + rp.totalCents, 0);
   const collected = month.reduce((a, rp) => a + rp.allocatedCents, 0);
   const paidCount = month.filter((rp) => rp.status === "paid").length;
-  const lateCount = month.filter((rp) => rp.status === "late" || rp.status === "partial").length;
+  const lateMonth = month.filter((rp) => (rp.status === "late" || rp.status === "partial") && rp.allocatedCents < rp.totalCents);
+  const lateCount = lateMonth.length;
+  const lateMonthCents = lateMonth.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
 
   const lettable = UNITS.filter((u) => u.kind !== "parking");
   const occupied = new Set(
     LEASES.filter((l) => l.status === "active" || l.status === "notice").map((l) => l.unitId),
   );
   const occupiedCount = lettable.filter((u) => occupied.has(u.id)).length;
-  const vacantCount = lettable.length - occupiedCount;
 
   // ── Recommended actions: each row exists because its signal exists ──
-  const todo: Array<{ priority?: number; href: string; title: string; sub: string; badge: { label: string; color: string } }> = [];
+  const todo: Array<{ priority?: number; href: string; title: string; sub: string; amount?: string; badge: { label: string; color: string } }> = [];
 
   const reviewQueue = BANK_TXS.filter((t) => t.status === "review");
   if (reviewQueue.length > 0) {
@@ -111,27 +115,14 @@ export default async function DashboardPage() {
     (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth && rp.allocatedCents < rp.totalCents,
   ).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
   if (lateOpen.length > 0) {
-    const worst = lateOpen[0];
-    const assessment = assessArrears(
-      {
-        invoiceId: worst.id,
-        dueDate: worst.dueDate,
-        openAmount: worst.totalCents - worst.allocatedCents,
-        paymentPlanActive: false,
-        executed: {},
-        miseEnDemeureArDate: null,
-      },
-      TODAY,
-    );
+    // Late tenants once, as one row: who is late is the Loyers screen's to say.
+    const tenants = new Set(lateOpen.map((rp) => rp.leaseId)).size;
     todo.push({
       priority: 1,
       href: "/app/loyers?vue=impayes",
-      title: fmt(d.dash.todoMed, {
-        unit: labelOfLease(worst.leaseId),
-        month: formatMonth(worst.period, locale),
-        days: assessment.daysOverdue,
-      }),
-      sub: d.dash.todoMedSub,
+      title: tenants === 1 ? d.home.arrearsOne : fmt(d.home.arrearsMany, { n: tenants }),
+      sub: d.home.arrearsSub,
+      amount: eurosWhole(lateOpen.reduce((sum, rp) => sum + rp.totalCents - rp.allocatedCents, 0), locale),
       badge: { label: d.dash.badgeArrears, color: "bg-red-100 text-red-700" },
     });
   }
@@ -208,12 +199,6 @@ export default async function DashboardPage() {
 
   // ── Workflow counters ──
   const wfBlocked = WORKFLOWS.filter((w) => w.blockedReason);
-  const wfCounts = [
-    { label: d.dash.wfRunning, value: WORKFLOWS.length - wfBlocked.length, edge: "border-l-brand-400" },
-    { label: d.dash.wfBlocked, value: wfBlocked.length, edge: wfBlocked.length > 0 ? "border-l-red-400" : "border-l-sand-200" },
-    { label: d.dash.wfMoveIn, value: WORKFLOWS.filter((w) => w.kind === "move_in").length, edge: "border-l-sky-400" },
-    { label: d.dash.wfMoveOut, value: WORKFLOWS.filter((w) => w.kind === "move_out").length, edge: "border-l-amber-400" },
-  ];
 
   // ── Cashflow (engine-aggregated) ──
   const cashflow = monthlyCashflow(RENT_PERIODS, chartMonths);
@@ -226,7 +211,7 @@ export default async function DashboardPage() {
         kind: "payment",
         label: d.experience.activityPayment,
         sub: `${t.matchedLeaseId ? labelOfLease(t.matchedLeaseId) : t.counterpartyName} · ${d.dash.activityRentSub}`,
-        amount: euros(t.amount, locale),
+        amount: eurosWhole(t.amount, locale),
         atIso: t.bookedAt,
       })),
     ...TICKETS.slice(-2).map((t) => ({
@@ -285,166 +270,117 @@ export default async function DashboardPage() {
 
   const firstName = (identity?.displayName ?? ORG.managerName ?? "").split(" ")[0] || ORG.shortName;
 
+  const pct = expected === 0 ? 0 : Math.round((collected / expected) * 100);
+  const at = pastMonths.indexOf(shownMonth);
+  const iconOf = (href: string) => (href.includes("banque") ? "bank" : href.includes("garanties") ? "shield-check" : href.includes("loyers") ? "alert" : href.includes("indexation") ? "trending-up" : "calendar") as IconName;
+  const activityIcon: Record<string, IconName> = { payment: "euro", ticket: "tasks", lease: "key" };
+  const bars: MonthBar[] = cashflow.map((c) => ({
+    month: c.month,
+    label: formatMonth(c.month, locale).split(" ")[0],
+    expectedCents: c.expectedCents,
+    collectedCents: c.collectedCents,
+    future: c.month > liveMonth,
+    href: c.month > liveMonth ? null : monthHref(c.month),
+    expected: eurosWhole(c.expectedCents, locale),
+    collected: eurosWhole(c.collectedCents, locale),
+  }));
+
   return (
-    <div>
-      <div className="crm-dashboard-heading">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-ink">
-            {fmt(d.dash.greeting, { name: firstName })}
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {fmt(d.dash.subtitle, { org: ORG.shortName, date: formatDate(TODAY, locale) })}
-          </p>
-        </div>
-        <Link href="/app/biens" className="crm-overview-link inline-flex min-h-10 items-center gap-2 rounded-full border border-sand-200 bg-white px-4 text-sm font-medium text-ink transition hover:border-brand-300">
-          <Icon name="properties" size={16} />{d.hubs.portfolio}<Icon name="chevron-right" size={14} />
-        </Link>
-      </div>
-
-      {/* The ledger, rent status and occupancy stay visible at a glance. */}
-      <div className="crm-overview">
-        <OverviewMetric
-          fraction={expected === 0 ? 0 : collected / expected}
-          label={fmt(d.dash.ringCollected, { month: formatMonth(liveMonth, locale) })}
-          value={eurosWhole(collected, locale)}
-          sub={fmt(d.dash.ringCollectedSub, { expected: eurosWhole(expected, locale) })}
-          icon="euro"
-          actionHref="/app/banque"
-          actionLabel={d.dash.ringCollectedAction}
-        />
-        <OverviewMetric
-          fraction={month.length === 0 ? 0 : paidCount / month.length}
-          label={d.dash.ringPaid}
-          value={`${paidCount}/${month.length}`}
-          sub={lateCount > 0 ? fmt(d.dash.ringPaidSub, { late: lateCount }) : d.dash.ringPaidNone}
-          icon={lateCount > 0 ? "alert" : "check"}
-          attention={lateCount > 0}
-          actionHref="/app/loyers?vue=impayes"
-          actionLabel={d.dash.ringPaidAction}
-        />
-        <OverviewMetric
-          fraction={lettable.length === 0 ? 0 : occupiedCount / lettable.length}
-          label={d.dash.ringOccupancy}
-          value={`${occupiedCount}/${lettable.length}`}
-          sub={
-            vacantCount === 0
-              ? d.dash.ringOccupancyNone
-              : vacantCount === 1
-                ? d.dash.ringOccupancySubOne
-                : fmt(d.dash.ringOccupancySubMany, { n: vacantCount })
-          }
-          icon="key"
-          actionHref="/app/biens?occupation=vacants"
-          actionLabel={d.dash.ringOccupancyAction}
-        />
-      </div>
-
-      <div className="crm-dashboard-grid">
-        <Panel title={d.dash.cashflowTitle} className="crm-dashboard-chart">
-          <p className="-mt-2 mb-4 text-xs text-ink-soft">{d.dash.cashflowSub}</p>
-          <CashflowChart
-            data={cashflow}
-            locale={locale}
-            currentMonth={liveMonth}
-            legendExpected={d.dash.cashflowExpected}
-            legendCollected={d.dash.cashflowCollected}
-            ariaLabel={d.dash.cashflowAria}
-            detailsLabel={d.dash.cashflowDetails}
-            monthLabel={d.dash.cashflowMonth}
+    <div className="space-y-9">
+      {/* The month, in the one raised card of the page: what came in, of what, who is late, how full the lots are. */}
+      <Hero
+        eyebrow={fmt(d.dash.greeting, { name: firstName })}
+        top={
+          <MonthSwitch
+            label={formatMonth(shownMonth, locale)}
+            prev={at > 0 ? monthHref(pastMonths[at - 1]) : null}
+            next={at < pastMonths.length - 1 ? monthHref(pastMonths[at + 1]) : null}
+            prevLabel={d.home.prevMonth}
+            nextLabel={d.home.nextMonth}
           />
-        </Panel>
+        }
+        label={fmt(d.dash.ringCollected, { month: formatMonth(shownMonth, locale) })}
+        figure={<Money value={eurosWhole(collected, locale)} />}
+        aside={
+          <HeroRing
+            fraction={month.length === 0 ? 0 : paidCount / month.length}
+            value={`${paidCount}/${month.length}`}
+            label={d.home.ringLabel}
+            sub={lateCount > 0 ? fmt(d.home.ringOpen, { n: month.length - paidCount }) : d.home.ringAllPaid}
+          />
+        }
+        actions={
+          <>
+            <HeroAction create="payment" icon="plus" label={d.home.actPayment} />
+            <HeroAction create="lease" icon="documents" label={d.home.actLease} />
+            <HeroAction href="/app/biens/nouveau" icon="properties" label={d.home.actProperty} />
+            <HeroAction href="/app/finance" icon="euro" label={d.home.actFinance} />
+          </>
+        }
+      >
+        <HeroChip href={shownMonth === liveMonth ? "/app/loyers" : `/app/loyers?mois=${shownMonth}`} icon="trending-up">
+          {fmt(d.home.collectedOf, { pct, expected: eurosWhole(expected, locale) })}
+        </HeroChip>
+        {lateCount > 0 && (
+          <HeroChip href="/app/loyers?vue=impayes" icon="alert" tone="late">
+            {fmt(d.home.lateChip, { n: lateCount, amount: eurosWhole(lateMonthCents, locale) })}
+          </HeroChip>
+        )}
+        <HeroChip href="/app/biens?occupation=vacants" icon="key">
+          {fmt(d.home.lotsChip, { let: occupiedCount, total: lettable.length })}
+        </HeroChip>
+      </Hero>
 
-        <Panel
-          title={d.dash.todoTitle}
-          className="crm-todo"
-          action={
-            todo.length > 0 ? (
-              <Badge className="bg-brand-50 text-brand-700">{fmt(d.dash.todoCount, { n: todo.length })}</Badge>
-            ) : undefined
-          }
-        >
+      <div className="grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:gap-10">
+        <Section title={d.dash.todoTitle} className="min-w-0 lg:order-2">
           {todo.length === 0 ? (
-            <p className="text-sm text-ink-soft">{d.dash.todoNone}</p>
+            <p className="px-1 text-sm text-ink-soft">{d.dash.todoNone}</p>
           ) : (
-            <>
-              <ul className="divide-y divide-sand-100">{todo.slice(0, 3).map((t) => (<li key={t.title}><Link href={t.href} className={`crm-action-row ${t.priority === 1 ? "is-urgent" : ""}`}>
-                      <span className="crm-symbol"><Icon name={t.href.includes("banque") ? "bank" : t.href.includes("garanties") ? "shield-check" : t.href.includes("loyers") ? "euro" : t.href.includes("indexation") ? "trending-up" : "calendar"} size={22} /></span>
-                      <div><span className="crm-action-category">{t.badge.label}</span><p className="crm-action-title">{t.title}</p><p className="crm-action-description">{t.sub}</p></div>
-                      <Icon name="chevron-right" size={18} />
-                    </Link></li>))}</ul>
-              {todo.length > 3 && <details className="crm-more-actions"><summary><span className="when-closed">{fmt(d.experience.moreActions, { n: todo.length - 3 })}</span><span className="when-open">{d.experience.lessActions}</span></summary><ul className="divide-y divide-sand-100">{todo.slice(3).map((t) => (<li key={t.title}><Link href={t.href} className={`crm-action-row ${t.priority === 1 ? "is-urgent" : ""}`}>
-                      <span className="crm-symbol"><Icon name={t.href.includes("banque") ? "bank" : t.href.includes("garanties") ? "shield-check" : t.href.includes("loyers") ? "euro" : t.href.includes("indexation") ? "trending-up" : "calendar"} size={22} /></span>
-                      <div><span className="crm-action-category">{t.badge.label}</span><p className="crm-action-title">{t.title}</p><p className="crm-action-description">{t.sub}</p></div>
-                      <Icon name="chevron-right" size={18} />
-                    </Link></li>))}</ul></details>}
-            </>
-          )}
-        </Panel>
-
-
-        <Panel
-          title={d.dash.workflowsTitle}
-          className="crm-dashboard-workflows"
-          action={
-            <Link href="/app/workflows" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
-              {d.common.seeAll}
-            </Link>
-          }
-        >
-          <div className="crm-workflow-stats">
-            {wfCounts.map((w) => (
-              <Link
-                key={w.label}
-                href="/app/workflows"
-                className="crm-workflow-stat"
-              >
-                <p className="font-display text-xl font-bold tabular-nums text-ink">{w.value}</p>
-                <p className="mt-0.5 text-xs font-medium text-ink-soft">{w.label}</p>
-              </Link>
-            ))}
-          </div>
-          <ul className="mt-3 divide-y divide-sand-100">
-            {wfBlocked.slice(0, 2).map((w) => (
-              <li key={w.id}>
-                <LinkRow
-                  href="/app/workflows"
-                  title={w.label}
-                  sub={(w.blockedReason ?? "").split(". ")[0]}
-                  right={<Badge className="bg-amber-100 text-amber-800">{d.status.blocked}</Badge>}
-                />
-              </li>
-            ))}
-          </ul>
-        </Panel>
-
-        <Panel title={d.dash.activityTitle} className="crm-dashboard-activity">
-          {activity.length === 0 ? (
-            <p className="text-sm text-ink-soft">{d.dash.activityNone}</p>
-          ) : (
-            <Timeline entries={activity} />
-          )}
-        </Panel>
-
-        <Panel title={d.dash.vigilanceTitle} className="crm-dashboard-vigilance">
-          {vigilance.length === 0 ? (
-            <p className="text-sm text-ink-soft">{d.dash.vigilanceNone}</p>
-          ) : (
-            <ul className="crm-watchlist space-y-4 text-sm">
-              {vigilance.map((v) => (
-                <li key={v.title} className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-ink">{v.title}</p>
-                    <p className="text-xs text-ink-soft">{v.sub}</p>
-                  </div>
-                  <Badge className={v.badge.color}>{v.badge.label}</Badge>
-                </li>
+            <Rows>
+              {todo.map((t) => (
+                <Row key={t.title} href={t.href} icon={iconOf(t.href)} tone={t.priority === 1 ? "late" : "plain"} title={t.title} sub={t.badge.label} right={t.amount} rightTone="late" />
               ))}
-            </ul>
+            </Rows>
           )}
-          <Link href="/app/conformite" className="mt-4 block text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
-            {d.dash.openCompliance}
-          </Link>
-        </Panel>
+        </Section>
+
+        <Section title={d.dash.cashflowTitle} className="min-w-0 lg:order-1">
+          <MonthBars bars={bars} selected={shownMonth} legendCollected={d.dash.cashflowCollected} legendExpected={d.dash.cashflowExpected} monthHeading={d.dash.cashflowMonth} ariaLabel={d.dash.cashflowAria} />
+        </Section>
+
+        <Section title={d.dash.activityTitle} className="min-w-0 lg:order-3">
+          {activity.length === 0 ? (
+            <p className="px-1 text-sm text-ink-soft">{d.dash.activityNone}</p>
+          ) : (
+            <Rows>
+              {activity.map((e) => (
+                <Row key={`${e.atIso}:${e.label}`} icon={activityIcon[e.kind] ?? "calendar"} title={e.label} sub={`${e.at} · ${e.sub}`} right={"amount" in e ? `+ ${e.amount}` : undefined} rightTone="in" />
+              ))}
+            </Rows>
+          )}
+        </Section>
+
+        <div className="min-w-0 space-y-9 lg:order-4">
+          {vigilance.length > 0 && (
+            <Section title={d.dash.vigilanceTitle} action={<Link href="/app/conformite" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">{d.home.seeAll}</Link>}>
+              <Rows>
+                {vigilance.map((v) => (
+                  <Row key={v.title} href="/app/conformite" icon="calendar" tone={v.badge.color.includes("red") ? "late" : "plain"} title={v.title} sub={v.sub} />
+                ))}
+              </Rows>
+            </Section>
+          )}
+          {WORKFLOWS.length > 0 && (
+            <Section title={d.dash.workflowsTitle} action={<Link href="/app/workflows" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">{d.home.seeAll}</Link>}>
+              <Rows>
+                <Row href="/app/workflows" icon="key" title={fmt(d.home.moves, { running: WORKFLOWS.length - wfBlocked.length, blocked: wfBlocked.length })} sub={`${d.dash.wfMoveIn} ${WORKFLOWS.filter((w) => w.kind === "move_in").length} · ${d.dash.wfMoveOut} ${WORKFLOWS.filter((w) => w.kind === "move_out").length}`} />
+                {wfBlocked.slice(0, 2).map((w) => (
+                  <Row key={w.id} href="/app/workflows" icon="alert" tone="late" title={w.label} sub={(w.blockedReason ?? "").split(". ")[0]} right={d.status.blocked} rightTone="soft" />
+                ))}
+              </Rows>
+            </Section>
+          )}
+        </div>
       </div>
     </div>
   );
