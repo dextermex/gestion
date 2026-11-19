@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHouse, daysFromNow, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextStep, nextUntil, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus, createAccountFromInvitation } from "./helpers";
+import { createHouse, daysFromNow, foldGettingStarted, frDay, inviteTenant, leaseIdOf, letLot, mail, nextStep, nextUntil, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus, createAccountFromInvitation } from "./helpers";
 
 /**
  * One tenancy, start to finish, on the real database: the owner creates a
@@ -266,7 +266,7 @@ test("the owner records the departure", async ({ page }) => {
   await foldGettingStarted(page);
   await page.getByRole("link", { name: "Enregistrer le départ du locataire" }).click();
   await page.waitForURL(/\/app\/biens\/depart\?bail=/);
-  await page.getByLabel("Date de fin du bail").fill(daysFromNow(45));
+  await page.getByLabel("Date de fin du bail").fill(frDay(daysFromNow(45)));
   await nextStep(page, "Suivant"); // date → inventory
   await nextStep(page, "Plus tard"); // the exit inventory, later
   await nextUntil(page, page.getByRole("button", { name: "Confirmer le départ" }), 6); // meters, keys, outstanding, deposit

@@ -80,6 +80,7 @@ const SAME_AS: Record<string, string> = {
   no_live_lease: "not_live",
   // An update that names the version it read, refused because the row moved on (or is gone).
   conflict_or_not_found: "changed",
+  already_ended: "lease_ended",
 };
 
 /** The sign-in page, returning to `returnTo` (an internal path) afterwards. */
