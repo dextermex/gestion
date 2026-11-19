@@ -106,9 +106,11 @@ describe("operations screens on a real account", () => {
   });
   it("Finance lists the bill with its piece and the way to mark it paid, and offers the intake", async () => {
     const { default: Page } = await import("@/app/app/finance/page");
-    const html = text(renderToString(await Page()));
+    const html = text(renderToString(await Page({ searchParams: Promise.resolve({}) })));
     expect(html).toContain('data-bill="bill-1"');
-    expect(html).toContain("Jos Kirsch · Chaudière");
+    // The row names the supplier, then says the bill's state and its subject.
+    expect(html).toContain("Jos Kirsch");
+    expect(html).toContain("Chaudière");
     expect(html).toContain("/api/documents/doc-3/fichier");
     expect(html).toContain('data-bill-paid="bill-1"');
     expect(html).toContain("data-bill-add");

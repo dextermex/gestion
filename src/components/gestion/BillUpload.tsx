@@ -6,6 +6,8 @@ import { Button, Field, Input, Modal, Select, Spinner } from "@/components/pro/u
 import type { Dict } from "@/lib/i18n/fr";
 import { fmt } from "@/lib/i18n/config";
 import { callForm } from "./call";
+import DateField from "./DateField";
+import { HERO_ACTION, HERO_ACTION_LABEL, HERO_ROUND } from "./Hero";
 
 /**
  * Bill intake for the finance module: forward-by-email inbox, a drop zone,
@@ -33,7 +35,8 @@ export default function BillUpload({
   unitOptions,
   ocr,
   writable,
-  sampleNote,
+  trigger = "button",
+  triggerLabel,
 }: {
   d: Dict;
   inbox: string;
@@ -43,16 +46,29 @@ export default function BillUpload({
   ocr: BillOcr | null;
   writable: boolean;
   sampleNote: string | null;
+  /** How the way in is drawn: a button, or the round action of a screen's head. */
+  trigger?: "button" | "round";
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const upload = (
+    <svg className={trigger === "round" ? "h-[22px] w-[22px]" : "h-4 w-4"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
   return (
     <>
-      <Button onClick={() => setOpen(true)} data-bill-add>
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
-        </svg>
-        {d.finance.addBill}
-      </Button>
+      {trigger === "round" ? (
+        <button type="button" onClick={() => setOpen(true)} data-bill-add aria-label={d.finance.addBill} className={HERO_ACTION}>
+          <span className={HERO_ROUND}>{upload}</span>
+          <span className={HERO_ACTION_LABEL}>{triggerLabel ?? d.finance.addBill}</span>
+        </button>
+      ) : (
+        <Button onClick={() => setOpen(true)} data-bill-add>
+          {upload}
+          {d.finance.addBill}
+        </Button>
+      )}
       {open && (
         <BillModal
           d={d}
@@ -61,7 +77,6 @@ export default function BillUpload({
           unitOptions={unitOptions}
           ocr={ocr}
           writable={writable}
-          sampleNote={sampleNote}
           onClose={() => setOpen(false)}
         />
       )}
@@ -78,7 +93,6 @@ function BillModal({
   unitOptions,
   ocr,
   writable,
-  sampleNote,
   onClose,
 }: {
   d: Dict;
@@ -87,7 +101,6 @@ function BillModal({
   unitOptions: Array<{ id: string; label: string }>;
   ocr: BillOcr | null;
   writable: boolean;
-  sampleNote: string | null;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -199,158 +212,136 @@ function BillModal({
     setBusy(false);
   };
 
-  return (
-    <Modal open onClose={onClose} title={d.finance.addBill} wide closeLabel={d.common.close}>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        {/* Intake — forward by email, or drop the file */}
-        <div className="space-y-4 lg:col-span-2">
-          <div className="rounded-xl border border-sand-200 bg-sand-50/60 p-4">
-            <p className="text-sm font-semibold text-ink">{d.finance.billForwardTitle}</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-soft">{d.finance.billForwardBody}</p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-800">
-                {inbox}
-              </code>
-              <button
-                onClick={copy}
-                className="tactile shrink-0 rounded-lg border border-sand-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700"
-              >
-                {copied ? d.finance.billCopied : d.finance.billCopy}
-              </button>
-            </div>
-          </div>
+  const fileState =
+    scan === "scanning" ? d.finance.billScanning : scan === "done" ? (ocr ? d.finance.billScanned : fmt(d.finance.billFileChosen, { name: fileName ?? "" })) : d.finance.attach;
 
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label={d.finance.billDropTitle}
-            onClick={() => fileInput.current?.click()}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileInput.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              const dropped = e.dataTransfer.files[0] ?? null;
-              ingest(dropped, dropped?.name ?? "facture.pdf");
-            }}
-            className={
-              "flex min-h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center transition-colors duration-150 " +
-              (dragOver ? "border-brand-400 bg-brand-50/60" : "border-sand-300 bg-white hover:border-brand-300")
-            }
-          >
-            <input
-              ref={fileInput}
-              id="bill-file"
-              type="file"
-              accept={ACCEPT}
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && ingest(e.target.files[0], e.target.files[0].name)}
-            />
-            {scan === "scanning" ? (
-              <>
-                <Spinner size={24} />
-                <p className="text-sm font-semibold text-ink">{d.finance.billScanning}</p>
-                {fileName && <p className="text-xs text-ink-soft">{fileName}</p>}
-              </>
-            ) : scan === "done" ? (
-              <>
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="h-5 w-5" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                  </svg>
-                </span>
-                <p role="status" className="text-sm font-semibold text-ink">
-                  {ocr ? d.finance.billScanned : fmt(d.finance.billFileChosen, { name: fileName ?? "" })}
-                </p>
-                {ocr && fileName && <p className="text-xs text-ink-soft">{fileName}</p>}
-              </>
-            ) : (
-              <>
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-700">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
-                  </svg>
-                </span>
-                <p className="text-sm font-semibold text-ink">{d.finance.billDropTitle}</p>
-                <p className="text-xs text-ink-soft">{d.finance.billDropBody}</p>
-              </>
-            )}
-          </div>
-          <p className="text-[11px] leading-relaxed text-ink-soft">{ocr ? d.finance.billOcrNote : d.finance.billFile}</p>
+  return (
+    <Modal open onClose={onClose} title={d.finance.addBill} closeLabel={d.common.close}>
+      <form
+        className="space-y-3.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1" role="radiogroup">
+          {(["expense", "income"] as const).map((dir) => (
+            <button
+              key={dir}
+              type="button"
+              role="radio"
+              aria-checked={direction === dir}
+              onClick={() => setDirection(dir)}
+              className={
+                "min-h-10 rounded-lg px-3 py-1.5 text-sm font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+                (direction === dir ? "bg-brand-600 text-white shadow-sm" : "text-ink-soft hover:text-ink")
+              }
+            >
+              {dir === "income" ? d.finance.billIncome : d.finance.billExpense}
+            </button>
+          ))}
         </div>
 
-        {/* Transaction form */}
-        <form
-          className="space-y-3.5 lg:col-span-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit();
-          }}
-        >
-          <div className="grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1" role="radiogroup">
-            {(["income", "expense"] as const).map((dir) => (
-              <button
-                key={dir}
-                type="button"
-                role="radio"
-                aria-checked={direction === dir}
-                onClick={() => setDirection(dir)}
-                className={
-                  "rounded-lg px-3 py-1.5 text-sm font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] " +
-                  (direction === dir ? "bg-brand-600 text-white shadow-sm" : "text-ink-soft hover:text-ink")
-                }
-              >
-                {dir === "income" ? d.finance.billIncome : d.finance.billExpense}
-              </button>
-            ))}
-          </div>
+        {/* What every bill needs, in the order it is read off the paper. */}
+        <Field label={d.finance.amountTotal}>
+          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" className="text-xl font-semibold tabular-nums" />
+        </Field>
+        <Field label={d.finance.billSubject}>
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={140} />
+        </Field>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label={d.finance.billSupplier}>
+            <Select value={supplier} onChange={(e) => setSupplier(e.target.value)}>
+              <option value="">{d.finance.billSupplierNone}</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={d.finance.billUnit}>
+            <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+              {unitOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <Field label={d.finance.billDocDate}>
+          <DateField value={docDate} onChange={setDocDate} placeholder={d.loyers.datePlaceholder} />
+        </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={d.finance.billSupplier}>
-              <Select value={supplier} onChange={(e) => setSupplier(e.target.value)}>
-                <option value="">{d.finance.billSupplierNone}</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={d.finance.billSubject}>
-              <Input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={140} />
-            </Field>
-            <Field label={d.finance.billDocNo}>
-              <Input value={docNo} onChange={(e) => setDocNo(e.target.value)} maxLength={40} />
-            </Field>
-            <Field label={d.finance.billDocDate}>
-              <Input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} />
-            </Field>
-            <Field label={d.finance.billDueDate}>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </Field>
-            <Field label={d.finance.billUnit}>
-              <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                {unitOptions.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={d.finance.billCategory}>
-              <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
+        {/* The paper itself: one line to tap or drop on. */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={d.finance.billDropTitle}
+          onClick={() => fileInput.current?.click()}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileInput.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const dropped = e.dataTransfer.files[0] ?? null;
+            ingest(dropped, dropped?.name ?? "facture.pdf");
+          }}
+          className={
+            "flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border border-dashed px-4 py-2.5 transition-colors duration-150 " +
+            (dragOver ? "border-brand-400 bg-brand-50/60" : scan === "done" ? "border-emerald-300 bg-emerald-50/50" : "border-sand-300 bg-white hover:border-brand-300")
+          }
+        >
+          <input ref={fileInput} id="bill-file" type="file" accept={ACCEPT} className="hidden" onChange={(e) => e.target.files?.[0] && ingest(e.target.files[0], e.target.files[0].name)} />
+          <span className={"grid h-9 w-9 shrink-0 place-items-center rounded-full " + (scan === "done" ? "bg-emerald-100 text-emerald-700" : "bg-brand-50 text-brand-700")}>
+            {scan === "scanning" ? (
+              <Spinner size={18} />
+            ) : scan === "done" ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="h-4 w-4" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+              </svg>
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span role={scan === "done" ? "status" : undefined} className="block truncate text-sm font-semibold text-ink">{fileState}</span>
+            <span className="block truncate text-xs text-ink-soft">{scan === "idle" ? d.finance.attachHint : (fileName ?? "")}</span>
+          </span>
+        </div>
+
+        {/* What an accountant asks for; a bill is complete without it. */}
+        <details className="group rounded-2xl border border-sand-200 bg-sand-50/50">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 [&::-webkit-details-marker]:hidden">
+            {d.finance.moreDetails}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-ink-soft transition-transform group-open:rotate-90" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" />
+            </svg>
+          </summary>
+          <div className="space-y-3.5 border-t border-sand-200 px-4 py-4">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label={d.finance.billDocNo}>
+                <Input value={docNo} onChange={(e) => setDocNo(e.target.value)} maxLength={40} />
+              </Field>
+              <Field label={d.finance.billDueDate}>
+                <DateField value={dueDate} onChange={setDueDate} placeholder={d.loyers.datePlaceholder} />
+              </Field>
+              <Field label={d.finance.billCategory}>
+                <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Field label={d.finance.billVat}>
                 <Select value={vat} onChange={(e) => setVat(e.target.value)}>
                   <option value="17">17 %</option>
@@ -360,53 +351,41 @@ function BillModal({
                   <option value="0">{d.finance.billVatExempt}</option>
                 </Select>
               </Field>
-              <Field label={d.finance.billAmount}>
-                <Input
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0,00"
-                  className="text-right tabular-nums"
-                />
-              </Field>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              <Toggle checked={paid} onChange={setPaid} label={d.finance.billPaid} />
+              <Toggle checked={cashflow} onChange={setCashflow} label={d.finance.billCashflow} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-sand-200 pt-3">
+              <p className="text-xs font-semibold text-ink-soft">{d.finance.billForwardTitle}</p>
+              <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-800">{inbox}</code>
+              <button type="button" onClick={copy} className="tactile shrink-0 rounded-lg border border-sand-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 max-sm:min-h-10">
+                {copied ? d.finance.billCopied : d.finance.billCopy}
+              </button>
             </div>
           </div>
+        </details>
 
-          <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
-            <Toggle checked={paid} onChange={setPaid} label={d.finance.billPaid} />
-            <Toggle checked={cashflow} onChange={setCashflow} label={d.finance.billCashflow} />
-          </div>
+        {submitted && (
+          <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+            {writable ? d.finance.billCreated : d.common.demoCreateNotice}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="text-xs font-semibold text-red-700">
+            {error}
+          </p>
+        )}
 
-          {submitted && (
-            <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-              {writable ? d.finance.billCreated : d.common.demoCreateNotice}
-            </p>
-          )}
-          {error && (
-            <p role="alert" className="text-xs font-semibold text-red-700">
-              {error}
-            </p>
-          )}
-          {!writable && sampleNote && <p className="text-[11px] text-amber-900/80">{sampleNote}</p>}
-
-          <div className="flex items-center justify-between gap-3 border-t border-sand-100 pt-4">
-            <p className="text-sm text-ink-soft">
-              {d.finance.billTotal}{" "}
-              <span className="font-display text-base font-bold tabular-nums text-ink">
-                {amount.trim() ? `${amount} €` : "0,00 €"}
-              </span>
-            </p>
-            <div className="flex gap-2">
-              <Button type="button" variant="ghost" onClick={onClose}>
-                {d.common.cancel}
-              </Button>
-              <Button type="submit" loading={busy} disabled={submitted && writable}>
-                {d.finance.billCreate}
-              </Button>
-            </div>
-          </div>
-        </form>
-      </div>
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {d.common.cancel}
+          </Button>
+          <Button type="submit" loading={busy} disabled={submitted && writable}>
+            {d.finance.billCreate}
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

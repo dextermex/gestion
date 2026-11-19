@@ -23,7 +23,6 @@ const STACKED: Array<[string, string, string | null]> = [
   ["edl", "/app/edl", null],
   ["compteurs", "/app/compteurs", null],
   ["workflows", "/app/workflows", null],
-  ["finance", "/app/finance", "Marquer payée"],
 ];
 const FOLDED: Array<[string, string]> = [
   ["charges", "/app/charges"],

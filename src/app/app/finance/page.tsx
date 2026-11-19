@@ -1,23 +1,29 @@
-import { Badge, PageHeader } from "@/components/pro/ui";
+import Link from "next/link";
+import { Badge } from "@/components/pro/ui";
 import { LegalNote, Panel } from "@/components/gestion/bits";
 import BillActions from "@/components/gestion/BillActions";
 import BillUpload from "@/components/gestion/BillUpload";
+import { FlowBars, ShareBars, type FlowBar } from "@/components/gestion/FlowBars";
+import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, MonthSwitch, Money, Row, Rows, Section, Segments } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
-import { euros, formatDate } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
+import type { Locale } from "@/lib/i18n/config";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { billState, type BillCategory } from "@/lib/gestion/bills";
 import { managementFeeVat } from "@/domain/fiscal/vat";
 import { splitExact } from "@/domain/money";
+import { addMonths } from "@/domain/dates";
+import { billDay, expensesByCategory, monthlyFlows, unpaidBills, yearResult } from "@/domain/finance/overview";
 
 /**
- * Finance: the bills the desk entered, each with its piece in the register
- * and its place in the fiscal buckets, paid or still due. The sample
- * cabinet also carries its worked example: the managed SCI's July
- * statement, fees and payout, computed by the engines over the sample
- * mandate. A real account has no such mandate yet and sees its own books.
+ * Finance: what came in, what went out and what is left, month by month,
+ * then what is still to pay. Revenus, Charges and Résultat are the same
+ * books read three ways. The agency's side (the managed SCI's statement,
+ * fees and payout, the accounting exports) sits in Comptabilité, which only
+ * a workspace that carries a mandate sees.
  */
 
 /** The sample mandate's statement: engine-computed, from records only a sample cabinet carries. */
@@ -63,47 +69,9 @@ function categoryLabels(d: Dict): Record<BillCategory, string> {
   };
 }
 
-export default async function FinancePage() {
-  const { locale, d } = await getI18n();
-  const demo = await getDemo();
-  const sample = await isSampleData();
-  const { BILLS, CONTACTS, ORG, TODAY, UNITS, propertyById } = demo;
-  const writable = !sample;
-  const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
-
-  const statement = sample ? sampleStatement(demo) : null;
-  const suppliers = CONTACTS.filter((c) => c.roles.some((r) => r === "artisan" || r === "supplier" || r === "syndic")).map((c) => ({ id: c.id, name: c.name }));
-  const unitOptions = UNITS.map((u) => ({ id: u.id, label: `${u.label} · ${propertyById(u.propertyId).name}` }));
-  const ocr = statement
-    ? {
-        supplierId: statement.artisan.id,
-        subject: statement.boilerTicket.title,
-        docNo: "2026-0812",
-        docDate: "2026-08-08",
-        amountLabel: "1 240,00",
-        unitId: "u-b-3b",
-      }
-    : null;
-
-  const categories = categoryLabels(d);
-  const STATE: Record<"paid" | "due" | "overdue", { label: string; color: string }> = {
-    paid: { label: d.finance.billPaidState, color: "bg-emerald-100 text-emerald-800" },
-    due: { label: d.finance.billDue, color: "bg-amber-100 text-amber-800" },
-    overdue: { label: d.finance.billOverdue, color: "bg-red-100 text-red-700" },
-  };
-  const bills = [...BILLS].sort((a, b) => ((a.docDate ?? a.createdAt) < (b.docDate ?? b.createdAt) ? 1 : -1));
-
+/** Comptabilité: the mandate's statement, the third-party accounts and the exports, as an agency reads them. */
+function Books({ statement, demo, d, locale }: { statement: NonNullable<ReturnType<typeof sampleStatement>>; demo: DemoData; d: Dict; locale: Locale }) {
   return (
-    <div>
-      <PageHeader
-        title={d.finance.title}
-        subtitle={d.finance.subtitle}
-        actions={
-          <BillUpload d={d} inbox={ORG.billInbox} suppliers={suppliers} unitOptions={unitOptions} ocr={ocr} writable={writable} sampleNote={sampleNote} />
-        }
-      />
-
-      {statement && (
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <Panel title={fmt(d.finance.statementTitle, { sci: statement.sci.name })}>
@@ -231,79 +199,249 @@ export default async function FinancePage() {
           </Panel>
         </div>
       </div>
+  );
+}
+
+const VIEWS = ["tresorerie", "revenus", "charges", "resultat", "comptabilite"] as const;
+type View = (typeof VIEWS)[number];
+
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ vue?: string; mois?: string }> }) {
+  const params = await searchParams;
+  const { locale, d } = await getI18n();
+  const demo = await getDemo();
+  const sample = await isSampleData();
+  const { BILLS, CONTACTS, ORG, RENT_PERIODS, TODAY, UNITS, leaseById, leaseTenantNames, leaseUnitLabel, propertyById } = demo;
+  const writable = !sample;
+  const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null;
+  const f = d.finance;
+
+  const statement = sample ? sampleStatement(demo) : null;
+  const suppliers = CONTACTS.filter((c) => c.roles.some((r) => r === "artisan" || r === "supplier" || r === "syndic")).map((c) => ({ id: c.id, name: c.name }));
+  const unitOptions = UNITS.map((u) => ({ id: u.id, label: `${u.label} · ${propertyById(u.propertyId).name}` }));
+  const ocr = statement
+    ? {
+        supplierId: statement.artisan.id,
+        subject: statement.boilerTicket.title,
+        docNo: "2026-0812",
+        docDate: "2026-08-08",
+        amountLabel: "1 240,00",
+        unitId: "u-b-3b",
+      }
+    : null;
+  const categories = categoryLabels(d);
+
+  // The month on the screen and the view of the books; both live in the address.
+  const liveMonth = TODAY.slice(0, 7);
+  const MONTHS = [-5, -4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  const past = MONTHS.filter((m) => m <= liveMonth);
+  const month = params.mois && past.includes(params.mois) ? params.mois : liveMonth;
+  const views: View[] = statement ? [...VIEWS] : VIEWS.filter((v) => v !== "comptabilite");
+  const view: View = views.includes(params.vue as View) ? (params.vue as View) : "tresorerie";
+  const hrefOf = (v: View, m: string) => {
+    const q = new URLSearchParams();
+    if (v !== "tresorerie") q.set("vue", v);
+    if (m !== liveMonth) q.set("mois", m);
+    const qs = q.toString();
+    return qs ? `/app/finance?${qs}` : "/app/finance";
+  };
+  const at = past.indexOf(month);
+  const year = month.slice(0, 4);
+
+  const flows = monthlyFlows(RENT_PERIODS, BILLS, MONTHS);
+  const flow = flows.find((x) => x.month === month) ?? { month, inCents: 0, outCents: 0, netCents: 0 };
+  const toPay = unpaidBills(BILLS, TODAY);
+  const paidThisMonth = BILLS.filter((b) => b.paidOn && b.paidOn.slice(0, 7) === month).sort((a, b) => (b.paidOn ?? "").localeCompare(a.paidOn ?? ""));
+  const rentsIn = RENT_PERIODS.filter((rp) => rp.period === month && rp.allocatedCents > 0).sort((a, b) => b.allocatedCents - a.allocatedCents);
+  const byCategory = expensesByCategory(BILLS, year);
+  const result = yearResult(RENT_PERIODS, BILLS, year, month);
+  const allBills = [...BILLS].sort((a, b) => billDay(b).localeCompare(billDay(a)));
+
+  const bars: FlowBar[] = flows.map((x) => ({
+    month: x.month,
+    label: formatMonth(x.month, locale).split(" ")[0],
+    inCents: x.inCents,
+    outCents: x.outCents,
+    future: x.month > liveMonth,
+    href: x.month > liveMonth ? null : hrefOf(view, x.month),
+    inLabel: eurosWhole(x.inCents, locale),
+    outLabel: eurosWhole(x.outCents, locale),
+  }));
+
+  type Bill = (typeof BILLS)[number];
+  /** A bill as a row: who and what, where and its state in words, the amount; its details and its one action inside. */
+  const billRow = (bill: Bill) => {
+    const state = billState(bill, TODAY);
+    const words =
+      state === "paid" ? fmt(f.billPaidOn, { date: formatDate(bill.paidOn, locale) }) : state === "overdue" ? fmt(f.billLateSince, { date: formatDate(bill.dueOn, locale) }) : bill.dueOn ? fmt(f.billDueOn, { date: formatDate(bill.dueOn, locale) }) : f.billNoDue;
+    const income = bill.direction === "income";
+    return (
+      <FoldRow
+        key={bill.id}
+        attrs={{ "data-bill": bill.id }}
+        icon={income ? "euro" : "documents"}
+        tone={state === "overdue" ? "late" : state === "paid" ? "quiet" : "plain"}
+        title={bill.supplierName || bill.subject}
+        sub={[words, bill.supplierName ? bill.subject : ""].filter(Boolean).join(" · ")}
+        right={`${income ? "+" : "−"} ${eurosWhole(bill.amountCents, locale)}`}
+        rightTone={income ? "in" : state === "overdue" ? "late" : state === "paid" ? "soft" : "plain"}
+      >
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-1.5 text-[13px] sm:grid-cols-2">
+          {(
+            [
+              [f.billsColAmount, `${euros(bill.amountCents, locale)}${bill.vatCents > 0 ? ` · ${fmt(f.billVatOf, { vat: euros(bill.vatCents, locale) })}` : ""}`],
+              [f.billsColDate, formatDate(billDay(bill), locale)],
+              [f.billCategory, categories[bill.category]],
+              ...(bill.unitLabel ? [[f.billUnit, bill.unitLabel] as [string, string]] : []),
+              ...(bill.docNo ? [[f.billDocNo, bill.docNo] as [string, string]] : []),
+            ] as Array<[string, string]>
+          ).map(([label, value]) => (
+            <div key={label} className="flex items-baseline justify-between gap-3">
+              <dt className="text-ink-soft">{label}</dt>
+              <dd className="text-right font-medium tabular-nums text-ink">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {state !== "paid" && <BillActions billId={bill.id} todayISO={TODAY} locale={locale} writable={writable} labels={{ markPaid: f.billPaid, markedPaid: f.billMarkedPaid, failed: f.billFailed }} />}
+          {bill.hasDocument && bill.documentId && (
+            <a href={`/api/documents/${encodeURIComponent(bill.documentId)}/fichier`} className="inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline">
+              {f.billOpenDoc}
+            </a>
+          )}
+        </div>
+      </FoldRow>
+    );
+  };
+
+  return (
+    <div className="space-y-8">
+      <Hero
+        title={f.title}
+        top={
+          <MonthSwitch
+            label={formatMonth(month, locale)}
+            prev={at > 0 ? hrefOf(view, past[at - 1]) : null}
+            next={at < past.length - 1 ? hrefOf(view, past[at + 1]) : null}
+            prevLabel={d.home.prevMonth}
+            nextLabel={d.home.nextMonth}
+          />
+        }
+        label={fmt(f.heroLabel, { month: formatMonth(month, locale) })}
+        figure={<Money value={eurosWhole(flow.netCents, locale)} />}
+        actions={
+          <>
+            <BillUpload d={d} inbox={ORG.billInbox} suppliers={suppliers} unitOptions={unitOptions} ocr={ocr} writable={writable} sampleNote={sampleNote} trigger="round" triggerLabel={f.actBill} />
+            <HeroAction create="payment" icon="plus" label={f.actPayment} />
+            <HeroAction href="/app/banque" icon="bank" label={f.actBank} />
+          </>
+        }
+      >
+        <HeroChip href={hrefOf("revenus", month)} icon="trending-up">{fmt(f.chipIn, { amount: eurosWhole(flow.inCents, locale) })}</HeroChip>
+        <HeroChip href={hrefOf("charges", month)} icon="documents">{fmt(f.chipOut, { amount: eurosWhole(flow.outCents, locale) })}</HeroChip>
+      </Hero>
+
+      <Segments
+        label={f.tabsAria}
+        items={views.map((v) => ({
+          href: hrefOf(v, month),
+          label: v === "tresorerie" ? f.tabCash : v === "revenus" ? f.tabIncome : v === "charges" ? f.tabCosts : v === "resultat" ? f.tabResult : f.tabBooks,
+          count: v === "charges" ? BILLS.filter((b) => b.direction === "expense").length : undefined,
+          current: v === view,
+        }))}
+      />
+
+      {view === "tresorerie" && (
+        <div className="grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10">
+          <Section title={f.chartAria} className="min-w-0">
+            <FlowBars bars={bars} selected={month} legendIn={f.legendIn} legendOut={f.legendOut} monthHeading={d.dash.cashflowMonth} ariaLabel={f.chartAria} />
+          </Section>
+          <div className="min-w-0">
+            <GroupHead title={f.toPay} total={toPay.length > 0 ? eurosWhole(toPay.reduce((a, b) => a + b.amountCents, 0), locale) : undefined} />
+            {BILLS.length === 0 ? <p className="px-1 text-sm text-ink-soft">{f.billsNone}</p> : toPay.length === 0 ? <p className="px-1 text-sm text-ink-soft">{f.toPayNone}</p> : <Rows>{toPay.map(billRow)}</Rows>}
+
+            <GroupHead title={f.movements} />
+            {rentsIn.length === 0 && paidThisMonth.length === 0 ? (
+              <p className="px-1 text-sm text-ink-soft">{f.movementsNone}</p>
+            ) : (
+              <Rows>
+                {paidThisMonth.map(billRow)}
+                {rentsIn.map((rp) => {
+                  const l = leaseById(rp.leaseId);
+                  return <Row key={rp.id} href={`/app/baux/${l.id}`} icon="euro" title={leaseTenantNames(l).join(", ") || leaseUnitLabel(l)} sub={leaseUnitLabel(l)} right={`+ ${eurosWhole(rp.allocatedCents, locale)}`} rightTone="in" />;
+                })}
+              </Rows>
+            )}
+          </div>
+        </div>
       )}
 
-      <div className={statement ? "mt-5" : ""}>
-        <Panel title={d.finance.billsTitle}>
-          {bills.length === 0 ? (
-            <p className="text-sm text-ink-soft">{d.finance.billsNone}</p>
+      {view === "revenus" && (
+        <div className="mx-auto max-w-4xl">
+          <GroupHead title={f.incomeTitle} total={eurosWhole(rentsIn.reduce((a, rp) => a + rp.allocatedCents, 0), locale)} />
+          {rentsIn.length === 0 ? (
+            <p className="px-1 text-sm text-ink-soft">{f.incomeNone}</p>
           ) : (
-            <div className="table-scroll table-stack">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-sand-100 bg-sand-50/60 text-left text-[11px] uppercase tracking-wide text-ink-soft">
-                    <th className="px-4 py-2.5 font-semibold">{d.finance.billsColDate}</th>
-                    <th className="px-3 py-2.5 font-semibold">{d.finance.billsColBill}</th>
-                    <th className="px-3 py-2.5 font-semibold">{d.finance.billsColUnit}</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">{d.finance.billsColAmount}</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">{d.finance.billsColStatus}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bills.map((bill) => {
-                    const state = billState(bill, TODAY);
-                    return (
-                      <tr key={bill.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50" data-bill={bill.id}>
-                        <td className="px-4 py-3 tabular-nums text-ink-soft" data-label={d.finance.billsColDate}>{formatDate(bill.docDate ?? bill.createdAt, locale)}</td>
-                        <td className="px-3 py-3" data-title>
-                          <p className="font-semibold text-ink">
-                            {[bill.supplierName, bill.subject].filter(Boolean).join(" · ")}
-                          </p>
-                          <p className="text-xs text-ink-soft">
-                            {[bill.docNo, categories[bill.category], bill.direction === "income" ? d.finance.billIncome : d.finance.billExpense].filter(Boolean).join(" · ")}
-                            {bill.hasDocument && bill.documentId && (
-                              <>
-                                {" · "}
-                                <a href={`/api/documents/${encodeURIComponent(bill.documentId)}/fichier`} className="font-semibold text-brand-700 hover:underline">
-                                  {d.finance.billOpenDoc}
-                                </a>
-                              </>
-                            )}
-                          </p>
-                        </td>
-                        <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.finance.billsColUnit}>{bill.unitLabel || d.common.none}</td>
-                        <td className="px-3 py-3 text-right" data-label={d.finance.billsColAmount}>
-                          <div>
-                          <p className={"tabular-nums font-semibold " + (bill.direction === "income" ? "text-emerald-700" : "text-ink")}>
-                            {euros(bill.amountCents, locale)}
-                          </p>
-                          {bill.vatCents > 0 && <p className="text-[11px] tabular-nums text-ink-soft">{fmt(d.finance.billVatOf, { vat: euros(bill.vatCents, locale) })}</p>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right" data-label={d.finance.billsColStatus} data-actions>
-                          <div className="flex flex-col items-end gap-1.5">
-                            <Badge className={STATE[state].color}>{STATE[state].label}</Badge>
-                            {state !== "paid" && (
-                              <BillActions
-                                billId={bill.id}
-                                todayISO={TODAY}
-                                locale={locale}
-                                writable={writable}
-                                labels={{ markPaid: d.finance.billPaid, markedPaid: d.finance.billMarkedPaid, failed: d.finance.billFailed }}
-                              />
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <Rows>
+              {rentsIn.map((rp) => {
+                const l = leaseById(rp.leaseId);
+                const names = leaseTenantNames(l).join(", ");
+                return <Row key={rp.id} href={`/app/baux/${l.id}`} icon="euro" title={names || leaseUnitLabel(l)} sub={leaseUnitLabel(l)} right={`+ ${eurosWhole(rp.allocatedCents, locale)}`} rightTone="in" />;
+              })}
+            </Rows>
           )}
-          {!writable && sampleNote && <p className="mt-3 text-[11px] text-amber-900/80">{sampleNote}</p>}
-        </Panel>
-      </div>
+          {allBills.some((b) => b.direction === "income") && (
+            <>
+              <GroupHead title={f.otherIncome} />
+              <Rows>{allBills.filter((b) => b.direction === "income").map(billRow)}</Rows>
+            </>
+          )}
+        </div>
+      )}
+
+      {view === "charges" && (
+        <div className="grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-10">
+          <Section title={fmt(f.costsTitle, { year })} className="min-w-0">
+            {byCategory.length === 0 ? (
+              <p className="px-1 text-sm text-ink-soft">{f.costsNone}</p>
+            ) : (
+              <ShareBars rows={byCategory.map((c) => ({ key: c.category, label: categories[c.category as BillCategory] ?? c.category, amount: eurosWhole(c.cents, locale), share: c.share }))} />
+            )}
+          </Section>
+          <Section title={f.billsAll} className="min-w-0">
+            {allBills.filter((b) => b.direction === "expense").length === 0 ? <p className="px-1 text-sm text-ink-soft">{f.billsNone}</p> : <Rows>{allBills.filter((b) => b.direction === "expense").map(billRow)}</Rows>}
+          </Section>
+        </div>
+      )}
+
+      {view === "resultat" && (
+        <div className="mx-auto max-w-2xl">
+          <Section title={fmt(f.resultTitle, { year })}>
+            <dl className="overflow-hidden rounded-3xl border border-sand-200/80 bg-white/75">
+              {(
+                [
+                  [f.resultRents, euros(result.rentCents, locale), "text-ink"],
+                  [f.resultOther, euros(result.otherIncomeCents, locale), "text-ink"],
+                  [f.resultCosts, `− ${euros(result.expenseCents, locale)}`, "text-ink"],
+                ] as Array<[string, string, string]>
+              ).map(([label, value, cls]) => (
+                <div key={label} className="flex items-baseline justify-between gap-3 border-b border-sand-200/80 px-5 py-3.5 text-sm">
+                  <dt className="text-ink-soft">{label}</dt>
+                  <dd className={`tabular-nums ${cls}`}>{value}</dd>
+                </div>
+              ))}
+              <div className="flex items-baseline justify-between gap-3 bg-brand-50/50 px-5 py-4">
+                <dt className="text-sm font-bold text-ink">{f.resultNet}</dt>
+                <dd className={"font-display text-xl font-bold tabular-nums " + (result.resultCents >= 0 ? "text-emerald-700" : "text-red-700")}>{euros(result.resultCents, locale)}</dd>
+              </div>
+            </dl>
+            <p className="mt-3 px-1 text-sm">
+              <Link href="/app/fiscalite" className="font-semibold text-brand-700 hover:underline">{d.hubs.reports}</Link>
+            </p>
+          </Section>
+        </div>
+      )}
+
+      {view === "comptabilite" && statement && <Books statement={statement} demo={demo} d={d} locale={locale} />}
     </div>
   );
 }

@@ -290,6 +290,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* The month, in the one raised card of the page: what came in, of what, who is late, how full the lots are. */}
       <Hero
         title={d.nav.home}
+        art
         eyebrow={fmt(d.dash.greeting, { name: firstName })}
         top={
           <MonthSwitch

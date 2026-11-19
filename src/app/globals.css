@@ -1484,6 +1484,15 @@ summary {
   .cashflow-months button { flex: 0 0 auto; min-width: 2.75rem; padding-inline: .5rem; scroll-snap-align: center; }
 }
 
-/* The head of a manager screen (Hero.tsx): the app's teal ground, the one raised element of a page. */
-.hero-card { background: radial-gradient(120% 90% at 20% 0%, #1a6f7a 0%, #10505c 42%, #0a3a45 100%); box-shadow: 0 1px 0 rgb(255 255 255 / 0.12) inset, 0 18px 40px -22px rgb(6 34 41 / 0.55); }
+/* The head of a manager screen (Hero.tsx): the sky card the overview already used, the one raised element of a page. */
+.hero-card { background: linear-gradient(125deg, #fafdff 10%, #e1f0ff 65%, #d2e8fa); border: 1px solid #fff; box-shadow: 0 2px 4px -2px rgb(23 43 52 / 0.05), 0 14px 34px -24px rgb(23 43 52 / 0.24); }
+.hero-art { position: absolute; right: 1.25rem; bottom: -0.75rem; width: 15rem; display: none; }
+@media (min-width: 64rem) { .hero-art { display: block; } }
+.hero-round { box-shadow: 0 1px 2px rgb(23 43 52 / 0.08), 0 8px 18px -12px rgb(23 43 52 / 0.4); }
+@media (hover: hover) { .group:hover > .hero-round { box-shadow: 0 1px 2px rgb(23 43 52 / 0.1), 0 10px 22px -12px rgb(16 80 92 / 0.55); } }
+@media (prefers-reduced-transparency: reduce) { .hero-card { background: #eaf3fb; } }
 @media (forced-colors: active) { .hero-card { border: 1px solid CanvasText; } }
+
+/* The product's own date field (DateField.tsx) inside a floating-label group: the label stays raised and the day, month, year pattern shows, as a native date field's does. */
+.ui-field-group:has(input[data-day]) > .ui-field-label { top: .4rem; transform: scale(.8); }
+.ui-field-group .ui-field[data-day]::placeholder { color: color-mix(in srgb, var(--color-ink-soft) 70%, transparent); }
