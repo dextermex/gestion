@@ -72,6 +72,7 @@ export const en: Dict = {
     forbidden: "Your role in this space does not allow this action.",
     rateLimited: "Too many requests in a short time. Try again in a few minutes.",
     readOnly: "Your role in this space lets you read, not change.",
+    deletionWrite: "Your request is noted on your account, but the team could not be told automatically. Write to {email} so that it is handled.",
   },
 
   nav: {

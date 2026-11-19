@@ -72,6 +72,7 @@ export const de: Dict = {
     forbidden: "Ihre Rolle in diesem Bereich erlaubt diese Aktion nicht.",
     rateLimited: "Zu viele Anfragen in kurzer Zeit. Versuchen Sie es in einigen Minuten erneut.",
     readOnly: "Ihre Rolle in diesem Bereich erlaubt das Lesen, nicht das Ändern.",
+    deletionWrite: "Ihre Anfrage ist in Ihrem Konto vermerkt, aber das Team konnte nicht automatisch benachrichtigt werden. Schreiben Sie an {email}, damit sie bearbeitet wird.",
   },
 
   nav: {

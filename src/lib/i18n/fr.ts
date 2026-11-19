@@ -78,6 +78,7 @@ export const fr = {
     forbidden: "Votre rôle dans cet espace ne permet pas cette action.",
     rateLimited: "Trop de demandes en peu de temps. Réessayez dans quelques minutes.",
     readOnly: "Votre rôle dans cet espace permet de consulter, pas de modifier.",
+    deletionWrite: "Votre demande est notée sur votre compte, mais l'équipe n'a pas pu être prévenue automatiquement. Écrivez à {email} pour qu'elle soit traitée.",
   },
 
   nav: {

@@ -77,6 +77,7 @@ export const lu: Dict = {
     forbidden: "Är Roll an dësem Beräich erlaabt dës Aktioun net.",
     rateLimited: "Ze vill Ufroen a kuerzer Zäit. Probéiert et an e puer Minutten nach eng Kéier.",
     readOnly: "Är Roll an dësem Beräich erlaabt ze liesen, net ze änneren.",
+    deletionWrite: "Är Ufro ass op Ärem Kont notéiert, mee d'Equipe konnt net automatesch informéiert ginn. Schreift un {email}, fir datt se behandelt gëtt.",
   },
 
   nav: {
