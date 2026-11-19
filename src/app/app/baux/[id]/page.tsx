@@ -5,6 +5,7 @@ import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import InvitePanel from "@/components/gestion/InvitePanel";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
+import PaymentsPanel from "@/components/gestion/PaymentsPanel";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
 import {
@@ -62,7 +63,9 @@ export default async function BailDetailPage({
     EDLS,
     INVITES,
     LEASES,
+    LEASE_CREDITS,
     ORG,
+    PAYMENTS,
     RENT_PERIODS,
     TICKETS,
     TODAY,
@@ -83,6 +86,7 @@ export default async function BailDetailPage({
   const unitShort = unitLabel.split(" · ")[0];
 
   const deposit = DEPOSITS.find((x) => x.leaseId === l.id);
+  const credit = LEASE_CREDITS[l.id] ?? 0;
   const periods = RENT_PERIODS.filter((rp) => rp.leaseId === l.id).slice(-12).reverse();
   const edls = EDLS.filter((e) => e.leaseId === l.id);
   const docs = DOCUMENTS.filter((doc) => doc.relatedLabel !== "" && unitLabel.includes(doc.relatedLabel));
@@ -326,6 +330,37 @@ export default async function BailDetailPage({
                 </li>
               ))}
             </ul>
+          </Panel>
+          {/* What was received, payment by payment: the one place a mistake is corrected. */}
+          <Panel title={d.baux.paymentsTitle}>
+            {credit > 0 && (
+              <p className="mb-3 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900" data-lease-credit>
+                {fmt(d.baux.creditLine, { amount: euros(credit, locale) })}
+              </p>
+            )}
+            <PaymentsPanel
+              real={!sample}
+              rows={PAYMENTS.filter((p) => p.leaseId === l.id).map((p) => ({
+                id: p.id,
+                date: formatDate(p.receivedOn, locale),
+                amount: euros(p.amountCents, locale),
+                origin: p.fromBank ? d.baux.paymentFromBank : d.baux.paymentManual,
+                credit: !p.cancelledOn && p.amountCents > p.allocatedCents ? fmt(d.baux.paymentUnallocated, { amount: euros(p.amountCents - p.allocatedCents, locale) }) : null,
+                cancelled: p.cancelledOn ? fmt(d.baux.paymentCancelledOn, { date: formatDate(p.cancelledOn, locale) }) : null,
+                note: p.note,
+              }))}
+              labels={{
+                empty: d.baux.paymentsEmpty,
+                cancel: d.baux.paymentCancel,
+                cancelTitle: d.baux.paymentCancelTitle,
+                cancelBody: d.baux.paymentCancelBody,
+                cancelReason: d.baux.paymentCancelReason,
+                cancelDo: d.baux.paymentCancelDo,
+                cancelKeep: d.baux.paymentCancelKeep,
+                cancelFailed: d.baux.paymentCancelFailed,
+                receiptIssued: d.baux.paymentReceiptIssued,
+              }}
+            />
           </Panel>
         </div>
       )}

@@ -174,7 +174,15 @@ export async function openLedger(ctx: OrgContext, lease: LedgerLease, today: str
     console.error("rent periods open failed:", error.code, error.message);
     return 0;
   }
-  return data?.length ?? 0;
+  const opened = data?.length ?? 0;
+  if (opened > 0) {
+    // Money already received above what was due waits for the next period:
+    // the months just opened take it, oldest first (the nightly roll does the
+    // same for the months it opens).
+    const { error: creditErr } = await g.rpc("apply_lease_credit", { p_lease: lease.id });
+    if (creditErr && creditErr.code !== "PGRST202" && creditErr.code !== "42883") console.error("credit application failed:", creditErr.code, creditErr.message);
+  }
+  return opened;
 }
 
 export async function createLease(

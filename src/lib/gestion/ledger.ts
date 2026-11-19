@@ -73,3 +73,23 @@ export function nextDueOn(today: string, paymentDay: number, startDate?: string,
 export function effectiveLeaseStatus<S extends string>(status: S, endDate: string | null, today: string): S | "ended" {
   return (status === "active" || status === "notice") && endDate !== null && endDate !== "" && endDate <= today ? "ended" : status;
 }
+
+/** Whether something of a period is still to pay and its due date is behind us. */
+export function isOverdue(period: { status: string; dueDate: string; totalCents: number; allocatedCents: number }, today: string): boolean {
+  return period.status !== "written_off" && period.allocatedCents < period.totalCents && period.dueDate < today;
+}
+
+/**
+ * The tenancies a payment can be recorded on: those in force, and those that
+ * ended with something still owed. A dossier in preparation is not one (it
+ * has no period for the money to land on), and an ended tenancy that owes
+ * nothing has nothing to receive.
+ */
+export function paymentLeases<L extends { id: string; status: string }>(demo: {
+  LEASES: L[];
+  RENT_PERIODS: Array<{ leaseId: string; status: string; dueDate: string; totalCents: number; allocatedCents: number }>;
+  TODAY: string;
+}): L[] {
+  const owing = new Set(demo.RENT_PERIODS.filter((rp) => isOverdue(rp, demo.TODAY)).map((rp) => rp.leaseId));
+  return demo.LEASES.filter((l) => l.status === "active" || l.status === "notice" || (l.status === "ended" && owing.has(l.id)));
+}

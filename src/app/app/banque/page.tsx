@@ -21,6 +21,7 @@ import type { DemoBankTx } from "@/lib/demo/data";
 import { diffDays } from "@/domain/dates";
 import { scoreFuzzy } from "@/domain/banking/matching";
 import { vopNameCheck } from "@/domain/banking/rf";
+import { paymentLeases } from "@/lib/gestion/ledger";
 
 /**
  * Back from the sample cabinet's demonstration journey: what Salt Edge's fake
@@ -51,7 +52,7 @@ export default async function BanquePage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const [{ BANK_ACCOUNTS, BANK_TXS, IBAN_BINDINGS, LEASES, ORG, TODAY, leaseTenantNames, leaseUnitLabel, openInvoicesForMatching }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  const [{ BANK_ACCOUNTS, BANK_TXS, IBAN_BINDINGS, LEASES, ORG, RENT_PERIODS, TODAY, leaseTenantNames, leaseUnitLabel, openInvoicesForMatching }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
 
   // Real accounts get the real consent journey. A sample cabinet gets the
   // same journey on Salt Edge's fake bank when the deployment carries the
@@ -93,9 +94,11 @@ export default async function BanquePage({
   const importCta = real ? <BankImport accounts={BANK_ACCOUNTS.map((b) => ({ id: b.id, label: b.label }))} labels={importLabels} /> : null;
   const sampleNote = real ? null : fmt(d.shell.sampleBanner, { cabinet: ORG.shortName });
 
-  // What a reviewed operation can be assigned to: the live leases, named by
-  // their lot and tenants; the engine's closest ones first, per operation.
-  const liveLeases = LEASES.filter((l) => l.status === "active" || l.status === "notice");
+  // What a reviewed operation can be assigned to: the tenancies in force and
+  // those that ended still owing (a former tenant's late transfer has to land
+  // somewhere), named by their lot and tenants; the engine's closest ones
+  // first, per operation.
+  const liveLeases = paymentLeases({ LEASES, RENT_PERIODS, TODAY });
   const leaseLabel = (leaseId: string): string => {
     const l = liveLeases.find((x) => x.id === leaseId);
     return l ? `${leaseUnitLabel(l)} · ${leaseTenantNames(l).join(", ")}` : leaseId;

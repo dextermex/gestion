@@ -553,6 +553,17 @@ export function Rental({
                       </li>
                     ))}
                   </ul>
+                  {/* Money received above what was due: said here, corrected (with every payment) on the lease sheet. */}
+                  {(demo.LEASE_CREDITS[lease.id] ?? 0) > 0 && (
+                    <p className="mt-3 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900" data-lease-credit>
+                      {fmt(d.baux.creditLine, { amount: euros(demo.LEASE_CREDITS[lease.id], locale) })}
+                    </p>
+                  )}
+                  <p className="mt-3 text-sm">
+                    <Link href={`/app/baux/${lease.id}?onglet=loyer`} className="font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+                      {d.baux.paymentsTitle}
+                    </Link>
+                  </p>
                 </div>
               </div>
               {/* Every running tenancy ends the same way: through the guided

@@ -985,11 +985,14 @@ function CreateDialog({
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The payment form's own key, drawn once per opening: the API writes a key once.
+  const [paymentKey, setPaymentKey] = useState("");
   useEffect(() => {
     setLeaseStep(0);
     setSubmitted(false);
     setSaving(false);
     setError(null);
+    setPaymentKey(kind === "payment" ? (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`) : "");
   }, [kind]);
 
   useEffect(() => {
@@ -1025,7 +1028,7 @@ function CreateDialog({
               depositForm: v("depositForm"),
             }
           : kind === "payment"
-            ? { leaseId: v("leaseId"), amount: v("amount"), receivedOn: v("receivedOn") }
+            ? { leaseId: v("leaseId"), amount: v("amount"), receivedOn: v("receivedOn"), requestKey: v("requestKey") }
             : { unitId: v("unitId"), title: v("title") };
     setSaving(true);
     setError(null);
@@ -1172,9 +1175,11 @@ function CreateDialog({
                   <Input name="amount" required inputMode="decimal" placeholder="1 850,00" />
                 </Field>
                 <Field label={d.shell.fieldReceivedOn}>
-                  <Input name="receivedOn" type="date" required defaultValue={todayISO()} />
+                  <Input name="receivedOn" type="date" required defaultValue={todayISO()} max={todayISO()} />
                 </Field>
               </div>
+              {/* One key per opened form: the same payment sent twice (a double click, a retry) is written once. */}
+              <input type="hidden" name="requestKey" value={paymentKey} readOnly />
             </>
           )}
           {kind === "ticket" && (

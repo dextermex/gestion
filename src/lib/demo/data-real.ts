@@ -31,7 +31,7 @@ import type { ContactIdentity, DemoAuditEntry, DemoDelivery, DemoGenerated, Demo
 import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
 import { todayISO } from "@/lib/clock";
 import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
-import type { DemoArchivedProperty } from "./data";
+import type { DemoArchivedProperty, DemoPayment } from "./data";
 import { effectiveLeaseStatus } from "@/lib/gestion/ledger";
 
 /**
@@ -280,6 +280,7 @@ export async function buildRealDataFrom(
       ? await inChunks(unitIds, (ids) => q("leases", "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details", (b) => b.in("unit_id", ids)))
       : await q("leases", "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details");
   const leaseIds = leaseRows.map((l) => s(l.id));
+  const endedLeaseIds = leaseRows.filter((l) => effectiveLeaseStatus(s(l.status), l.end_date ? day(l.end_date) : null, today) === "ended").map((l) => s(l.id));
   // On a tenancy's sheet, its lot and that lot's property; on a property's, the property and its lots.
   const sheetUnitIds = leaseScoped ? leaseRows.map((l) => s(l.unit_id)) : unitIds;
   const sheetPropertyIds = leaseScoped ? unitRows.filter((u) => sheetUnitIds.includes(s(u.id))).map((u) => s(u.property_id)) : propertyRows.map((p) => s(p.id));
@@ -307,8 +308,14 @@ export async function buildRealDataFrom(
     // Paid-ness from the view; an arrear older than the window is still an
     // arrear. The shell asks one thing of the ledger: whether a rent was
     // ever received (one period with money on it, read by id below).
+    // The shell also reads what ended tenancies still owe (a handful of rows
+    // at most): a former tenant who pays late must stay offered where a
+    // payment is recorded.
     shell
-      ? q("rent_period_status", "id,allocated_cents,status", (b) => b.in("status", ["paid", "partial", "partial_late"]), 1)
+      ? Promise.all([
+          q("rent_period_status", "id,allocated_cents,status", (b) => b.in("status", ["paid", "partial", "partial_late"]), 1),
+          inChunks(endedLeaseIds, (ids) => q("rent_period_status", "id,allocated_cents,status", (b) => b.in("lease_id", ids).in("status", ["late", "partial_late"]))),
+        ]).then(([probe, overdue]) => [...probe, ...overdue.filter((r) => !probe.some((p) => s(p.id) === s(r.id)))])
       : byLease("rent_period_status", "id,allocated_cents,status", (b) => b.or(`period.gte.${from},status.in.(late,partial_late)`)),
     byLease("deposits", "id,lease_id,form,amount_cents,status,key_handover_on,decompte_issued_on,mise_en_demeure_ar_on,released_first_tranche_cents,released_balance_cents", (b) => b),
     byLease("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256", (b) => b),
@@ -345,6 +352,21 @@ export async function buildRealDataFrom(
       ? inChunks(leaseIds, (ids) => q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.eq("related_type", "lease").in("related_id", ids)))
       : q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.gte("created_at", fromStamp).order("created_at")),
   ]);
+
+  // The money received on a tenancy and not yet on a period (0032), and, on
+  // a tenancy's sheet, its payments one by one. Absent until the base carries
+  // them: the screens then show no credit and no list, never a wrong one.
+  const [creditRows, paymentRows] = await Promise.all([
+    shell
+      ? none()
+      : scoped
+        ? inChunks(leaseIds, (ids) => q("lease_credit", "lease_id,credit_cents", (b) => b.in("lease_id", ids), undefined, { optional: true }))
+        : q("lease_credit", "lease_id,credit_cents", undefined, undefined, { optional: true }),
+    leaseScoped
+      ? q("payments", "id,lease_id,received_on,amount_cents,bank_transaction_id,note,cancelled_at,created_at", (b) => b.eq("lease_id", leaseScoped).order("received_on", { ascending: false }), undefined, { optional: true })
+      : none(),
+  ]);
+  const paymentAllocationRows = await inChunks(paymentRows.map((p) => s(p.id)), (ids) => q("payment_allocations", "payment_id,amount_cents,reversed_at", (b) => b.in("payment_id", ids)));
 
   // ── C. What hangs off those rows: by id, in chunks. ──
   const ticketIds = ticketRows.map((t) => s(t.id));
@@ -617,6 +639,25 @@ export async function buildRealDataFrom(
       status: (raw === "partial_late" ? "partial" : raw) as DemoRentPeriod["status"],
     };
   });
+
+  // ── Payments and credit: what was received, what of it sits on periods ──
+  const allocatedByPayment = new Map<string, number>();
+  for (const a of paymentAllocationRows) {
+    if (a.reversed_at) continue;
+    allocatedByPayment.set(s(a.payment_id), (allocatedByPayment.get(s(a.payment_id)) ?? 0) + n(a.amount_cents));
+  }
+  const PAYMENTS: DemoPayment[] = paymentRows.filter(ofKnownLease).map((p) => ({
+    id: s(p.id),
+    leaseId: s(p.lease_id),
+    receivedOn: day(p.received_on),
+    amountCents: n(p.amount_cents),
+    allocatedCents: p.cancelled_at ? 0 : (allocatedByPayment.get(s(p.id)) ?? 0),
+    fromBank: typeof p.bank_transaction_id === "string" && p.bank_transaction_id !== "",
+    cancelledOn: p.cancelled_at ? day(p.cancelled_at) : null,
+    note: sOr(p.note, null),
+  }));
+  const LEASE_CREDITS: Record<string, number> = {};
+  for (const c of creditRows) if (leaseIndex.has(s(c.lease_id)) && n(c.credit_cents) > 0) LEASE_CREDITS[s(c.lease_id)] = n(c.credit_cents);
 
   // ── Deposits ──
   const deductionsByDeposit = new Map<string, Row[]>();
@@ -1114,6 +1155,8 @@ export async function buildRealDataFrom(
     UNITS,
     LEASES,
     RENT_PERIODS,
+    PAYMENTS,
+    LEASE_CREDITS,
     DEGRADED: [...failed],
     BANK_ACCOUNTS,
     IBAN_BINDINGS,
