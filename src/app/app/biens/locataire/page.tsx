@@ -3,6 +3,7 @@ import TenantWizard, { type Person } from "@/components/gestion/TenantWizard";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { dossierOf } from "@/lib/gestion/dossier";
+import { isLettable } from "@/lib/gestion/portfolio";
 import { stepAt, type RentalStep } from "@/lib/gestion/rental-flow";
 import { getParamValue } from "@/domain/legal/params";
 
@@ -19,6 +20,10 @@ import { getParamValue } from "@/domain/legal/params";
  * reads; with it (the état des lieux hands back this way), at that step. A
  * lease that is no longer a draft has nothing left for this flow: it is
  * edited from the property.
+ *
+ * Opened with neither, there is no lot to let: the properties are where a
+ * rental starts. A lot that cannot carry a lease of its own (a parking
+ * space, a cellar) goes back to its property.
  */
 
 export default async function AjouterLocatairePage({
@@ -43,10 +48,12 @@ export default async function AjouterLocatairePage({
 
   // ── Starting from a lot ──
   if (!bail) {
-    const unit = lot ? demo.UNITS.find((u) => u.id === lot) : undefined;
+    if (!lot) redirect("/app/biens");
+    const unit = demo.UNITS.find((u) => u.id === lot);
     if (!unit) notFound();
     const property = demo.PROPERTIES.find((p) => p.id === unit.propertyId);
     if (!property) notFound();
+    if (!isLettable(unit)) redirect(`/app/biens/${property.id}`);
 
     // A lot already under a live lease cannot take a second one.
     const live = demo.LEASES.find((l) => l.unitId === unit.id && (l.status === "active" || l.status === "notice"));
