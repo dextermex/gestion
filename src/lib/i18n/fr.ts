@@ -76,6 +76,11 @@ export const fr = {
     toTenantHome: "Retour à mon logement",
     toSpace: "Ouvrir mon espace",
     toSignIn: "Se connecter",
+    fileTitle: "Ce document n'a pas pu être ouvert",
+    fileAbsent: "Il n'existe plus, ou aucun fichier ne lui est rattaché.",
+    fileRefused: "Votre compte n'y a pas accès dans cet espace.",
+    fileFailed: "Le fichier n'a pas pu être préparé. Réessayez dans un instant : si le problème persiste, écrivez-nous.",
+    fileBack: "Revenir à l'écran précédent",
   },
   nav: {
     mortgages: "Crédits immobiliers",

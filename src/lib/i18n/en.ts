@@ -72,6 +72,11 @@ export const en: Dict = {
     toTenantHome: "Back to my home",
     toSpace: "Open my space",
     toSignIn: "Sign in",
+    fileTitle: "This document could not be opened",
+    fileAbsent: "It no longer exists, or no file is attached to it.",
+    fileRefused: "Your account has no access to it in this space.",
+    fileFailed: "The file could not be prepared. Try again in a moment: if the problem persists, write to us.",
+    fileBack: "Back to the previous screen",
   },
   nav: {
     mortgages: "Mortgages",

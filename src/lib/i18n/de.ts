@@ -72,6 +72,11 @@ export const de: Dict = {
     toTenantHome: "Zurück zu meiner Wohnung",
     toSpace: "Meinen Bereich öffnen",
     toSignIn: "Anmelden",
+    fileTitle: "Dieses Dokument konnte nicht geöffnet werden",
+    fileAbsent: "Es existiert nicht mehr, oder es ist keine Datei damit verknüpft.",
+    fileRefused: "Ihr Konto hat in diesem Bereich keinen Zugriff darauf.",
+    fileFailed: "Die Datei konnte nicht vorbereitet werden. Versuchen Sie es gleich noch einmal: Besteht das Problem weiter, schreiben Sie uns.",
+    fileBack: "Zurück zum vorherigen Bildschirm",
   },
   nav: {
     mortgages: "Immobilienkredite",

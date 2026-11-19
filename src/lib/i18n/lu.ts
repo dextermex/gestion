@@ -77,6 +77,11 @@ export const lu: Dict = {
     toTenantHome: "Zréck bei meng Wunneng",
     toSpace: "Mäi Beräich opmaachen",
     toSignIn: "Umellen",
+    fileTitle: "Dëst Dokument konnt net opgemaach ginn",
+    fileAbsent: "Et existéiert net méi, oder et ass kee Fichier domat verbonnen.",
+    fileRefused: "Äre Kont huet an dësem Beräich keen Zougrëff drop.",
+    fileFailed: "De Fichier konnt net virbereet ginn. Probéiert an engem Moment nach eng Kéier: wann de Problem bleift, schreift eis.",
+    fileBack: "Zréck op de Schierm vu virdrun",
   },
   nav: {
     mortgages: "Immobiliekreditter",
