@@ -593,6 +593,7 @@ declare
   v_carried date;
   v_other integer;
   v_other_label text;
+  v_live boolean;
   l record;
 begin
   select cp.org_id, cp.lease_id, cp.status, cp.balance_cents into v_org, v_lease, v_status, v_balance
@@ -611,10 +612,13 @@ begin
 
   if v_balance > 0 then
     perform pg_advisory_xact_lock(hashtext('gestion.ledger:' || v_lease::text));
-    -- La première échéance, de ce mois en avant, que personne n'a commencé à payer.
+    -- La première échéance, de ce mois en avant, que personne n'a commencé à
+    -- payer et qui ne tombe pas avant l'échéance du décompte : le solde n'est
+    -- jamais dû plus tôt que ce que le décompte annonce au locataire.
     select rp.id, rp.period, rp.other_cents, rp.other_label into v_target, v_carried, v_other, v_other_label
     from gestion.rent_periods rp
     where rp.lease_id = v_lease and rp.period >= v_month and not rp.written_off
+      and rp.due_date >= p_due_on
       and not exists (select 1 from gestion.payment_allocations a where a.rent_period_id = rp.id and a.reversed_at is null)
     order by rp.period
     limit 1
@@ -629,15 +633,19 @@ begin
              end
        where id = v_target;
     else
-      -- Aucune échéance libre (tout est payé d'avance, ou le bail est clos) :
-      -- le solde ouvre sa propre échéance, au premier mois sans ligne.
+      -- Aucune échéance libre à temps (tout est payé d'avance, le mois est
+      -- déjà échu, ou le bail est clos) : le solde ouvre sa propre échéance,
+      -- au premier mois sans ligne qui ne tombe pas avant celle du décompte.
       select le.status, le.end_date, le.start_date, le.rent_cents, le.charges_cents, le.payment_day into l
       from gestion.leases le where le.id = v_lease;
+      v_live := l.status in ('active', 'notice');
       v_carried := v_month;
-      while exists (select 1 from gestion.rent_periods rp where rp.lease_id = v_lease and rp.period = v_carried) loop
+      loop
+        exit when not exists (select 1 from gestion.rent_periods rp where rp.lease_id = v_lease and rp.period = v_carried)
+          and (not v_live or greatest((v_carried + (l.payment_day - 1))::date, l.start_date) >= p_due_on);
         v_carried := (v_carried + interval '1 month')::date;
       end loop;
-      if l.status in ('active', 'notice') and (l.end_date is null or v_carried <= date_trunc('month', l.end_date)::date) then
+      if v_live and (l.end_date is null or v_carried <= date_trunc('month', l.end_date)::date) then
         -- Un mois que le bail devra de toute façon : son loyer, plus le solde.
         insert into gestion.rent_periods (org_id, lease_id, period, due_date, rent_cents, charges_cents, other_cents, other_label, vat_cents)
         values (v_org, v_lease, v_carried, greatest((v_carried + (l.payment_day - 1))::date, l.start_date), l.rent_cents, l.charges_cents, v_balance, p_label, 0);

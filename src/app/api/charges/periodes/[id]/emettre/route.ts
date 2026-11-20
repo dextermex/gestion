@@ -6,11 +6,13 @@ import { todayISO } from "@/lib/clock";
 
 /**
  * A draft décompte is issued: dated, due a month later, and its balance
- * carried onto the ledger. What the tenant owes lands as the "other" part
- * of the first open rent period from this month on (a month somebody
- * already paid is history and is never touched); what the tenant is owed
- * is shown on the décompte and settled by hand, the ledger never invents a
- * negative rent.
+ * carried onto the ledger in the same transaction (`issue_charge_period`,
+ * 0032). What the tenant owes lands as the "other" part of the first rent
+ * period from this month on that nobody started paying and that falls due
+ * no earlier than the décompte; with none, it opens a period of its own
+ * (a tenancy paid ahead, or one that ended). A month somebody already paid
+ * is history and is never touched; what the tenant is owed is shown on the
+ * décompte and settled by hand, the ledger never invents a negative rent.
  */
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -36,6 +38,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (period.status !== "draft") return NextResponse.json({ error: "not_draft" }, { status: 409 });
 
   const dueOn = addDays(issuedOn, 30);
+  const label = `Décompte ${period.year}`;
+
+  // One transaction (0032): the status and the balance on the ledger move
+  // together, or neither does.
+  const { data: out, error: rpcErr } = await g.rpc("issue_charge_period", { p_period: id, p_issued_on: issuedOn, p_due_on: dueOn, p_label: label });
+  if (!rpcErr) {
+    const result = (out ?? {}) as { balance_cents?: number; carried_to?: string | null };
+    const balanceCents = Number(result.balance_cents) || 0;
+    const carriedTo = balanceCents > 0 && typeof result.carried_to === "string" ? result.carried_to.slice(0, 7) : null;
+    return NextResponse.json({ ok: true, issuedOn, dueOn, balanceCents, carriedTo });
+  }
+  const message = rpcErr.message ?? "";
+  if (message.includes("not a draft")) return NextResponse.json({ error: "not_draft" }, { status: 409 });
+  if (message.includes("charge period not found")) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (rpcErr.code !== "PGRST202" && rpcErr.code !== "42883") return dbError("charge period issue", rpcErr);
+
+  // A base without the function yet: the same two steps, one after the other.
   const { data: issued, error: issueErr } = await g
     .from("charge_periods")
     .update({ status: "issued", issued_on: issuedOn, due_on: dueOn })
@@ -51,16 +70,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (balanceCents > 0) {
     const fromMonth = `${today.slice(0, 7)}-01`;
     const [{ data: periods, error: pErr }, { data: statuses, error: sErr }] = await Promise.all([
-      g.from("rent_periods").select("id,period,other_cents,other_label").eq("org_id", org.id).eq("lease_id", period.lease_id).gte("period", fromMonth).order("period", { ascending: true }),
+      g.from("rent_periods").select("id,period,due_date,other_cents,other_label").eq("org_id", org.id).eq("lease_id", period.lease_id).gte("period", fromMonth).order("period", { ascending: true }),
       g.from("rent_period_status").select("id,allocated_cents").eq("lease_id", period.lease_id),
     ]);
     if (pErr) return dbError("regularisation ledger read", pErr);
     if (sErr) return dbError("regularisation status read", sErr);
     const allocated = new Map<string, number>();
     for (const row of (statuses as Array<{ id: string; allocated_cents: number }> | null) ?? []) allocated.set(String(row.id), Number(row.allocated_cents) || 0);
-    const target = ((periods as Array<{ id: string; period: string; other_cents: number; other_label: string | null }> | null) ?? []).find((p) => (allocated.get(String(p.id)) ?? 0) === 0);
+    const target = ((periods as Array<{ id: string; period: string; due_date: string; other_cents: number; other_label: string | null }> | null) ?? []).find(
+      (p) => (allocated.get(String(p.id)) ?? 0) === 0 && String(p.due_date).slice(0, 10) >= dueOn,
+    );
     if (target) {
-      const label = `Décompte ${period.year}`;
       const { error: carryErr } = await g
         .from("rent_periods")
         .update({

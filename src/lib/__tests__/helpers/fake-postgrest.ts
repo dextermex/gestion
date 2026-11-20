@@ -861,8 +861,9 @@ export class FakeDb {
           const month = `${this.today.slice(0, 7)}-01`;
           const label = String(args.p_label ?? "");
           const allocations = this.table("payment_allocations");
+          const dueOn = String(args.p_due_on);
           const free = this.table("rent_periods")
-            .filter((rp) => rp.lease_id === cp.lease_id && String(rp.period) >= month && !rp.written_off && !allocations.some((a) => a.rent_period_id === rp.id && a.reversed_at == null))
+            .filter((rp) => rp.lease_id === cp.lease_id && String(rp.period) >= month && !rp.written_off && String(rp.due_date) >= dueOn && !allocations.some((a) => a.rent_period_id === rp.id && a.reversed_at == null))
             .sort((a, b) => (String(a.period) < String(b.period) ? -1 : 1))[0];
           if (free) {
             free.other_cents = n(free.other_cents) + balance;
@@ -876,9 +877,14 @@ export class FakeDb {
               const [y, m] = d.slice(0, 7).split("-").map(Number);
               return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
             };
-            while (this.table("rent_periods").some((rp) => rp.lease_id === cp.lease_id && rp.period === carried)) carried = next(carried);
-            const runs = LIVE.has(String(lease.status)) && (lease.end_date == null || carried <= `${String(lease.end_date).slice(0, 7)}-01`);
+            const live = LIVE.has(String(lease.status));
             const day = String(Math.min(Math.max(n(lease.payment_day) || 1, 1), 28)).padStart(2, "0");
+            const normalDue = (m: string): string => {
+              const d = `${m.slice(0, 7)}-${day}`;
+              return d < String(lease.start_date) ? String(lease.start_date) : d;
+            };
+            while (this.table("rent_periods").some((rp) => rp.lease_id === cp.lease_id && rp.period === carried) || (live && normalDue(carried) < dueOn)) carried = next(carried);
+            const runs = live && (lease.end_date == null || carried <= `${String(lease.end_date).slice(0, 7)}-01`);
             const due = `${carried.slice(0, 7)}-${day}`;
             this.insertRow("rent_periods", {
               org_id: cp.org_id, lease_id: cp.lease_id, period: carried,
