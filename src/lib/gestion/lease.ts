@@ -618,6 +618,110 @@ export async function discardDraft(
   return { ok: true };
 }
 
+/** The places a person can take on a tenancy in force, after it started. */
+export const PARTY_ROLES = ["tenant", "guarantor"] as const;
+export type PartyRole = (typeof PARTY_ROLES)[number];
+
+const TENANT_ROLES = new Set(["tenant", "colocataire"]);
+const KEEPS_TENANT = "a tenancy in force keeps a tenant";
+
+/**
+ * Someone joins a tenancy in force: a co-tenant moving in, a guarantor
+ * added. The person is a contact of the workspace, still on its screens,
+ * and not already in that place on this tenancy. They are in from the day
+ * given (the tenancy's start at the earliest), today when not said.
+ */
+export async function addLeaseParty(
+  ctx: OrgContext,
+  leaseId: string,
+  input: { contactId: string; role: PartyRole; movedInOn: string | null },
+  today: string = isoToday(),
+): Promise<{ ok: true; id: string } | { error: "not_found" | "not_live" | "invalid" | "already_party" | "storage_failed" }> {
+  const { g, org } = ctx;
+  const [{ data: lease, error: leaseErr }, { data: contact, error: contactErr }] = await Promise.all([
+    g.from("leases").select("id,status,start_date").eq("org_id", org.id).eq("id", leaseId).maybeSingle(),
+    g.from("contacts").select("id,archived_at").eq("org_id", org.id).eq("id", input.contactId).maybeSingle(),
+  ]);
+  if (leaseErr || contactErr) {
+    const e = leaseErr ?? contactErr;
+    console.error("party lookup failed:", e?.code, e?.message);
+    return { error: "storage_failed" };
+  }
+  if (!lease) return { error: "not_found" };
+  if (!(LIVE_STATUSES as readonly string[]).includes(String(lease.status))) return { error: "not_live" };
+  if (!contact || contact.archived_at) return { error: "invalid" };
+  const start = String(lease.start_date ?? "").slice(0, 10);
+  const movedInOn = input.movedInOn ?? (today > start ? today : start);
+  if (!ISO_DAY.test(movedInOn) || movedInOn < start) return { error: "invalid" };
+
+  const { data: present, error: presentErr } = await g
+    .from("lease_parties")
+    .select("id,role,moved_out_on")
+    .eq("org_id", org.id)
+    .eq("lease_id", leaseId)
+    .eq("contact_id", input.contactId);
+  if (presentErr) {
+    console.error("party presence lookup failed:", presentErr.code, presentErr.message);
+    return { error: "storage_failed" };
+  }
+  const sameRole = (r: string) => (input.role === "tenant" ? TENANT_ROLES.has(r) : r === input.role);
+  if (((present as Array<{ role: string; moved_out_on: string | null }> | null) ?? []).some((p) => sameRole(p.role) && !p.moved_out_on)) return { error: "already_party" };
+
+  const { data, error } = await g
+    .from("lease_parties")
+    .insert({ org_id: org.id, lease_id: leaseId, contact_id: input.contactId, role: input.role, moved_in_on: movedInOn })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "already_party" };
+    console.error("party insert failed:", error?.code, error?.message);
+    return { error: "storage_failed" };
+  }
+  return { ok: true, id: String(data.id) };
+}
+
+/**
+ * Someone leaves a tenancy that goes on without them: a co-tenant moving
+ * out, a guarantee that ends. The row stays, dated. A tenancy in force is
+ * never left without a tenant: the last one leaves through the departure,
+ * which closes the lease (the database refuses it as well).
+ */
+export async function moveOutParty(
+  ctx: OrgContext,
+  leaseId: string,
+  partyId: string,
+  movedOutOn: string,
+): Promise<{ ok: true } | { error: "not_found" | "not_live" | "invalid" | "last_tenant" | "storage_failed" }> {
+  const { g, org } = ctx;
+  if (!ISO_DAY.test(movedOutOn)) return { error: "invalid" };
+  const [{ data: lease, error: leaseErr }, { data: parties, error: partiesErr }] = await Promise.all([
+    g.from("leases").select("id,status,start_date").eq("org_id", org.id).eq("id", leaseId).maybeSingle(),
+    g.from("lease_parties").select("id,role,moved_in_on,moved_out_on").eq("org_id", org.id).eq("lease_id", leaseId),
+  ]);
+  if (leaseErr || partiesErr) {
+    const e = leaseErr ?? partiesErr;
+    console.error("move-out lookup failed:", e?.code, e?.message);
+    return { error: "storage_failed" };
+  }
+  if (!lease) return { error: "not_found" };
+  const rows = (parties as Array<{ id: string; role: string; moved_in_on: string | null; moved_out_on: string | null }> | null) ?? [];
+  const party = rows.find((p) => p.id === partyId);
+  if (!party) return { error: "not_found" };
+  if (!(LIVE_STATUSES as readonly string[]).includes(String(lease.status))) return { error: "not_live" };
+  const from = String(party.moved_in_on ?? lease.start_date ?? "").slice(0, 10);
+  if (party.moved_out_on || movedOutOn < from) return { error: "invalid" };
+  if (TENANT_ROLES.has(party.role) && !rows.some((p) => p.id !== partyId && TENANT_ROLES.has(p.role) && !p.moved_out_on)) return { error: "last_tenant" };
+
+  const { data, error } = await g.from("lease_parties").update({ moved_out_on: movedOutOn }).eq("org_id", org.id).eq("id", partyId).is("moved_out_on", null).select("id");
+  if (error) {
+    if (error.code === "23514" && (error.message ?? "").includes(KEEPS_TENANT)) return { error: "last_tenant" };
+    console.error("move-out failed:", error.code, error.message);
+    return { error: "storage_failed" };
+  }
+  if (!data?.length) return { error: "not_found" };
+  return { ok: true };
+}
+
 /** Where a departure being recorded stands, kept on the lease row as the owner goes. */
 export interface DepartureProgress {
   /** 1-based step reached, out of the seven the flow walks. */

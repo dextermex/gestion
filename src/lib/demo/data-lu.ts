@@ -140,6 +140,7 @@ export function leaseUnitLabel(l: DemoLease): string {
 export const RENT_PERIODS = fr.RENT_PERIODS;
 export const ARCHIVED_PROPERTIES = fr.ARCHIVED_PROPERTIES;
 export const PAYMENTS = fr.PAYMENTS;
+export const LEASE_PARTIES = fr.LEASE_PARTIES;
 export const LEASE_CREDITS = fr.LEASE_CREDITS;
 export const DEGRADED = fr.DEGRADED;
 export const IBAN_BINDINGS = fr.IBAN_BINDINGS;

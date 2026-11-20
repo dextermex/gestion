@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import InvitePanel from "@/components/gestion/InvitePanel";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
 import PaymentsPanel from "@/components/gestion/PaymentsPanel";
+import LeaseParties from "@/components/gestion/LeaseParties";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
 import {
@@ -15,7 +15,6 @@ import {
   euros,
   formatDate,
   formatMonth,
-  initials,
   inviteStateMeta,
   leaseStatusMeta,
   leaseTypeMeta,
@@ -63,7 +62,9 @@ export default async function BailDetailPage({
     EDLS,
     INVITES,
     LEASES,
+    CONTACTS,
     LEASE_CREDITS,
+    LEASE_PARTIES,
     ORG,
     PAYMENTS,
     RENT_PERIODS,
@@ -465,32 +466,59 @@ export default async function BailDetailPage({
             )}
 
             <Panel title={d.baux.partiesTitle}>
-              <ul className="divide-y divide-sand-100">
-                {l.tenantContactIds.map((cid) => {
-                  const c = contactById(cid);
-                  return (
-                    <li key={cid} className="flex items-center gap-3 py-2.5">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
-                        {initials(c.name)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/app/contacts/${c.id}`}
-                          className="block truncate text-sm font-semibold text-ink hover:text-brand-700"
-                        >
-                          {c.name}
-                        </Link>
-                        <p className="truncate text-xs text-ink-soft">
-                          <ContactLink email={c.email} phone={c.phone} none="" />
-                        </p>
-                      </div>
-                      <Badge className="bg-sky-100 text-sky-800">
-                        {l.colocation ? d.baux.partyColoc : d.baux.partyTenant}
-                      </Badge>
-                    </li>
-                  );
-                })}
-              </ul>
+              {/* Everyone on the tenancy, dated; while it runs, people join and leave here, and access to the space is taken back. */}
+              <LeaseParties
+                leaseId={l.id}
+                writable={!sample}
+                live={l.status === "active" || l.status === "notice"}
+                today={TODAY}
+                rows={LEASE_PARTIES.filter((p) => p.leaseId === l.id)
+                  .sort((a, b) => Number(a.role === "guarantor") - Number(b.role === "guarantor") || String(a.movedInOn ?? "").localeCompare(String(b.movedInOn ?? "")))
+                  .map((p) => {
+                    const c = contactById(p.contactId);
+                    const left = p.movedOutOn !== null && p.movedOutOn <= TODAY;
+                    return {
+                      id: p.id,
+                      contactId: c.id,
+                      name: c.name,
+                      href: `/app/contacts/${c.id}`,
+                      email: c.email,
+                      phone: c.phone,
+                      roleLabel: p.role === "guarantor" ? d.baux.partyGuarantor : l.colocation ? d.baux.partyColoc : d.baux.partyTenant,
+                      datesLabel: p.movedOutOn
+                        ? fmt(d.baux.partyBetween, { from: p.movedInOn ? formatDate(p.movedInOn, locale) : formatDate(l.startDate, locale), to: formatDate(p.movedOutOn, locale) })
+                        : fmt(d.baux.partySince, { date: formatDate(p.movedInOn ?? l.startDate, locale) }),
+                      present: !left && p.movedOutOn === null,
+                      portalLinked: c.portalLinked === true,
+                    };
+                  })}
+                candidates={CONTACTS.filter((c) => !LEASE_PARTIES.some((p) => p.leaseId === l.id && p.contactId === c.id && p.movedOutOn === null))
+                  .map((c) => ({ id: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name }))
+                  .sort((a, b) => a.label.localeCompare(b.label))}
+                labels={{
+                  linked: d.baux.partyLinked,
+                  moveOut: d.baux.partyMoveOut,
+                  moveOutOn: d.baux.partyMoveOutOn,
+                  moveOutDo: d.baux.partyMoveOutDo,
+                  keep: d.baux.partyKeep,
+                  lastTenant: d.baux.partyLastTenant,
+                  failed: d.baux.partyFailed,
+                  access: d.baux.partyAccess,
+                  accessBody: d.baux.partyAccessBody,
+                  accessDo: d.baux.partyAccessDo,
+                  add: d.baux.partyAdd,
+                  addContact: d.baux.partyAddContact,
+                  addRole: d.baux.partyAddRole,
+                  roleTenant: d.baux.partyTenant,
+                  roleGuarantor: d.baux.partyGuarantor,
+                  addOn: d.baux.partyAddOn,
+                  addDo: d.baux.partyAddDo,
+                  pick: d.baux.partyPick,
+                  already: d.baux.partyAlready,
+                  invalid: d.baux.partyInvalid,
+                  noCandidate: d.baux.partyNoCandidate,
+                }}
+              />
               <p className="mt-3 text-xs text-ink-soft">
                 {property.name} · {property.address} · {fmt(d.baux.cadastralRef, { ref: property.cadastralRef })}
               </p>

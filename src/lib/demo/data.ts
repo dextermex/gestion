@@ -550,6 +550,22 @@ export interface DemoPayment {
 /** The payments a sheet shows: read for the tenancy on screen, empty elsewhere. */
 export const PAYMENTS: DemoPayment[] = [];
 
+/** A person's place on a tenancy, with the days they came in and left. */
+export interface DemoLeaseParty {
+  id: string;
+  leaseId: string;
+  contactId: string;
+  role: "tenant" | "colocataire" | "guarantor";
+  movedInOn: string | null;
+  movedOutOn: string | null;
+}
+
+/** Everyone on every tenancy, those who left included (dated). */
+export const LEASE_PARTIES: DemoLeaseParty[] = LEASES.flatMap((l) => [
+  ...l.tenantContactIds.map((contactId) => ({ id: `lp-${l.id}-${contactId}`, leaseId: l.id, contactId, role: "tenant" as const, movedInOn: l.startDate, movedOutOn: null })),
+  ...(l.guarantorContactIds ?? []).map((contactId) => ({ id: `lp-${l.id}-${contactId}-g`, leaseId: l.id, contactId, role: "guarantor" as const, movedInOn: l.startDate, movedOutOn: null })),
+]);
+
 /**
  * Money received above what was due, by tenancy (cents): kept as a credit and
  * applied to the next periods as they open.

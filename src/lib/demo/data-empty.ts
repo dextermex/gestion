@@ -71,6 +71,7 @@ export function buildEmptyData(org: Org): DemoData {
     RENT_PERIODS: [],
     ARCHIVED_PROPERTIES: [],
     PAYMENTS: [],
+    LEASE_PARTIES: [],
     LEASE_CREDITS: {},
     DEGRADED: [],
     BANK_ACCOUNTS: [],

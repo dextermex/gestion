@@ -24,6 +24,8 @@
 -- 11. my_lease_credit : le locataire lit son crédit, et rien d'autre des
 --     paiements.
 -- 12. portal_tenant_live_lease : une partie sortie du bail n'y écrit plus.
+-- 13. lease_keeps_tenant : un bail en cours n'est jamais laissé sans
+--     locataire présent.
 --
 -- Les fonctions appelées par l'application sont SECURITY INVOKER : elles
 -- écrivent sous le jeton de l'appelant, les politiques RLS décident, et
@@ -32,6 +34,9 @@
 -- exécutables par aucun rôle client : seul le planificateur les appelle.
 --
 -- Réversible :
+--   drop trigger lease_keeps_tenant on gestion.lease_parties;
+--   drop trigger lease_starts_with_tenant on gestion.leases;
+--   drop function gestion.guard_live_lease_tenant();
 --   recréer gestion.portal_tenant_live_lease telle qu'en 0015 ;
 --   drop function gestion.my_lease_credit();
 --   select cron.unschedule('gestion-end-due-leases');
@@ -706,6 +711,55 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 13. Un bail en cours garde un locataire
+-- ---------------------------------------------------------------------------
+-- Ni la sortie datée, ni le retrait, ni le changement de rôle d'une partie ne
+-- laissent un bail en cours (actif ou en préavis) sans locataire présent ; un
+-- dossier ne passe en cours qu'avec un locataire. Le départ de tous passe par
+-- la clôture du bail, qui change d'abord le statut.
+create or replace function gestion.guard_live_lease_tenant()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_lease uuid;
+begin
+  foreach v_lease in array (
+    case
+      when tg_table_name = 'leases' then array[new.id]
+      when tg_op = 'DELETE' then array[old.lease_id]
+      else array[old.lease_id, new.lease_id]
+    end
+  ) loop
+    if exists (select 1 from gestion.leases l where l.id = v_lease and l.status in ('active', 'notice'))
+       and not exists (
+         select 1 from gestion.lease_parties lp
+          where lp.lease_id = v_lease and lp.role in ('tenant', 'colocataire') and lp.moved_out_on is null
+       ) then
+      raise exception 'gestion: a tenancy in force keeps a tenant' using errcode = '23514';
+    end if;
+  end loop;
+  return null;
+end;
+$$;
+
+comment on function gestion.guard_live_lease_tenant() is
+  'Refuse qu''un bail en cours reste sans locataire présent : sortie, retrait ou changement de rôle de la dernière partie, ou activation d''un dossier sans locataire.';
+
+drop trigger if exists lease_keeps_tenant on gestion.lease_parties;
+create trigger lease_keeps_tenant
+  after delete or update of moved_out_on, role, lease_id on gestion.lease_parties
+  for each row execute function gestion.guard_live_lease_tenant();
+
+drop trigger if exists lease_starts_with_tenant on gestion.leases;
+create trigger lease_starts_with_tenant
+  after update of status on gestion.leases
+  for each row
+  when (old.status = 'draft' and new.status in ('active', 'notice'))
+  execute function gestion.guard_live_lease_tenant();
+
+-- ---------------------------------------------------------------------------
 -- Droits d'exécution, explicites (même geste que 0018)
 -- ---------------------------------------------------------------------------
 revoke all on function gestion.apply_lease_credit(uuid, boolean) from public, anon;
@@ -715,6 +769,7 @@ revoke all on function gestion.settle_lease_end(uuid) from public, anon;
 revoke all on function gestion.close_lease(uuid, date) from public, anon;
 revoke all on function gestion.issue_charge_period(uuid, date, date, text) from public, anon;
 revoke all on function gestion.my_lease_credit() from public, anon;
+revoke all on function gestion.guard_live_lease_tenant() from public, anon, authenticated;
 revoke all on function gestion.portal_tenant_live_lease(uuid) from public, anon;
 
 grant execute on function gestion.apply_lease_credit(uuid, boolean) to authenticated;

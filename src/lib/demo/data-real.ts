@@ -31,7 +31,7 @@ import type { ContactIdentity, DemoAuditEntry, DemoDelivery, DemoGenerated, Demo
 import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
 import { todayISO } from "@/lib/clock";
 import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
-import type { DemoArchivedProperty, DemoPayment } from "./data";
+import type { DemoArchivedProperty, DemoLeaseParty, DemoPayment } from "./data";
 import { effectiveLeaseStatus } from "@/lib/gestion/ledger";
 
 /**
@@ -303,7 +303,7 @@ export async function buildRealDataFrom(
   };
   const [partyRows, periodRows, statusRows, depositRows, edlRows, ticketRows, insuranceRows, inviteRows, arrearsRows, chargePeriodRows, readingRows, txRows, billRows, leaseLetterRows] = await Promise.all([
     // The shell keeps the parties: the pickers and the palette name a tenancy by its tenants.
-    shell ? q("lease_parties", "lease_id,contact_id,role,moved_out_on") : byLease("lease_parties", "lease_id,contact_id,role,moved_out_on", (b) => b),
+    shell ? q("lease_parties", "id,lease_id,contact_id,role,moved_in_on,moved_out_on") : byLease("lease_parties", "id,lease_id,contact_id,role,moved_in_on,moved_out_on", (b) => b),
     byLease("rent_periods", "id,lease_id,period,due_date,rent_cents,charges_cents,vat_cents,total_cents", (b) => b.gte("period", from), "period"),
     // Paid-ness from the view; an arrear older than the window is still an
     // arrear. The shell asks one thing of the ledger: whether a rent was
@@ -551,10 +551,11 @@ export async function buildRealDataFrom(
     list.push(p);
     partiesByLease.set(s(p.lease_id), list);
   }
+  // A person dated out is on the tenancy until that day (a co-tenant leaving at the end of the month).
   const partyIds = (leaseId: string, ended: boolean, role: "tenant" | "guarantor"): string[] =>
     (partiesByLease.get(leaseId) ?? [])
       .filter((p) => (role === "guarantor") === (s(p.role) === "guarantor"))
-      .filter((p) => ended || !p.moved_out_on)
+      .filter((p) => ended || !p.moved_out_on || day(p.moved_out_on) > today)
       .map((p) => s(p.contact_id));
   const depositByLease = new Map<string, Row>();
   for (const d of depositRows) depositByLease.set(s(d.lease_id), d);
@@ -661,6 +662,14 @@ export async function buildRealDataFrom(
     fromBank: typeof p.bank_transaction_id === "string" && p.bank_transaction_id !== "",
     cancelledOn: p.cancelled_at ? day(p.cancelled_at) : null,
     note: sOr(p.note, null),
+  }));
+  const LEASE_PARTIES: DemoLeaseParty[] = partyRows.filter(ofKnownLease).map((p) => ({
+    id: s(p.id),
+    leaseId: s(p.lease_id),
+    contactId: s(p.contact_id),
+    role: (s(p.role) === "guarantor" ? "guarantor" : s(p.role) === "colocataire" ? "colocataire" : "tenant") as DemoLeaseParty["role"],
+    movedInOn: p.moved_in_on ? day(p.moved_in_on) : null,
+    movedOutOn: p.moved_out_on ? day(p.moved_out_on) : null,
   }));
   const LEASE_CREDITS: Record<string, number> = {};
   for (const c of creditRows) if (leaseIndex.has(s(c.lease_id)) && n(c.credit_cents) > 0) LEASE_CREDITS[s(c.lease_id)] = n(c.credit_cents);
@@ -1164,6 +1173,7 @@ export async function buildRealDataFrom(
     LEASES,
     RENT_PERIODS,
     PAYMENTS,
+    LEASE_PARTIES,
     LEASE_CREDITS,
     DEGRADED: [...failed],
     BANK_ACCOUNTS,

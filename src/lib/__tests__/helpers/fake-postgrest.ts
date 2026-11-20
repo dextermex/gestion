@@ -232,6 +232,13 @@ export class FakeDb {
       )
     );
   }
+  /** gestion.guard_live_lease_tenant (0032): a tenancy in force keeps at least one tenant who has not left. */
+  tenantKeptError(leaseId: unknown): DbError | null {
+    const lease = this.table("leases").find((l) => l.id === leaseId);
+    if (!lease || !LIVE.has(String(lease.status))) return null;
+    const stays = this.table("lease_parties").some((lp) => lp.lease_id === leaseId && TENANT_ROLES.has(String(lp.role)) && lp.moved_out_on == null);
+    return stays ? null : { code: "23514", message: "gestion: a tenancy in force keeps a tenant" };
+  }
   tenantTicket(ticketId: unknown, userId: string): boolean {
     return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && this.tenantLease(t.lease_id, userId));
   }
@@ -1174,16 +1181,35 @@ class FakeQuery implements PromiseLike<Result> {
               Object.assign(r, before);
               return { data: null, error: rule };
             }
+            // lease_keeps_tenant (0032): a tenancy in force keeps a tenant who has not left.
+            const kept =
+              this.table === "lease_parties" ? this.db.tenantKeptError(before.lease_id) ?? this.db.tenantKeptError(r.lease_id)
+              : this.table === "leases" && before.status === "draft" && LIVE.has(String(r.status)) ? this.db.tenantKeptError(r.id)
+              : null;
+            if (kept) {
+              Object.assign(r, before);
+              return { data: null, error: kept };
+            }
           }
           return this.wantRows ? this.shaped(rows.map((r) => ({ ...r }))) : { data: null, error: null };
         }
         case "delete": {
           const gone = this.matching();
           const ids = new Set(gone.map((r) => r.id));
+          const kept = this.db.table(this.table);
           this.db.replace(
             this.table,
             this.db.table(this.table).filter((r) => !ids.has(r.id)),
           );
+          if (this.table === "lease_parties") {
+            for (const leaseId of new Set(gone.map((r) => r.lease_id))) {
+              const refused = this.db.tenantKeptError(leaseId);
+              if (refused) {
+                this.db.replace(this.table, kept);
+                return { data: null, error: refused };
+              }
+            }
+          }
           if (this.table === "leases") for (const r of gone) this.db.removeLease(r.id);
           return this.wantRows ? this.shaped(gone.map((r) => ({ ...r }))) : { data: null, error: null };
         }
