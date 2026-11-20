@@ -790,14 +790,18 @@ set search_path = ''
 as $$
 declare
   v_lease uuid;
+  v_leases uuid[];
 begin
-  foreach v_lease in array (
-    case
-      when tg_table_name = 'leases' then array[new.id]
-      when tg_op = 'DELETE' then array[old.lease_id]
-      else array[old.lease_id, new.lease_id]
-    end
-  ) loop
+  -- Une fonction pour deux tables : les lignes sont lues en jsonb, sans
+  -- nommer une colonne que l'autre table n'a pas.
+  if tg_table_name = 'leases' then
+    v_leases := array[(to_jsonb(new) ->> 'id')::uuid];
+  elsif tg_op = 'DELETE' then
+    v_leases := array[(to_jsonb(old) ->> 'lease_id')::uuid];
+  else
+    v_leases := array[(to_jsonb(old) ->> 'lease_id')::uuid, (to_jsonb(new) ->> 'lease_id')::uuid];
+  end if;
+  foreach v_lease in array v_leases loop
     if exists (select 1 from gestion.leases l where l.id = v_lease and l.status in ('active', 'notice'))
        and not exists (
          select 1 from gestion.lease_parties lp
