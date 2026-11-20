@@ -68,6 +68,24 @@ describe("the three-stage property journey", () => {
     expect(payload).toMatchObject({ type: "house", name: "Maison du Parc", street: "Rue du Parc", city: "Luxembourg", country: "LU" });
     expect(document.body.textContent).toContain(fr.biens.wizDoneTitle.replace("{name}", "Maison du Parc"));
   });
+  it("sends only the photograph chosen as cover: a property has one, and each upload would replace the last", async () => {
+    const fetch = vi.fn(async (url: string) => ({ ok: true, json: async () => (url === "/api/biens/create" ? { id: "property-created", units: [] } : { path: "x" }) }));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:photo", revokeObjectURL: () => undefined }));
+    await act(async () => root.render(<PropertyWizard d={fr} notice="sample" real />));
+    await essentials();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const files = [new File([new Uint8Array(10)], "facade.jpg", { type: "image/jpeg" }), new File([new Uint8Array(20)], "jardin.jpg", { type: "image/jpeg" })];
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    await act(async () => new Promise((r) => setTimeout(r, 0)));
+    await click(fr.biens.wizSetCover);
+    await click(fr.experience.skipExtras);
+    await click(fr.biens.wizCreate);
+    const uploads = fetch.mock.calls.filter(([url]) => url === "/api/biens/photo");
+    expect(uploads).toHaveLength(1);
+    expect(((uploads[0] as unknown as [string, { body: FormData }])[1].body.get("file") as File).name).toBe("jardin.jpg");
+  });
   it("allows all optional details to be skipped without a write in a sample cabinet", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);

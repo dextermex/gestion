@@ -1173,7 +1173,7 @@ export const en: Dict = {
     wizBedrooms: "Bedrooms",
     wizFloor: "Floor",
     wizYear: "Year",
-    wizPhotosHint: "The first photo becomes the property cover, the one shown across your portfolio. You can add more later.",
+    wizPhotosHint: "The photo chosen as cover is saved with the property: it is the one shown across your portfolio. You can replace it from the property sheet.",
     wizAddPhotos: "Choose photos",
     wizCover: "Cover",
     wizSetCover: "Make it the cover",

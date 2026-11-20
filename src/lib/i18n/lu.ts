@@ -1178,7 +1178,7 @@ export const lu: Dict = {
     wizBedrooms: "Schlofzëmmeren",
     wizFloor: "Etage",
     wizYear: "Joer",
-    wizPhotosHint: "Déi éischt Foto gëtt d'Couverture vum Bien, déi am ganze Patrimoine ugewise gëtt. Dir kënnt méi spéit weiderer derbäisetzen.",
+    wizPhotosHint: "D'Foto, déi als Couverture gewielt ass, gëtt mam Bien gespäichert: si gëtt am ganze Patrimoine ugewisen. Dir kënnt se méi spéit vun der Fiche aus ersetzen.",
     wizAddPhotos: "Fotoen auswielen",
     wizCover: "Couverture",
     wizSetCover: "Als Couverture setzen",

@@ -332,9 +332,10 @@ export default function PropertyWizard({
       setCreatedId(created.id);
       setCreatedUnits(created.units ?? []);
 
-      // The photographs follow the property they belong to. A failed upload
-      // never loses the property: the sheet simply has no cover yet.
-      const ordered = coverKey ? [...photos].sort((a, b) => (a.key === coverKey ? -1 : b.key === coverKey ? 1 : 0)) : photos;
+      // The cover follows the property it belongs to: a property has one photograph, so only the one
+      // chosen as cover is sent (each upload replaces the last). A failed upload never loses the
+      // property: the sheet simply has no cover yet.
+      const ordered = (coverKey ? photos.filter((p) => p.key === coverKey) : photos).slice(0, 1);
       for (const photo of ordered) {
         const body = new FormData();
         body.append("file", photo.file);

@@ -1173,7 +1173,7 @@ export const de: Dict = {
     wizBedrooms: "Schlafzimmer",
     wizFloor: "Etage",
     wizYear: "Baujahr",
-    wizPhotosHint: "Das erste Foto wird zum Titelbild des Objekts und erscheint im gesamten Portfolio. Weitere können Sie später hinzufügen.",
+    wizPhotosHint: "Das als Titelbild gewählte Foto wird mit dem Objekt gespeichert und erscheint im gesamten Portfolio. Sie können es später im Objektblatt ersetzen.",
     wizAddPhotos: "Fotos auswählen",
     wizCover: "Titelbild",
     wizSetCover: "Als Titelbild setzen",

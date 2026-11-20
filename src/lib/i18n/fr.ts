@@ -1184,7 +1184,7 @@ export const fr = {
     wizBedrooms: "Chambres",
     wizFloor: "Étage",
     wizYear: "Année",
-    wizPhotosHint: "La première photo devient la couverture du bien, celle qui apparaît dans votre patrimoine. Vous pourrez en ajouter d'autres plus tard.",
+    wizPhotosHint: "La photo choisie comme couverture est enregistrée avec le bien : c'est celle qui apparaît dans votre patrimoine. Vous pourrez la remplacer depuis la fiche.",
     wizAddPhotos: "Choisir des photos",
     wizCover: "Couverture",
     wizSetCover: "Mettre en couverture",
