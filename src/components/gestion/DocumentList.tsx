@@ -1,14 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Modal } from "@/components/pro/ui";
+import { useRouter } from "next/navigation";
+import { Button, Modal } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
+import { callJson } from "./call";
 
 /**
  * The register's rows, and the sheet one opens: everything a row does not
  * say (retention clock, fingerprint, origin) waits behind the row, so the
  * list stays a list. The name opens the file; the row opens the sheet.
- * Presentation only: labels and dates arrive formatted.
+ * Labels and dates arrive formatted. A piece of a tenancy says whether its
+ * tenants read it in their space, and the desk can share it or take it back
+ * from the sheet (`PATCH /api/documents/[id]/partage`).
  */
 export interface DocumentRow {
   id: string;
@@ -27,6 +31,8 @@ export interface DocumentRow {
   /** The first characters of the fingerprint, what a row shows of a sealed piece. */
   shortSha: string | null;
   fileHref: string | null;
+  /** A piece of a tenancy: whether its tenants read it; null when it is not a tenancy's, or the base does not say. */
+  shared: boolean | null;
 }
 
 export interface ListLabels {
@@ -49,10 +55,37 @@ export interface ListLabels {
   sealedNote: string;
   /** Said of a row with nothing behind it; null on a sample cabinet, whose rows are references. */
   noFile: string | null;
+  sharedNote: string;
+  notSharedNote: string;
+  shareNow: string;
+  shareWithdraw: string;
+  shareFailed: string;
 }
 
-export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; labels: ListLabels }) {
+export default function DocumentList({ rows, labels, writable = false }: { rows: DocumentRow[]; labels: ListLabels; /** The switch that shares a piece is offered; off on a sample cabinet. */ writable?: boolean }) {
+  const router = useRouter();
   const [open, setOpen] = useState<DocumentRow | null>(null);
+  /** What the sheet changed, until the page is read again. */
+  const [sharedNow, setSharedNow] = useState<Record<string, boolean>>({});
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const sharedOf = (r: DocumentRow): boolean | null => (r.id in sharedNow ? sharedNow[r.id] : r.shared);
+
+  const share = async (r: DocumentRow, next: boolean) => {
+    setShareError(null);
+    setSharing(true);
+    try {
+      const res = await callJson(`/api/documents/${encodeURIComponent(r.id)}/partage`, "PATCH", { shared: next }, "/app/documents");
+      if (!res) return;
+      if (res.ok) {
+        setSharedNow((m) => ({ ...m, [r.id]: res.payload.shared === true }));
+        router.refresh();
+      } else setShareError(labels.shareFailed);
+    } catch {
+      setShareError(labels.shareFailed);
+    }
+    setSharing(false);
+  };
   const subtitle = (r: DocumentRow) => [r.kindLabel, r.relatedLabel, !r.hasFile && labels.noFile ? labels.noFile : null].filter(Boolean).join(" · ");
 
   return (
@@ -124,7 +157,12 @@ export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; la
         </table>
       </div>
 
-      <Modal open={open !== null} onClose={() => setOpen(null)} title={open?.name ?? ""} closeLabel={labels.close}>
+      <Modal
+        open={open !== null}
+        onClose={() => {
+          setOpen(null);
+          setShareError(null);
+        }} title={open?.name ?? ""} closeLabel={labels.close}>
         {open && (
           <div className="crm-doc-sheet">
             <div className="crm-doc-sheet-head">
@@ -162,6 +200,21 @@ export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; la
               )}
             </dl>
             {open.sealed && <p className="crm-doc-sheet-note">{labels.sealedNote}</p>}
+            {sharedOf(open) !== null && (
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2" data-document-shared={sharedOf(open) ? "yes" : "no"}>
+                <p className="text-sm text-ink-soft">{sharedOf(open) ? labels.sharedNote : labels.notSharedNote}</p>
+                {writable && (
+                  <Button size="sm" variant="secondary" loading={sharing} onClick={() => void share(open, !sharedOf(open))}>
+                    {sharedOf(open) ? labels.shareWithdraw : labels.shareNow}
+                  </Button>
+                )}
+                {shareError && (
+                  <p role="alert" className="w-full text-xs font-semibold text-red-700">
+                    {shareError}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="crm-doc-sheet-actions">
               {open.hasFile && open.fileHref ? (
                 <a href={open.fileHref} className="ui-button inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 max-sm:min-h-11">

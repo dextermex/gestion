@@ -376,6 +376,13 @@ export async function buildRealDataFrom(
   );
   const letterRows = [...leaseLetterRows, ...periodLetterRows];
   const documentRows = scoped ? relatedDocRows : documentPage.rows;
+  // Which pieces of a tenancy its tenants read (0031), asked apart: a base without the column answers
+  // nothing here (logged) instead of emptying the register, and the sheet then offers no switch.
+  const sharedRows = await inChunks(
+    documentRows.filter((doc) => s(doc.related_type) === "lease").map((doc) => s(doc.id)),
+    (ids) => q("documents", "id,shared_with_tenant", (b) => b.in("id", ids)),
+  );
+  const sharedById = new Map(sharedRows.map((r) => [s(r.id), r.shared_with_tenant === true]));
   const allPeriodRows = [...periodRows, ...lateRows];
 
   const rolesByContact = new Map<string, DemoContact["roles"]>();
@@ -877,6 +884,8 @@ export async function buildRealDataFrom(
     hasFile: s(doc.storage_path) !== "",
     kind: kindByDocument.get(s(doc.id)) ?? null,
     sha256: s(doc.sha256) || null,
+    relatedType: s(doc.related_type) || null,
+    sharedWithTenant: sharedById.get(s(doc.id)) ?? null,
   }));
   const DOCUMENT_SUMMARY: DocumentSummary = summariseDocuments(
     documentFacts.rows.map((doc) => ({ klass: s(doc.class), sealed: b(doc.sealed), retentionUntil: doc.retention_until ? day(doc.retention_until) : null, createdAt: day(doc.created_at) })),

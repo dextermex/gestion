@@ -5,7 +5,9 @@ import { PIECE_MAX_BYTES, isPdfName, pieceClass, pieceLine, pieceRefusal, prepar
 import { attachmentFolder } from "@/lib/portal/types";
 import { fr } from "@/lib/i18n/fr";
 import { tenantPieceLabels } from "@/lib/portal/labels";
-import { retentionUntil, shareDocument } from "@/lib/gestion/documents";
+import { registerUploaded, retentionUntil, shareDocument, signedUploadTarget } from "@/lib/gestion/documents";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { MAX_DOCUMENT_BYTES } from "@/lib/gestion/documents-rules";
 import { DOCUMENT_KINDS, sharedOnceProduced } from "@/lib/documents/kinds";
 import { FakeDb } from "./helpers/fake-postgrest";
 import { ORG, ctxFor, hydrate, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
@@ -174,5 +176,77 @@ describe("the retention clock of an upload", () => {
     expect(retentionUntil("aml_5y_from_end", "2026-11-20")).toBeNull();
     expect(retentionUntil("gdpr_minimised", "2026-11-20")).toBeNull();
     expect(retentionUntil("accounting_10y", "nonsense")).toBeNull();
+  });
+});
+
+/** The bucket as far as a large upload needs it: signed upload tokens, the stored objects, removal. */
+function fakeBucket() {
+  const objects = new Map<string, Uint8Array>();
+  const signed: string[] = [];
+  const removed: string[] = [];
+  const bucket = {
+    createSignedUploadUrl: async (path: string) => {
+      signed.push(path);
+      return { data: { token: `tok-${signed.length}`, path, signedUrl: "" }, error: null };
+    },
+    download: async (path: string) => {
+      const bytes = objects.get(path);
+      return bytes ? { data: new Blob([bytes as BlobPart]), error: null } : { data: null, error: { message: "not found" } };
+    },
+    remove: async (paths: string[]) => {
+      for (const p of paths) {
+        removed.push(p);
+        objects.delete(p);
+      }
+      return { data: [], error: null };
+    },
+  };
+  const client = { storage: { from: () => bucket } } as unknown as SupabaseClient;
+  return { client, objects, signed, removed };
+}
+
+describe("a large piece the browser puts in the bucket itself", () => {
+  let db: FakeDb;
+  let ctx: OrgContext;
+  beforeEach(() => {
+    db = new FakeDb(today);
+    ctx = ctxFor(db);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
+  });
+
+  it("hands out a path in the workspace's own folder, for a type and a size the register takes", async () => {
+    const { client, signed } = fakeBucket();
+    const target = await signedUploadTarget(ctx, client, { type: "application/pdf", size: 9 * 1024 * 1024 });
+    expect("path" in target && target.path).toMatch(new RegExp(`^${ORG}/documents/[0-9a-f-]{36}\\.pdf$`));
+    expect(signed).toHaveLength(1);
+    expect(await signedUploadTarget(ctx, client, { type: "application/x-msdownload", size: 10 })).toEqual({ error: "unsupported_type" });
+    expect(await signedUploadTarget(ctx, client, { type: "application/pdf", size: MAX_DOCUMENT_BYTES + 1 })).toEqual({ error: "too_large" });
+  });
+
+  it("registers the stored file with its own size and fingerprint, once, and only from the workspace's folder", async () => {
+    const { client, objects } = fakeBucket();
+    const target = await signedUploadTarget(ctx, client, { type: "application/pdf", size: 6_000_000 });
+    if (!("path" in target)) throw new Error("no target");
+    objects.set(target.path, new Uint8Array(6_000_000).fill(7));
+    const stored = await registerUploaded(ctx, client, { path: target.path, klass: "decompte", name: "Décompte syndic 2025", relatedType: null, relatedId: null });
+    expect("id" in stored && stored.sizeBytes).toBe(6_000_000);
+    const row = db.table("documents").find((d) => d.storage_path === target.path)!;
+    expect([row.mime, row.size_bytes, row.class, row.name, String(row.sha256).length]).toEqual(["application/pdf", 6_000_000, "decompte", "Décompte syndic 2025", 64]);
+    // The same path again, a path elsewhere, a name the application never hands out: refused.
+    expect(await registerUploaded(ctx, client, { path: target.path, klass: "other", name: "x" })).toEqual({ error: "invalid" });
+    expect(await registerUploaded(ctx, client, { path: `${ORG}/tickets/x/11111111-2222-4333-8444-555555555555.pdf`, klass: "other", name: "x" })).toEqual({ error: "invalid" });
+    expect(await registerUploaded(ctx, client, { path: `${ORG}/documents/../../etc.pdf`, klass: "other", name: "x" })).toEqual({ error: "invalid" });
+  });
+
+  it("registers nothing for a file that is not there, and removes one over the limit", async () => {
+    const { client, objects, removed } = fakeBucket();
+    const missing = `${ORG}/documents/11111111-2222-4333-8444-555555555555.pdf`;
+    expect(await registerUploaded(ctx, client, { path: missing, klass: "other", name: "x" })).toEqual({ error: "upload_failed" });
+    const big = `${ORG}/documents/11111111-2222-4333-8444-666666666666.pdf`;
+    objects.set(big, new Uint8Array(MAX_DOCUMENT_BYTES + 1));
+    expect(await registerUploaded(ctx, client, { path: big, klass: "other", name: "x" })).toEqual({ error: "too_large" });
+    expect(removed).toEqual([big]);
+    expect(db.table("documents")).toHaveLength(0);
   });
 });

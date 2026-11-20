@@ -1,5 +1,5 @@
 import { callForm, callJson, type CallResult } from "@/components/gestion/call";
-import { SUPABASE_URL } from "@/lib/supabase/config";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/config";
 
 /**
  * A piece sent to the register from a screen, whatever its size. A request
@@ -29,7 +29,12 @@ export async function uploadPiece(file: File, fields: Record<string, string>, ba
   const body = new FormData();
   body.append("cacheControl", "3600");
   body.append("", file);
-  const put = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${bucket}/${path}?token=${encodeURIComponent(token)}`, { method: "PUT", headers: { "x-upsert": "false" }, body }).catch(() => null);
+  // The project's public key opens the storage gateway, as for any browser client; the token decides.
+  const put = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${bucket}/${path}?token=${encodeURIComponent(token)}`, {
+    method: "PUT",
+    headers: { "x-upsert": "false", apikey: SUPABASE_ANON_KEY },
+    body,
+  }).catch(() => null);
   if (!put || !put.ok) return { ok: false, status: put?.status === 413 ? 413 : 502, payload: { error: put?.status === 413 ? "too_large" : "upload_failed" } };
   return callJson("/api/documents", "POST", { uploadedPath: path, ...fields }, backTo);
 }
