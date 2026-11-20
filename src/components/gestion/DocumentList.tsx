@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Modal } from "@/components/pro/ui";
+import { Button, Modal, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { callJson } from "./call";
 
@@ -12,7 +12,10 @@ import { callJson } from "./call";
  * list stays a list. The name opens the file; the row opens the sheet.
  * Labels and dates arrive formatted. A piece of a tenancy says whether its
  * tenants read it in their space, and the desk can share it or take it back
- * from the sheet (`PATCH /api/documents/[id]/partage`).
+ * from the sheet (`PATCH /api/documents/[id]/partage`). A piece the desk
+ * filed itself, unsealed, can be put on another shelf or taken out of the
+ * register from its sheet (`/api/documents/[id]`); the route refuses what a
+ * work order, a retention or a bill stands on.
  */
 export interface DocumentRow {
   id: string;
@@ -33,6 +36,10 @@ export interface DocumentRow {
   fileHref: string | null;
   /** A piece of a tenancy: whether its tenants read it; null when it is not a tenancy's, or the base does not say. */
   shared: boolean | null;
+  /** The class as stored, for the shelf select. */
+  klass: string;
+  /** Filed by the desk and unsealed: its class can change and it can be taken out. */
+  editable: boolean;
 }
 
 export interface ListLabels {
@@ -60,9 +67,26 @@ export interface ListLabels {
   shareNow: string;
   shareWithdraw: string;
   shareFailed: string;
+  save: string;
+  remove: string;
+  removeConfirm: string;
+  removeInUse: string;
+  editFailed: string;
 }
 
-export default function DocumentList({ rows, labels, writable = false }: { rows: DocumentRow[]; labels: ListLabels; /** The switch that shares a piece is offered; off on a sample cabinet. */ writable?: boolean }) {
+export default function DocumentList({
+  rows,
+  labels,
+  writable = false,
+  classes = [],
+}: {
+  rows: DocumentRow[];
+  labels: ListLabels;
+  /** The switches of the sheet (share, shelf, removal) are offered; off on a sample cabinet. */
+  writable?: boolean;
+  /** The shelves a piece may be put on. */
+  classes?: Array<{ value: string; label: string }>;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState<DocumentRow | null>(null);
   /** What the sheet changed, until the page is read again. */
@@ -70,6 +94,35 @@ export default function DocumentList({ rows, labels, writable = false }: { rows:
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const sharedOf = (r: DocumentRow): boolean | null => (r.id in sharedNow ? sharedNow[r.id] : r.shared);
+  const [klass, setKlass] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const show = (r: DocumentRow | null) => {
+    setOpen(r);
+    setKlass(r?.klass ?? "");
+    setConfirming(false);
+    setShareError(null);
+    setEditError(null);
+  };
+
+  const housekeeping = async (r: DocumentRow, method: "PATCH" | "DELETE") => {
+    setEditError(null);
+    setEditing(true);
+    try {
+      const res = await callJson(`/api/documents/${encodeURIComponent(r.id)}`, method, method === "PATCH" ? { class: klass } : undefined, "/app/documents");
+      if (!res) return;
+      if (res.ok) {
+        if (method === "DELETE") show(null);
+        router.refresh();
+      } else setEditError(res.status === 409 ? labels.removeInUse : labels.editFailed);
+    } catch {
+      setEditError(labels.editFailed);
+    }
+    setEditing(false);
+    setConfirming(false);
+  };
 
   const share = async (r: DocumentRow, next: boolean) => {
     setShareError(null);
@@ -103,7 +156,7 @@ export default function DocumentList({ rows, labels, writable = false }: { rows:
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="crm-doc-row border-b border-sand-100 last:border-0" onClick={() => setOpen(r)} data-document-row={r.id}>
+              <tr key={r.id} className="crm-doc-row border-b border-sand-100 last:border-0" onClick={() => show(r)} data-document-row={r.id}>
                 <td className="px-4 py-3">
                   <div className="crm-doc-cell">
                     <span className={"crm-doc-icon" + (r.sealed ? " is-sealed" : "")} aria-hidden>
@@ -145,7 +198,7 @@ export default function DocumentList({ rows, labels, writable = false }: { rows:
                     aria-label={`${labels.details} : ${r.name}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setOpen(r);
+                      show(r);
                     }}
                   >
                     <Icon name="chevron-right" size={16} />
@@ -159,10 +212,7 @@ export default function DocumentList({ rows, labels, writable = false }: { rows:
 
       <Modal
         open={open !== null}
-        onClose={() => {
-          setOpen(null);
-          setShareError(null);
-        }} title={open?.name ?? ""} closeLabel={labels.close}>
+        onClose={() => show(null)} title={open?.name ?? ""} closeLabel={labels.close}>
         {open && (
           <div className="crm-doc-sheet">
             <div className="crm-doc-sheet-head">
@@ -211,6 +261,41 @@ export default function DocumentList({ rows, labels, writable = false }: { rows:
                 {shareError && (
                   <p role="alert" className="w-full text-xs font-semibold text-red-700">
                     {shareError}
+                  </p>
+                )}
+              </div>
+            )}
+            {writable && open.editable && (
+              <div className="mt-4 flex flex-wrap items-end gap-2" data-document-housekeeping>
+                {classes.length > 0 && (
+                  <>
+                    <label className="min-w-0 flex-1 text-sm">
+                      <span className="mb-1 block font-semibold text-ink-soft">{labels.klass}</span>
+                      <Select value={klass} onChange={(e) => setKlass(e.target.value)} disabled={editing}>
+                        {classes.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                    <Button size="sm" variant="secondary" loading={editing && !confirming} disabled={klass === open.klass} onClick={() => void housekeeping(open, "PATCH")}>
+                      {labels.save}
+                    </Button>
+                  </>
+                )}
+                {confirming ? (
+                  <Button size="sm" variant="danger" loading={editing} onClick={() => void housekeeping(open, "DELETE")}>
+                    {labels.removeConfirm}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} disabled={editing}>
+                    {labels.remove}
+                  </Button>
+                )}
+                {editError && (
+                  <p role="alert" className="w-full text-xs font-semibold text-red-700">
+                    {editError}
                   </p>
                 )}
               </div>

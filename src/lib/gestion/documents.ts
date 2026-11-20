@@ -326,3 +326,91 @@ export async function registerUploaded(
   }
   return { id: String(data.id), name, path: input.path, sha256, sizeBytes: bytes.length };
 }
+
+export type HousekeepingFailure = "not_found" | "sealed" | "produced" | "in_use" | "invalid" | "forbidden" | "storage_failed";
+
+/** The records that name a piece by its id, outside the register's own row. */
+const REFERENCES: Array<{ table: string; column: string }> = [
+  { table: "work_orders", column: "invoice_document_id" },
+  { table: "deposit_deductions", column: "justification_document_id" },
+  { table: "bills", column: "document_id" },
+];
+
+async function pieceOf(ctx: OrgContext, documentId: string): Promise<{ id: string; sealed: boolean; path: string; createdAt: string } | { error: HousekeepingFailure }> {
+  const { data, error } = await ctx.g.from("documents").select("id,sealed,storage_path,created_at").eq("org_id", ctx.org.id).eq("id", documentId).maybeSingle();
+  if (error) {
+    console.error("document lookup failed:", error.code, error.message);
+    return { error: "storage_failed" };
+  }
+  if (!data) return { error: "not_found" };
+  return { id: String(data.id), sealed: data.sealed === true, path: String(data.storage_path ?? ""), createdAt: String(data.created_at ?? "").slice(0, 10) };
+}
+
+/**
+ * A piece filed by mistake, taken out of the register with its file. Only
+ * a piece the desk filed itself and nothing else stands on: never a sealed
+ * piece, never one the application produced, never one a work order, a
+ * guarantee retention or a bill names.
+ */
+export async function removeDocument(ctx: OrgContext, client: SupabaseClient, documentId: string): Promise<{ removed: true } | { error: HousekeepingFailure }> {
+  const piece = await pieceOf(ctx, documentId);
+  if ("error" in piece) return piece;
+  if (piece.sealed) return { error: "sealed" };
+  const { data: produced, error: genErr } = await ctx.g.from("generated_documents").select("document_id").eq("org_id", ctx.org.id).eq("document_id", piece.id).limit(1);
+  // A base without the produced register (before 0022) has produced nothing.
+  if (genErr && genErr.code !== "42P01" && genErr.code !== "PGRST205") return { error: "storage_failed" };
+  if (((produced as unknown[] | null) ?? []).length > 0) return { error: "produced" };
+  for (const ref of REFERENCES) {
+    const { data: used, error: refErr } = await ctx.g.from(ref.table).select("id").eq("org_id", ctx.org.id).eq(ref.column, piece.id).limit(1);
+    if (refErr) {
+      console.error(`document reference read failed (${ref.table}):`, refErr.code, refErr.message);
+      return { error: "storage_failed" };
+    }
+    if (((used as unknown[] | null) ?? []).length > 0) return { error: "in_use" };
+  }
+  const { data: gone, error } = await ctx.g.from("documents").delete().eq("org_id", ctx.org.id).eq("id", piece.id).eq("sealed", false).select("id");
+  if (error) {
+    if (error.code === "42501") return { error: "forbidden" };
+    console.error("document removal failed:", error.code, error.message);
+    return { error: "storage_failed" };
+  }
+  if (((gone as unknown[] | null) ?? []).length === 0) return { error: "forbidden" };
+  if (piece.path) await client.storage.from(MEDIA_BUCKET).remove([piece.path]).catch(() => null);
+  return { removed: true };
+}
+
+/**
+ * A piece renamed, or put on the shelf it belongs to. The class carries its
+ * retention clock, so both follow; a sealed piece keeps its class (the seal
+ * covers it) and may only be renamed.
+ */
+export async function reclassDocument(
+  ctx: OrgContext,
+  documentId: string,
+  input: { name?: string; klass?: DocumentClass },
+): Promise<{ id: string; name: string | null; klass: DocumentClass | null } | { error: HousekeepingFailure }> {
+  const piece = await pieceOf(ctx, documentId);
+  if ("error" in piece) return piece;
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) {
+    const name = documentName(input.name, "");
+    if (!name) return { error: "invalid" };
+    patch.name = name;
+  }
+  if (input.klass !== undefined) {
+    if (piece.sealed) return { error: "sealed" };
+    const retention = retentionFor(input.klass);
+    patch.class = input.klass;
+    patch.retention_class = retention;
+    patch.retention_until = retentionUntil(retention, piece.createdAt || todayISO());
+  }
+  if (Object.keys(patch).length === 0) return { error: "invalid" };
+  const { data, error } = await ctx.g.from("documents").update(patch).eq("org_id", ctx.org.id).eq("id", piece.id).select("id");
+  if (error) {
+    if (error.code === "42501") return { error: piece.sealed ? "sealed" : "forbidden" };
+    console.error("document update failed:", error.code, error.message);
+    return { error: "storage_failed" };
+  }
+  if (((data as unknown[] | null) ?? []).length === 0) return { error: "forbidden" };
+  return { id: piece.id, name: (patch.name as string | undefined) ?? null, klass: input.klass ?? null };
+}

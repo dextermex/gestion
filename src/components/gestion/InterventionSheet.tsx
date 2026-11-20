@@ -7,7 +7,8 @@ import { allowedWorkOrderActions, visitHour, type WorkOrderAction } from "@/lib/
 import { dayKey } from "@/lib/portal/format";
 import type { Locale } from "@/lib/i18n/config";
 import { euros, formatDate, type Meta, type WorkOrderStatus } from "@/lib/types";
-import { callForm, callJson } from "./call";
+import { uploadPiece } from "@/lib/gestion/upload-client";
+import { callJson } from "./call";
 
 /**
  * One intervention, opened from its row: the ticket and the work order
@@ -111,22 +112,19 @@ export default function InterventionSheet({
     }
     setBusy(true);
     setError(null);
+    // The invoice's piece, stored for this work order before the step that records it.
+    let storedPiece: string | null = null;
     try {
-      // The invoice's piece, stored for this work order before the step that records it.
       if (body?.action === "invoice" && invoiceFile && wo) {
-        const form = new FormData();
-        form.set("file", invoiceFile);
-        form.set("class", "invoice");
-        form.set("name", invoiceFile.name);
-        form.set("relatedType", "work_order");
-        form.set("relatedId", wo.id);
-        const stored = await callForm("/api/documents", form, BACK);
+        // In the request when it can carry the file, straight to the bucket otherwise.
+        const stored = await uploadPiece(invoiceFile, { class: "invoice", name: invoiceFile.name, relatedType: "work_order", relatedId: wo.id }, BACK);
         if (!stored) return;
         if (!stored.ok) {
           setError(stored.status === 415 ? labels.invoiceBadFile : labels.failed);
           setBusy(false);
           return;
         }
+        storedPiece = String(stored.payload.id);
         body = { ...body, invoiceDocumentId: stored.payload.id };
       }
       const res = await callJson(url, method, body, BACK);
@@ -134,7 +132,11 @@ export default function InterventionSheet({
       if (res.ok) {
         setNote(labels.done);
         router.refresh();
-      } else setError(res.status === 409 ? (res.payload.error === "request_closed" ? labels.requestClosed : labels.refused) : labels.failed);
+      } else {
+        // The step was refused: the piece filed for it goes too, rather than staying with nothing that names it.
+        if (storedPiece) await fetch(`/api/documents/${encodeURIComponent(storedPiece)}`, { method: "DELETE" }).catch(() => null);
+        setError(res.status === 409 ? (res.payload.error === "request_closed" ? labels.requestClosed : labels.refused) : labels.failed);
+      }
     } catch {
       setError(labels.failed);
     }

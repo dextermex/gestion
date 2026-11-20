@@ -114,6 +114,9 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
     shortSha: doc.sha256 ? shortSha(doc.sha256) : null,
     fileHref: doc.hasFile ? `/api/documents/${encodeURIComponent(doc.id)}/fichier` : null,
     shared: doc.relatedType === "lease" && typeof doc.sharedWithTenant === "boolean" ? doc.sharedWithTenant : null,
+    klass: doc.klass,
+    // A piece the desk filed itself: neither sealed nor produced by the application.
+    editable: !doc.sealed && !doc.kind,
   }));
 
   const shelves = DOCUMENT_GROUP_KEYS.filter((g) => summary.byGroup[g] > 0);
@@ -252,6 +255,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                     <DocumentList
                       rows={rows}
                       writable={!sample}
+                      classes={Object.keys(cls).map((value) => ({ value, label: cls[value] }))}
                       labels={{
                         colDoc: d.documents.colDoc,
                         colClass: d.documents.colClass,
@@ -276,6 +280,11 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                         shareNow: d.documents.shareNow,
                         shareWithdraw: d.documents.shareWithdraw,
                         shareFailed: d.documents.shareFailed,
+                        save: d.common.save,
+                        remove: d.common.delete,
+                        removeConfirm: d.documents.removeConfirm,
+                        removeInUse: d.documents.removeInUse,
+                        editFailed: d.documents.editFailed,
                       }}
                     />
                     <div className="crm-doc-foot">

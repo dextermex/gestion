@@ -5,7 +5,7 @@ import { PIECE_MAX_BYTES, isPdfName, pieceClass, pieceLine, pieceRefusal, prepar
 import { attachmentFolder } from "@/lib/portal/types";
 import { fr } from "@/lib/i18n/fr";
 import { tenantPieceLabels } from "@/lib/portal/labels";
-import { registerUploaded, retentionUntil, shareDocument, signedUploadTarget } from "@/lib/gestion/documents";
+import { reclassDocument, registerUploaded, removeDocument, retentionUntil, shareDocument, signedUploadTarget } from "@/lib/gestion/documents";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MAX_DOCUMENT_BYTES } from "@/lib/gestion/documents-rules";
 import { DOCUMENT_KINDS, sharedOnceProduced } from "@/lib/documents/kinds";
@@ -248,5 +248,53 @@ describe("a large piece the browser puts in the bucket itself", () => {
     expect(await registerUploaded(ctx, client, { path: big, klass: "other", name: "x" })).toEqual({ error: "too_large" });
     expect(removed).toEqual([big]);
     expect(db.table("documents")).toHaveLength(0);
+  });
+});
+
+describe("the register's housekeeping", () => {
+  let db: FakeDb;
+  let ctx: OrgContext;
+  beforeEach(() => {
+    db = new FakeDb(today);
+    ctx = ctxFor(db);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
+    const piece = (id: string, extra: Record<string, unknown> = {}) =>
+      db.insertRow("documents", { id, org_id: ORG, class: "other", retention_class: "accounting_10y", name: `${id}.pdf`, storage_path: `${ORG}/documents/${id}.pdf`, sealed: false, created_at: "2026-11-02T10:00:00Z", ...extra });
+    piece("d-loose");
+    piece("d-sealed", { sealed: true, class: "lease" });
+    piece("d-produced", { sealed: false });
+    db.insertRow("generated_documents", { document_id: "d-produced", org_id: ORG, kind: "rent_notice", source_id: "rp-1" });
+    piece("d-invoice", { class: "invoice" });
+    db.insertRow("work_orders", { id: "wo-1", org_id: ORG, ticket_id: "t-1", status: "invoiced", invoice_document_id: "d-invoice" });
+  });
+
+  it("takes out a piece filed by mistake, with its file", async () => {
+    const { client, removed } = fakeBucket();
+    expect(await removeDocument(ctx, client, "d-loose")).toEqual({ removed: true });
+    expect(db.table("documents").some((d) => d.id === "d-loose")).toBe(false);
+    expect(removed).toEqual([`${ORG}/documents/d-loose.pdf`]);
+  });
+
+  it("keeps what is sealed, produced, or named by a work order, and finds nothing of another workspace", async () => {
+    const { client, removed } = fakeBucket();
+    expect(await removeDocument(ctx, client, "d-sealed")).toEqual({ error: "sealed" });
+    expect(await removeDocument(ctx, client, "d-produced")).toEqual({ error: "produced" });
+    expect(await removeDocument(ctx, client, "d-invoice")).toEqual({ error: "in_use" });
+    expect(await removeDocument(ctxFor(db, "0f0f0f0f-0000-4000-8000-00000000beef"), client, "d-loose")).toEqual({ error: "not_found" });
+    expect(removed).toEqual([]);
+    expect(db.table("documents")).toHaveLength(4);
+  });
+
+  it("puts a piece on another shelf with the clock of its class; a sealed piece keeps its class but can be renamed", async () => {
+    expect(await reclassDocument(ctx, "d-loose", { klass: "id_document" })).toEqual({ id: "d-loose", name: null, klass: "id_document" });
+    const row = db.table("documents").find((d) => d.id === "d-loose")!;
+    expect([row.class, row.retention_class, row.retention_until]).toEqual(["id_document", "aml_5y_from_end", null]);
+    await reclassDocument(ctx, "d-loose", { klass: "invoice" });
+    expect(db.table("documents").find((d) => d.id === "d-loose")!.retention_until).toBe("2036-11-02");
+    expect(await reclassDocument(ctx, "d-sealed", { klass: "other" })).toEqual({ error: "sealed" });
+    expect(await reclassDocument(ctx, "d-sealed", { name: "  Bail signé  " })).toEqual({ id: "d-sealed", name: "Bail signé", klass: null });
+    expect(await reclassDocument(ctx, "d-loose", { name: "   " })).toEqual({ error: "invalid" });
+    expect(await reclassDocument(ctx, "d-loose", {})).toEqual({ error: "invalid" });
   });
 });
