@@ -65,15 +65,16 @@ async function crawl(page: Page, seeds: string[], scope: RegExp, max: number): P
       const links = Array.from(document.querySelectorAll("a")).map((a) => ({ href: a.getAttribute("href"), text: (a.getAttribute("aria-label") || a.textContent || "").trim().slice(0, 50), visible: visible(a) }));
       return {
         errorScreen: Boolean(document.querySelector('[role="alert"].ui-empty')),
-        // The wizards are a form with no shell around it.
-        main: Boolean(document.querySelector("main, form")),
-        mainText: ((document.querySelector("main") ?? document.querySelector("form"))?.textContent ?? "").trim().length,
+        main: Boolean(document.querySelector("main")),
+        mainText: (document.querySelector("main")?.textContent ?? "").trim().length,
+        // The wizards draw their step over the page, outside <main>: a visible heading is content too.
+        heading: Array.from(document.querySelectorAll("h1")).some((h) => visible(h) && (h.textContent ?? "").trim().length > 0),
         busy: Array.from(document.querySelectorAll('[aria-busy="true"]')).filter(visible).length,
         links,
       };
     });
     if (read.errorScreen) problems.push("shows the error screen");
-    if (status < 400 && !landed.pathname.startsWith("/connexion") && (!read.main || read.mainText < 20)) problems.push("renders nothing");
+    if (status < 400 && !landed.pathname.startsWith("/connexion") && !read.heading && (!read.main || read.mainText < 20)) problems.push("renders nothing");
     if (read.busy > 0) {
       // Something still says it is loading once the network is quiet: give it a moment, then call it stuck.
       await page.waitForTimeout(4_000);

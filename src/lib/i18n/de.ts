@@ -1283,6 +1283,7 @@ export const de: Dict = {
     energyAria: "Energieklasse {cls}",
     backToList: "← Immobilien",
     cpeBadge: "CPE {cls} · läuft ab {date}",
+    cpeBadgeUndated: "CPE {cls} · Ausstellungsdatum nachzutragen",
     unitsTitle: "Einheiten",
     unitMeta: "{floor} · {area} m²",
     unitRooms: " · {n} Zi.",

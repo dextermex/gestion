@@ -1288,6 +1288,7 @@ export const lu: Dict = {
     energyAria: "Energieklass {cls}",
     backToList: "← Immobilien",
     cpeBadge: "CPE {cls} · leeft of {date}",
+    cpeBadgeUndated: "CPE {cls} · Ausstellungsdatum nozedroen",
     unitsTitle: "Unitéiten",
     unitMeta: "{floor} · {area} m²",
     unitRooms: " · {n} Zëmmer",

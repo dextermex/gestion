@@ -706,8 +706,9 @@ export function Technical({
     (m) => m.propertyId === p.id && (card.scope === "property" || m.unitId === null || m.unitId === card.single?.unit.id),
   );
   const policies = demo.INSURANCES.filter((i) => i.propertyId === p.id);
-  const cpe = cpeExpiryDeadline(p.name, p.cpeIssuedOn);
-  const cpeState = deadlineStatus(cpe, demo.TODAY);
+  // A certificate whose issue date was never recorded has no expiry to compute.
+  const cpe = p.cpeIssuedOn ? cpeExpiryDeadline(p.name, p.cpeIssuedOn) : null;
+  const cpeState = cpe ? deadlineStatus(cpe, demo.TODAY) : null;
   const syndic = p.syndicMandateStart ? syndicMandateDeadline(p.syndicName ?? "", p.syndicMandateStart) : null;
   const unitLabel = (id: string | null) =>
     id ? demo.UNITS.find((u) => u.id === id)?.label ?? d.biens.metersCommon : d.biens.metersCommon;
@@ -719,7 +720,9 @@ export function Technical({
           items={[
             {
               k: d.biens.cpeRow,
-              v: p.energyClass ? (
+              v: p.energyClass && !cpe ? (
+                <Badge className="bg-amber-100 text-amber-800">{fmt(d.biens.cpeBadgeUndated, { cls: p.energyClass })}</Badge>
+              ) : p.energyClass && cpe ? (
                 <Badge
                   className={
                     cpeState === "overdue"

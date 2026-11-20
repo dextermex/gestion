@@ -1283,6 +1283,7 @@ export const en: Dict = {
     energyAria: "Energy class {cls}",
     backToList: "← Properties",
     cpeBadge: "CPE {cls} · expires {date}",
+    cpeBadgeUndated: "CPE {cls} · issue date to be filled in",
     unitsTitle: "Units",
     unitMeta: "{floor} · {area} m²",
     unitRooms: " · {n} rm",

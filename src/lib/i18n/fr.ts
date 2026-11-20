@@ -1294,6 +1294,7 @@ export const fr = {
     energyAria: "Classe énergétique {cls}",
     backToList: "← Biens",
     cpeBadge: "CPE {cls} · expire {date}",
+    cpeBadgeUndated: "CPE {cls} · date d'émission à renseigner",
     unitsTitle: "Lots",
     unitMeta: "{floor} · {area} m²",
     unitRooms: " · {n} ch.",

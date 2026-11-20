@@ -80,7 +80,7 @@ function account(): DemoData {
   };
 }
 
-vi.mock("@/lib/demo", () => ({ getDemo: async () => account(), isSampleData: async () => false }));
+vi.mock("@/lib/demo", () => ({ getDemo: async () => account(), isSampleData: async () => false, getDatasetId: async () => "real", sampleDataEnabled: () => false }));
 vi.mock("@/lib/i18n", () => ({ getI18n: async () => ({ locale: "fr", d: fr }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => "/app" }));
 
@@ -125,6 +125,11 @@ describe("operations screens on a real account", () => {
     expect(html).toContain(fr.documents.noFile);
     expect(html).toContain(fr.documents.add);
     expect(html).not.toContain("data-pagination");
+  });
+  it("A property's technique tab opens when its energy certificate has no issue date", async () => {
+    const { default: Page } = await import("@/app/app/biens/[id]/page");
+    const html = text(renderToString(await Page({ params: Promise.resolve({ id: "prop-1" }), searchParams: Promise.resolve({ onglet: "technique" }) })));
+    expect(html).toContain(fr.bien.cadastreTitle);
   });
   it("Interventions opens the ticket's sheet", async () => {
     const { default: Page } = await import("@/app/app/interventions/page");
