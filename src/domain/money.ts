@@ -46,24 +46,3 @@ export function splitExact(amount: Cents, ratios: number[]): Cents[] {
   }
   return out;
 }
-
-const EUR_FORMAT = new Intl.NumberFormat("fr-LU", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-});
-
-const EUR_FORMAT_WHOLE = new Intl.NumberFormat("fr-LU", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
-export function formatEUR(amount: Cents): string {
-  return EUR_FORMAT.format(amount / 100);
-}
-
-export function formatEURWhole(amount: Cents): string {
-  return EUR_FORMAT_WHOLE.format(amount / 100);
-}

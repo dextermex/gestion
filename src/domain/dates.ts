@@ -85,18 +85,6 @@ export function startOfMonth(d: ISODate): ISODate {
   return toISO(y, m, 1);
 }
 
-export function isBefore(a: ISODate, b: ISODate): boolean {
-  return a < b;
-}
-
-export function maxDate(...dates: ISODate[]): ISODate {
-  return dates.reduce((a, b) => (a > b ? a : b));
-}
-
-export function minDate(...dates: ISODate[]): ISODate {
-  return dates.reduce((a, b) => (a < b ? a : b));
-}
-
 const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "short",

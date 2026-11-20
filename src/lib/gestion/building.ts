@@ -39,7 +39,6 @@ export function buildingStats(card: PropertyCard): BuildingStats {
 
 /** The four families the Lots tab filters by. */
 export type LotFamily = "apartments" | "commercial" | "parking" | "other";
-export const LOT_FAMILIES: readonly LotFamily[] = ["apartments", "commercial", "parking", "other"];
 
 export function lotFamilyOf(unit: Pick<DemoUnit, "kind">): LotFamily {
   switch (unit.kind) {

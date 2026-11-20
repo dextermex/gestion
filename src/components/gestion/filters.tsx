@@ -1,44 +1,10 @@
 import Link from "next/link";
 
 /**
- * The immocloud list-page grammar, in Morada tokens:
- * - CountCard — big number + label, acting as a filter tab (URL-driven, so
- *   pages stay server components and views stay shareable links).
- * - ChipLink — small filter pill for secondary dimensions.
- * Selection is a border+ring, never a fill: color stays reserved for data.
+ * The immocloud list-page grammar, in Morada tokens: ChipLink, a small
+ * filter pill, URL-driven so pages stay server components and views stay
+ * shareable links.
  */
-
-export function CountCard({
-  href,
-  value,
-  label,
-  selected,
-  tone = "default",
-}: {
-  href: string;
-  value: string | number;
-  label: string;
-  selected?: boolean;
-  tone?: "default" | "good" | "warn" | "bad";
-}) {
-  const valueColor =
-    tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : tone === "bad" ? "text-red-700" : "text-ink";
-  return (
-    <Link
-      href={href}
-      aria-current={selected ? "true" : undefined}
-      className={
-        "crm-count-card tactile block rounded-2xl border bg-white p-5 shadow-sm transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
-        (selected
-          ? "border-brand-400 bg-brand-50 ring-1 ring-brand-200"
-          : "border-sand-200 hover:border-brand-300 hover:bg-brand-50/40")
-      }
-    >
-      <p className={`font-display text-2xl font-bold tracking-tight tabular-nums ${valueColor}`}>{value}</p>
-      <p className="mt-0.5 text-xs font-semibold text-ink-soft">{label}</p>
-    </Link>
-  );
-}
 
 export function ChipLink({
   href,
