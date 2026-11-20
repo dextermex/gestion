@@ -14,6 +14,7 @@ import { cpeExpiryDeadline, vacancyClock } from "@/domain/compliance/deadlines";
 import { computeSettlement } from "@/domain/deposits/settlement";
 import { monthlyCashflow } from "@/domain/finance/cashflow";
 import { addDays, addMonths, diffDays } from "@/domain/dates";
+import { isOverdue } from "@/lib/gestion/ledger";
 
 /**
  * Aujourd'hui: the command center. Every block is DERIVED — a row appears
@@ -69,7 +70,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const expected = month.reduce((a, rp) => a + rp.totalCents, 0);
   const collected = month.reduce((a, rp) => a + rp.allocatedCents, 0);
   const paidCount = month.filter((rp) => rp.status === "paid").length;
-  const lateMonth = month.filter((rp) => (rp.status === "late" || rp.status === "partial") && rp.allocatedCents < rp.totalCents);
+  // Late is unpaid past its due date: a month part-paid before it falls due is not behind yet.
+  const lateMonth = month.filter((rp) => isOverdue(rp, TODAY));
   const lateCount = lateMonth.length;
   const lateMonthCents = lateMonth.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
 
@@ -111,9 +113,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
 
   // Oldest open arrears case, assessed by the legal ladder.
-  const lateOpen = RENT_PERIODS.filter(
-    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth && rp.allocatedCents < rp.totalCents,
-  ).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+  const lateOpen = RENT_PERIODS.filter((rp) => isOverdue(rp, TODAY) && rp.period <= liveMonth).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
   // This month's late rents are the head's own chip. What is still unpaid
   // from earlier months is a different fact, said once, here.
   const earlierOpen = lateOpen.filter((rp) => rp.period < shownMonth);

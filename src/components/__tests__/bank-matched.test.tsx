@@ -18,7 +18,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh }
 let host: HTMLDivElement;
 let root: Root;
 
-const meta = { label: "Rapproché", className: "bg-emerald-100 text-emerald-800" };
+const meta = { label: "Rapproché", color: "bg-emerald-100 text-emerald-800" };
 const row = (over: Partial<TxRow> = {}): TxRow => ({
   id: "tx-1",
   status: "manual",

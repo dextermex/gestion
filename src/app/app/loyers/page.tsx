@@ -9,6 +9,7 @@ import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
 import { addMonths } from "@/domain/dates";
+import { isOverdue } from "@/lib/gestion/ledger";
 import { existingOf, generateLabels } from "@/lib/documents/labels";
 
 export default async function LoyersPage({
@@ -32,7 +33,8 @@ export default async function LoyersPage({
   const expected = monthRows.reduce((a, r) => a + r.totalCents, 0);
   const collected = monthRows.reduce((a, r) => a + r.allocatedCents, 0);
   const open = expected - collected;
-  const isOpen = (rp: (typeof RENT_PERIODS)[number]) => (rp.status === "late" || rp.status === "partial") && rp.allocatedCents < rp.totalCents;
+  // Behind is what is unpaid past its due date: a month part-paid before it falls due is still to come, as the tenant reads it.
+  const isOpen = (rp: (typeof RENT_PERIODS)[number]) => isOverdue(rp, TODAY);
   // Late first, then what is partly paid, the oldest due date leading each.
   const byUrgency = (x: (typeof RENT_PERIODS)[number], y: (typeof RENT_PERIODS)[number]) =>
     x.status === y.status ? x.dueDate.localeCompare(y.dueDate) : x.status === "late" ? -1 : 1;
@@ -54,9 +56,7 @@ export default async function LoyersPage({
   // has been done is read from the rows (the steps recorded, the registered
   // letter and its AR date), never from a click.
   const letterById = new Map(REGISTERED_LETTERS.map((l) => [l.id, l]));
-  const arrearsCases = RENT_PERIODS.filter(
-    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth,
-  ).map((rp) => {
+  const arrearsCases = RENT_PERIODS.filter((rp) => isOverdue(rp, TODAY) && rp.period <= liveMonth).map((rp) => {
     const steps = ARREARS_ACTIONS.filter((a) => a.rentPeriodId === rp.id).sort((a, b) => a.executedOn.localeCompare(b.executedOn));
     const executed: Partial<Record<Exclude<ArrearsStage, "none">, string>> = {};
     for (const a of steps) executed[a.stage] = a.executedOn;
@@ -116,7 +116,7 @@ export default async function LoyersPage({
   const caseOf = new Map(arrearsCases.map((c) => [c.rp.id, c]));
   const openNow = monthRows.filter(isOpen).sort(byUrgency);
   const earlier = RENT_PERIODS.filter((rp) => isOpen(rp) && rp.period < month).sort((x, y) => y.period.localeCompare(x.period) || byUrgency(x, y));
-  const upcoming = monthRows.filter((rp) => rp.status === "pending" || rp.status === "upcoming");
+  const upcoming = monthRows.filter((rp) => rp.status === "pending" || rp.status === "upcoming" || (rp.status === "partial" && !isOverdue(rp, TODAY)));
   const paid = monthRows.filter((rp) => rp.status === "paid");
   const openCents = (rows: Period[]) => rows.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
   const lateTenants = new Set([...openNow, ...earlier].map((rp) => rp.leaseId)).size;
