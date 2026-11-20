@@ -50,6 +50,8 @@ export function requestLabels(d: Dict) {
     seeRequest: d.tenant.reqSeeIt,
     pieces: tenantPieceLabels(d),
     failed: d.tenant.reqFailed,
+    sessionEnded: d.tenant.reqSessionEnded,
+    signInAgain: d.tenant.signInAgain,
     noLease: d.tenant.reqNoLease,
     back: d.common.back,
     cancel: d.common.cancel,

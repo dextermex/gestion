@@ -3050,6 +3050,7 @@ export const en: Dict = {
     uploading: "Uploading files…",
     reqSent: "Request sent. Your manager receives it immediately.",
     reqFailed: "The request could not be sent. Try again in a moment.",
+    reqSessionEnded: "Your session has expired. Your request is kept: sign in again, then send it.",
     reqNoLease: "A request goes with a current tenancy. Your manager can invite you again if needed.",
     reqListTitle: "Your requests",
     reqEmptyTitle: "No request",

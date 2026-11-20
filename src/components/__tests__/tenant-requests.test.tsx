@@ -108,4 +108,15 @@ describe("a tenant's new request", () => {
     await act(async () => Array.from(partial!.querySelectorAll("button")).find((b) => b.textContent === t.reqSeeIt)!.click());
     expect(push).toHaveBeenCalledWith("/locataire/demandes/t-2");
   });
+
+  it("keeps what was written when the session ended, and offers to sign in again beside the form", async () => {
+    stub({ "/api/locataire/demandes": [{ status: 401, body: { error: "unauthenticated" } }] });
+    const dialog = await open(TWO.slice(0, 1));
+    const before = window.location.href;
+    await act(async () => (dialog.querySelector("form button[type=submit]") as HTMLButtonElement).click());
+    expect(window.location.href).toBe(before);
+    expect((dialog.querySelector("form input:not([type=file])") as HTMLInputElement).value).toBe("Le portail du parking");
+    const alert = Array.from(dialog.querySelectorAll("[role=alert]")).find((a) => a.textContent?.includes(t.reqSessionEnded));
+    expect(alert?.querySelector("a[data-sign-in-again]")?.getAttribute("target")).toBe("_blank");
+  });
 });

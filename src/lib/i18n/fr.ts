@@ -3061,6 +3061,7 @@ export const fr = {
     uploading: "Envoi des fichiers…",
     reqSent: "Demande envoyée. Votre gestionnaire la reçoit immédiatement.",
     reqFailed: "La demande n'a pas pu être envoyée. Réessayez dans un instant.",
+    reqSessionEnded: "Votre session a expiré. Votre demande est gardée : reconnectez-vous, puis envoyez-la.",
     reqNoLease: "Une demande s'adresse à une location en cours. Votre gestionnaire pourra vous inviter à nouveau si besoin.",
     reqListTitle: "Vos demandes",
     reqEmptyTitle: "Aucune demande",

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PIECE_ACCEPT, pieceLine, preparePieces, sendPieces, type PieceOutcome } from "@/lib/portal/pieces";
+import { signInBeside } from "@/lib/gestion/threads";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
@@ -75,7 +76,7 @@ export default function TenantRequests({
   const [refused, setRefused] = useState<PieceOutcome[]>([]);
   /** The request was written but some of its files were not: its id, and which. */
   const [partial, setPartial] = useState<{ id: string; failed: PieceOutcome[] } | null>(null);
-  const [state, setState] = useState<"idle" | "sending" | "uploading" | "failed" | "noLease" | "sample">("idle");
+  const [state, setState] = useState<"idle" | "sending" | "uploading" | "failed" | "noLease" | "sample" | "session">("idle");
 
   useEffect(() => {
     if (initialOpen) setOpen(true);
@@ -113,7 +114,8 @@ export default function TenantRequests({
         body: JSON.stringify({ kind, category: kind === "technical" ? category : null, severity: kind === "technical" ? severity : "routine", title, description, leaseId: leaseId || undefined }),
       });
       if (res.status === 401) {
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
+        // The session ended: what was written stays in the form, and signing in again opens beside it.
+        setState("session");
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { error?: string; id?: string };
@@ -277,6 +279,14 @@ export default function TenantRequests({
             {state === "noLease" && (
               <p role="alert" className="text-xs font-semibold text-red-700">
                 {labels.noLease}
+              </p>
+            )}
+            {state === "session" && (
+              <p role="alert" className="text-xs font-semibold text-red-700">
+                {labels.sessionEnded}{" "}
+                <a href={signInBeside(typeof window === "undefined" ? "/locataire/demandes" : window.location.pathname + window.location.search)} target="_blank" rel="noopener" className="inline-flex min-h-10 items-center text-brand-700 underline underline-offset-2" data-sign-in-again>
+                  {labels.signInAgain}
+                </a>
               </p>
             )}
             {state === "sample" && sampleNote && (

@@ -3050,6 +3050,7 @@ export const de: Dict = {
     uploading: "Dateien werden hochgeladen…",
     reqSent: "Anfrage gesendet. Ihre Verwaltung erhält sie sofort.",
     reqFailed: "Die Anfrage konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal.",
+    reqSessionEnded: "Ihre Sitzung ist abgelaufen. Ihre Anfrage bleibt erhalten: Melden Sie sich erneut an und senden Sie sie dann.",
     reqNoLease: "Eine Anfrage gehört zu einem laufenden Mietverhältnis. Ihre Verwaltung kann Sie bei Bedarf erneut einladen.",
     reqListTitle: "Ihre Anfragen",
     reqEmptyTitle: "Keine Anfrage",

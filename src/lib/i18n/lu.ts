@@ -3055,6 +3055,7 @@ export const lu: Dict = {
     uploading: "Fichiere ginn eropgelueden…",
     reqSent: "Ufro geschéckt. Är Gestioun kritt se direkt.",
     reqFailed: "D'Ufro konnt net geschéckt ginn. Probéiert et gläich nach eng Kéier.",
+    reqSessionEnded: "Är Sessioun ass ofgelaf. Är Ufro bleift gespäichert: mellt Iech nees un, a schéckt se dann.",
     reqNoLease: "Eng Ufro gehéiert zu enger lafender Locatioun. Är Gestioun kann Iech bei Bedarf nei invitéieren.",
     reqListTitle: "Är Ufroen",
     reqEmptyTitle: "Keng Ufro",
