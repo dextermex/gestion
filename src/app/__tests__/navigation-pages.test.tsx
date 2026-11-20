@@ -289,3 +289,30 @@ describe("AML", () => {
     expect(html).not.toContain(fr.common.emptyBody);
   });
 });
+
+describe("A file that could not be handed over", () => {
+  const render = async (params: Record<string, string>) => {
+    const { default: Page } = await import("@/app/app/documents/indisponible/page");
+    return text(renderToString(await Page({ searchParams: Promise.resolve(params) })));
+  };
+
+  it("says why, leads back to the screen the link was on, and to the documents", async () => {
+    const html = await render({ raison: "absent", retour: "/app/loyers?mois=2026-10" });
+    expect(html).toContain(fr.errors.fileTitle);
+    expect(html).toContain(fr.errors.fileAbsent);
+    expect(hrefs(html)).toEqual(["/app/loyers?mois=2026-10", "/app/documents"]);
+    expect(text(renderToString(await (await import("@/app/app/documents/indisponible/page")).default({ searchParams: Promise.resolve({ raison: "refuse" }) })))).toContain(fr.errors.fileRefused);
+  });
+
+  it("offers to write to the team when the storage failed, and never returns outside the management space", async () => {
+    const html = await render({ raison: "echec", retour: "https://example.invalid/app" });
+    expect(html).toContain(fr.errors.fileFailed);
+    const links = hrefs(html);
+    expect(links).not.toContain("https://example.invalid/app");
+    expect(links[0]).toBe("/app/documents");
+    expect(links.some((h) => h.startsWith("mailto:"))).toBe(true);
+    // An unknown reason reads as a failure, not as a missing file.
+    expect(await render({ raison: "x" })).toContain(fr.errors.fileFailed);
+    expect(hrefs(await render({ retour: "/locataire" }))).not.toContain("/locataire");
+  });
+});
