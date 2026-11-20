@@ -126,6 +126,32 @@ export function ticketForRequestStatus(asked: RequestStatus, ticket: { status: T
 }
 
 /**
+ * Waiting on the tenant (access to the home, a piece of information): an
+ * open request is set aside, and taken up again where its work order
+ * stands. A closed request is not set aside; one that is not waiting has
+ * nothing to take up again.
+ */
+export function ticketForWaiting(waiting: boolean, ticket: { status: TicketStatus; workOrder: WorkOrderStatus | null }): TicketStatus | "request_closed" | "unchanged" {
+  if (isTicketClosed(ticket.status)) return "request_closed";
+  if (waiting) return ticket.status === "pending_tenant" ? "unchanged" : "pending_tenant";
+  if (ticket.status !== "pending_tenant") return "unchanged";
+  const w = ticket.workOrder;
+  return w === "accepted" || w === "slots_proposed" ? "triaged" : w === "scheduled" ? "scheduled" : "in_progress";
+}
+
+/**
+ * The day a request is to be handled by, as the desk sets it: stored as
+ * noon UTC, the same calendar day in Luxembourg and in UTC. Null clears it;
+ * anything that is not a day is refused.
+ */
+export function dueInstant(day: string | null): string | null | "invalid" {
+  if (day === null || day === "") return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "invalid";
+  const at = new Date(`${day}T12:00:00.000Z`);
+  return Number.isNaN(at.getTime()) || at.toISOString().slice(0, 10) !== day ? "invalid" : at.toISOString();
+}
+
+/**
  * A visit is planned for a day, and for an hour only when the desk entered
  * one. The work order keeps a single instant, so a day with no hour is
  * written as noon UTC and one second: the calendar day is the same in

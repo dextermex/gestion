@@ -7,6 +7,7 @@ import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { isTicketClosed } from "@/lib/gestion/interventions";
 import { isIntervention } from "@/lib/portal/types";
+import { dayKey } from "@/lib/portal/format";
 
 /**
  * Interventions: the work of the workspace. Tickets raised at the desk,
@@ -102,7 +103,7 @@ export default async function InterventionsPage() {
                   </td>
                   <td className="px-4 py-3 text-right" data-actions>
                     <InterventionSheet
-                      ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, closed: isTicketClosed(t.status), workOrder: t.workOrder }}
+                      ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, closed: isTicketClosed(t.status), workOrder: t.workOrder, waiting: t.status === "pending_tenant", dueOn: t.slaDueAt ? dayKey(t.slaDueAt) : null }}
                       ticketMeta={statusMeta[t.status]}
                       workOrderMeta={t.workOrder ? workOrderMeta[t.workOrder.status] : null}
                       artisans={artisans}

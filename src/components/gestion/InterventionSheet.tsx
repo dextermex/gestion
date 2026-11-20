@@ -21,6 +21,11 @@ import { callJson } from "./call";
  * more hand-over or planning: the sheet says so and offers to reopen it,
  * which is the only way it opens again. A visit is planned for a day, and
  * for an hour only when one is entered.
+ *
+ * Beside the steps, the desk's follow-up on the request itself: set aside
+ * while the tenant is waited on (and taken up again), and the day it is to
+ * be handled by. Both are the ticket's, so the counters and the lists that
+ * read them follow.
  */
 export interface InterventionLabels {
   open: string;
@@ -52,6 +57,11 @@ export interface InterventionLabels {
   invoiceFile: string;
   invoiceAttached: string;
   invoiceBadFile: string;
+  dueOnLabel: string;
+  dueSave: string;
+  waitTenant: string;
+  resumeWork: string;
+  waitingNote: string;
 }
 
 export interface SheetTicket {
@@ -62,6 +72,10 @@ export interface SheetTicket {
   /** The request was resolved or refused: no step that would take it up again is offered until it is reopened. */
   closed: boolean;
   workOrder: { id: string; status: WorkOrderStatus; artisanContactId: string | null; scheduledAt: string | null; amountCents: number | null; vatCents: number | null } | null;
+  /** Set aside while the tenant is waited on. */
+  waiting?: boolean;
+  /** The day it is to be handled by, "YYYY-MM-DD", when the desk set one. */
+  dueOn?: string | null;
 }
 
 const BACK = "/app/interventions";
@@ -103,6 +117,7 @@ export default function InterventionSheet({
   const [amount, setAmount] = useState(wo?.amountCents != null ? (wo.amountCents / 100).toFixed(2).replace(".", ",") : "");
   const [vat, setVat] = useState(wo?.vatCents != null ? (wo.vatCents / 100).toFixed(2).replace(".", ",") : "");
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [dueOn, setDueOn] = useState(ticket.dueOn ?? "");
 
   const run = async (url: string, method: string, body: Record<string, unknown> | undefined) => {
     setNote(null);
@@ -174,6 +189,24 @@ export default function InterventionSheet({
           <Badge className={ticketMeta.color}>{ticketMeta.label}</Badge>
           <span className="ml-2">{labels.workOrderStatus}</span>
           {workOrderMeta ? <Badge className={workOrderMeta.color}>{workOrderMeta.label}</Badge> : <span>{labels.noWorkOrder}</span>}
+        </div>
+
+        {/* The desk's follow-up on the request: waiting on the tenant, and the day it is to be handled by. */}
+        <div className="mt-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-2" data-request-follow-up>
+          <Field label={labels.dueOnLabel}>
+            <Input type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} disabled={busy} />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" loading={busy} disabled={dueOn === (ticket.dueOn ?? "")} onClick={() => run(`/api/demandes/${encodeURIComponent(ticket.id)}`, "PATCH", { dueOn: dueOn || null })}>
+              {labels.dueSave}
+            </Button>
+            {!ticket.closed && (
+              <Button size="sm" variant="secondary" loading={busy} onClick={() => run(`/api/demandes/${encodeURIComponent(ticket.id)}`, "PATCH", { waiting: !ticket.waiting })} data-request-waiting={ticket.waiting ? "yes" : "no"}>
+                {ticket.waiting ? labels.resumeWork : labels.waitTenant}
+              </Button>
+            )}
+          </div>
+          {ticket.waiting && <p className="text-xs leading-relaxed text-ink-soft sm:col-span-2">{labels.waitingNote}</p>}
         </div>
 
         {wo ? (

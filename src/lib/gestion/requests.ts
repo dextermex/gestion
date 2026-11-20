@@ -3,7 +3,7 @@ import type { OrgContext } from "@/lib/gestion/api";
 import { leaseOfConversation, notifyTenantsOfMessage } from "@/lib/delivery/outbox";
 import { appendMessage, leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_STATUSES, leaseSubject, requestStatusOf, type RequestStatus } from "@/lib/portal/types";
-import { ticketForRequestStatus } from "@/lib/gestion/interventions";
+import { dueInstant, ticketForRequestStatus, ticketForWaiting } from "@/lib/gestion/interventions";
 import type { TicketStatus, WorkOrderStatus } from "@/lib/types";
 import { THREAD_PAGE, latestMoment, type ThreadMessage } from "@/lib/gestion/threads";
 
@@ -15,7 +15,7 @@ import { THREAD_PAGE, latestMoment, type ThreadMessage } from "@/lib/gestion/thr
  * database; an id from another workspace is simply not found.
  */
 
-export type RequestWriteFailure = "invalid" | "not_found" | "forbidden" | "storage_failed";
+export type RequestWriteFailure = "invalid" | "not_found" | "forbidden" | "storage_failed" | "request_closed";
 
 /**
  * What became of the e-mail that tells the tenants a message waits in their
@@ -81,6 +81,49 @@ export async function setRequestStatus(
   // Nothing was written: the policies let this member read the request, not change it.
   if (((data as unknown[] | null) ?? []).length === 0) return { error: "forbidden" };
   return { status: requestStatusOf(next.status), held: next.held };
+}
+
+/**
+ * The desk's follow-up on a request, beside its status: set aside while
+ * waiting on the tenant (and taken up again), and the day it is to be
+ * handled by. Both are the ticket's own columns (`status = pending_tenant`,
+ * `sla_due_at`), which the Interventions counter and the lists read. The
+ * answer is what the ticket now says.
+ */
+export async function setRequestFollowUp(
+  ctx: OrgContext,
+  ticketId: string,
+  input: { waiting?: boolean; dueOn?: string | null },
+): Promise<{ status: TicketStatus; slaDueAt: string | null } | { error: RequestWriteFailure }> {
+  if (input.waiting === undefined && input.dueOn === undefined) return { error: "invalid" };
+  const { data: found, error: readErr } = await ctx.g.from("tickets").select("id,status,sla_due_at").eq("org_id", ctx.org.id).eq("id", ticketId).maybeSingle();
+  if (readErr) return failure(readErr, "request lookup");
+  const ticket = (found as Row | null) ?? null;
+  if (!ticket) return { error: "not_found" };
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {};
+  if (input.waiting !== undefined) {
+    const { data: orders, error: orderErr } = await ctx.g.from("work_orders").select("status,created_at").eq("org_id", ctx.org.id).eq("ticket_id", ticketId).order("created_at").limit(1);
+    if (orderErr) return failure(orderErr, "work order lookup");
+    const workOrder = ((orders as Row[] | null) ?? [])[0];
+    const next = ticketForWaiting(input.waiting, { status: String(ticket.status) as TicketStatus, workOrder: workOrder ? (String(workOrder.status) as WorkOrderStatus) : null });
+    if (next === "request_closed") return { error: "request_closed" };
+    if (next !== "unchanged") patch.status = next;
+  }
+  if (input.dueOn !== undefined) {
+    const due = dueInstant(input.dueOn);
+    if (due === "invalid") return { error: "invalid" };
+    patch.sla_due_at = due;
+  }
+  if (Object.keys(patch).length > 0) {
+    const { data, error } = await ctx.g.from("tickets").update({ ...patch, updated_at: now }).eq("org_id", ctx.org.id).eq("id", ticketId).select("id");
+    if (error) return failure(error, "request follow-up update");
+    if (((data as unknown[] | null) ?? []).length === 0) return { error: "forbidden" };
+  }
+  return {
+    status: (patch.status as TicketStatus | undefined) ?? (String(ticket.status) as TicketStatus),
+    slaDueAt: patch.sla_due_at !== undefined ? (patch.sla_due_at as string | null) : ticket.sla_due_at ? String(ticket.sla_due_at) : null,
+  };
 }
 
 /** "Apt 3B · Résidence Beaulieu" for a lease of the workspace, or nothing if it cannot be read. */
@@ -277,5 +320,5 @@ export async function createIntervention(ctx: OrgContext, ticketId: string): Pro
 
 /** The HTTP status a write failure answers with. */
 export function statusOfFailure(error: RequestWriteFailure): number {
-  return error === "invalid" ? 400 : error === "not_found" ? 404 : error === "forbidden" ? 403 : 502;
+  return error === "invalid" ? 400 : error === "not_found" ? 404 : error === "forbidden" ? 403 : error === "request_closed" ? 409 : 502;
 }

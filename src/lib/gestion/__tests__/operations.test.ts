@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedWorkOrderActions, isTicketClosed, nextWorkOrderStep, stepAlreadyTaken, ticketAfterStep, ticketForRequestStatus, visitHasHour, visitHour, visitInstant } from "@/lib/gestion/interventions";
+import { allowedWorkOrderActions, dueInstant, isTicketClosed, nextWorkOrderStep, stepAlreadyTaken, ticketAfterStep, ticketForRequestStatus, ticketForWaiting, visitHasHour, visitHour, visitInstant } from "@/lib/gestion/interventions";
 import { visitWhen } from "@/lib/portal/format";
 import { requestState } from "@/lib/portal/types";
 import { advancesBilledForYear, computeChargePeriod, decompteBalance } from "@/lib/gestion/charges";
@@ -115,6 +115,28 @@ describe("a request's status, whichever screen moves it", () => {
     expect(ticketForRequestStatus("in_progress", at("cancelled", "accepted"))).toEqual({ status: "triaged", closure: "clear", held: false });
     expect(ticketForRequestStatus("todo", at("closed", "paid"))).toEqual({ status: "in_progress", closure: "clear", held: true });
     expect(ticketForRequestStatus("in_progress", at("done"))).toEqual({ status: "in_progress", closure: "clear", held: false });
+  });
+});
+
+describe("the desk's follow-up on a request", () => {
+  it("sets an open request aside while the tenant is waited on, and takes it up again where its work order stands", () => {
+    expect(ticketForWaiting(true, { status: "in_progress", workOrder: null })).toBe("pending_tenant");
+    expect(ticketForWaiting(true, { status: "new", workOrder: null })).toBe("pending_tenant");
+    expect(ticketForWaiting(true, { status: "pending_tenant", workOrder: null })).toBe("unchanged");
+    expect(ticketForWaiting(false, { status: "pending_tenant", workOrder: "scheduled" })).toBe("scheduled");
+    expect(ticketForWaiting(false, { status: "pending_tenant", workOrder: "accepted" })).toBe("triaged");
+    expect(ticketForWaiting(false, { status: "pending_tenant", workOrder: null })).toBe("in_progress");
+    expect(ticketForWaiting(false, { status: "in_progress", workOrder: null })).toBe("unchanged");
+    // A closed request is not set aside, nor taken up: reopening it is its own act.
+    for (const status of ["done", "closed", "cancelled"] as const) expect(ticketForWaiting(true, { status, workOrder: null })).toBe("request_closed");
+    // While waiting, the tenant still reads "in progress".
+    expect(requestState("pending_tenant")).toBe("in_progress");
+  });
+
+  it("keeps the day a request is to be handled by as that day, wherever it is read", () => {
+    expect(dueInstant("2026-12-03")).toBe("2026-12-03T12:00:00.000Z");
+    expect([dueInstant(null), dueInstant("")]).toEqual([null, null]);
+    expect([dueInstant("2026-02-30"), dueInstant("03/12/2026"), dueInstant("2026-12-03T10:00")]).toEqual(["invalid", "invalid", "invalid"]);
   });
 });
 

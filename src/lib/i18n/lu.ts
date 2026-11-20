@@ -2316,6 +2316,11 @@ export const lu: Dict = {
     colSeverity: "Prioritéit",
     colStatus: "Status",
     colSla: "SLA-Echéance",
+    dueOnLabel: "Ze erleedege bis",
+    dueSave: "Delai späicheren",
+    waitTenant: "Waart op de Locataire",
+    resumeWork: "Weiderfueren",
+    waitingNote: "Op der Säit, bis de Locataire äntwert: si zielt bei „Waart op Locataire“. Weiderfueren setzt se dohinner zréck, wou d'Interventioun steet.",
   },
 
   edl: {

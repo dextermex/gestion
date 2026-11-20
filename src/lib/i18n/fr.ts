@@ -2322,6 +2322,11 @@ export const fr = {
     colSeverity: "Priorité",
     colStatus: "Statut",
     colSla: "Échéance SLA",
+    dueOnLabel: "À traiter avant le",
+    dueSave: "Enregistrer l'échéance",
+    waitTenant: "En attente du locataire",
+    resumeWork: "Reprendre",
+    waitingNote: "Mise de côté en attendant le locataire : elle compte dans « En attente locataire ». Reprendre la remet où en est l'intervention.",
   },
 
   edl: {

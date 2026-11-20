@@ -2311,6 +2311,11 @@ export const de: Dict = {
     colSeverity: "Priorität",
     colStatus: "Status",
     colSla: "SLA-Frist",
+    dueOnLabel: "Zu erledigen bis",
+    dueSave: "Frist speichern",
+    waitTenant: "Wartet auf den Mieter",
+    resumeWork: "Fortsetzen",
+    waitingNote: "Zurückgestellt, bis der Mieter antwortet: zählt unter „Wartet auf Mieter“. Fortsetzen setzt sie dorthin zurück, wo der Einsatz steht.",
   },
 
   edl: {

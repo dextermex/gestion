@@ -2311,6 +2311,11 @@ export const en: Dict = {
     colSeverity: "Priority",
     colStatus: "Status",
     colSla: "SLA due",
+    dueOnLabel: "To handle by",
+    dueSave: "Save the due date",
+    waitTenant: "Waiting on the tenant",
+    resumeWork: "Resume",
+    waitingNote: "Set aside while waiting on the tenant: it counts in \"Waiting on tenant\". Resume puts it back where the intervention stands.",
   },
 
   edl: {

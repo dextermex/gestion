@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OrgContext } from "@/lib/gestion/api";
 import { closeLease } from "@/lib/gestion/lease";
-import { addManagerMessage, createIntervention, markConversationRead, parseRequestStatus, setRequestStatus, statusOfFailure } from "@/lib/gestion/requests";
+import { addManagerMessage, createIntervention, markConversationRead, parseRequestStatus, setRequestFollowUp, setRequestStatus, statusOfFailure } from "@/lib/gestion/requests";
 import { addTenantMessage, attachTenantFiles, createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_STATUSES, attachmentFolder, isIntervention, isRequestOpen, leaseSubject, requestState, requestStatusOf, ticketStatusFor } from "@/lib/portal/types";
@@ -46,6 +46,29 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     db.insertRow("agencies", { id: ORG, name: "Cabinet Test", email: "bonjour@cabinet-test.lu", phone: "+352 26 00 00 00" });
     db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
     ({ propertyId, unitId } = seedProperty(db));
+  });
+
+  it("sets a request aside while the tenant is waited on, gives it a due day, and the lists read both", async () => {
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    await linkAccount(db, ctx, rental, anna);
+    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
+    const request = await createTenantRequest(db.tenantClient(anna), anna, lease, technical("Fuite", "Sous l'évier."));
+    if ("error" in request) throw new Error(request.error);
+    expect(await setRequestFollowUp(ctx, request.id, { waiting: true, dueOn: "2026-12-03" })).toEqual({ status: "pending_tenant", slaDueAt: "2026-12-03T12:00:00.000Z" });
+    let ticket = (await hydrate(db)).TICKETS.find((t) => t.id === request.id)!;
+    expect([ticket.status, ticket.slaDueAt?.slice(0, 10)]).toEqual(["pending_tenant", "2026-12-03"]);
+    // The tenant reads it as in progress.
+    expect((await space(db, anna)).requests.find((r) => r.id === request.id)?.state).toBe("in_progress");
+    expect(await setRequestFollowUp(ctx, request.id, { waiting: false, dueOn: null })).toEqual({ status: "in_progress", slaDueAt: null });
+    ticket = (await hydrate(db)).TICKETS.find((t) => t.id === request.id)!;
+    expect([ticket.status, ticket.slaDueAt]).toEqual(["in_progress", null]);
+    // Closed: not set aside; a day that is not one, and another workspace's request, are refused.
+    await setRequestStatus(ctx, request.id, "resolved");
+    expect(await setRequestFollowUp(ctx, request.id, { waiting: true })).toEqual({ error: "request_closed" });
+    expect(statusOfFailure("request_closed")).toBe(409);
+    expect(await setRequestFollowUp(ctx, request.id, { dueOn: "demain" })).toEqual({ error: "invalid" });
+    expect(await setRequestFollowUp(ctxFor(db, OTHER_ORG), request.id, { dueOn: "2026-12-03" })).toEqual({ error: "not_found" });
+    expect(await setRequestFollowUp(ctx, request.id, {})).toEqual({ error: "invalid" });
   });
 
   it("keeps a message once when the same draft is sent again with its id, on both sides, and nobody is told twice", async () => {
