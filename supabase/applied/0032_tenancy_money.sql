@@ -8,7 +8,9 @@
 --  1. payments : colonnes d'annulation (qui, quand, pourquoi) et clé de
 --     requête ; un seul paiement vivant par opération bancaire ; une seule
 --     écriture par clé de requête.
---  2. leases.ledger_from : le mois à partir duquel Morada suit les loyers.
+--  2. leases.ledger_from : le mois à partir duquel Morada suit les loyers ;
+--     rent_periods.adjusted_at, adjusted_by, adjust_reason : le montant d'un
+--     mois fixé à la main, avec sa raison.
 --  3. vue lease_credit : l'argent reçu au-delà de ce qui était dû, par bail.
 --  4. apply_lease_credit : répartit l'argent non affecté d'un bail sur ses
 --     échéances ouvertes, la plus ancienne d'abord.
@@ -55,6 +57,7 @@
 --   drop index gestion.payments_bank_transaction_live_key, gestion.payments_request_key;
 --   alter table gestion.payments drop column cancelled_at, drop column cancelled_by, drop column cancel_reason, drop column request_key;
 --   alter table gestion.leases drop column ledger_from;
+--   alter table gestion.rent_periods drop column adjusted_at, drop column adjusted_by, drop column adjust_reason;
 --   puis réappliquer le corps de roll_rent_periods de 0013.
 
 -- ---------------------------------------------------------------------------
@@ -87,6 +90,15 @@ alter table gestion.leases add column if not exists ledger_from date;
 
 comment on column gestion.leases.ledger_from is
   'Premier mois dont Morada suit le loyer (premier jour du mois). Nul : le premier mois déjà ouvert, sinon le début du bail.';
+
+-- Le montant d'un mois fixé à la main (le premier ou le dernier mois au
+-- prorata, un mois remis) : qui, quand, pourquoi.
+alter table gestion.rent_periods add column if not exists adjusted_at timestamptz;
+alter table gestion.rent_periods add column if not exists adjusted_by uuid;
+alter table gestion.rent_periods add column if not exists adjust_reason text;
+
+comment on column gestion.rent_periods.adjust_reason is
+  'Pourquoi le montant du mois a été fixé à la main (prorata du premier ou du dernier mois, remise). Avec adjusted_at et adjusted_by.';
 
 -- ---------------------------------------------------------------------------
 -- 3. Le crédit d'un bail : reçu, pas encore affecté

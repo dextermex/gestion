@@ -4,6 +4,7 @@ import { validateLeaseDraft, type ValidationIssue } from "@/domain/lease/rules";
 import { leaseRF } from "@/domain/banking/rf";
 import { getParamValue } from "@/domain/legal/params";
 import { dueDateFor, ledgerMonths } from "@/lib/gestion/ledger";
+import { monthShare, prorate } from "@/domain/lease/prorata";
 import { todayISO } from "@/lib/clock";
 import { depositTransitionAllowed } from "@/lib/gestion/deposits";
 import type { DepositStatus } from "@/lib/types";
@@ -618,6 +619,77 @@ export async function discardDraft(
   }
   if (!gone?.length) return { error: "not_found" };
   return { ok: true };
+}
+
+/**
+ * One month's amount set by hand: the first or last month of a tenancy that
+ * covers it only in part (`prorata`: cut to the days covered, from the
+ * month's own amounts), or any amount the owner states with a reason (a
+ * month waived, a rent agreed for that month). Only a month nothing was paid
+ * on and not written off; a month already set to its share is not cut again.
+ * The reason, the author and the day are kept with the month.
+ */
+export async function adjustPeriod(
+  ctx: OrgContext,
+  leaseId: string,
+  periodId: string,
+  input: { prorata: true; reason?: string } | { prorata?: false; rentCents: number; chargesCents: number; reason: string },
+): Promise<
+  | { ok: true; rentCents: number; chargesCents: number }
+  | { error: "not_found" | "paid" | "written_off" | "not_partial" | "already_adjusted" | "invalid" | "storage_failed" }
+> {
+  const { g, org } = ctx;
+  const [{ data: lease, error: leaseErr }, { data: period, error: periodErr }] = await Promise.all([
+    g.from("leases").select("id,status,start_date,end_date").eq("org_id", org.id).eq("id", leaseId).maybeSingle(),
+    g.from("rent_periods").select("*").eq("org_id", org.id).eq("lease_id", leaseId).eq("id", periodId).maybeSingle(),
+  ]);
+  if (leaseErr || periodErr) {
+    const e = leaseErr ?? periodErr;
+    if (e?.code === "22P02") return { error: "not_found" };
+    console.error("period adjust lookup failed:", e?.code, e?.message);
+    return { error: "storage_failed" };
+  }
+  if (!lease || !period) return { error: "not_found" };
+  if (period.written_off) return { error: "written_off" };
+  const { data: allocs, error: allocErr } = await g.from("payment_allocations").select("amount_cents,reversed_at").eq("org_id", org.id).eq("rent_period_id", periodId);
+  if (allocErr) {
+    console.error("period adjust allocations lookup failed:", allocErr.code, allocErr.message);
+    return { error: "storage_failed" };
+  }
+  if (((allocs as Array<{ amount_cents: number; reversed_at: string | null }> | null) ?? []).some((a) => !a.reversed_at && a.amount_cents > 0)) return { error: "paid" };
+
+  let rentCents: number;
+  let chargesCents: number;
+  let reason: string;
+  if (input.prorata) {
+    if (period.adjusted_at) return { error: "already_adjusted" };
+    const share = monthShare(String(period.period).slice(0, 10), String(lease.start_date).slice(0, 10), lease.end_date ? String(lease.end_date).slice(0, 10) : null);
+    if (!share) return { error: "not_partial" };
+    rentCents = prorate(Number(period.rent_cents) || 0, share);
+    chargesCents = prorate(Number(period.charges_cents) || 0, share);
+    reason = (input.reason ?? "").trim().slice(0, 300) || `prorata ${share.days}/${share.daysInMonth}`;
+  } else {
+    rentCents = input.rentCents;
+    chargesCents = input.chargesCents;
+    reason = input.reason.trim().slice(0, 300);
+    if (!Number.isSafeInteger(rentCents) || rentCents < 0 || !Number.isSafeInteger(chargesCents) || chargesCents < 0 || reason === "") return { error: "invalid" };
+  }
+
+  const amounts = { rent_cents: rentCents, charges_cents: chargesCents };
+  let { data, error } = await g
+    .from("rent_periods")
+    .update({ ...amounts, adjusted_at: new Date().toISOString(), adjusted_by: ctx.userId, adjust_reason: reason })
+    .eq("org_id", org.id)
+    .eq("id", periodId)
+    .select("id");
+  // A base without the columns of 0032: the amounts alone.
+  if (error && (error.code === "PGRST204" || error.code === "42703")) ({ data, error } = await g.from("rent_periods").update(amounts).eq("org_id", org.id).eq("id", periodId).select("id"));
+  if (error) {
+    console.error("period adjust failed:", error.code, error.message);
+    return { error: "storage_failed" };
+  }
+  if (!data?.length) return { error: "not_found" };
+  return { ok: true, rentCents, chargesCents };
 }
 
 /** The places a person can take on a tenancy in force, after it started. */

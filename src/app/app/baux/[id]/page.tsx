@@ -6,6 +6,8 @@ import InvitePanel from "@/components/gestion/InvitePanel";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
 import PaymentsPanel from "@/components/gestion/PaymentsPanel";
 import LeaseParties from "@/components/gestion/LeaseParties";
+import PeriodAdjust from "@/components/gestion/PeriodAdjust";
+import { monthShare, prorate } from "@/domain/lease/prorata";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
 import {
@@ -328,13 +330,39 @@ export default async function BailDetailPage({
               </p>
             )}
             <ul className="divide-y divide-sand-100">
-              {periods.map((rp) => (
-                <li key={rp.id} className="flex items-center gap-3 py-2.5 text-sm">
-                  <p className="min-w-0 flex-1 text-ink">{formatMonth(rp.period, locale)}</p>
-                  <p className="tabular-nums text-ink">{euros(rp.totalCents, locale)}</p>
-                  <MetaBadge meta={rentMeta[rp.status]} />
-                </li>
-              ))}
+              {periods.map((rp) => {
+                // A month nothing was paid on can be set by hand; the first and last month of the tenancy, to their days.
+                const share = monthShare(rp.period, l.startDate, l.endDate);
+                const adjustable = !sample && rp.allocatedCents === 0 && rp.status !== "written_off" && rp.status !== "paid";
+                return (
+                  <li key={rp.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm" data-period={rp.id}>
+                    <p className="min-w-0 flex-1 text-ink">{formatMonth(rp.period, locale)}</p>
+                    <p className="tabular-nums text-ink">{euros(rp.totalCents, locale)}</p>
+                    <MetaBadge meta={rentMeta[rp.status]} />
+                    {adjustable && (
+                      <PeriodAdjust
+                        leaseId={l.id}
+                        periodId={rp.id}
+                        rent={(rp.rentCents / 100).toFixed(2).replace(".", ",")}
+                        charges={(rp.chargesCents / 100).toFixed(2).replace(".", ",")}
+                        prorata={share ? fmt(d.baux.periodProrata, { days: share.days, total: share.daysInMonth, amount: euros(prorate(rp.rentCents, share) + prorate(rp.chargesCents, share) + rp.vatCents, locale) }) : null}
+                        labels={{
+                          adjust: d.baux.periodAdjust,
+                          rent: d.location.rent,
+                          charges: d.location.charges,
+                          reason: d.baux.periodReason,
+                          save: d.baux.periodSave,
+                          cancel: d.common.cancel,
+                          failed: d.baux.periodAdjustFailed,
+                          paid: d.baux.periodPaid,
+                          already: d.baux.periodAlready,
+                          invalid: d.baux.periodInvalid,
+                        }}
+                      />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </Panel>
           {/* What was received, payment by payment: the one place a mistake is corrected. */}

@@ -217,3 +217,54 @@ describe("the arrears ladder and the adjustment letter", () => {
     expect(lease.rent_cents).toBe(128000);
   });
 });
+
+describe("setting one month's amount", () => {
+  let db: FakeDb;
+  let leaseId: string;
+  // A tenancy that began on the 17th of this month.
+  const start = `${thisMonth.slice(0, 7)}-17`;
+
+  beforeEach(async () => {
+    db = new FakeDb(today < start ? start : today);
+    current = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    leaseId = (await letTo(current, unitId, [ANNA], "1 250", start)).leaseId;
+  });
+
+  const first = () => db.table("rent_periods").find((rp) => rp.lease_id === leaseId && rp.period === thisMonth)!;
+  const adjust = async (periodId: unknown, body: Record<string, unknown>) => {
+    const { PATCH } = await import("@/app/api/baux/[id]/echeances/[periodId]/route");
+    return PATCH(call(`/api/baux/${leaseId}/echeances/${String(periodId)}`, "PATCH", body), params({ id: leaseId, periodId: String(periodId) }));
+  };
+
+  it("cuts the first month to the days the tenancy covers, once, and keeps why", async () => {
+    const res = await adjust(first().id, { prorata: true });
+    expect(res.status).toBe(200);
+    const days = Number(addDays(addMonths(thisMonth, 1), -1).slice(8)) - 16;
+    const total = Number(addDays(addMonths(thisMonth, 1), -1).slice(8));
+    expect(first()).toMatchObject({ rent_cents: Math.round((125000 * days) / total), charges_cents: Math.round((15000 * days) / total), adjust_reason: `prorata ${days}/${total}` });
+    expect(first().adjusted_at).not.toBeNull();
+    expect((await adjust(first().id, { prorata: true })).status).toBe(409);
+    // Next month is covered whole: nothing to cut.
+    const next = db.table("rent_periods").find((rp) => rp.lease_id === leaseId && rp.period === addMonths(thisMonth, 1))!;
+    expect(((await (await adjust(next.id, { prorata: true })).json()) as { error: string }).error).toBe("not_partial");
+  });
+
+  it("takes an amount stated with its reason, never on a month something was paid on", async () => {
+    expect((await adjust(first().id, { rent: "600", charges: "0" })).status).toBe(400);
+    expect((await adjust(first().id, { rent: "600", charges: "0", reason: "Arrivée en cours de mois" })).status).toBe(200);
+    expect(first()).toMatchObject({ rent_cents: 60000, charges_cents: 0, total_cents: 60000 });
+    db.insertRow("payments", { id: "pay-1", org_id: ORG, lease_id: leaseId, received_on: db.today, amount_cents: 100, method: "transfer" });
+    db.insertRow("payment_allocations", { org_id: ORG, payment_id: "pay-1", rent_period_id: first().id, amount_cents: 100 });
+    const refused = await adjust(first().id, { rent: "500", charges: "0", reason: "Autre" });
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toBe("paid");
+    expect((await adjust("nope", { prorata: true })).status).toBe(404);
+  });
+
+  it("writes the amounts alone on a base without the trace columns", async () => {
+    db.absentColumns.set("rent_periods", new Set(["adjusted_at", "adjusted_by", "adjust_reason"]));
+    expect((await adjust(first().id, { rent: "700", charges: "50", reason: "Accord" })).status).toBe(200);
+    expect(first()).toMatchObject({ rent_cents: 70000, charges_cents: 5000 });
+  });
+});
