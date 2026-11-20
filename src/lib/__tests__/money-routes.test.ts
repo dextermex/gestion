@@ -268,3 +268,41 @@ describe("setting one month's amount", () => {
     expect(first()).toMatchObject({ rent_cents: 70000, charges_cents: 5000 });
   });
 });
+
+describe("importing a statement", () => {
+  let db: FakeDb;
+  const csv = [
+    "Booking date,Amount,Counterparty name,Remittance information,End to end id",
+    "2026-07-01,1250.00,Ana Santos,Loyer,NOTPROVIDED",
+    "2026-08-01,1250.00,Ana Santos,Loyer,NOTPROVIDED",
+    "2026-09-01,1250.00,Ana Santos,Loyer,NOTPROVIDED",
+  ].join("\n");
+
+  beforeEach(() => {
+    db = new FakeDb(today);
+    current = ctxFor(db);
+    db.insertRow("bank_accounts", { id: "acc-1", org_id: ORG, label: "Compte", iban: "LU280019400644750000", holder_name_verbatim: "Cabinet", kind: "operating", provider: "manual" });
+  });
+
+  const send = async (body: string) => {
+    const { POST } = await import("@/app/api/banque/import/route");
+    const form = new FormData();
+    form.set("bankAccountId", "acc-1");
+    form.set("file", new File([body], "releve.csv", { type: "text/csv" }));
+    const res = await POST(new NextRequest("https://app.morada.lu/api/banque/import", { method: "POST", body: form }));
+    return { status: res.status, body: (await res.json()) as { imported: number; skipped: number } };
+  };
+
+  it("keeps three transfers that share a reference, and lands a statement imported twice once", async () => {
+    expect(await send(csv)).toMatchObject({ status: 200, body: { imported: 3, skipped: 0 } });
+    expect(db.table("bank_transactions").map((t) => t.end_to_end_id)).toEqual(["NOTPROVIDED", "NOTPROVIDED", "NOTPROVIDED"]);
+    expect(await send(csv)).toMatchObject({ status: 200, body: { imported: 0, skipped: 3 } });
+  });
+
+  it("recognises an operation imported earlier under its reference alone", async () => {
+    db.insertRow("bank_transactions", { org_id: ORG, bank_account_id: "acc-1", bank_tx_id: "TX-1", booked_on: "2026-07-01", amount_cents: 125000, match_status: "unmatched" });
+    const body = ["Booking date,Amount,Counterparty name,Remittance information,Transaction id", "2026-07-01,1250.00,Ana Santos,Loyer,TX-1", "2026-08-01,1250.00,Ana Santos,Loyer,TX-2"].join("\n");
+    expect(await send(body)).toMatchObject({ status: 200, body: { imported: 1, skipped: 1 } });
+    expect(db.table("bank_transactions")).toHaveLength(2);
+  });
+});

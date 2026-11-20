@@ -78,9 +78,27 @@ describe("statements", () => {
     ].join("\r\n");
     const { rows } = parseStatementCsv(csv);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ bookedOn: "2026-09-01", amountCents: 140000, counterpartyName: "Santos, Ana", remittanceInfo: "Loyer septembre, apt 2A", reference: "TX-0001", txId: "TX-0001" });
+    expect(rows[0]).toMatchObject({ bookedOn: "2026-09-01", amountCents: 140000, counterpartyName: "Santos, Ana", remittanceInfo: "Loyer septembre, apt 2A", reference: "TX-0001" });
     expect(rows[1].counterpartyIban).toBeNull();
-    expect(rows[1].txId).toBe("TX-0002");
+    expect(rows[0].txId.startsWith("csv:")).toBe(true);
+    expect(rows[0].txId).not.toBe(rows[1].txId);
+  });
+
+  it("never takes a repeating reference for the operation's identity", () => {
+    // A standing order: the same reference, the same amount, month after month; and the SEPA default.
+    const csv = [
+      "Booking date,Amount,Counterparty name,Remittance information,End to end id",
+      "2026-07-01,1250.00,Ana Santos,Loyer,RF18539007547034",
+      "2026-08-01,1250.00,Ana Santos,Loyer,RF18539007547034",
+      "2026-09-01,1250.00,Ana Santos,Loyer,RF18539007547034",
+      "2026-09-03,80.00,Luc Weber,Charges,NOTPROVIDED",
+      "2026-09-04,80.00,Luc Weber,Charges,NOTPROVIDED",
+    ].join("\n");
+    const first = parseStatementCsv(csv);
+    expect(new Set(first.rows.map((r) => r.txId)).size).toBe(5);
+    expect(first.rows.every((r) => r.reference !== null)).toBe(true);
+    // The same statement imported again gives the same ids: it lands once.
+    expect(parseStatementCsv(csv).rows.map((r) => r.txId)).toEqual(first.rows.map((r) => r.txId));
   });
 
   it("reads a German export", () => {

@@ -151,6 +151,7 @@ const GENERATED: Record<string, (row: Row) => void> = {
 const UNIQUE: Record<string, string[][]> = {
   rent_periods: [["lease_id", "period"]],
   arrears_actions: [["rent_period_id", "stage"]],
+  bank_transactions: [["bank_account_id", "bank_tx_id"]],
   iban_bindings: [["org_id", "payer_iban", "lease_id"]],
   workspace_settings: [["org_id"]],
   template_validations: [["org_id", "kind", "lang"]],
