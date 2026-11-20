@@ -4,6 +4,7 @@ import GestionShell from "@/components/gestion/Shell";
 import ProvisionError from "@/components/gestion/ProvisionError";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
+import DegradedNote from "@/components/gestion/DegradedNote";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
@@ -123,6 +124,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <GestionShell locale={locale} dict={d} shell={shellData}>
+      {/* The workspace could not be read at all: an empty screen is said to be a failed read. Loyers and Accueil say their own partial failures. */}
+      <DegradedNote tables={demo.DEGRADED.includes("hydration") ? demo.DEGRADED : []} d={d} />
       {children}
     </GestionShell>
   );

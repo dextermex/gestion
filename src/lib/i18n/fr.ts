@@ -169,6 +169,8 @@ export const fr = {
     datasetReal: "Réel",
     datasetRealDesc: "Vos données. Vide tant que rien n'est enregistré.",
     sampleBanner: "Données d'exemple : {cabinet}. Rien de ce que vous voyez ici n'est réel et rien n'est enregistré.",
+    degradedAll: "Vos données n'ont pas pu être lues : l'espace s'affiche vide alors qu'il ne l'est pas. Rechargez la page dans un instant.",
+    degradedSome: "Une partie de vos données n'a pas pu être lue : les montants et les listes de cette page peuvent être incomplets. Rechargez la page dans un instant.",
     sampleBack: "Revenir à mes données",
     datasetBeta: "Bêta",
     datasetFr: "Cabinet francophone",

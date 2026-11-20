@@ -106,3 +106,37 @@ describe("an archived property", () => {
     expect(demo.DEPOSITS).toEqual([]);
   });
 });
+
+describe("a read that fails", () => {
+  it("is named, so the screens say their figures are incomplete, instead of passing for an empty ledger", async () => {
+    const db = new FakeDb(today);
+    const ctx = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    await letTo(ctx, unitId, [{ firstName: "Anna", lastName: "Weber" }]);
+    expect((await hydrate(db)).DEGRADED).toEqual([]);
+    db.failing.add("rent_period_status");
+    const demo = await hydrate(db);
+    expect(demo.DEGRADED).toContain("rent_period_status");
+    // A table the base does not carry yet is a pending migration, not a failure.
+    db.failing.clear();
+    db.absent.add("lease_credit");
+    expect((await hydrate(db)).DEGRADED).toEqual([]);
+  });
+});
+
+describe("a large workspace", () => {
+  it("reads every rent period of the window, the newest months included, past the server's page size", async () => {
+    const db = new FakeDb(today);
+    const property = db.insertRow("properties", { org_id: ORG, name: "Résidence", type: "apartment_building", address: {}, commune: "Esch" });
+    const month = `${today.slice(0, 7)}-01`;
+    for (let i = 0; i < 1100; i++) {
+      const unit = db.insertRow("units", { org_id: ORG, property_id: property.id, label: `Lot ${i}` });
+      const lease = db.insertRow("leases", { org_id: ORG, unit_id: unit.id, status: "active", start_date: month, rent_cents: 90000 });
+      db.insertRow("rent_periods", { org_id: ORG, lease_id: lease.id, period: month, due_date: month, rent_cents: 90000 });
+    }
+    const demo = await hydrate(db);
+    expect(demo.RENT_PERIODS).toHaveLength(1100);
+    expect(demo.RENT_PERIODS.filter((rp) => rp.period === today.slice(0, 7))).toHaveLength(1100);
+    expect(demo.DEGRADED).toEqual([]);
+  });
+});

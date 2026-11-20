@@ -16,6 +16,7 @@ const today = new Date().toISOString().slice(0, 10);
 const text = (html: string): string => html.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 
 let dueDate = addDays(today, 3);
+let degraded: string[] = [];
 
 function account(): DemoData {
   const data = buildEmptyData(orgFromWorkspace({ id: "org-1", name: "Espace test", kind: "manager" }));
@@ -27,6 +28,7 @@ function account(): DemoData {
   return {
     ...data,
     TODAY: today,
+    DEGRADED: degraded,
     CONTACTS: [{ id: "c-tenant", kind: "natural", name: "Lena Schmit", email: null, phone: null, language: "fr", roles: ["tenant"] }],
     LEASES: [lease],
     RENT_PERIODS: [
@@ -46,6 +48,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }), us
 describe("Loyers and a month part-paid", () => {
   beforeEach(() => {
     dueDate = addDays(today, 3);
+    degraded = [];
   });
 
   it("lists it as still to come before its due date, with nobody late", async () => {
@@ -53,6 +56,13 @@ describe("Loyers and a month part-paid", () => {
     const html = text(renderToString(await Page({ searchParams: Promise.resolve({}) })));
     expect(html).not.toContain(fmt(fr.loyers.chipLate, { n: 1 }));
     expect(html).toContain(fr.loyers.groupUpcoming);
+  });
+
+  it("says when a read failed and the figures may be short", async () => {
+    const { default: Page } = await import("@/app/app/loyers/page");
+    expect(text(renderToString(await Page({ searchParams: Promise.resolve({}) })))).not.toContain(fr.shell.degradedSome);
+    degraded = ["rent_period_status"];
+    expect(text(renderToString(await Page({ searchParams: Promise.resolve({}) })))).toContain(fr.shell.degradedSome);
   });
 
   it("counts it late from the day after it fell due", async () => {

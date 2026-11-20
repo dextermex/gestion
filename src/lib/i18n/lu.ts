@@ -168,6 +168,8 @@ export const lu: Dict = {
     datasetReal: "Richteg",
     datasetRealDesc: "Är eege Donnéeën. Eidel, soulaang näischt agedroe ass.",
     sampleBanner: "Beispilldonnéeën: {cabinet}. Näischt dovun ass richteg, a näischt gëtt gespäichert.",
+    degradedAll: "Är Donnéeë konnten net gelies ginn: de Beräich gesäit eidel aus, och wann e net eidel ass. Lued d'Säit an engem Moment nei.",
+    degradedSome: "En Deel vun Ären Donnéeë konnt net gelies ginn: d'Beträg an d'Lëschten op dëser Säit kënnen onvollstänneg sinn. Lued d'Säit an engem Moment nei.",
     sampleBack: "Zréck op meng Donnéeën",
     datasetBeta: "Beta",
     datasetFr: "Frankophone Cabinet",

@@ -3,6 +3,7 @@ import { EmptyState, PageHeader } from "@/components/pro/ui";
 import { Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Row, Rows, Section } from "@/components/gestion/Hero";
 import MonthBars, { type MonthBar } from "@/components/gestion/MonthBars";
 import GlassHouse from "@/components/gestion/GlassHouse";
+import DegradedNote from "@/components/gestion/DegradedNote";
 import { Icon, type IconName } from "@/components/pro/icons";
 import { getDemo } from "@/lib/demo";
 import { getIdentity } from "@/lib/workspace";
@@ -288,6 +289,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="space-y-9">
+      {/* A read of this page failed (the shell says when the whole workspace could not be read). */}
+      <DegradedNote tables={demo.DEGRADED.filter((t) => t !== "hydration")} d={d} />
       {/* The month, in the one raised card of the page: what came in, of what, who is late, how full the lots are. */}
       <Hero
         title={d.nav.home}

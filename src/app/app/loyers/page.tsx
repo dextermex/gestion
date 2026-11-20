@@ -2,6 +2,7 @@ import Link from "next/link";
 import ArrearsActions, { type ArrearsLabels } from "@/components/gestion/ArrearsActions";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { LegalNote } from "@/components/gestion/bits";
+import DegradedNote from "@/components/gestion/DegradedNote";
 import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Rows, Step, Steps } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { euros, eurosWhole, formatDate, formatMonth, initials, rentStatusMeta } from "@/lib/types";
@@ -19,7 +20,7 @@ export default async function LoyersPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { ARREARS_ACTIONS, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { ARREARS_ACTIONS, DEGRADED, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const rentMeta = rentStatusMeta(d);
   // The live month and its four neighbours, derived from today — the demo
@@ -240,6 +241,8 @@ export default async function LoyersPage({
 
   return (
     <div className="space-y-8">
+      {/* A read of this page failed (the shell says when the whole workspace could not be read). */}
+      <DegradedNote tables={DEGRADED.filter((t) => t !== "hydration")} d={d} />
       <Hero
         title={d.loyers.title}
         top={

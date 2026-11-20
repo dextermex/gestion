@@ -204,6 +204,8 @@ export class FakeDb {
   readonly absent = new Set<string>();
   /** Columns the base does not carry yet, by table: a read naming one or a write setting one fails as PostgREST says. */
   readonly absentColumns = new Map<string, Set<string>>();
+  /** Tables whose every query fails as an unreachable base does (a timeout, a dropped connection). */
+  readonly failing = new Set<string>();
   private leaseSeq = 0;
 
   constructor(public today: string) {}
@@ -1142,6 +1144,7 @@ class FakeQuery implements PromiseLike<Result> {
 
   private run(): Result {
     if (this.db.absent.has(this.table)) return { data: null, error: { code: "PGRST205", message: `Could not find the table 'gestion.${this.table}' in the schema cache` } };
+    if (this.db.failing.has(this.table)) return { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } };
     // A column the base does not carry yet: named in a read, it is unknown; written, PostgREST does not find it.
     const missing = this.db.absentColumns.get(this.table);
     if (missing) {
