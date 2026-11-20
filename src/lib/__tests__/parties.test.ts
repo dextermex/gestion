@@ -133,3 +133,22 @@ describe("the people on a tenancy in force", () => {
     expect(db.table("portal_invites").filter((i) => i.contact_id === annaContact && !i.accepted_at).every((i) => i.revoked_at != null)).toBe(true);
   });
 });
+
+describe("a dossier save whose writes did not all land", () => {
+  it("fails on the step the write belongs to, and names it on another", async () => {
+    const db = new FakeDb(today);
+    const ctx = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    db.failing.add("deposits");
+    const atGuarantee = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "guarantee", tenants: [ANNA], rent: "1 000", startDate: today, depositMonths: 2, depositForm: "cash" }));
+    expect(atGuarantee).toMatchObject({ error: "storage_failed" });
+    const atRent = await saveRentalDraft(ctx, fr, dossier({ unitId, step: "rent", tenants: [ANNA], rent: "1 000", startDate: today, depositMonths: 2 }));
+    if ("error" in atRent) throw new Error(atRent.error);
+    expect(atRent.pending).toEqual(["deposit"]);
+    db.failing.clear();
+    const again = await saveRentalDraft(ctx, fr, dossier({ unitId, leaseId: atRent.leaseId, step: "guarantee", tenants: [{ ...ANNA, contactId: atRent.contactIds[0] }], rent: "1 000", startDate: today, depositMonths: 2 }));
+    if ("error" in again) throw new Error(again.error);
+    expect(again.pending).toEqual([]);
+    expect(db.table("deposits")).toHaveLength(1);
+  });
+});
