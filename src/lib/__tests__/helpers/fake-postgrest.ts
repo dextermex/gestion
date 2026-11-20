@@ -715,8 +715,8 @@ class FakeQuery implements PromiseLike<Result> {
   private ignoreDuplicates = false;
   private wantRows = false;
   private shape: "single" | "maybe" | null = null;
-  private orderKey: string | null = null;
-  private orderAsc = true;
+  /** PostgREST's order: the first key decides, the next ones break ties. */
+  private orders: Array<{ key: string; asc: boolean }> = [];
   private limitN: number | null = null;
 
   constructor(
@@ -836,8 +836,7 @@ class FakeQuery implements PromiseLike<Result> {
     return this;
   }
   order(key: string, opts?: { ascending?: boolean }): this {
-    this.orderKey = key;
-    this.orderAsc = opts?.ascending !== false;
+    this.orders.push({ key, asc: opts?.ascending !== false });
     return this;
   }
   limit(count: number): this {
@@ -893,10 +892,20 @@ class FakeQuery implements PromiseLike<Result> {
         case "select": {
           let rows = this.matching();
           const total = rows.length;
-          if (this.orderKey) {
-            const k = this.orderKey;
-            rows = rows.slice().sort((a, b) => (String(a[k]) < String(b[k]) ? -1 : String(a[k]) > String(b[k]) ? 1 : 0));
-            if (!this.orderAsc) rows.reverse();
+          const cmp = (a: Row, b: Row, k: string) => (String(a[k]) < String(b[k]) ? -1 : String(a[k]) > String(b[k]) ? 1 : 0);
+          if (this.orders.length === 1) {
+            // One key: ascending, reversed when descending (ties come back reversed too, as the suites expect).
+            const k = this.orders[0].key;
+            rows = rows.slice().sort((a, b) => cmp(a, b, k));
+            if (!this.orders[0].asc) rows.reverse();
+          } else if (this.orders.length > 1) {
+            rows = rows.slice().sort((a, b) => {
+              for (const o of this.orders) {
+                const c = cmp(a, b, o.key);
+                if (c !== 0) return o.asc ? c : -c;
+              }
+              return 0;
+            });
           }
           if (this.rangeFrom !== null && this.rangeTo !== null) rows = rows.slice(this.rangeFrom, this.rangeTo + 1);
           if (this.limitN !== null) rows = rows.slice(0, this.limitN);
