@@ -144,6 +144,8 @@ interface LedgerLease {
   paymentDay: number;
   /** The month rent tracking starts from (YYYY-MM-01); absent, the lease's own start. */
   ledgerFrom?: string | null;
+  /** A rent recorded ahead: the months from it open at that amount. */
+  rentChange?: RentChange | null;
 }
 
 /**
@@ -162,8 +164,8 @@ export async function openLedger(ctx: OrgContext, lease: LedgerLease, today: str
     lease_id: lease.id,
     period: m,
     due_date: dueDateFor(m, lease.paymentDay, lease.startDate),
-    rent_cents: lease.rentCents,
-    charges_cents: lease.chargesCents,
+    rent_cents: lease.rentChange && m >= lease.rentChange.from ? lease.rentChange.rentCents : lease.rentCents,
+    charges_cents: lease.rentChange && m >= lease.rentChange.from ? lease.rentChange.chargesCents : lease.chargesCents,
     other_cents: 0,
     vat_cents: 0,
   }));
@@ -890,15 +892,15 @@ export async function closeLease(
     // date had taken out of the ledger is opened again.
     const { data: lease, error: leaseErr } = await g
       .from("leases")
-      .select("id,start_date,end_date,rent_cents,charges_cents,payment_day,ledger_from")
+      .select("id,start_date,end_date,rent_cents,charges_cents,payment_day,ledger_from,details")
       .eq("org_id", org.id)
       .eq("id", leaseId)
       .maybeSingle();
     if (leaseErr || !lease) {
       result.pending.push("ledger");
     } else {
-      const row = lease as LeaseRow & { ledger_from?: string | null };
-      await openLedger(ctx, { id: row.id, startDate: row.start_date, endDate: row.end_date, rentCents: row.rent_cents, chargesCents: row.charges_cents, paymentDay: row.payment_day, ledgerFrom: row.ledger_from ?? null }, today);
+      const row = lease as LeaseRow & { ledger_from?: string | null; details?: unknown };
+      await openLedger(ctx, { id: row.id, startDate: row.start_date, endDate: row.end_date, rentCents: row.rent_cents, chargesCents: row.charges_cents, paymentDay: row.payment_day, ledgerFrom: row.ledger_from ?? null, rentChange: readRentChange(row.details) }, today);
     }
     return result;
   }
@@ -959,10 +961,14 @@ export async function repriceOpenPeriods(
   rentCents: number,
   chargesCents: number,
   fromMonth: string,
+  /** When given, a period that fell due before this day keeps its amount (a change the owner types, not a legal effect date). */
+  notDueBefore: string | null = null,
 ): Promise<number> {
   const { g, org } = ctx;
   const [{ data: periods, error: pErr }, { data: statuses, error: sErr }] = await Promise.all([
-    g.from("rent_periods").select("id,period").eq("org_id", org.id).eq("lease_id", leaseId).gte("period", fromMonth),
+    (notDueBefore
+      ? g.from("rent_periods").select("id,period").eq("org_id", org.id).eq("lease_id", leaseId).gte("period", fromMonth).gte("due_date", notDueBefore)
+      : g.from("rent_periods").select("id,period").eq("org_id", org.id).eq("lease_id", leaseId).gte("period", fromMonth)),
     g.from("rent_period_status").select("id,allocated_cents").eq("lease_id", leaseId),
   ]);
   if (pErr || sErr) {
@@ -992,8 +998,87 @@ export async function repriceOpenPeriods(
 }
 
 /** The month a change takes effect from: today's month, or later. */
-export function effectiveMonth(from: string | null): string {
-  const today = todayISO().slice(0, 7);
+export function effectiveMonth(from: string | null, today: string = todayISO()): string {
+  const month = today.slice(0, 7);
   const asked = (from ?? "").slice(0, 7);
-  return asked && asked > today ? `${asked}-01` : `${today}-01`;
+  return /^\d{4}-\d{2}$/.test(asked) && asked > month ? `${asked}-01` : `${month}-01`;
+}
+
+/** A rent recorded ahead of the month it applies from, kept on the lease until then (`details.rentChange`). */
+export interface RentChange {
+  from: string;
+  rentCents: number;
+  chargesCents: number;
+}
+
+export function readRentChange(details: unknown): RentChange | null {
+  const raw = (details as Record<string, unknown> | null)?.rentChange as Record<string, unknown> | undefined;
+  if (!raw || typeof raw.from !== "string" || !/^\d{4}-\d{2}-01$/.test(raw.from)) return null;
+  const rent = Number(raw.rentCents);
+  const charges = Number(raw.chargesCents);
+  if (!Number.isSafeInteger(rent) || rent <= 0 || !Number.isSafeInteger(charges) || charges < 0) return null;
+  return { from: raw.from, rentCents: rent, chargesCents: charges };
+}
+
+/**
+ * What a rent or charges change writes, by its month.
+ *
+ * The lease row carries the rent in force today: that is what the tenant
+ * reads and what the nightly roll opens months at. A change from this month
+ * is written there at once; a change from a later month waits on the lease
+ * (`details.rentChange`), the roll opens the months from it at the new
+ * amount and makes it the rent in force on its first day. Either way, the
+ * periods already open from that month are re-priced, except those that
+ * fell due already or carry money: a month owed or paid keeps its amount.
+ */
+export function rentChangePatch(
+  lease: { rentCents: number; chargesCents: number; details: Record<string, unknown> | null },
+  next: { rentCents: number; chargesCents: number },
+  fromMonth: string,
+  today: string,
+): Record<string, unknown> {
+  const details = { ...(lease.details ?? {}) };
+  delete details.rentChange;
+  const patch: Record<string, unknown> = {};
+  if (fromMonth <= `${today.slice(0, 7)}-01`) {
+    if (next.rentCents !== lease.rentCents) {
+      // The previous rent is what an indexation lag is detected against.
+      patch.previous_rent_cents = lease.rentCents;
+      patch.rent_cents = next.rentCents;
+    }
+    if (next.chargesCents !== lease.chargesCents) patch.charges_cents = next.chargesCents;
+  } else {
+    details.rentChange = { from: fromMonth, rentCents: next.rentCents, chargesCents: next.chargesCents };
+  }
+  if (JSON.stringify(details) !== JSON.stringify(lease.details ?? {})) patch.details = details;
+  return patch;
+}
+
+/**
+ * A new payment day moves the due dates of the months still to come, never
+ * one already due or carrying money, and never onto a day already behind
+ * (a month cannot become late by being re-dated). Returns how many moved.
+ */
+export async function redateOpenPeriods(ctx: OrgContext, leaseId: string, paymentDay: number, startDate: string, today: string): Promise<number> {
+  const { g, org } = ctx;
+  const [{ data: periods, error: pErr }, { data: statuses, error: sErr }] = await Promise.all([
+    g.from("rent_periods").select("id,period,due_date").eq("org_id", org.id).eq("lease_id", leaseId).gte("due_date", today),
+    g.from("rent_period_status").select("id,allocated_cents").eq("lease_id", leaseId),
+  ]);
+  if (pErr || sErr) {
+    console.error("redate lookup failed:", pErr?.message ?? sErr?.message);
+    return 0;
+  }
+  const allocated = new Map<string, number>();
+  for (const row of (statuses as Array<{ id: string; allocated_cents: number }> | null) ?? []) allocated.set(row.id, row.allocated_cents ?? 0);
+  let moved = 0;
+  for (const p of (periods as Array<{ id: string; period: string; due_date: string }> | null) ?? []) {
+    if ((allocated.get(p.id) ?? 0) > 0) continue;
+    const due = dueDateFor(String(p.period).slice(0, 10), paymentDay, startDate);
+    if (due === String(p.due_date).slice(0, 10) || due < today) continue;
+    const { error } = await g.from("rent_periods").update({ due_date: due }).eq("org_id", org.id).eq("id", p.id);
+    if (error) console.error("redate failed:", error.code, error.message);
+    else moved += 1;
+  }
+  return moved;
 }

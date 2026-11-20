@@ -33,6 +33,7 @@ import { todayISO } from "@/lib/clock";
 import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
 import type { DemoArchivedProperty, DemoLeaseParty, DemoPayment } from "./data";
 import { effectiveLeaseStatus } from "@/lib/gestion/ledger";
+import { readRentChange } from "@/lib/gestion/lease";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -609,6 +610,7 @@ export async function buildRealDataFrom(
       dossier: dossierOf(details),
       departure: departureOf(details),
       premises: typeof details.premises === "string" && details.premises.trim() ? details.premises.trim() : undefined,
+      rentChange: readRentChange(details) ?? undefined,
     };
   });
   const leaseIndex = new Map(LEASES.map((l) => [l.id, l]));

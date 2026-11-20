@@ -87,3 +87,73 @@ describe("issuing a décompte", () => {
     expect(((await res.json()) as { balanceCents: number }).balanceCents).toBe(5000);
   });
 });
+
+describe("changing the rent of a tenancy in force", () => {
+  let db: FakeDb;
+  let leaseId: string;
+  const nextMonth = addMonths(thisMonth, 1);
+
+  beforeEach(async () => {
+    db = new FakeDb(today);
+    current = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    leaseId = (await letTo(current, unitId, [ANNA], "1 250", addMonths(thisMonth, -3))).leaseId;
+    await openLedger(current, { id: leaseId, startDate: addMonths(thisMonth, -3), endDate: null, rentCents: 125000, chargesCents: 15000, paymentDay: 1 }, today);
+  });
+
+  const lease = () => db.table("leases").find((l) => l.id === leaseId)!;
+  const period = (month: string) => db.table("rent_periods").find((rp) => rp.lease_id === leaseId && rp.period === month)!;
+  const patch = async (body: Record<string, unknown>) => {
+    const { PATCH } = await import("@/app/api/baux/[id]/route");
+    return PATCH(call(`/api/baux/${leaseId}`, "PATCH", body), params({ id: leaseId }));
+  };
+
+  it("sends a dwelling's rise to the indexation, and takes a typing error corrected", async () => {
+    const refused = await patch({ rent: "1 300" });
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toBe("rent_increase_needs_letter");
+    expect(lease().rent_cents).toBe(125000);
+
+    const corrected = await patch({ rent: "1 300", correction: true });
+    expect(corrected.status).toBe(200);
+    expect(lease()).toMatchObject({ rent_cents: 130000, previous_rent_cents: 125000 });
+    // Months already due keep their amount; the next one, still to come, takes the new rent.
+    expect(period(thisMonth).rent_cents).toBe(String(period(thisMonth).due_date) < today ? 125000 : 130000);
+    expect(period(nextMonth).rent_cents).toBe(130000);
+    expect(period(addMonths(thisMonth, -1)).rent_cents).toBe(125000);
+  });
+
+  it("keeps a rent from a later month on the lease until then, and the months from it open at that amount", async () => {
+    const res = await patch({ rent: "1 200", charges: "160", effectiveFrom: `${nextMonth.slice(0, 7)}-15` });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { effectiveFrom: string; repriced: number })).toMatchObject({ effectiveFrom: nextMonth, repriced: 1 });
+    // The rent in force, what the tenant reads, has not changed yet.
+    expect(lease()).toMatchObject({ rent_cents: 125000, charges_cents: 15000 });
+    expect((lease().details as Record<string, unknown>).rentChange).toEqual({ from: nextMonth, rentCents: 120000, chargesCents: 16000 });
+    expect(period(nextMonth)).toMatchObject({ rent_cents: 120000, charges_cents: 16000 });
+    expect(period(thisMonth)).toMatchObject({ rent_cents: 125000, charges_cents: 15000 });
+    // A month opened later (the roll, or the ledger opened again) takes the new amount from its month.
+    const later = new FakeDb(addMonths(thisMonth, 2));
+    later.replace("rent_periods", db.table("rent_periods"));
+    later.replace("leases", db.table("leases"));
+    const { readRentChange } = await import("@/lib/gestion/lease");
+    await openLedger(ctxFor(later), { id: leaseId, startDate: addMonths(thisMonth, -3), endDate: null, rentCents: 125000, chargesCents: 15000, paymentDay: 1, rentChange: readRentChange(lease().details) }, addMonths(thisMonth, 2));
+    expect(later.table("rent_periods").find((rp) => rp.lease_id === leaseId && rp.period === addMonths(thisMonth, 3))).toMatchObject({ rent_cents: 120000 });
+    // The sheet says what is coming.
+    const { hydrate } = await import("./helpers/tenancy");
+    expect((await hydrate(db)).LEASES.find((l) => l.id === leaseId)?.rentChange).toEqual({ from: nextMonth, rentCents: 120000, chargesCents: 16000 });
+    // A later edit from this month replaces what was waiting.
+    await patch({ rent: "1 150" });
+    expect(lease().rent_cents).toBe(115000);
+    expect((lease().details as Record<string, unknown>).rentChange).toBeUndefined();
+  });
+
+  it("moves the months still to come to a new payment day, never onto a day already behind", async () => {
+    const res = await patch({ paymentDay: "10" });
+    expect(res.status).toBe(200);
+    expect(period(nextMonth).due_date).toBe(`${nextMonth.slice(0, 7)}-10`);
+    // This month fell due already: it stays as it was.
+    expect(period(thisMonth).due_date).toBe(thisMonth);
+    expect(period(addMonths(thisMonth, -1)).due_date).toBe(addMonths(thisMonth, -1));
+  });
+});

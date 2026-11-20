@@ -322,6 +322,11 @@ export default async function BailDetailPage({
               </Link>
             }
           >
+            {l.rentChange && (
+              <p className="mb-3 rounded-xl bg-sky-50 px-3.5 py-2.5 text-sm text-sky-900" data-rent-change>
+                {fmt(d.baux.rentChangeLine, { rent: euros(l.rentChange.rentCents, locale), charges: euros(l.rentChange.chargesCents, locale), month: formatMonth(l.rentChange.from.slice(0, 7), locale) })}
+              </p>
+            )}
             <ul className="divide-y divide-sand-100">
               {periods.map((rp) => (
                 <li key={rp.id} className="flex items-center gap-3 py-2.5 text-sm">

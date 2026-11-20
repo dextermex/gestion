@@ -18,7 +18,9 @@
 --  7. settle_lease_end, close_lease : un départ à venir met le bail en
 --     préavis jusqu'à sa date ; le jour venu, le bail se clôt.
 --  8. end_due_leases : chaque nuit, clôt les baux dont la date est arrivée.
---  9. roll_rent_periods : respecte le début du suivi, puis affecte les crédits.
+--  9. roll_rent_periods : respecte le début du suivi, ouvre les mois au loyer
+--     saisi d'avance quand il y en a un (et le met en vigueur le jour venu),
+--     puis affecte les crédits.
 -- 10. issue_charge_period : un décompte émis porte toujours son solde au
 --     grand livre, dans la même transaction.
 -- 11. my_lease_credit : le locataire lit son crédit, et rien d'autre des
@@ -528,8 +530,36 @@ declare
   v_day date := coalesce(as_of, gestion.today());
   r record;
 begin
+  -- Un loyer saisi d'avance (details.rentChange) devient le loyer en vigueur
+  -- le premier jour de son mois ; l'ancien reste comme loyer précédent.
+  update gestion.leases l
+     set previous_rent_cents = case
+           when (l.details -> 'rentChange' ->> 'rentCents')::integer <> l.rent_cents then l.rent_cents
+           else l.previous_rent_cents
+         end,
+         rent_cents = (l.details -> 'rentChange' ->> 'rentCents')::integer,
+         charges_cents = (l.details -> 'rentChange' ->> 'chargesCents')::integer,
+         details = l.details - 'rentChange',
+         updated_at = now()
+   where l.status in ('active', 'notice')
+     and l.details ? 'rentChange'
+     and case
+           when (l.details -> 'rentChange' ->> 'from') ~ '^\d{4}-\d{2}-01$'
+            and (l.details -> 'rentChange' ->> 'rentCents') ~ '^[1-9]\d{0,8}$'
+            and (l.details -> 'rentChange' ->> 'chargesCents') ~ '^\d{1,9}$'
+           then (l.details -> 'rentChange' ->> 'from')::date <= date_trunc('month', v_day)::date
+           else false
+         end;
+
   with live as (
     select l.id, l.org_id, l.start_date, l.end_date, l.rent_cents, l.charges_cents, l.payment_day,
+           -- Le loyer saisi d'avance, pour les mois à partir du sien.
+           case when (l.details -> 'rentChange' ->> 'from') ~ '^\d{4}-\d{2}-01$'
+                 and (l.details -> 'rentChange' ->> 'rentCents') ~ '^[1-9]\d{0,8}$'
+                 and (l.details -> 'rentChange' ->> 'chargesCents') ~ '^\d{1,9}$'
+                then (l.details -> 'rentChange' ->> 'from')::date end as change_from,
+           (l.details -> 'rentChange' ->> 'rentCents') as change_rent,
+           (l.details -> 'rentChange' ->> 'chargesCents') as change_charges,
            -- Le suivi commence au mois choisi ; à défaut, au premier mois déjà
            -- ouvert : une date de début corrigée n'ouvre jamais de loyers passés.
            coalesce(l.ledger_from, (select min(rp.period) from gestion.rent_periods rp where rp.lease_id = l.id)) as tracked_from
@@ -556,7 +586,10 @@ begin
     cross join lateral generate_series(b.from_month, b.to_month, interval '1 month') as m
   )
   insert into gestion.rent_periods (org_id, lease_id, period, due_date, rent_cents, charges_cents, other_cents, vat_cents)
-  select org_id, id, period, greatest((period + (payment_day - 1))::date, start_date), rent_cents, charges_cents, 0, 0
+  select org_id, id, period, greatest((period + (payment_day - 1))::date, start_date),
+         case when change_from is not null and period >= change_from then change_rent::integer else rent_cents end,
+         case when change_from is not null and period >= change_from then change_charges::integer else charges_cents end,
+         0, 0
   from months
   on conflict (lease_id, period) do nothing;
 

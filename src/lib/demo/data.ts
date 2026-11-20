@@ -330,6 +330,8 @@ export interface DemoLease {
   dossier?: { completed: string[]; step: string; payerName: string | null };
   /** The rooms and parts let, as the contract describes them; absent to describe the lot from its facts. */
   premises?: string;
+  /** A rent recorded ahead of the month it applies from (cents), until that month. */
+  rentChange?: { from: string; rentCents: number; chargesCents: number };
   /** A departure being recorded on a running lease: the step reached and what was entered. */
   departure?: {
     step: number;

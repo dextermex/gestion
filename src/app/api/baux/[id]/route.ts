@@ -8,6 +8,9 @@ import {
   ledgerPinFor,
   normalizePaymentDay,
   readDeparture,
+  readRentChange,
+  redateOpenPeriods,
+  rentChangePatch,
   repriceOpenPeriods,
   saveDeparture,
   trimLedgerBefore,
@@ -79,15 +82,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   let chargesCents = lease.charges_cents as number;
   let moneyChanged = false;
 
+  // A rent recorded ahead is what the form edits: the amounts compared are the newest the lease knows.
+  const pending = readRentChange(lease.details);
+  const knownRent = pending?.rentCents ?? rentCents;
+  const knownCharges = pending?.chargesCents ?? chargesCents;
+  rentCents = knownRent;
+  chargesCents = knownCharges;
   if (has(body, "rent")) {
     const parsed = parseEuroInput(str(body.rent, 20));
     if (!parsed) return NextResponse.json({ error: "invalid" }, { status: 400 });
     if (parsed !== rentCents) {
-      // The previous rent is what an indexation lag is detected against, so
-      // it is kept whenever the rent actually moves.
-      patch.previous_rent_cents = rentCents;
       rentCents = parsed;
-      patch.rent_cents = parsed;
       moneyChanged = true;
     }
   }
@@ -97,11 +102,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (parsed === null) return NextResponse.json({ error: "invalid" }, { status: 400 });
     if (parsed !== chargesCents) {
       chargesCents = parsed;
-      patch.charges_cents = parsed;
       moneyChanged = true;
     }
   }
-  if (has(body, "paymentDay")) patch.payment_day = normalizePaymentDay(body.paymentDay);
+  // A dwelling's rent goes up through the adjustment (the capital investi
+  // ceiling, a registered letter, its AR): from here, only a correction of
+  // what was typed, said as such.
+  const live = lease.status === "active" || lease.status === "notice";
+  if (moneyChanged && live && rentCents > (lease.rent_cents as number) && lease.lease_type !== "commercial" && body.correction !== true) {
+    return NextResponse.json({ error: "rent_increase_needs_letter" }, { status: 409 });
+  }
+  if (has(body, "paymentDay")) {
+    const day = normalizePaymentDay(body.paymentDay);
+    if (day !== Number(lease.payment_day)) patch.payment_day = day;
+  }
   if (has(body, "type")) patch.lease_type = body.type === "commercial" ? "commercial" : "residential";
   if (has(body, "startDate") && ISO.test(str(body.startDate, 10))) patch.start_date = str(body.startDate, 10);
   if (has(body, "endDate")) {
@@ -150,6 +164,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.capital_investi = components;
   }
 
+  // The month a new rent applies from: this one or later, said by the owner.
+  const today = todayISO();
+  // A dossier not started has no ledger yet: its rent is simply the rent.
+  const fromMonth = live ? effectiveMonth(str(body.effectiveFrom, 10), today) : `${today.slice(0, 7)}-01`;
+  if (moneyChanged) {
+    const base = (patch.details as Record<string, unknown> | undefined) ?? ((lease.details as Record<string, unknown> | null) ?? null);
+    Object.assign(patch, rentChangePatch({ rentCents: lease.rent_cents as number, chargesCents: lease.charges_cents as number, details: base }, { rentCents, chargesCents }, fromMonth, today));
+  }
+
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
 
   // A start date corrected on a running tenancy must not open the months
@@ -168,15 +191,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   // A start moved later: the months before it were never owed.
-  if (startMoved && (lease.status === "active" || lease.status === "notice") && String(patch.start_date) > String(lease.start_date ?? "").slice(0, 10)) {
+  if (startMoved && live && String(patch.start_date) > String(lease.start_date ?? "").slice(0, 10)) {
     await trimLedgerBefore(ctx, id, String(patch.start_date), Number(patch.payment_day ?? lease.payment_day) || 1);
   }
 
+  // The months already open from that one take the new amount, except those already due or carrying money.
   let repriced = 0;
-  if (moneyChanged) {
-    repriced = await repriceOpenPeriods(ctx, id, rentCents, chargesCents, effectiveMonth(str(body.effectiveFrom, 10)));
+  if (moneyChanged) repriced = await repriceOpenPeriods(ctx, id, rentCents, chargesCents, fromMonth, today);
+  // A new payment day moves the months still to come.
+  let redated = 0;
+  if (typeof patch.payment_day === "number" && live) {
+    redated = await redateOpenPeriods(ctx, id, patch.payment_day, String(patch.start_date ?? lease.start_date).slice(0, 10), today);
   }
-  return NextResponse.json({ ok: true, repriced });
+  return NextResponse.json({ ok: true, repriced, redated, effectiveFrom: moneyChanged ? fromMonth : null });
 }
 
 function lifecycleError(code: "not_found" | "not_draft" | "not_live" | "already_let" | "not_empty" | "incomplete" | "storage_failed") {
