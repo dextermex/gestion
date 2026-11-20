@@ -8,6 +8,7 @@
  */
 
 import "server-only";
+import { previewEmpty, sampleDataAllowed } from "@/lib/deployment";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import * as frData from "./data";
@@ -44,9 +45,10 @@ const DATASETS = { fr: frData, lu: luData } satisfies Record<SampleId, DemoData>
  * Sample cabinets are off unless the deployment asks for them. Production
  * leaves `MORADA_SAMPLE_DATA` unset: the cookie is then ignored and every
  * account reads its own space only. The test suite and a demonstration
- * deployment set it to "1".
+ * deployment set it to "1"; the deployment that serves customers ignores it
+ * even when set (src/lib/deployment.ts).
  */
-export const sampleDataEnabled = () => process.env.MORADA_SAMPLE_DATA === "1";
+export const sampleDataEnabled = () => sampleDataAllowed();
 
 export async function getDatasetId(): Promise<DatasetId> {
   if (!sampleDataEnabled()) return "real";
@@ -82,7 +84,7 @@ export const getDemo = cache(async (scope?: ReadScope): Promise<DemoData> => {
   const dataset = await getDatasetId();
   if (dataset !== "real") return DATASETS[dataset];
 
-  if (process.env.MORADA_PREVIEW_EMPTY === "1") {
+  if (previewEmpty()) {
     return buildEmptyData(orgFromWorkspace({ id: "preview", name: "Espace de test", kind: "manager" }));
   }
 

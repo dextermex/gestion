@@ -8,6 +8,7 @@ import ProvisionError from "@/components/gestion/ProvisionError";
 import NoWorkspace from "@/components/gestion/NoWorkspace";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
+import { previewEmpty } from "@/lib/deployment";
 import { WORKSPACE_SEEN, getIdentity, hadWorkspace, provisionDefaultWorkspace, tenantAnswer } from "@/lib/workspace";
 import { getSession } from "@/lib/supabase/server";
 import { updateSignupUser } from "@/lib/signup/update-user";
@@ -28,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // See src/lib/demo/index.ts: the same development harness, which stands in
   // for a session so every screen can be walked in its empty state.
   let identity =
-    process.env.MORADA_PREVIEW_EMPTY === "1"
+    previewEmpty()
       ? {
           userId: "preview",
           email: "test@example.invalid",
@@ -43,7 +44,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // One account, two roles. Whether this account is a tenant anywhere is the
   // predicate the tenant space starts from (`gestion.is_tenant()`), asked
   // once per request and answered yes or no.
-  const session = process.env.MORADA_PREVIEW_EMPTY === "1" ? null : await getSession();
+  const session = previewEmpty() ? null : await getSession();
   // Yes, no, or unknown (the question could not be asked): an unknown is not a "no".
   const tenantKnown = session ? await tenantAnswer(session.accessToken) : false;
   const tenant = tenantKnown === true;

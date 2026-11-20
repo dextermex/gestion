@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Whether the deployment takes subscriptions, read from its server-side
  * variables, never from a browser:

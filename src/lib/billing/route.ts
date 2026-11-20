@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 import { BILLED_UNIT_KINDS, billedRents } from "@/domain/billing/pricing";
 import type { Cents } from "@/domain/money";
 import { refuseCrossOrigin, withOrgAndClient, type OrgContext } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import { getSession } from "@/lib/supabase/server";
 import { getI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -17,7 +18,7 @@ import type { BillingSnapshot } from "./service";
 /**
  * The spine of the subscription routes: same origin, a session, the active
  * workspace, its owner or an admin, real data (never the sample cabinet),
- * subscriptions on, and the workspace's snapshot. Subscribing is itself a
+ * subscriptions on, a counted number of calls, and the workspace's snapshot. Subscribing is itself a
  * read for the write lock: a workspace whose trial is over must still be
  * able to pay.
  */
@@ -39,6 +40,9 @@ export async function billingRoute(req: NextRequest): Promise<BillingRoute | Nex
   if ((await getDatasetId()) !== "real") return NextResponse.json({ error: "sample_read_only" }, { status: 403 });
   const stripe = stripeClient();
   if (!stripe) return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  // Every one of these routes opens a session or changes something at Stripe: counted per person and per workspace.
+  const limited = await refuseOverRate(ctx.g, RATE.billingSession, ctx.org.id);
+  if (limited) return limited;
   const session = await getSession();
   const { locale, d } = await getI18n();
   const snapshot = await visitSnapshot({ org: ctx.org, userId: ctx.userId, email: session?.email ?? "", locale, metadata: session?.metadata });

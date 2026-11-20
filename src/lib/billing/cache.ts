@@ -1,5 +1,5 @@
 import "server-only";
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { stripeClient } from "./stripe";
 import { readSnapshot, type BillingSnapshot } from "./service";
 
@@ -32,6 +32,25 @@ export async function cachedSnapshot(orgId: string): Promise<BillingSnapshot | n
     if ((error as { code?: string }).code === NOT_YET) return null;
     throw error;
   }
+}
+
+/**
+ * The snapshot read from Stripe now, past the cache, which is then dropped
+ * so the screens follow. Asked only when the cached one says the workspace
+ * is locked: a payment made without coming back through the return route
+ * (another tab, the invoice e-mail, the team) unlocks at the next write
+ * instead of up to five minutes later.
+ */
+export async function freshSnapshot(orgId: string): Promise<BillingSnapshot | null> {
+  const stripe = stripeClient();
+  if (!stripe) return null;
+  const snapshot = await readSnapshot(stripe, orgId);
+  try {
+    revalidateTag(billingTag(orgId));
+  } catch {
+    /* outside a request (a test, a script): there is no cache to drop */
+  }
+  return snapshot;
 }
 
 /** A promise that gives up after `ms`: a slow Stripe never holds a page or a write. */

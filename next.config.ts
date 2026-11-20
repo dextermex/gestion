@@ -1,7 +1,30 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
+/**
+ * Headers every answer carries. The policy holds only directives that need
+ * no nonce (a script policy would need one, and a nonce makes every page a
+ * function call): who may frame the application (itself, for the bank
+ * journey's return), where a base address or a form may point, and no
+ * plug-in content. The rest tells the browser not to guess a file's type,
+ * what a link out may say about where it came from, which device features
+ * no page here uses, and to come back over HTTPS.
+ */
+export const SECURITY_HEADERS = [
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=(), serial=(), browsing-topics=()" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+] as const;
+
 const nextConfig: NextConfig = {
+  // The framework's name and version are nobody's business.
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: [...SECURITY_HEADERS] }];
+  },
   images: {
     formats: ["image/avif", "image/webp"],
   },
