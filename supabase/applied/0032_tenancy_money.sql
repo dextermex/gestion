@@ -31,6 +31,7 @@
 -- 13. lease_keeps_tenant : un bail en cours n'est jamais laissé sans
 --     locataire présent.
 -- 14. arrears_actions_period_stage_key : une étape de relance par échéance.
+-- 15. properties.request_key : un bien créé une fois par requête.
 --
 -- Les fonctions appelées par l'application sont SECURITY INVOKER : elles
 -- écrivent sous le jeton de l'appelant, les politiques RLS décident, et
@@ -39,6 +40,8 @@
 -- exécutables par aucun rôle client : seul le planificateur les appelle.
 --
 -- Réversible :
+--   drop index if exists gestion.properties_request_key;
+--   alter table gestion.properties drop column request_key;
 --   drop index if exists gestion.arrears_actions_period_stage_key;
 --   drop trigger lease_keeps_tenant on gestion.lease_parties;
 --   drop trigger lease_starts_with_tenant on gestion.leases;
@@ -835,6 +838,20 @@ begin
       where rent_period_id is not null;
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 15. Un bien créé une fois par requête
+-- ---------------------------------------------------------------------------
+-- La clé que l'assistant envoie avec sa création : la même requête rejouée
+-- (réponse perdue, second clic) retrouve le bien qu'elle a créé.
+alter table gestion.properties add column if not exists request_key text;
+
+comment on column gestion.properties.request_key is
+  'Clé de la requête qui a créé le bien : la même requête rejouée ne crée rien.';
+
+create unique index if not exists properties_request_key
+  on gestion.properties (org_id, request_key)
+  where request_key is not null;
 
 -- ---------------------------------------------------------------------------
 -- Droits d'exécution, explicites (même geste que 0018)

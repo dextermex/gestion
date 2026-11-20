@@ -306,3 +306,47 @@ describe("importing a statement", () => {
     expect(db.table("bank_transactions")).toHaveLength(2);
   });
 });
+
+describe("creating a property", () => {
+  let db: FakeDb;
+  beforeEach(() => {
+    db = new FakeDb(today);
+    current = ctxFor(db);
+  });
+  const create = async (body: Record<string, unknown>) => {
+    const { POST } = await import("@/app/api/biens/create/route");
+    const res = await POST(call("/api/biens/create", "POST", body));
+    return { status: res.status, body: (await res.json()) as { id?: string; units?: Array<{ id: string }>; replayed?: boolean; error?: string } };
+  };
+  const house = { type: "house", name: "Maison Weber", street: "Rue de la Gare", city: "Strassen", requestKey: "wizard-key-0001" };
+
+  it("creates it once per request, a retry finding what the first one made", async () => {
+    const first = await create(house);
+    expect(first.status).toBe(200);
+    expect(first.body.units).toHaveLength(1);
+    const again = await create(house);
+    expect(again.body).toMatchObject({ id: first.body.id, replayed: true });
+    expect(again.body.units?.map((u) => u.id)).toEqual(first.body.units?.map((u) => u.id));
+    expect(db.table("properties")).toHaveLength(1);
+    // Another key is another property.
+    expect((await create({ ...house, requestKey: "wizard-key-0002" })).body.id).not.toBe(first.body.id);
+  });
+
+  it("never leaves a house without its lot", async () => {
+    db.absentColumns.set("units", new Set(["bedrooms"]));
+    const res = await create(house);
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(db.table("properties")).toHaveLength(0);
+  });
+
+  it("refuses two lots of one property under one name", async () => {
+    const building = { type: "building", name: "Résidence", street: "Rue Haute", city: "Esch", units: [{ label: "Apt 1" }, { label: "apt 1 " }] };
+    expect(await create(building)).toMatchObject({ status: 400, body: { error: "duplicate_lot" } });
+    const made = await create({ ...building, units: [{ label: "Apt 1" }] });
+    const { POST } = await import("@/app/api/lots/create/route");
+    const dup = await POST(call("/api/lots/create", "POST", { propertyId: made.body.id, label: "APT 1" }));
+    expect(dup.status).toBe(409);
+    const other = await POST(call("/api/lots/create", "POST", { propertyId: made.body.id, label: "Apt 2" }));
+    expect(other.status).toBe(200);
+  });
+});

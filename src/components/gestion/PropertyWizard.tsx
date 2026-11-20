@@ -129,6 +129,8 @@ export default function PropertyWizard({
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // One key per property being created: a retry after a lost answer finds the property it made.
+  const [requestKey] = useState(() => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`));
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [createdUnits, setCreatedUnits] = useState<Array<{ id: string; label: string }>>([]);
 
@@ -293,6 +295,7 @@ export default function PropertyWizard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          requestKey,
           type,
           name,
           street,
