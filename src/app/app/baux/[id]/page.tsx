@@ -765,22 +765,27 @@ export default async function BailDetailPage({
                 {threads.map((c) => {
                   const last = c.messages[c.messages.length - 1];
                   return (
-                    <li key={c.id} className="py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <Link href={`/app/messages?fil=${encodeURIComponent(c.id)}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-ink hover:text-brand-700">
-                          {c.subject}
-                        </Link>
-                        {c.unread > 0 && (
-                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
-                            {c.unread}
+                    <li key={c.id}>
+                      {/* The whole row opens the conversation: the subject and the last word shown under it. */}
+                      <Link
+                        href={`/app/messages?fil=${encodeURIComponent(c.id)}`}
+                        className="group -mx-2 block rounded-xl px-2 py-3 transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                        data-thread-link={c.id}
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink group-hover:text-brand-700">{c.subject}</span>
+                          {c.unread > 0 && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
+                              {c.unread}
+                            </span>
+                          )}
+                        </span>
+                        {last && (
+                          <span className="mt-0.5 block truncate text-xs text-ink-soft">
+                            {last.from} : {last.body}
                           </span>
                         )}
-                      </div>
-                      {last && (
-                        <p className="mt-0.5 truncate text-xs text-ink-soft">
-                          {last.from} : {last.body}
-                        </p>
-                      )}
+                      </Link>
                     </li>
                   );
                 })}

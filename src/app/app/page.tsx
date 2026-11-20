@@ -215,12 +215,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         amount: eurosWhole(t.amount, locale),
         atIso: t.bookedAt,
       })),
-    ...TICKETS.slice(-2).map((t) => ({
-      kind: "ticket",
-      label: fmt(d.dash.activityTicket, { ref: t.ref, title: t.title }),
-      sub: t.unitLabel,
-      atIso: t.createdAt,
-    })),
+    // The two latest requests by date (not by the order they were read in), each opening where it is handled:
+    // a tenant's request in Messages, an intervention in Interventions.
+    ...TICKETS.slice()
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+      .slice(0, 2)
+      .map((t) => ({
+        kind: "ticket",
+        label: fmt(d.dash.activityTicket, { ref: t.ref, title: t.title }),
+        sub: t.unitLabel,
+        atIso: t.createdAt,
+        href: t.source === "tenant" ? `/app/messages?demande=${encodeURIComponent(t.id)}` : "/app/interventions",
+      })),
     ...LEASES.filter((l) => l.noticeInfo).map((l) => ({
       kind: "lease",
       label: fmt(d.dash.activityNotice, { unit: leaseUnitLabel(l), tenant: leaseTenantNames(l)[0] ?? "" }),
@@ -357,7 +363,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ) : (
             <Rows>
               {activity.map((e) => (
-                <Row key={`${e.atIso}:${e.label}`} icon={activityIcon[e.kind] ?? "calendar"} title={e.label} sub={`${e.at} · ${e.sub}`} right={"amount" in e ? `+ ${e.amount}` : undefined} rightTone="in" />
+                <Row key={`${e.atIso}:${e.label}`} href={(e as { href?: string }).href} icon={activityIcon[e.kind] ?? "calendar"} title={e.label} sub={`${e.at} · ${e.sub}`} right={"amount" in e ? `+ ${e.amount}` : undefined} rightTone="in" />
               ))}
             </Rows>
           )}
