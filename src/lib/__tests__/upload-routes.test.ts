@@ -122,3 +122,30 @@ describe("a tenant's file whose row is refused", () => {
     expect(store.uploaded).toEqual([]);
   });
 });
+
+describe("a bill whose piece was put in the bucket by the browser", () => {
+  it("registers the stored file on the bill, with its own size, and refuses a path from elsewhere", async () => {
+    const db = new FakeDb(today);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    const path = `${ORG}/documents/11111111-2222-4333-8444-555555555555.pdf`;
+    const objects = new Map<string, Uint8Array>([[path, new Uint8Array(6_000_000).fill(1)]]);
+    const bucketApi = {
+      download: async (p: string) => (objects.has(p) ? { data: new Blob([objects.get(p)! as BlobPart]), error: null } : { data: null, error: { message: "not found" } }),
+      remove: async () => ({ data: [], error: null }),
+    };
+    vi.mocked(withOrgAndClient).mockResolvedValue({ g: db.client(), org: { id: ORG, name: "Cabinet Test", kind: "owner", role: "owner" }, userId: "user-owner", client: { storage: { from: () => bucketApi } } } as never);
+    const { POST } = await import("@/app/api/finance/factures/route");
+    const bill = (uploadedPath: string) => {
+      const form = new FormData();
+      for (const [k, v] of Object.entries({ direction: "expense", subject: "Ravalement", category: "maintenance_repairs", vatRate: "17", amount: "1200", docDate: today, dueOn: "", uploadedPath, fileName: "devis-ravalement.pdf" })) form.set(k, v);
+      return POST(new NextRequest("https://app.morada.lu/api/finance/factures", { method: "POST", body: form }));
+    };
+    const res = await bill(path);
+    expect(res.status).toBe(201);
+    const { id, documentId } = (await res.json()) as { id: string; documentId: string };
+    const piece = db.table("documents").find((d) => d.id === documentId)!;
+    expect([piece.related_type, piece.related_id, piece.size_bytes, piece.class, piece.name]).toEqual(["bill", id, 6_000_000, "invoice", "devis-ravalement.pdf"]);
+    expect(db.table("bills").find((b) => b.id === id)!.document_id).toBe(documentId);
+    expect((await bill(`${ORG}/tickets/l-1/11111111-2222-4333-8444-555555555555.pdf`)).status).toBe(400);
+  });
+});

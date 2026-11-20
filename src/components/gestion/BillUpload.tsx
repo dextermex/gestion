@@ -6,6 +6,7 @@ import { Button, Field, Input, Modal, Select, Spinner } from "@/components/pro/u
 import type { Dict } from "@/lib/i18n/fr";
 import { fmt } from "@/lib/i18n/config";
 import { callForm } from "./call";
+import { IN_REQUEST_MAX_BYTES, putInBucket } from "@/lib/gestion/upload-client";
 import DateField from "./DateField";
 import { HERO_ACTION, HERO_ACTION_LABEL, HERO_ROUND } from "./Hero";
 
@@ -187,7 +188,18 @@ function BillModal({
     setBusy(true);
     try {
       const form = new FormData();
-      if (file) form.set("file", file);
+      if (file && file.size > IN_REQUEST_MAX_BYTES) {
+        // Larger than a request carries: straight to the bucket first, then the bill names it.
+        const put = await putInBucket(file, "/app/finance");
+        if (!put) return;
+        if (!("path" in put)) {
+          setError(put.status === 413 ? d.finance.billTooLarge : put.status === 415 ? d.finance.billBadType : d.finance.billFailed);
+          setBusy(false);
+          return;
+        }
+        form.set("uploadedPath", put.path);
+        form.set("fileName", file.name);
+      } else if (file) form.set("file", file);
       form.set("direction", direction);
       form.set("supplierContactId", supplier);
       form.set("subject", subject);

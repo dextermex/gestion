@@ -14,13 +14,14 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/config";
  */
 export const IN_REQUEST_MAX_BYTES = 4 * 1024 * 1024;
 
-export async function uploadPiece(file: File, fields: Record<string, string>, backTo: string): Promise<CallResult | null> {
-  if (file.size <= IN_REQUEST_MAX_BYTES) {
-    const form = new FormData();
-    form.set("file", file);
-    for (const [key, value] of Object.entries(fields)) form.set(key, value);
-    return callForm("/api/documents", form, backTo);
-  }
+/**
+ * The file put in the workspace's folder of the bucket by the browser
+ * itself, with a one-time token the application signs under the person's
+ * own session: the path it now has, or the refusal (a type or a size the
+ * register does not take, the storage service's own answer). Null when the
+ * session ended and the person is on the way to signing in again.
+ */
+export async function putInBucket(file: File, backTo: string): Promise<{ path: string } | CallResult | null> {
   const target = await callJson("/api/documents/televersement", "POST", { type: file.type, size: file.size }, backTo);
   if (!target || !target.ok) return target;
   const { bucket, path, token } = target.payload as { bucket?: string; path?: string; token?: string };
@@ -36,5 +37,17 @@ export async function uploadPiece(file: File, fields: Record<string, string>, ba
     body,
   }).catch(() => null);
   if (!put || !put.ok) return { ok: false, status: put?.status === 413 ? 413 : 502, payload: { error: put?.status === 413 ? "too_large" : "upload_failed" } };
-  return callJson("/api/documents", "POST", { uploadedPath: path, ...fields }, backTo);
+  return { path };
+}
+
+export async function uploadPiece(file: File, fields: Record<string, string>, backTo: string): Promise<CallResult | null> {
+  if (file.size <= IN_REQUEST_MAX_BYTES) {
+    const form = new FormData();
+    form.set("file", file);
+    for (const [key, value] of Object.entries(fields)) form.set(key, value);
+    return callForm("/api/documents", form, backTo);
+  }
+  const put = await putInBucket(file, backTo);
+  if (!put || !("path" in put)) return put;
+  return callJson("/api/documents", "POST", { uploadedPath: put.path, ...fields }, backTo);
 }
