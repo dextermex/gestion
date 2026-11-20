@@ -5,6 +5,7 @@ import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { dayKey, timeOfDay, whenShort } from "@/lib/portal/format";
+import { tenantPieceLabels } from "@/lib/portal/labels";
 import { getTenantView } from "@/lib/portal/space";
 import type { TenantMessage } from "@/lib/portal/tenant-space";
 import { formatDate, requestStateMeta } from "@/lib/types";
@@ -127,6 +128,7 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
         photoMessage: d.tenant.chatPhotoMessage,
         photoChoose: d.tenant.photoPick,
         photoFailed: d.tenant.photoFailed,
+        pieces: tenantPieceLabels(d),
         uploading: d.tenant.uploading,
         close: d.common.close,
       }}

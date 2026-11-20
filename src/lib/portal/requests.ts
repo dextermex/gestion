@@ -95,9 +95,20 @@ export interface UploadedFile {
   name: string;
   mime: string;
   sizeBytes: number;
+  /** What the piece is in the register's classes; a photograph when not said. */
+  klass?: string;
 }
 
-/** Records photos already uploaded to the lease's folder; a path outside that folder is refused. */
+const TENANT_CLASSES = new Set(["photo", "insurance", "other"]);
+const RETENTION_OF_CLASS: Record<string, string> = { photo: "gdpr_minimised", insurance: "accounting_10y", other: "accounting_10y" };
+
+/**
+ * Records files already uploaded to the lease's folder; a path outside that
+ * folder is refused. A piece is a photograph, the insurance certificate, or
+ * another paper (0031 lets a tenant file those three classes on their own
+ * request). On a base that still takes photographs only, the same rows are
+ * filed as photographs rather than refused: the file reaches the desk either way.
+ */
 export async function attachTenantFiles(
   g: GestionReader,
   user: { id: string },
@@ -109,10 +120,14 @@ export async function attachTenantFiles(
   const rows = files
     .filter((f) => f.path.startsWith(folder) && !f.path.includes("..") && f.path.length < 300)
     .slice(0, 10)
-    .map((f) => ({
+    .map((f) => {
+      const klass = f.klass && TENANT_CLASSES.has(f.klass) ? f.klass : "photo";
+      return { klass, file: f };
+    })
+    .map(({ klass, file: f }) => ({
       org_id: lease.orgId,
-      class: "photo",
-      retention_class: "gdpr_minimised",
+      class: klass,
+      retention_class: RETENTION_OF_CLASS[klass],
       name: str(f.name, 160) || "photo",
       storage_path: f.path,
       mime: str(f.mime, 80) || null,
@@ -122,7 +137,10 @@ export async function attachTenantFiles(
       uploaded_by: user.id,
     }));
   if (rows.length === 0) return { attached: 0 };
-  const { data, error } = await g.from("documents").insert(rows).select("id");
+  let { data, error } = await g.from("documents").insert(rows).select("id");
+  if (error?.code === "42501" && rows.some((r) => r.class !== "photo")) {
+    ({ data, error } = await g.from("documents").insert(rows.map((r) => ({ ...r, class: "photo", retention_class: RETENTION_OF_CLASS.photo }))).select("id"));
+  }
   if (error) return failure(error, "tenant attachment insert");
   return { attached: (data as unknown[] | null)?.length ?? rows.length };
 }

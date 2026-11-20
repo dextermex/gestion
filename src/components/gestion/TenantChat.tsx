@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Modal, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
+import PieceThumb from "@/components/gestion/PieceThumb";
 import { usePageRefresh, useTabVisible } from "@/lib/page-refresh";
-import { shrinkPhotos } from "@/lib/photo";
+import { PIECE_ACCEPT, pieceLine, preparePieces, sendPieces, type PieceLabels, type PieceOutcome } from "@/lib/portal/pieces";
 import { initials } from "@/lib/types";
 
 /**
@@ -29,9 +30,6 @@ import { initials } from "@/lib/types";
  * device. What the space's navigation counts as unread is what arrived
  * after that. A conversation in a tab left in the background is not read.
  */
-
-const MAX_FILES = 5;
-const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
  * The conversation filling a phone's whole screen (the page's gutter is
@@ -79,6 +77,8 @@ export interface TenantChatLabels {
   photoMessage: string;
   photoChoose: string;
   photoFailed: string;
+  /** Why a file did not go, by name. */
+  pieces: PieceLabels;
   uploading: string;
   close: string;
 }
@@ -138,6 +138,8 @@ export default function TenantChat({
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoFor, setPhotoFor] = useState<string>(openRequests[0]?.id ?? "");
   const [photoState, setPhotoState] = useState<"idle" | "uploading" | "failed" | "sample">("idle");
+  /** The files that did not go, each with its reason: said by name, never dropped in silence. */
+  const [photoRefused, setPhotoRefused] = useState<PieceOutcome[]>([]);
 
   // The conversation is on the screen (always on a laptop, on a phone once it has the screen)
   // and the tab is the one being looked at: the account has read it up to its last message.
@@ -159,7 +161,7 @@ export default function TenantChat({
   }, [conversationId, lastAt, unread, phoneOpen, sampleNote, visible, page]);
 
   const sendPhotos = async (input: HTMLInputElement) => {
-    const chosen = Array.from(input.files ?? []).filter((f) => f.type.startsWith("image/")).slice(0, MAX_FILES);
+    const chosen = Array.from(input.files ?? []);
     input.value = "";
     const target = openRequests.find((r) => r.id === photoFor) ?? openRequests[0];
     if (chosen.length === 0 || !target) return;
@@ -168,27 +170,27 @@ export default function TenantChat({
       return;
     }
     setPhotoState("uploading");
+    setPhotoRefused([]);
     try {
-      const ready = (await shrinkPhotos(chosen)).filter((f) => f.size <= MAX_BYTES);
-      if (ready.length === 0) {
-        setPhotoState("failed");
-        return;
-      }
-      const body = new FormData();
-      for (const f of ready) body.append("files", f);
-      const res = await fetch(`/api/locataire/demandes/${encodeURIComponent(target.id)}/pieces`, { method: "POST", body });
-      if (res.status === 401) {
+      // Each file ready or refused by name; then one request per file, and what became of each.
+      const { ready, refused } = await preparePieces(chosen);
+      const sent = ready.length > 0 ? await sendPieces(target.id, ready) : [];
+      if (sent === "signed_out") {
         window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      if (!res.ok) {
+      const failed = [...refused, ...sent.filter((o) => !o.ok)];
+      const went = sent.filter((o) => o.ok).length;
+      setPhotoRefused(failed);
+      if (went === 0) {
         setPhotoState("failed");
         return;
       }
-      // The thread says what was filed and where; the photo itself sits on the request's card.
+      // The thread says what was filed and where; the file itself sits on the request's card.
       await fetch("/api/locataire/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: labels.photoMessage.replace("{title}", target.title), leaseId }) }).catch(() => null);
-      setPhotoState("idle");
-      setPhotoOpen(false);
+      setPhotoState(failed.length > 0 ? "failed" : "idle");
+      // Everything went: the sheet closes. Otherwise it stays, saying which files did not go.
+      if (failed.length === 0) setPhotoOpen(false);
       page.refresh();
     } catch {
       setPhotoState("failed");
@@ -299,16 +301,7 @@ export default function TenantChat({
                         <ul className="mt-3 grid grid-cols-3 gap-2">
                           {request.attachments.map((a) => (
                             <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
-                              {a.url ? (
-                                <a href={a.url} target="_blank" rel="noreferrer" className="block">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
-                                </a>
-                              ) : (
-                                <p className="truncate p-2 text-[11px] text-ink-soft" title={a.name}>
-                                  {a.name}
-                                </p>
-                              )}
+                              <PieceThumb name={a.name} url={a.url} />
                             </li>
                           ))}
                         </ul>
@@ -360,6 +353,7 @@ export default function TenantChat({
               type="button"
               onClick={() => {
                 setPhotoState("idle");
+                setPhotoRefused([]);
                 setPhotoOpen(true);
               }}
               aria-label={labels.photo}
@@ -436,11 +430,18 @@ export default function TenantChat({
               >
                 <Icon name="camera" size={18} className="shrink-0" />
                 {photoState === "uploading" ? labels.uploading : labels.photoChoose}
-                <input type="file" accept="image/*" multiple className="sr-only" disabled={photoState === "uploading"} onChange={(e) => void sendPhotos(e.currentTarget)} />
+                <input type="file" accept={PIECE_ACCEPT} multiple className="sr-only" disabled={photoState === "uploading"} onChange={(e) => void sendPhotos(e.currentTarget)} />
               </label>
-              <p role="status" className={"mt-2 min-h-4 text-xs font-semibold " + (photoState === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-red-700")}>
-                {photoState === "failed" ? labels.photoFailed : photoState === "sample" ? sampleNote : ""}
-              </p>
+              <div role="status" className={"mt-2 min-h-4 text-xs font-semibold " + (photoState === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-red-700")}>
+                {photoState === "sample" ? sampleNote : photoState === "failed" && photoRefused.length === 0 ? labels.photoFailed : ""}
+                {photoState === "failed" && photoRefused.length > 0 && (
+                  <ul className="space-y-0.5" data-pieces-refused>
+                    {photoRefused.map((o, i) => (
+                      <li key={`${o.name}:${i}`}>{pieceLine(o, labels.pieces)}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
         </Modal>

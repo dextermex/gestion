@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LegalNote } from "@/components/gestion/bits";
+import PieceThumb from "@/components/gestion/PieceThumb";
 import { Badge, Button, Card, Modal, PageHeader, Select, Spinner, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { THREAD_PAGE, mergeLines, type ThreadMessageLine } from "@/lib/gestion/threads";
@@ -979,16 +980,7 @@ function AttachmentGrid({ attachments }: { attachments: AttachmentView[] }) {
     <ul className="grid grid-cols-3 gap-2">
       {attachments.map((a) => (
         <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
-          {a.url ? (
-            <a href={a.url} target="_blank" rel="noreferrer" className="block">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
-            </a>
-          ) : (
-            <p className="truncate p-2 text-[11px] text-ink-soft" title={a.name}>
-              {a.name}
-            </p>
-          )}
+          <PieceThumb name={a.name} url={a.url} />
         </li>
       ))}
     </ul>

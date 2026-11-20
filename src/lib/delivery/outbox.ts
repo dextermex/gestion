@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { APP_URL } from "@/lib/constants";
 import type { GestionReader } from "@/lib/demo/data-real";
 import type { OrgContext } from "@/lib/gestion/api";
+import { shareDocument } from "@/lib/gestion/documents";
 import { MEDIA_BUCKET } from "@/lib/gestion/media";
 import { getDict } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
@@ -233,6 +234,8 @@ export async function sendDocumentByMail(
     });
     deliveries.push({ email: r.email, status: result.status, id });
   }
+  // What left for the tenants is theirs to read in their space too (a formal reminder is withheld until then).
+  if (deliveries.some((x) => x.status === "sent")) await shareDocument(ctx, documentId, true);
   return { name, deliveries };
 }
 

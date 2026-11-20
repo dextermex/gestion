@@ -196,6 +196,8 @@ export class FakeDb {
   readonly absent = new Set<string>();
   /** Functions the base does not carry yet: calling one fails as PostgREST says (PGRST202). */
   readonly absentFunctions = new Set<string>();
+  /** A base before 0031: a tenant files photographs only, on their own request. */
+  photosOnly = false;
   private leaseSeq = 0;
 
   constructor(public today: string) {}
@@ -219,8 +221,9 @@ export class FakeDb {
   tenantLiveLease(leaseId: unknown, userId: string): boolean {
     return this.tenantLease(leaseId, userId) && this.table("leases").some((l) => l.id === leaseId && LIVE.has(String(l.status)));
   }
+  /** 0031: a request is the tenant's when it sits on one of their leases and they raised it. */
   tenantTicket(ticketId: unknown, userId: string): boolean {
-    return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && this.tenantLease(t.lease_id, userId));
+    return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && t.source === "tenant" && this.tenantLease(t.lease_id, userId));
   }
   /** The tenancy's conversation, or a request's own thread from before 0019. */
   private tenantConversation(conversationId: unknown, userId: string): boolean {
@@ -246,13 +249,14 @@ export class FakeDb {
         return row.lease_id != null && this.tenantLease(row.lease_id, userId);
       case "payment_allocations":
         return this.table("rent_periods").some((rp) => rp.id === row.rent_period_id && this.tenantLease(rp.lease_id, userId));
+      // 0031: the pieces of the lease the cabinet shares, and those of the tenant's own requests.
       case "documents":
         return (
-          (row.related_type === "lease" && row.related_id != null && this.tenantLease(row.related_id, userId)) ||
+          (row.related_type === "lease" && row.related_id != null && row.shared_with_tenant === true && this.tenantLease(row.related_id, userId)) ||
           (row.related_type === "ticket" && row.related_id != null && this.tenantTicket(row.related_id, userId))
         );
       case "tickets":
-        return row.lease_id != null && this.tenantLease(row.lease_id, userId);
+        return row.lease_id != null && row.source === "tenant" && this.tenantLease(row.lease_id, userId);
       case "conversations":
         return this.tenantScope(row, userId);
       case "messages":
@@ -271,9 +275,15 @@ export class FakeDb {
       case "tickets":
         return row.lease_id != null && row.source === "tenant" && this.tenantLiveLease(row.lease_id, userId);
       case "documents":
+        // 0031: a photograph, the insurance certificate or another paper, in the lease's own folder of its workspace.
         return (
-          row.related_type === "ticket" && row.related_id != null && row.class === "photo" && row.uploaded_by === userId &&
-          this.table("tickets").some((t) => t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId))
+          row.related_type === "ticket" && row.related_id != null && row.uploaded_by === userId &&
+          (this.photosOnly ? row.class === "photo" : ["photo", "insurance", "other"].includes(String(row.class))) &&
+          this.table("tickets").some(
+            (t) =>
+              t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId) &&
+              (this.photosOnly || (t.org_id === row.org_id && String(row.storage_path ?? "").startsWith(`${row.org_id}/tickets/${t.lease_id}/`))),
+          )
         );
       case "conversations":
         return row.scope_type === "lease" && row.scope_id != null && this.tenantLease(row.scope_id, userId);

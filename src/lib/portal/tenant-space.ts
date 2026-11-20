@@ -265,7 +265,8 @@ export async function buildTenantSpace(
     read("deposits", "id,lease_id,form,amount_cents,status,received_on,key_handover_on", (q) => q.in("lease_id", leaseIds)),
     read("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256", (q) => q.in("lease_id", leaseIds)),
     read("insurance_policies", "id,lease_id,kind,provider,policy_number,expires_on", (q) => q.in("lease_id", leaseIds)),
-    read("tickets", "id,lease_id,category,severity,status,title,description,created_at,updated_at,closed_at", (q) => q.in("lease_id", leaseIds).order("created_at", { ascending: false })),
+    // The requests the tenant raised, and only those: an intervention the desk opened on the lot is the desk's own.
+    read("tickets", "id,lease_id,category,severity,status,title,description,created_at,updated_at,closed_at", (q) => q.in("lease_id", leaseIds).eq("source", "tenant").order("created_at", { ascending: false })),
   ]);
   // The documents and conversations the space shows are the leases' and the
   // requests' own: asked for by those ids, not "everything the policy lets

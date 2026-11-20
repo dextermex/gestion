@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { shrinkPhotos } from "@/lib/photo";
+import { PIECE_ACCEPT, pieceLine, preparePieces, sendPieces, type PieceOutcome } from "@/lib/portal/pieces";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
@@ -12,8 +12,14 @@ import { REQUEST_KINDS, TECHNICAL_CATEGORIES, type RequestKind } from "@/lib/por
  * A new request, in two steps: what it is about (a technical problem, a
  * document, a question, anything else), then the few details that let the
  * manager act. A technical problem lands as an intervention in its
- * category; photos travel with it. The request is written through the API
- * under the tenant's own session and the page then reads it back.
+ * category; photos travel with it, or a PDF where a document is what is
+ * asked for. The request is written through the API under the tenant's own
+ * session and the page then reads it back.
+ *
+ * A file that cannot go is said, by name and with its reason: at once when
+ * it is chosen (a type or a size the upload does not take), and after the
+ * request is sent when its upload failed. The request stands either way;
+ * the form then stays open to say which files are missing from it.
  *
  * A link elsewhere in the space may open the form already on its way
  * (`preset`): sending the insurance certificate, asking for a month's
@@ -28,11 +34,9 @@ export interface RequestPreset {
   /** The dialog's heading while the preset stands ("Envoyer mon attestation"). */
   heading: string;
   hint: string | null;
+  /** What the files of this request are, when the preset asks for one paper (the insurance certificate). */
+  purpose?: "insurance";
 }
-
-
-const MAX_FILES = 5;
-const MAX_BYTES = 8 * 1024 * 1024;
 
 export default function TenantRequests({
   labels,
@@ -59,6 +63,10 @@ export default function TenantRequests({
   const [title, setTitle] = useState(preset?.title ?? "");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  /** The chosen files that will not go, each with its reason. */
+  const [refused, setRefused] = useState<PieceOutcome[]>([]);
+  /** The request was written but some of its files were not: its id, and which. */
+  const [partial, setPartial] = useState<{ id: string; failed: PieceOutcome[] } | null>(null);
   const [state, setState] = useState<"idle" | "sending" | "uploading" | "failed" | "noLease" | "sample">("idle");
 
   useEffect(() => {
@@ -73,6 +81,8 @@ export default function TenantRequests({
     setTitle("");
     setDescription("");
     setFiles([]);
+    setRefused([]);
+    setPartial(null);
     setState("idle");
   };
   const close = () => {
@@ -105,10 +115,15 @@ export default function TenantRequests({
       }
       if (files.length > 0) {
         setState("uploading");
-        const body = new FormData();
-        for (const f of files) body.append("files", f);
-        // Photos that fail to upload do not undo the request: it exists, the owner has it.
-        await fetch(`/api/locataire/demandes/${data.id}/pieces`, { method: "POST", body }).catch(() => null);
+        // A file that fails to upload does not undo the request: it exists, the owner has it. But it is said.
+        const sent = await sendPieces(data.id, files, guided ? (preset?.purpose ?? null) : null);
+        const failed = sent === "signed_out" ? files.map((f) => ({ name: f.name, ok: false, reason: "failed" as const })) : sent.filter((o) => !o.ok);
+        if (failed.length > 0) {
+          setPartial({ id: data.id, failed });
+          setState("idle");
+          router.refresh();
+          return;
+        }
       }
       setOpen(false);
       router.push(`/locataire/demandes/${data.id}`);
@@ -119,9 +134,18 @@ export default function TenantRequests({
   };
 
   const pickFiles = (list: FileList | null) => {
-    // Brought down to the upload size first: a phone's photograph is well over the limit as taken.
-    const chosen = Array.from(list ?? []).filter((f) => f.type.startsWith("image/")).slice(0, MAX_FILES);
-    void shrinkPhotos(chosen).then((ready) => setFiles(ready.filter((f) => f.size <= MAX_BYTES)));
+    // Photographs are brought down to the upload size first (a phone's is well over the limit as taken);
+    // what still cannot go is named with its reason, never dropped in silence.
+    void preparePieces(Array.from(list ?? [])).then((prepared) => {
+      setFiles(prepared.ready);
+      setRefused(prepared.refused);
+    });
+  };
+
+  const seeRequest = (id: string) => {
+    setOpen(false);
+    router.push(`/locataire/demandes/${id}`);
+    router.refresh();
   };
 
   if (!canCreate) return null;
@@ -130,7 +154,24 @@ export default function TenantRequests({
     <>
       <Button onClick={() => setOpen(true)}>{labels.open}</Button>
       <Modal open={open} onClose={close} title={kind ? (guided && preset ? preset.heading : labels.kinds[kind][0]) : labels.open} closeLabel={labels.close}>
-        {!kind ? (
+        {partial ? (
+          <div data-request-partial>
+            <p role="alert" className="text-sm font-semibold text-ink">
+              {labels.sentFilesFailed.replace("{failed}", String(partial.failed.length))}
+            </p>
+            <ul className="mt-2 space-y-1 text-sm text-red-700">
+              {partial.failed.map((o, i) => (
+                <li key={`${o.name}:${i}`}>{pieceLine(o, labels.pieces)}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-sm text-ink-soft">{labels.sentFilesRetry}</p>
+            <div className="mt-4 flex justify-end">
+              <Button type="button" onClick={() => seeRequest(partial.id)}>
+                {labels.seeRequest}
+              </Button>
+            </div>
+          </div>
+        ) : !kind ? (
           <div>
             <p className="mb-3 text-sm text-ink-soft">{labels.kind}</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -190,13 +231,20 @@ export default function TenantRequests({
               <label className="tactile inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-sand-200 bg-white px-3.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-300 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-600">
                 <Icon name="camera" size={18} className="shrink-0" />
                 {labels.photoPick}
-                <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => pickFiles(e.target.files)} />
+                <input type="file" accept={PIECE_ACCEPT} multiple className="sr-only" onChange={(e) => pickFiles(e.target.files)} />
               </label>
               <p className="mt-2 text-xs text-ink-soft">{labels.photosHint}</p>
               {files.length > 0 && (
                 <ul className="mt-2 flex flex-wrap gap-1.5" aria-live="polite">
                   {files.map((f) => (
                     <li key={f.name + f.size} className="max-w-full truncate rounded-full bg-sand-100 px-2.5 py-1 text-xs font-medium text-ink">{f.name}</li>
+                  ))}
+                </ul>
+              )}
+              {refused.length > 0 && (
+                <ul role="alert" className="mt-2 space-y-0.5 text-xs font-semibold text-red-700" data-pieces-refused>
+                  {refused.map((o, i) => (
+                    <li key={`${o.name}:${i}`}>{pieceLine(o, labels.pieces)}</li>
                   ))}
                 </ul>
               )}

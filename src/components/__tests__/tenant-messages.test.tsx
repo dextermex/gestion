@@ -22,6 +22,7 @@ const manager = "Cabinet Reuter";
 const labels = {
   empty: t.threadEmpty, noneYet: t.msgNoneYet, write: t.threadWrite, send: t.threadSend, sent: t.threadSent, failed: t.threadFailed, view: t.msgView, requestBadge: fr.messages.requestBadge, newRequest: t.reqNew,
   photo: t.chatPhoto, photoTitle: t.chatPhotoTitle, photoPick: t.chatPhotoPick, photoNone: t.chatPhotoNone, photoMessage: t.chatPhotoMessage, photoChoose: t.photoPick, photoFailed: t.photoFailed, uploading: t.uploading, close: fr.common.close,
+  pieces: { badType: t.fileBadType, tooLarge: t.fileTooLarge, notSent: t.fileNotSent, closed: t.fileRequestClosed, tooMany: t.fileTooMany },
 };
 
 const conversations: TenantConversationView[] = [
@@ -238,7 +239,7 @@ describe("the tenant's Messages on a phone", () => {
     const dialog = document.querySelector("[role=dialog]")!;
     expect(dialog.getAttribute("aria-label")).toBe(t.chatPhotoTitle);
     expect(Array.from(dialog.querySelectorAll("input[type=radio]")).map((r) => (r as HTMLInputElement).value)).toEqual(["r-1"]);
-    expect(dialog.querySelector("input[type=file]")?.getAttribute("accept")).toBe("image/*");
+    expect(dialog.querySelector("input[type=file]")?.getAttribute("accept")).toBe("image/*,application/pdf");
   });
 
   it("offers no camera where no request can be written", async () => {

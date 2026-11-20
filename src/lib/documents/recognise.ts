@@ -20,7 +20,9 @@ type ImageType = "image/jpeg" | "image/png" | "image/webp";
 export async function recogniseDocument(input: { bytes: Uint8Array; mime: string; lang: Locale; candidates: RecognitionCandidate[] }): Promise<Recognition | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
-  const client = new Anthropic({ apiKey, timeout: 55_000, maxRetries: 1 });
+  // One attempt, inside the route's 60 seconds: the SDK retries a timeout, and two attempts of 55 s
+  // would outlive the function, which the platform then cuts without an answer.
+  const client = new Anthropic({ apiKey, timeout: 50_000, maxRetries: 0 });
   const data = Buffer.from(input.bytes).toString("base64");
   const file: Anthropic.ContentBlockParam =
     input.mime === "application/pdf"

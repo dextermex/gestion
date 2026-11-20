@@ -29,7 +29,7 @@ export default async function TenantRequestsPage({ searchParams }: { searchParam
   const month = typeof params.mois === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.mois) ? params.mois : null;
   const preset: RequestPreset | null =
     params.nouvelle === "attestation"
-      ? { kind: "other", title: d.tenant.presetCertTitle, heading: d.tenant.presetCertHeading, hint: d.tenant.presetCertHint }
+      ? { kind: "other", title: d.tenant.presetCertTitle, heading: d.tenant.presetCertHeading, hint: d.tenant.presetCertHint, purpose: "insurance" }
       : params.nouvelle === "quittance" && month
         ? { kind: "document", title: fmt(d.tenant.presetReceiptTitle, { month: formatMonth(month, locale) }), heading: d.tenant.presetReceiptHeading, hint: null }
         : params.nouvelle === "correction"

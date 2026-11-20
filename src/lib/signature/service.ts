@@ -342,7 +342,7 @@ async function sealSigned(ctx: OrgContext, storage: SupabaseClient, client: Sign
 
   const stored = await storeBytes(ctx, storage, { bytes: pdf, mime: "application/pdf", klass: "lease", name: `${baseName} · ${words.signed}.pdf`, relatedType: "lease", relatedId: leaseId, sealed: true });
   if ("error" in stored) return null;
-  const storedTrail = await storeBytes(ctx, storage, { bytes: trail, mime: "application/pdf", klass: "lease", name: `${words.trail} · ${baseName}.pdf`, relatedType: "lease", relatedId: leaseId, sealed: true });
+  const storedTrail = await storeBytes(ctx, storage, { bytes: trail, mime: "application/pdf", klass: "lease", name: `${words.trail} · ${baseName}.pdf`, relatedType: "lease", relatedId: leaseId, sealed: true, shared: false });
   if (!("error" in storedTrail)) {
     for (const r of signers) await g.from("signature_signers").update({ audit_document_id: storedTrail.id }).eq("org_id", org.id).eq("id", s(r.id));
   }

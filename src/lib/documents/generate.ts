@@ -7,7 +7,7 @@ import type { Locale } from "@/lib/i18n/config";
 import { assemble, lessorOf, readSettings, type AssembleFailure } from "./assemble";
 import type { MissingItem } from "./contract-parties";
 import { composeDocument, unfilledPlaceholders } from "./compose";
-import { KIND_CLASS, type DocumentKind } from "./kinds";
+import { KIND_CLASS, sharedOnceProduced, type DocumentKind } from "./kinds";
 import type { DocumentModel } from "./model";
 import { renderPdf, type RenderLabels } from "./render";
 import { missingForDocuments } from "./settings-rules";
@@ -129,6 +129,8 @@ export async function generateDocument(
     relatedType: "lease",
     relatedId: assembled.leaseId,
     sealed: true,
+    // What is written for the tenant is theirs to read at once; a formal reminder is theirs once it is sent.
+    shared: sharedOnceProduced(req.kind),
   });
   if ("error" in stored) return { error: "storage_failed", context: `document ${stored.error}`, detail: null };
 

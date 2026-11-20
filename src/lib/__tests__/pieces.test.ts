@@ -1,0 +1,178 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import type { OrgContext } from "@/lib/gestion/api";
+import { attachTenantFiles, createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
+import { PIECE_MAX_BYTES, isPdfName, pieceClass, pieceLine, pieceRefusal, preparePieces, type PieceLabels } from "@/lib/portal/pieces";
+import { attachmentFolder } from "@/lib/portal/types";
+import { fr } from "@/lib/i18n/fr";
+import { tenantPieceLabels } from "@/lib/portal/labels";
+import { retentionUntil, shareDocument } from "@/lib/gestion/documents";
+import { DOCUMENT_KINDS, sharedOnceProduced } from "@/lib/documents/kinds";
+import { FakeDb } from "./helpers/fake-postgrest";
+import { ORG, ctxFor, hydrate, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
+
+/**
+ * The files a tenant attaches to a request: photographs, and a PDF where a
+ * document is what is asked for. What is refused is refused by name, with
+ * its reason; what is accepted is filed under its class in the lease's own
+ * folder, and reaches both sides.
+ */
+const ANNA = { firstName: "Anna", lastName: "Weber", email: "anna.weber@example.lu" };
+const anna = { id: "user-anna", email: "anna.weber@example.lu" };
+const today = new Date().toISOString().slice(0, 10);
+const labels: PieceLabels = tenantPieceLabels(fr);
+
+describe("what a tenant may attach", () => {
+  it("takes photographs and a PDF, up to the size one request may carry", () => {
+    expect(pieceRefusal({ type: "image/jpeg", size: 800_000 })).toBeNull();
+    expect(pieceRefusal({ type: "application/pdf", size: 1_200_000 })).toBeNull();
+    expect(pieceRefusal({ type: "application/pdf", size: PIECE_MAX_BYTES })).toBeNull();
+    expect(pieceRefusal({ type: "application/pdf", size: PIECE_MAX_BYTES + 1 })).toBe("size");
+    expect(pieceRefusal({ type: "image/heic", size: 800_000 })).toBe("type");
+    expect(pieceRefusal({ type: "application/zip", size: 10 })).toBe("type");
+    expect(pieceRefusal({ type: "image/png", size: 0 })).toBe("size");
+    // Under the host's limit on a request body (about 4.5 MB), with room for the form around the file.
+    expect(PIECE_MAX_BYTES).toBeLessThanOrEqual(4 * 1024 * 1024);
+  });
+
+  it("files a piece under what it is: a photograph, the insurance certificate, another paper", () => {
+    expect(pieceClass("image/jpeg", null)).toBe("photo");
+    expect(pieceClass("application/pdf", null)).toBe("other");
+    expect(pieceClass("application/pdf", "insurance")).toBe("insurance");
+    expect(pieceClass("image/png", "insurance")).toBe("insurance");
+    expect([isPdfName("attestation.PDF"), isPdfName("evier.png"), isPdfName("pdf")]).toEqual([true, false, false]);
+  });
+
+  it("says by name what will not go, and why, instead of dropping it", async () => {
+    const file = (name: string, type: string, size: number) => new File([new Uint8Array(size)], name, { type });
+    const chosen = [file("evier.png", "image/png", 2000), file("attestation.pdf", "application/pdf", 3000), file("archive.zip", "application/zip", 10), file("scan.pdf", "application/pdf", PIECE_MAX_BYTES + 5)];
+    const { ready, refused } = await preparePieces(chosen);
+    expect(ready.map((f) => f.name)).toEqual(["evier.png", "attestation.pdf"]);
+    expect(refused).toEqual([
+      { name: "archive.zip", ok: false, reason: "type" },
+      { name: "scan.pdf", ok: false, reason: "size" },
+    ]);
+    expect(refused.map((o) => pieceLine(o, labels))).toEqual([
+      "archive.zip : format non accepté (JPEG, PNG, WebP ou PDF).",
+      "scan.pdf : fichier trop volumineux (4 Mo au plus).",
+    ]);
+    // More than a handful at once: the ones beyond are named too.
+    const many = await preparePieces(Array.from({ length: 7 }, (_, i) => file(`p${i}.png`, "image/png", 100)));
+    expect([many.ready.length, many.refused.map((o) => [o.name, o.reason])]).toEqual([5, [["p5.png", "too_many"], ["p6.png", "too_many"]]]);
+    expect(pieceLine({ name: "x.png", ok: false, reason: "failed" }, labels)).toContain("l'envoi n'a pas abouti");
+  });
+});
+
+describe("a tenant's files on their request", () => {
+  let db: FakeDb;
+  let ctx: OrgContext;
+  let leaseId: string;
+  let ticketId: string;
+  const folder = () => attachmentFolder(ORG, leaseId);
+
+  beforeEach(async () => {
+    db = new FakeDb(today);
+    ctx = ctxFor(db);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
+    const { propertyId, unitId } = seedProperty(db);
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    leaseId = rental.leaseId;
+    await linkAccount(db, ctx, rental, anna);
+    const request = await createTenantRequest(db.tenantClient(anna), anna, { id: leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" }, parseRequestInput({ kind: "other", title: "Attestation d'assurance habitation" })!);
+    if ("error" in request) throw new Error(request.error);
+    ticketId = request.id;
+  });
+
+  it("records a PDF certificate and a photograph under their classes, and both sides list them", async () => {
+    const attached = await attachTenantFiles(db.tenantClient(anna), anna, { id: leaseId, orgId: ORG }, ticketId, [
+      { path: `${folder()}a.pdf`, name: "attestation.pdf", mime: "application/pdf", sizeBytes: 120_000, klass: "insurance" },
+      { path: `${folder()}b.jpg`, name: "compteur.jpg", mime: "image/jpeg", sizeBytes: 300_000, klass: "photo" },
+      // A class a tenant may not file is brought back to a photograph; a path outside the lease's folder is not recorded.
+      { path: `${folder()}c.png`, name: "plan.png", mime: "image/png", sizeBytes: 10, klass: "id_document" },
+      { path: `${ORG}/documents/x.pdf`, name: "ailleurs.pdf", mime: "application/pdf", sizeBytes: 10, klass: "other" },
+    ]);
+    expect(attached).toEqual({ attached: 3 });
+    const rows = db.table("documents").filter((d) => d.related_id === ticketId);
+    expect(rows.map((d) => [d.name, d.class, d.retention_class]).sort()).toEqual([
+      ["attestation.pdf", "insurance", "accounting_10y"],
+      ["compteur.jpg", "photo", "gdpr_minimised"],
+      ["plan.png", "photo", "gdpr_minimised"],
+    ]);
+    const mine = await space(db, anna);
+    expect(mine.requests[0].attachments.map((a) => a.name).sort()).toEqual(["attestation.pdf", "compteur.jpg", "plan.png"]);
+    const demo = await hydrate(db, ORG, {});
+    expect(demo.TICKETS.find((t) => t.id === ticketId)!.attachments.map((a) => a.name).sort()).toEqual(["attestation.pdf", "compteur.jpg", "plan.png"]);
+  });
+
+  it("still delivers the certificate on a base that takes photographs only: filed as a photograph rather than refused", async () => {
+    db.photosOnly = true;
+    const attached = await attachTenantFiles(db.tenantClient(anna), anna, { id: leaseId, orgId: ORG }, ticketId, [
+      { path: `${folder()}a.pdf`, name: "attestation.pdf", mime: "application/pdf", sizeBytes: 120_000, klass: "insurance" },
+    ]);
+    expect(attached).toEqual({ attached: 1 });
+    expect(db.table("documents").filter((d) => d.related_id === ticketId).map((d) => [d.name, d.class])).toEqual([["attestation.pdf", "photo"]]);
+  });
+});
+
+describe("what the tenant reads of the desk's side", () => {
+  let db: FakeDb;
+  let ctx: OrgContext;
+  let leaseId: string;
+  let unitId: string;
+
+  beforeEach(async () => {
+    db = new FakeDb(today);
+    ctx = ctxFor(db);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
+    const seeded = seedProperty(db);
+    unitId = seeded.unitId;
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    leaseId = rental.leaseId;
+    await linkAccount(db, ctx, rental, anna);
+  });
+
+  it("lists the requests the tenant raised, not an intervention the desk opened on the lot", async () => {
+    db.insertRow("tickets", { id: "t-desk", org_id: ORG, lease_id: leaseId, unit_id: unitId, source: "manager", status: "triaged", title: "Devis toiture (note interne)", created_at: `${today}T08:00:00Z` });
+    db.insertRow("tickets", { id: "t-mine", org_id: ORG, lease_id: leaseId, unit_id: unitId, source: "tenant", status: "new", title: "Fuite sous l'évier", created_at: `${today}T09:00:00Z` });
+    const mine = await space(db, anna);
+    expect(mine.requests.map((r) => r.id)).toEqual(["t-mine"]);
+    // Nor its pieces: a quote filed on the desk's intervention stays at the desk.
+    db.insertRow("documents", { id: "d-quote", org_id: ORG, class: "invoice", name: "devis.pdf", storage_path: `${ORG}/documents/q.pdf`, related_type: "ticket", related_id: "t-desk" });
+    const again = await space(db, anna);
+    expect(again.requests.flatMap((r) => r.attachments.map((a) => a.name))).toEqual([]);
+  });
+
+  it("shows a piece of the lease only once the desk shares it, and the desk can take it back", async () => {
+    db.insertRow("documents", { id: "d-scan", org_id: ORG, class: "lease", name: "bail-signe.pdf", storage_path: `${ORG}/documents/s.pdf`, related_type: "lease", related_id: leaseId, shared_with_tenant: false });
+    const docsOf = async () => (await space(db, anna)).current?.documents.map((d) => d.name) ?? [];
+    expect(await docsOf()).toEqual([]);
+    expect(await shareDocument(ctx, "d-scan", true)).toEqual({ shared: true });
+    expect(await docsOf()).toEqual(["bail-signe.pdf"]);
+    expect(await shareDocument(ctx, "d-scan", false)).toEqual({ shared: false });
+    expect(await docsOf()).toEqual([]);
+    // Only a piece of a tenancy has tenants to be shared with; another workspace's piece is not found.
+    db.insertRow("documents", { id: "d-prop", org_id: ORG, class: "deed", name: "acte.pdf", storage_path: `${ORG}/documents/a.pdf`, related_type: "property", related_id: "p-1" });
+    expect(await shareDocument(ctx, "d-prop", true)).toEqual({ error: "not_found" });
+    expect(await shareDocument(ctxFor(db, "0f0f0f0f-0000-4000-8000-00000000beef"), "d-scan", true)).toEqual({ error: "not_found" });
+  });
+
+  it("produces for the tenant what is written for them; a formal reminder waits until it is sent", () => {
+    const withheld = DOCUMENT_KINDS.filter((k) => !sharedOnceProduced(k));
+    expect(withheld.sort()).toEqual(["arrears_formal", "arrears_mise_en_demeure"]);
+    expect(sharedOnceProduced("rent_receipt")).toBe(true);
+    expect(sharedOnceProduced("lease_contract")).toBe(true);
+  });
+});
+
+describe("the retention clock of an upload", () => {
+  it("runs ten years from filing for the accounting classes, three months for an applicant's papers, and stays open otherwise", () => {
+    expect(retentionUntil("accounting_10y", "2026-11-20")).toBe("2036-11-20");
+    expect(retentionUntil("applicant_3m", "2026-11-30")).toBe("2027-03-02");
+    expect(retentionUntil("accounting_10y", "2028-02-29")).toBe("2038-03-01");
+    expect(retentionUntil("permanent", "2026-11-20")).toBeNull();
+    expect(retentionUntil("aml_5y_from_end", "2026-11-20")).toBeNull();
+    expect(retentionUntil("gdpr_minimised", "2026-11-20")).toBeNull();
+    expect(retentionUntil("accounting_10y", "nonsense")).toBeNull();
+  });
+});
