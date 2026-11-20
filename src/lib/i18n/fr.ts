@@ -3046,6 +3046,7 @@ export const fr = {
     gasWarning: "Odeur de gaz ? Quittez le logement et appelez d'abord le 112 (secours) ou le 8007-3001 (Creos). Votre demande peut attendre.",
     formTitle: "Objet",
     formTitleHint: "En quelques mots.",
+    formTenancy: "Logement concerné",
     formDesc: "Description",
     formDescHint: "Où, depuis quand, ce que vous avez déjà essayé.",
     formPhoto: "Photos ou PDF (optionnel)",

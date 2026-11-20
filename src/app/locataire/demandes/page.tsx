@@ -3,6 +3,7 @@ import { LinkRow, MetaBadge } from "@/components/gestion/bits";
 import TenantEmpty from "@/components/gestion/TenantEmpty";
 import TenantRequests, { type RequestPreset } from "@/components/gestion/TenantRequests";
 import { requestLabels } from "@/lib/portal/labels";
+import { leaseSubject } from "@/lib/portal/types";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
@@ -52,6 +53,8 @@ export default async function TenantRequestsPage({ searchParams }: { searchParam
           sampleNote={sampleNote}
           initialOpen={params.nouvelle !== undefined}
           preset={preset}
+          // Two tenancies in force at once (a second lot, a parking): the form asks which one the request is about.
+          tenancies={[space.current, ...space.others].filter((l): l is NonNullable<typeof l> => l !== null).map((l) => ({ id: l.id, label: leaseSubject(l.unit.label, l.property.name) }))}
         />
       </div>
 

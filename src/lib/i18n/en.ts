@@ -3035,6 +3035,7 @@ export const en: Dict = {
     gasWarning: "Smell of gas? Leave the home and first call 112 (emergency) or 8007-3001 (Creos). Your request can wait.",
     formTitle: "Subject",
     formTitleHint: "In a few words.",
+    formTenancy: "Home concerned",
     formDesc: "Description",
     formDescHint: "Where, since when, what you have already tried.",
     formPhoto: "Photos or PDF (optional)",

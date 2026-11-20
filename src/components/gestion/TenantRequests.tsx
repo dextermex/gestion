@@ -44,6 +44,7 @@ export default function TenantRequests({
   sampleNote,
   initialOpen = false,
   preset = null,
+  tenancies = [],
 }: {
   labels: RequestLabels;
   /** The tenant has a tenancy in force: a request has somewhere to land. */
@@ -52,6 +53,12 @@ export default function TenantRequests({
   sampleNote: string | null;
   initialOpen?: boolean;
   preset?: RequestPreset | null;
+  /**
+   * The tenancies in force a request can be about, the current one first.
+   * With more than one (a second lot, a parking), the form asks which; the
+   * route takes it only if it is one of the account's own.
+   */
+  tenancies?: Array<{ id: string; label: string }>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(initialOpen);
@@ -60,6 +67,7 @@ export default function TenantRequests({
   const [guided, setGuided] = useState(preset !== null);
   const [category, setCategory] = useState<string>("heating");
   const [severity, setSeverity] = useState<"routine" | "priority" | "urgent">("routine");
+  const [leaseId, setLeaseId] = useState(tenancies[0]?.id ?? "");
   const [title, setTitle] = useState(preset?.title ?? "");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -102,7 +110,7 @@ export default function TenantRequests({
       const res = await fetch("/api/locataire/demandes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, category: kind === "technical" ? category : null, severity: kind === "technical" ? severity : "routine", title, description }),
+        body: JSON.stringify({ kind, category: kind === "technical" ? category : null, severity: kind === "technical" ? severity : "routine", title, description, leaseId: leaseId || undefined }),
       });
       if (res.status === 401) {
         window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
@@ -192,6 +200,17 @@ export default function TenantRequests({
         ) : (
           <form className="space-y-4" onSubmit={submit}>
             {guided && preset?.hint && <p className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm leading-relaxed text-ink">{preset.hint}</p>}
+            {tenancies.length > 1 && (
+              <Field label={labels.tenancy}>
+                <Select value={leaseId} onChange={(e) => setLeaseId(e.target.value)} data-request-tenancy>
+                  {tenancies.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
             {kind === "technical" && (
               <>
                 <Field label={labels.category}>

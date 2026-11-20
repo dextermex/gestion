@@ -33,6 +33,7 @@ export function requestLabels(d: Dict) {
     urgency: d.tenant.formUrgency,
     urgencies: { routine: d.tenant.urgRoutine, priority: d.tenant.urgPriority, urgent: d.tenant.urgUrgent },
     urgencyHint: d.tenant.urgencyHint,
+    tenancy: d.tenant.formTenancy,
     title: d.tenant.formTitle,
     titleHint: d.tenant.formTitleHint,
     description: d.tenant.formDesc,

@@ -3035,6 +3035,7 @@ export const de: Dict = {
     gasWarning: "Gasgeruch? Verlassen Sie die Wohnung und rufen Sie zuerst die 112 (Notruf) oder 8007-3001 (Creos) an. Ihre Anfrage kann warten.",
     formTitle: "Betreff",
     formTitleHint: "In wenigen Worten.",
+    formTenancy: "Betroffene Wohnung",
     formDesc: "Beschreibung",
     formDescHint: "Wo, seit wann, was Sie bereits versucht haben.",
     formPhoto: "Fotos oder PDF (optional)",

@@ -3040,6 +3040,7 @@ export const lu: Dict = {
     gasWarning: "Gasgeroch? Verloosst d'Wunneng a rufft als éischt den 112 (Noutruff) oder den 8007-3001 (Creos) un. Är Ufro kann waarden.",
     formTitle: "Sujet",
     formTitleHint: "A puer Wierder.",
+    formTenancy: "Betraffe Wunneng",
     formDesc: "Beschreiwung",
     formDescHint: "Wou, zënter wéini, wat Dir scho probéiert hutt.",
     formPhoto: "Fotoen oder PDF (optionell)",
