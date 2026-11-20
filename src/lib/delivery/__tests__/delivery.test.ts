@@ -244,12 +244,17 @@ describe("the outbox on one database", () => {
     const sentRow = deliveries().filter((x) => x.kind === "document")[1];
     expect(sentRow).toMatchObject({ status: "sent", provider: "resend", provider_message_id: "msg_2" });
     expect(sentRow.sent_at).toBeTruthy();
+    // Once it left, a second click does not send it again: it says to whom and when, and sends only when asked again.
+    const twice = await sendDocumentByMail(ctx, storage.client, g.documentId);
+    expect(twice).toMatchObject({ error: "already_sent", emails: [ANNA.email] });
+    expect("sentAt" in twice && twice.sentAt).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     // Refused: an id that is nobody's, a piece of the property rather than the lease, a tenant without an address.
     expect(await sendDocumentByMail(ctx, storage.client, "not-a-document")).toEqual({ error: "not_found" });
     const other = db.insertRow("documents", { org_id: ORG, class: "other", name: "x.pdf", storage_path: `${ORG}/documents/x.pdf`, related_type: "property", related_id: propertyId });
     expect(await sendDocumentByMail(ctx, storage.client, String(other.id))).toEqual({ error: "not_found" });
     await ctx.g.from("contacts").update({ email: "" }).eq("org_id", ORG).eq("id", contactId);
-    expect(await sendDocumentByMail(ctx, storage.client, g.documentId)).toEqual({ error: "no_recipient" });
+    expect(await sendDocumentByMail(ctx, storage.client, g.documentId, { again: true })).toEqual({ error: "no_recipient" });
     expect(deliveries().filter((x) => x.kind === "document")).toHaveLength(2);
   });
 });
