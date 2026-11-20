@@ -41,7 +41,7 @@ async function open(tenancies: Array<{ id: string; label: string }>) {
   await act(async () => root.render(<TenantRequests labels={requestLabels(fr)} canCreate sampleNote={null} tenancies={tenancies} />));
   await act(async () => Array.from(document.querySelectorAll("button")).find((b) => b.textContent === t.reqNew)!.click());
   // A question: no category to choose, a title is enough.
-  await act(async () => Array.from(document.querySelectorAll("[role=dialog] button")).find((b) => b.textContent?.includes(t.kindQuestion))!.click());
+  await act(async () => Array.from(document.querySelectorAll<HTMLButtonElement>("[role=dialog] button")).find((b) => b.textContent?.includes(t.kindQuestion))!.click());
   const dialog = document.querySelector("[role=dialog]") as HTMLElement;
   const title = dialog.querySelector("form input:not([type=file])") as HTMLInputElement;
   await act(async () => {
