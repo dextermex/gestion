@@ -7,7 +7,7 @@ import BillingPanel from "@/components/gestion/BillingPanel";
 import { TRIAL_DAYS, billedRents } from "@/domain/billing/pricing";
 import { DAY, billingState } from "@/domain/billing/trial";
 import { billingPhaseMeta } from "@/lib/types";
-import { billingPage, type BillingPageData } from "@/lib/billing/view";
+import { billingPage, confirmationShown, type BillingPageData } from "@/lib/billing/view";
 
 /**
  * Abonnement: how to be billed, the price, the card and the invoices. The
@@ -42,7 +42,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
   return (
     <>
       <PageHeader title={d.billing.title} subtitle={d.billing.subtitle} />
-      <BillingPanel locale={locale} b={d.billing} data={data} rents={rents} sample={sample} now={now} badge={badge} confirmed={params.confirme === "1"} />
+      <BillingPanel locale={locale} b={d.billing} data={data} rents={rents} sample={sample} now={now} badge={badge} confirmed={confirmationShown(params.confirme, data, sample)} />
     </>
   );
 }

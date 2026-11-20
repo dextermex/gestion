@@ -7,7 +7,7 @@ import {
 } from "@/lib/billing/service";
 import { lockedFor } from "@/lib/billing/gate";
 import { billingProvider, exemptOrgs } from "@/lib/billing/provider";
-import { signupChoice } from "@/lib/billing/view";
+import { confirmationShown, signupChoice } from "@/lib/billing/view";
 
 /**
  * The billing service against a recorded stand-in for Stripe: the real SDK,
@@ -386,6 +386,14 @@ describe("configuration and the write lock", () => {
     // Stripe silent on the second look: the lock it gave stands.
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await lockedFor(ORG, async () => over, env, NOW, async () => { throw new Error("stripe down"); })).toBe(true);
+  });
+
+  it("says a subscription was confirmed only when one is on record, whatever the address says", () => {
+    const sub = view({ status: "trialing" });
+    expect(confirmationShown("1", { subscription: sub }, false)).toBe(true);
+    expect(confirmationShown("1", { subscription: null }, false)).toBe(false);
+    expect(confirmationShown(undefined, { subscription: sub }, false)).toBe(false);
+    expect(confirmationShown("1", { subscription: sub }, true)).toBe(false);
   });
 
   it("reads the rhythm picked at sign-up defensively, an older choice's plan name ignored", () => {

@@ -194,6 +194,9 @@ function firstNameOf(parties: TenantParty[], fallback: string): string {
   return name.trim().split(/\s+/)[0] ?? "";
 }
 
+/** Where a tenant opens one of their pieces: a route that signs it for a minute at that moment. */
+export const tenantDocumentHref = (id: string): string => `/api/locataire/documents/${encodeURIComponent(id)}/fichier`;
+
 export async function buildTenantSpace(
   g: GestionReader,
   opts: { userId: string; email: string; displayName: string; today: string; sign: (paths: string[]) => Promise<Map<string, string>> },
@@ -300,7 +303,9 @@ export async function buildTenantSpace(
     klass: s(d.class),
     createdAt: day(d.created_at) ?? "",
     storagePath: s(d.storage_path),
-    url: urlOf(s(d.storage_path)),
+    // The object is readable (signed above), and the page links to the route that
+    // signs it for a minute when opened: no long-lived link sits in the page.
+    url: urlOf(s(d.storage_path)) ? tenantDocumentHref(s(d.id)) : null,
     relatedType: s(d.related_type),
     relatedId: s(d.related_id),
   }));
