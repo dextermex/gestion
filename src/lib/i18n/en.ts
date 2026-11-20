@@ -1972,6 +1972,8 @@ export const en: Dict = {
     confidenceMedium: "medium confidence",
     confidenceLow: "low confidence, please check",
     recogUnavailable: "Reading unavailable for this file: fill in the fields.",
+    readOffer: "Suggest a filing",
+    readNotice: "On request, the file is read by an analysis provider (Anthropic) to suggest its class, title and record. Nothing is stored until you confirm.",
     factsTitle: "Key facts",
     factSummary: "Summary",
     factDate: "Date",

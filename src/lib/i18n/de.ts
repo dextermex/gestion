@@ -1972,6 +1972,8 @@ export const de: Dict = {
     confidenceMedium: "mittlere Sicherheit",
     confidenceLow: "geringe Sicherheit, bitte prüfen",
     recogUnavailable: "Lesung für diese Datei nicht verfügbar: Füllen Sie die Felder aus.",
+    readOffer: "Ablage vorschlagen",
+    readNotice: "Auf Wunsch wird die Datei von einem Analyseanbieter (Anthropic) gelesen, um Klasse, Titel und Zuordnung vorzuschlagen. Nichts wird gespeichert, bevor Sie bestätigen.",
     factsTitle: "Eckdaten",
     factSummary: "Zusammenfassung",
     factDate: "Datum",

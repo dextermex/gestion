@@ -1977,6 +1977,8 @@ export const lu: Dict = {
     confidenceMedium: "mëttel Sécherheet",
     confidenceLow: "geréng Sécherheet, w.e.g. kontrolléieren",
     recogUnavailable: "Liesung fir dëse Fichier net disponibel: Fëllt d'Felder aus.",
+    readOffer: "Classement proposéieren",
+    readNotice: "Op Ufro gëtt de Fichier vun engem Analyse-Prestataire (Anthropic) gelies, fir d'Klass, den Titel an d'Zouuerdnung virzeschloen. Näischt gëtt gespäichert, ier Dir bestätegt.",
     factsTitle: "Schlësseldaten",
     factSummary: "Resumé",
     factDate: "Datum",

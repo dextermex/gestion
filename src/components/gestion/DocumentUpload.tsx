@@ -46,6 +46,8 @@ export interface DocumentLabels {
   confidenceMedium: string;
   confidenceLow: string;
   recogUnavailable: string;
+  readOffer: string;
+  readNotice: string;
   factsTitle: string;
   factSummary: string;
   factDate: string;
@@ -156,8 +158,8 @@ export default function DocumentUpload({
       return;
     }
     // The file's name stands in until the person, or the reader, names the piece.
+    // The reader is a further processor: it reads a file only when asked to (below).
     if (!touched.current.name || !name.trim()) setName(chosen.name);
-    void analyse(chosen);
   };
 
   const save = async () => {
@@ -269,6 +271,15 @@ export default function DocumentUpload({
           />
         </div>
 
+        {file && reading === "idle" && recognition && RECOGNISABLE_TYPES.has(file.type) && (
+          <div className="crm-reading" data-read-offer>
+            <Icon name="ai" size={16} />
+            <span className="min-w-0 flex-1">{labels.readNotice}</span>
+            <Button size="sm" variant="secondary" onClick={() => void analyse(file)} disabled={busy}>
+              {labels.readOffer}
+            </Button>
+          </div>
+        )}
         {reading === "reading" && (
           <p role="status" className="crm-reading">
             <Icon name="ai" size={16} />

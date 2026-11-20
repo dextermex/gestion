@@ -1985,6 +1985,8 @@ export const fr = {
     confidenceMedium: "confiance moyenne",
     confidenceLow: "confiance faible, vérifiez",
     recogUnavailable: "Lecture indisponible pour ce fichier : renseignez les champs.",
+    readOffer: "Proposer le classement",
+    readNotice: "Sur demande, le fichier est lu par un prestataire d'analyse (Anthropic) pour proposer la classe, le titre et le rattachement. Rien n'est enregistré avant votre confirmation.",
     factsTitle: "Points clés",
     factSummary: "Résumé",
     factDate: "Date",
