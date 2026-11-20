@@ -94,14 +94,18 @@ export async function leaveSignedInAccountIfAny(page: Page): Promise<void> {
 /**
  * An invited tenant's first visit: the invitation offers account creation on
  * the phone funnel with the invited address, never the retired email form.
- * The account is then created as above and signed in back to the invitation.
+ * The way back names the invitation's page, never its token (the link left
+ * it in a cookie only the server reads). The account is then created as
+ * above and signed in back to the invitation.
  */
 export async function createAccountFromInvitation(page: Page, person: Person, token: string): Promise<void> {
   const create = page.getByRole("link", { name: "Créer mon compte" });
   const href = (await create.getAttribute("href")) ?? "";
   expect(href).toContain("/inscription?");
   expect(new URL(href, "http://x").searchParams.get("email")).toBe(person.email);
-  await signUp(page, person, `/invitation/${token}`);
+  expect(new URL(href, "http://x").searchParams.get("next")).toBe("/invitation");
+  expect(href).not.toContain(token);
+  await signUp(page, person, "/invitation");
 }
 
 /** Sign out from the management shell, through its account menu (wizard screens have no shell: start from the dashboard). */

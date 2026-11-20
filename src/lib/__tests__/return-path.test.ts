@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { REQUESTED_PATH_HEADER, requestedPath, signInAddress } from "@/lib/auth/return-path";
 import { config, middleware } from "@/middleware";
+import { INVITATION_COOKIE, isInvitationToken, tokenOfPath } from "@/lib/auth/invitation-token";
 
 /**
  * Signing in returns to the page that was asked for: the middleware names
@@ -58,7 +59,51 @@ describe("the middleware", () => {
     expect(forwarded(res)).toBe("/locataire/bail");
   });
 
-  it("runs on the two spaces only: never on an API route, the door or a file", () => {
-    expect(config.matcher).toEqual(["/app/:path*", "/locataire/:path*"]);
+  it("runs on the two spaces and the invitation link only: never on an API route, the door or a file", () => {
+    expect(config.matcher).toEqual(["/app/:path*", "/locataire/:path*", "/invitation/:token"]);
+  });
+});
+
+describe("the invitation link", () => {
+  const TOKEN = "Qx3_aZ09-".repeat(5) + "k";
+
+  it("leaves its token in a cookie only the server reads, on the invitation page alone, and sends the browser to an address without it", () => {
+    const res = middleware(new NextRequest(`https://app.morada.lu/invitation/${TOKEN}`));
+    expect(res.status).toBe(303);
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/invitation");
+    expect(res.headers.get("location")).not.toContain(TOKEN);
+    const cookie = res.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain(`${INVITATION_COOKIE}=${TOKEN}`);
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/Secure/i);
+    expect(cookie).toMatch(/SameSite=lax/i);
+    expect(cookie).toMatch(/Path=\/invitation(;|$)/i);
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    // Nothing is named for a layout here.
+    expect(res.headers.get(`x-middleware-request-${REQUESTED_PATH_HEADER}`)).toBeNull();
+  });
+
+  it("is not Secure on a local plain-HTTP server, so the cookie still reaches the page there", () => {
+    const res = middleware(new NextRequest(`http://127.0.0.1:4321/invitation/${TOKEN}`));
+    expect(res.status).toBe(303);
+    expect(res.headers.get("set-cookie") ?? "").not.toMatch(/Secure/i);
+  });
+
+  it("leaves an address without a token of the right shape to the page, which says the link is not valid", () => {
+    for (const raw of ["short", "a%2Fb".repeat(8), "x".repeat(200)]) {
+      const res = middleware(new NextRequest(`https://app.morada.lu/invitation/${raw}`));
+      expect(res.status, raw).toBe(200);
+      expect(res.headers.get("set-cookie"), raw).toBeNull();
+    }
+  });
+
+  it("reads a token from its path only when it is one", () => {
+    expect(tokenOfPath(`/invitation/${TOKEN}`)).toBe(TOKEN);
+    expect(tokenOfPath(`/invitation/${TOKEN}/`)).toBe(TOKEN);
+    expect(tokenOfPath("/invitation")).toBeNull();
+    expect(tokenOfPath(`/invitation/${TOKEN}/x`)).toBeNull();
+    expect(tokenOfPath("/invitation/%E0%A4%A")).toBeNull();
+    expect(isInvitationToken(TOKEN)).toBe(true);
+    expect(isInvitationToken("../../etc")).toBe(false);
   });
 });

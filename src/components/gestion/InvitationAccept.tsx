@@ -42,7 +42,8 @@ export default function InvitationAccept({
   preview: InvitePreviewView;
   session: { email: string } | null;
 }) {
-  const next = encodeURIComponent(`/invitation/${token}`);
+  // The way back names the page, never the token: it waits in a cookie the server reads.
+  const next = encodeURIComponent("/invitation");
   const matches = session !== null && preview.email !== "" && session.email.toLowerCase() === preview.email.toLowerCase();
   const [phase, setPhase] = useState<"idle" | "accepting" | "done" | "failed">("idle");
   const [failure, setFailure] = useState<Failure | null>(null);
