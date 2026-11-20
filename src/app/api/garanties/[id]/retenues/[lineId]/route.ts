@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { undoArrearsSettlement } from "@/lib/banking/retention";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { loadSettlement } from "@/lib/gestion/deposit-settlement";
 import { ownedDocument } from "@/lib/gestion/documents";
@@ -86,6 +87,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!settlementOpen(loaded.deposit.status, loaded.deposit.keyHandoverOn)) return NextResponse.json({ error: "not_open" }, { status: 409 });
   if (line.justifiedAt && line.justificationDocumentId) return NextResponse.json({ error: "refused" }, { status: 409 });
 
+  // An arrears line withdrawn takes back what it settled: the months are owed again.
+  if (line.kind === "arrears" && !(await undoArrearsSettlement(ctx, lineId))) return NextResponse.json({ error: "storage_failed" }, { status: 502 });
   const { data, error } = await g.from("deposit_deductions").delete().eq("org_id", org.id).eq("id", lineId).eq("deposit_id", id).select("id");
   if (error) return dbError("deposit deduction delete", error);
   if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });

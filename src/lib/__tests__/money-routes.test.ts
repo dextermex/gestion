@@ -365,3 +365,32 @@ describe("a payer's account", () => {
     expect(db.table("iban_bindings").map((b) => b.payer_iban)).toEqual(["LU280019400644750000"]);
   });
 });
+
+describe("arrears kept from the guarantee", () => {
+  it("settle the oldest months they cover, once, and are owed again when the line is withdrawn", async () => {
+    const db = new FakeDb(today);
+    current = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    const { leaseId } = await letTo(current, unitId, [ANNA], "1 250", addMonths(thisMonth, -3));
+    await openLedger(current, { id: leaseId, startDate: addMonths(thisMonth, -3), endDate: null, rentCents: 125000, chargesCents: 15000, paymentDay: 1 }, today);
+    const deposit = db.insertRow("deposits", { org_id: ORG, lease_id: leaseId, form: "cash", amount_cents: 250000, status: "release_pending", key_handover_on: today });
+    const { POST } = await import("@/app/api/garanties/[id]/retenues/route");
+    const res = await POST(call(`/api/garanties/${String(deposit.id)}/retenues`, "POST", { kind: "arrears", label: "Loyer impayé", amount: "1 500" }), params({ id: String(deposit.id) }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string; settledCents: number };
+    expect(body.settledCents).toBe(150000);
+    const allocated = () =>
+      (db.rowsOf("rent_period_status").filter((r) => r.lease_id === leaseId) as Row[])
+        .sort((a, b) => (String(a.period) < String(b.period) ? -1 : 1))
+        .map((r) => Number(r.allocated_cents));
+    expect(allocated().slice(0, 2)).toEqual([140000, 10000]);
+    expect(db.table("payments")).toHaveLength(1);
+    expect(db.table("payments")[0]).toMatchObject({ method: "other", note: "Retenue sur la garantie" });
+
+    const { DELETE } = await import("@/app/api/garanties/[id]/retenues/[lineId]/route");
+    const gone = await DELETE(call(`/api/garanties/${String(deposit.id)}/retenues/${body.id}`, "DELETE"), params({ id: String(deposit.id), lineId: body.id }));
+    expect(gone.status).toBe(200);
+    expect(allocated().every((c) => c === 0)).toBe(true);
+    expect(db.table("payments")[0].cancelled_at).not.toBeNull();
+  });
+});

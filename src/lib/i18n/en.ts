@@ -2159,6 +2159,7 @@ export const en: Dict = {
   },
 
   garanties: {
+    retentionNote: "Kept from the guarantee",
     docSettlement: "Settlement statement",
     actJustifyFile: "Document (PDF or image)",
     actJustifyNeedsFile: "Attach the invoice or the estimate.",

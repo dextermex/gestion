@@ -2159,6 +2159,7 @@ export const de: Dict = {
   },
 
   garanties: {
+    retentionNote: "Einbehalt aus der Kaution",
     docSettlement: "Garantieabrechnung",
     actJustifyFile: "Beleg (PDF oder Bild)",
     actJustifyNeedsFile: "Fügen Sie die Rechnung oder den Kostenvoranschlag bei.",

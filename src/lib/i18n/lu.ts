@@ -2164,6 +2164,7 @@ export const lu: Dict = {
   },
 
   garanties: {
+    retentionNote: "Zeréckbehalen vun der Garantie",
     docSettlement: "Décompte vun der Garantie",
     actJustifyFile: "Beleeg (PDF oder Bild)",
     actJustifyNeedsFile: "Setzt d'Rechnung oder den Devis derbäi.",

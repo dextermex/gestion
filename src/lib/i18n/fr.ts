@@ -2170,6 +2170,7 @@ export const fr = {
   },
 
   garanties: {
+    retentionNote: "Retenue sur la garantie",
     docSettlement: "Décompte de garantie",
     actJustifyFile: "Pièce (PDF ou image)",
     actJustifyNeedsFile: "Joignez la facture ou le devis.",
