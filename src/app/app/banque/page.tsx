@@ -133,6 +133,15 @@ export default async function BanquePage({
   const inCount = BANK_TXS.filter((t) => t.amount > 0).length;
   const autoRate = inCount === 0 ? null : Math.round((100 * autoCount) / inCount);
 
+  // The verdicts the ledger writes as codes, in the reader's words.
+  const explainText = (raw: string): string =>
+    raw === "payment_cancelled"
+      ? d.banque.explainCancelled
+      : raw === "several_leases"
+        ? d.banque.explainSeveral
+        : /^currency [A-Z]{3}$/.test(raw)
+          ? fmt(d.banque.explainCurrency, { currency: raw.slice(9) })
+          : raw;
   const rows: TxRow[] = BANK_TXS.map((t) => {
     const status = statusOf(t);
     return {
@@ -140,7 +149,7 @@ export default async function BanquePage({
       status,
       counterparty: t.counterpartyName ?? d.common.none,
       remittance: t.remittanceInfo ?? d.common.none,
-      explain: t.matchExplain ?? "",
+      explain: explainText(t.matchExplain ?? ""),
       amountLabel: euros(t.amount, locale),
       negative: t.amount < 0,
       bookedAt: t.bookedAt,

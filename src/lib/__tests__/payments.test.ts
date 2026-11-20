@@ -291,6 +291,20 @@ describe("the matching run", () => {
     expect(db.table("bank_transactions").map((t) => t.match_status).sort()).toEqual(["ignored", "review"]);
   });
 
+  it("holds for a person a transfer whose amount spans two tenancies of one payer", async () => {
+    const { unitId: parking } = seedProperty(db, ORG, "Parking Gare");
+    const second = await letTo(ctx, parking, [{ firstName: "Anna", lastName: "Weber" }], "100", started);
+    await openLedger(ctx, { id: second.leaseId, startDate: started, endDate: null, rentCents: 10000, chargesCents: 15000, paymentDay: 1 }, today);
+    const payer = "LU280019400644750000";
+    db.insertRow("iban_bindings", { org_id: ORG, payer_iban: payer, lease_id: leaseId });
+    db.insertRow("iban_bindings", { org_id: ORG, payer_iban: payer, lease_id: second.leaseId });
+    // The flat's oldest month and the parking's oldest month, in one transfer.
+    line(MONTH + 25000, { remittance_info: "virement", counterparty_iban: payer });
+    expect(await run()).toEqual({ auto: 0, review: 1, ignored: 0 });
+    expect(db.table("payments")).toHaveLength(0);
+    expect(db.table("bank_transactions")[0]).toMatchObject({ match_status: "review", match_explain: "several_leases" });
+  });
+
   it("matches against the whole open ledger of a large workspace, not its first page", async () => {
     // 1 100 other tenancies, each with an open month: the tenancy under test is read last.
     for (let i = 0; i < 1100; i++) {

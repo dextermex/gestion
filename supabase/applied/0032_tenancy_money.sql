@@ -32,6 +32,7 @@
 --     locataire présent.
 -- 14. arrears_actions_period_stage_key : une étape de relance par échéance.
 -- 15. properties.request_key : un bien créé une fois par requête.
+-- 16. lease_parties_present_key : une place par personne et par titre.
 --
 -- Les fonctions appelées par l'application sont SECURITY INVOKER : elles
 -- écrivent sous le jeton de l'appelant, les politiques RLS décident, et
@@ -40,6 +41,7 @@
 -- exécutables par aucun rôle client : seul le planificateur les appelle.
 --
 -- Réversible :
+--   drop index if exists gestion.lease_parties_present_key;
 --   drop index if exists gestion.properties_request_key;
 --   alter table gestion.properties drop column request_key;
 --   drop index if exists gestion.arrears_actions_period_stage_key;
@@ -295,7 +297,7 @@ begin
                  where a.rent_period_id = rp.id and a.reversed_at is null
                ), 0) as open_cents
         from gestion.rent_periods rp
-        where rp.id = any (p_periods) and rp.org_id = v_org and not rp.written_off
+        where rp.id = any (p_periods) and rp.org_id = v_org and rp.lease_id = p_lease and not rp.written_off
         order by rp.due_date, rp.period, rp.id
       loop
         exit when v_left <= 0;
@@ -852,6 +854,28 @@ comment on column gestion.properties.request_key is
 create unique index if not exists properties_request_key
   on gestion.properties (org_id, request_key)
   where request_key is not null;
+
+-- ---------------------------------------------------------------------------
+-- 16. Une personne n'a qu'une place à la fois sur un bail
+-- ---------------------------------------------------------------------------
+-- Deux enregistrements croisés d'un dossier ne mettent pas deux fois la même
+-- personne au même titre. Une partie sortie (moved_out_on) peut revenir.
+-- Posé seulement là où aucun doublon n'existe déjà (une notice le dit).
+do $$
+begin
+  if exists (
+    select 1 from gestion.lease_parties
+     where moved_out_on is null
+     group by lease_id, contact_id, role
+    having count(*) > 1
+  ) then
+    raise notice 'lease_parties: duplicate places exist, index lease_parties_present_key not created';
+  else
+    create unique index if not exists lease_parties_present_key
+      on gestion.lease_parties (lease_id, contact_id, role)
+      where moved_out_on is null;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- Droits d'exécution, explicites (même geste que 0018)

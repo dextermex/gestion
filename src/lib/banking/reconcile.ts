@@ -166,6 +166,12 @@ export async function reconcileUnmatched(g: Db, orgId: string): Promise<Reconcil
     if (decision.kind === "auto") {
       const targets = liveInvoices.filter((i) => decision.invoiceIds.includes(i.id));
       if (targets.length === 0) continue;
+      // One transfer is one payment on one tenancy: a sum that spans several
+      // is for a person to split, not to be filed under the first of them.
+      if (new Set(targets.map((t) => t.leaseId)).size > 1) {
+        if (await mark(btx.id, { match_status: "review", match_tier: decision.tier, match_confidence: decision.confidence, match_explain: "several_leases" })) out.review += 1;
+        continue;
+      }
       const leaseId = targets[0].leaseId;
       // Locale-neutral shorthand: the UI's badge carries the translated tier.
       const explain =

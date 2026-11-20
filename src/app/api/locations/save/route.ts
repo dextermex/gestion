@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const input = parseDossierInput(body, locale);
   if (!input) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  // An account typed for the payer that is not one (a typo in its check digits) is said, not dropped.
+  if (typeof body.payerIban === "string" && body.payerIban.trim() !== "" && input.payerIban === null) {
+    return NextResponse.json({ error: "invalid_iban", problem: "payerIban" }, { status: 400 });
+  }
 
   const result = await saveRentalDraft(ctx, d, input);
   if ("error" in result) {

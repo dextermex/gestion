@@ -568,6 +568,11 @@ export class FakeDb {
         if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "payments_request_key"' };
       }
     }
+    // lease_parties_present_key (0032): one present place per person and role on a lease.
+    if (table === "lease_parties" && row.moved_out_on == null) {
+      const clash = this.table(table).some((r) => r !== row && r.lease_id === row.lease_id && r.contact_id === row.contact_id && r.role === row.role && r.moved_out_on == null);
+      if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "lease_parties_present_key"' };
+    }
     // contacts_email_active_key (0002): one live contact per e-mail and workspace.
     if (table === "contacts" && row.email != null && row.archived_at == null) {
       const clash = this.table(table).some((r) => r !== row && r.org_id === row.org_id && r.email === row.email && r.archived_at == null);
@@ -808,7 +813,7 @@ export class FakeDb {
           });
           if (Array.isArray(args.p_periods)) {
             let left = amount;
-            const named = this.table("rent_periods").filter((rp) => (args.p_periods as unknown[]).includes(rp.id) && rp.org_id === lease.org_id && !rp.written_off);
+            const named = this.table("rent_periods").filter((rp) => (args.p_periods as unknown[]).includes(rp.id) && rp.org_id === lease.org_id && rp.lease_id === lease.id && !rp.written_off);
             for (const per of this.periodsOldestFirst(named)) {
               if (left <= 0) break;
               const open = this.openCents(per);

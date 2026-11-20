@@ -1,4 +1,5 @@
 import "server-only";
+import { ibanChecks } from "@/domain/banking/iban";
 import type { OrgContext } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { leaseRF } from "@/domain/banking/rf";
@@ -94,10 +95,10 @@ const sameName = (a: { first: string; last: string }, b: { first: string; last: 
   return norm(a.first) === norm(b.first) && norm(a.last) === norm(b.last);
 };
 
-/** IBAN as stored elsewhere in the product: upper case, no spaces. */
+/** IBAN as stored elsewhere in the product: upper case, no spaces, and its check digits right (mod 97). */
 export function normalizeIban(raw: string): string | null {
   const iban = raw.replace(/[\s]/g, "").toUpperCase();
-  return /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) ? iban : null;
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) && ibanChecks(iban) ? iban : null;
 }
 
 function tenantFrom(raw: unknown, defaultLanguage: string): TenantInput | null {
@@ -412,7 +413,9 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
     const { error: linkErr } = await g
       .from("lease_parties")
       .insert({ org_id: org.id, lease_id: leaseId, contact_id: contactId, role: "tenant" });
-    if (linkErr) console.error("lease party insert failed:", linkErr.code, linkErr.message);
+    // Already on it (a save that crossed this one): one place, as wanted. Any
+    // other failure is said: the tenant step is not done without its people.
+    if (linkErr && linkErr.code !== "23505") return fail("lease party insert", linkErr);
   }
   // Someone removed from the dossier leaves the lease; they stay a contact.
   const gone = [...existing.entries()].filter(([contactId]) => !contactIds.includes(contactId)).map(([, partyId]) => partyId);

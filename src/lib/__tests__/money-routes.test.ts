@@ -350,3 +350,18 @@ describe("creating a property", () => {
     expect(other.status).toBe(200);
   });
 });
+
+describe("a payer's account", () => {
+  it("is refused with a wrong check digit, and kept when it is right", async () => {
+    const db = new FakeDb(today);
+    current = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    const { leaseId } = await letTo(current, unitId, [ANNA]);
+    const { POST } = await import("@/app/api/baux/[id]/payeurs/route");
+    const bad = await POST(call(`/api/baux/${leaseId}/payeurs`, "POST", { payerIban: "LU28 0019 4006 4475 0001" }), params({ id: leaseId }));
+    expect(bad.status).toBe(400);
+    const good = await POST(call(`/api/baux/${leaseId}/payeurs`, "POST", { payerIban: "LU28 0019 4006 4475 0000" }), params({ id: leaseId }));
+    expect(good.status).toBe(200);
+    expect(db.table("iban_bindings").map((b) => b.payer_iban)).toEqual(["LU280019400644750000"]);
+  });
+});
