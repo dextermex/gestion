@@ -765,6 +765,10 @@ export const de: Dict = {
     portalNotLive: "Die Einladung geht ab, sobald der Bail aktiv ist.",
     portalFailed: "Die Einladung konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal.",
     portalSample: "Bei einem Beispielbüro werden Einladungen nur dargestellt: nichts wird gesendet.",
+    portalWithdraw: "Zugang entziehen",
+    portalWithdrawConfirm: "Zugang zum Mieterbereich entziehen? Die Person kann ihn dann nicht mehr öffnen; eine neue Einladung öffnet ihn wieder.",
+    portalWithdrawn: "Zugang zum Bereich entzogen. Eine neue Einladung öffnet ihn wieder.",
+    portalWithdrawFailed: "Der Zugang konnte nicht entzogen werden. Versuchen Sie es gleich noch einmal.",
   },
 
   bien: {

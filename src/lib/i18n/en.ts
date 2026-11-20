@@ -765,6 +765,10 @@ export const en: Dict = {
     portalNotLive: "The invitation goes out once the lease is active.",
     portalFailed: "The invitation could not be sent. Try again in a moment.",
     portalSample: "On a sample cabinet, invitations are illustrated: nothing is sent.",
+    portalWithdraw: "Remove access",
+    portalWithdrawConfirm: "Remove access to the tenant space? This person will no longer be able to open it; a new invitation reopens it.",
+    portalWithdrawn: "Access to the space removed. A new invitation reopens it.",
+    portalWithdrawFailed: "Access could not be removed. Try again in a moment.",
   },
 
   bien: {

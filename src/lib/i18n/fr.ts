@@ -778,6 +778,10 @@ export const fr = {
     portalNotLive: "L'invitation s'envoie une fois le bail actif.",
     portalFailed: "L'invitation n'a pas pu être envoyée. Réessayez dans un instant.",
     portalSample: "Sur un cabinet d'exemple, les invitations sont illustrées : aucun envoi ne part.",
+    portalWithdraw: "Retirer l'accès",
+    portalWithdrawConfirm: "Retirer l'accès à l'espace locataire ? La personne ne pourra plus l'ouvrir ; une nouvelle invitation le rouvre.",
+    portalWithdrawn: "Accès à l'espace retiré. Une nouvelle invitation le rouvre.",
+    portalWithdrawFailed: "L'accès n'a pas pu être retiré. Réessayez dans un instant.",
   },
 
   bien: {

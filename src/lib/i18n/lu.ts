@@ -770,6 +770,10 @@ export const lu: Dict = {
     portalNotLive: "D'Invitatioun geet fort, soubal de Bail aktiv ass.",
     portalFailed: "D'Invitatioun konnt net geschéckt ginn. Probéiert et gläich nach eng Kéier.",
     portalSample: "Bei engem Beispill-Cabinet ginn Invitatiounen nëmmen duergestallt: näischt geet fort.",
+    portalWithdraw: "Zougang ewechhuelen",
+    portalWithdrawConfirm: "Zougang zum Locataire-Beräich ewechhuelen? D'Persoun kann en dann net méi opmaachen; eng nei Invitatioun mécht en erëm op.",
+    portalWithdrawn: "Zougang zum Beräich ewechgeholl. Eng nei Invitatioun mécht en erëm op.",
+    portalWithdrawFailed: "De Zougang konnt net ewechgeholl ginn. Probéiert et gläich nach eng Kéier.",
   },
 
   bien: {
