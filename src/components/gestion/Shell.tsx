@@ -13,6 +13,7 @@ import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
 import ScrollHeader from "./ScrollHeader";
 import GettingStarted, { type Progress } from "./GettingStarted";
+import DegradedBanner from "./DegradedBanner";
 import { BillingBanner, Paywall, TrialChip, TrialPrompt, type ShellBilling } from "./BillingShell";
 import type { Dict } from "@/lib/i18n/fr";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
@@ -37,6 +38,8 @@ export interface ShellData {
   orgShortName: string;
   /** The spaces this account may manage, when there are several: the account menu lets the person choose. */
   workspaces?: WorkspaceChoice[];
+  /** Part of the account's data could not be read: the screen may be incomplete. */
+  degraded?: boolean;
   userName: string;
   userEmail: string;
   badges: { review: number; unread: number };
@@ -461,6 +464,8 @@ export default function GestionShell({
               </button>
             </div>
           )}
+
+          {shell.degraded && <DegradedBanner text={d.shell.readDegraded} retry={d.shell.readRetry} />}
 
           {shell.billing && <BillingBanner billing={shell.billing} d={d} locale={locale} />}
 

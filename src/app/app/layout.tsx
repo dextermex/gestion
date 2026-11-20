@@ -123,6 +123,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     orgShortName: sampleCabinet ?? identity.active.name,
     // A person who belongs to several spaces chooses the one on screen (never on a sample cabinet).
     workspaces: sampleCabinet === null && identity.workspaces.length > 1 ? identity.workspaces.map((w) => ({ id: w.id, name: w.name, active: w.id === workspace.id })) : [],
+    // A read that failed is said, so an empty list never passes for an empty workspace.
+    degraded: (demo.DEGRADED?.length ?? 0) > 0,
     userName: identity.displayName,
     userEmail: identity.email,
     badges: {

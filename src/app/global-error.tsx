@@ -2,6 +2,8 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import { TEAM_EMAIL } from "@/lib/constants";
+import { monitoringOn } from "@/lib/monitoring";
 
 /**
  * The last resort: an error the root layout itself could not survive. It is
@@ -21,7 +23,15 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         <main style={{ maxWidth: 480, margin: "20vh auto 0", padding: "0 24px", textAlign: "center" }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>Une erreur est survenue.</h1>
           <p style={{ marginTop: 12, fontSize: 15, lineHeight: 1.6, color: "#5c6660" }}>
-            La page n&apos;a pas pu s&apos;afficher. Réessayez : si le problème persiste, il nous a été signalé.
+            {/* "Reported" only where a report leaves: without monitoring, the person is asked to write. */}
+            {monitoringOn() ? (
+              <>La page n&apos;a pas pu s&apos;afficher. Réessayez : l&apos;erreur nous a été signalée.</>
+            ) : (
+              <>
+                La page n&apos;a pas pu s&apos;afficher. Réessayez : si le problème persiste, écrivez-nous à{" "}
+                <a href={`mailto:${TEAM_EMAIL}`} style={{ color: "#0f6e6e", fontWeight: 600 }}>{TEAM_EMAIL}</a>.
+              </>
+            )}
           </p>
           <button
             type="button"

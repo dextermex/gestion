@@ -177,6 +177,8 @@ export const de: Dict = {
     datasetRealDesc: "Ihre eigenen Daten. Leer, solange nichts erfasst ist.",
     sampleBanner: "Beispieldaten: {cabinet}. Nichts davon ist echt, und nichts wird gespeichert.",
     sampleBack: "Zurück zu meinen Daten",
+    readDegraded: "Ein Teil Ihrer Daten konnte nicht gelesen werden: Die Anzeige ist möglicherweise unvollständig. Es ist nichts verloren gegangen.",
+    readRetry: "Erneut versuchen",
     datasetBeta: "Beta",
     datasetFr: "Frankophones Büro",
     datasetLu: "Luxemburgisches Büro",

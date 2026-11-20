@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import GestionLogo from "@/components/gestion/GestionLogo";
 import ScrollHeader from "@/components/gestion/ScrollHeader";
 import SessionKeeper from "@/components/gestion/SessionKeeper";
+import DegradedBanner from "@/components/gestion/DegradedBanner";
 import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
 import TenantTabs from "@/components/gestion/TenantTabs";
@@ -109,6 +110,8 @@ export default async function TenantLayout({ children }: { children: React.React
           <TenantSampleBanner text={fmt(d.shell.sampleBanner, { cabinet: sampleCabinet })} back={d.shell.sampleBack} />
         </div>
       )}
+
+      {space.degraded && <DegradedBanner text={d.shell.readDegraded} retry={d.shell.readRetry} />}
 
       {/* A conversation open over the phone's screen gets the screen whole: no gutter, no width limit. */}
       <main className="tenant-main mx-auto w-full max-w-6xl px-safe-4 py-6 max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6">{children}</main>

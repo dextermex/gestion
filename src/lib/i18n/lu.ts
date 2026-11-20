@@ -182,6 +182,8 @@ export const lu: Dict = {
     datasetRealDesc: "Är eege Donnéeën. Eidel, soulaang näischt agedroe ass.",
     sampleBanner: "Beispilldonnéeën: {cabinet}. Näischt dovun ass richteg, a näischt gëtt gespäichert.",
     sampleBack: "Zréck op meng Donnéeën",
+    readDegraded: "En Deel vun Ären Donnéeën konnt net gelies ginn: wat ugewise gëtt, ass vläicht net komplett. Et ass näischt verluer gaangen.",
+    readRetry: "Nach eng Kéier probéieren",
     datasetBeta: "Beta",
     datasetFr: "Frankophone Cabinet",
     datasetLu: "Lëtzebuergesche Cabinet",

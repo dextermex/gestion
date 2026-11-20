@@ -1,6 +1,7 @@
 import "server-only";
 import { authedClient } from "@/lib/supabase/server";
 import { signMedia, signThumbnails } from "@/lib/gestion/media";
+import { reportHandled } from "@/lib/monitoring";
 import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
 import type { OpenInvoice } from "@/domain/banking/matching";
 import type { DemoData } from "./index";
@@ -164,6 +165,19 @@ export async function buildRealDataFrom(
   // the way a workspace is read.
   const ARCHIVABLE = new Set(["properties", "units", "contacts"]);
   const CAP = 2000;
+  // The tables whose read failed: the shell says the screen may be incomplete
+  // rather than let an empty list pass for an empty workspace. A table the
+  // database does not have yet (a pending migration) is a feature not there,
+  // not a failure.
+  const degraded = new Set<string>();
+  const failed = (table: string, error: { code?: string; message?: string }) => {
+    if (error.code === "PGRST205" || error.code === "42P01") {
+      console.error(`gestion read: table not in this database yet (${table}):`, error.code);
+      return;
+    }
+    degraded.add(table);
+    reportHandled(`gestion read (${table})`, error.code);
+  };
   const q = async (table: string, select: string, apply?: (b: Narrow) => Narrow, cap = CAP): Promise<Row[]> => {
     let base = g.from(table).select(select).eq("org_id", oid) as unknown as Narrow;
     if (ARCHIVABLE.has(table)) base = base.is("archived_at", null);
@@ -171,6 +185,7 @@ export async function buildRealDataFrom(
     const { data, error } = await query.limit(cap);
     if (error) {
       console.error(`gestion read failed (${table}):`, error.code, error.message);
+      failed(table, error);
       return [];
     }
     return (data as unknown as Row[]) ?? [];
@@ -182,6 +197,7 @@ export async function buildRealDataFrom(
     const { data, error, count } = await (apply ? apply(base) : base).order(order, { ascending: false }).range(lo, hi);
     if (error) {
       console.error(`gestion page read failed (${table}):`, error.code, error.message);
+      failed(table, error);
       return { rows: [], total: 0 };
     }
     return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
@@ -192,6 +208,7 @@ export async function buildRealDataFrom(
     const { data, error, count } = await base.order("created_at", { ascending: false }).range(0, CAP - 1);
     if (error) {
       console.error("gestion documents summary read failed:", error.code, error.message);
+      failed("documents", error);
       return { rows: [], total: 0 };
     }
     return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
@@ -357,7 +374,10 @@ export async function buildRealDataFrom(
         const { data, error } = await b.order("created_at", { ascending: false }).limit(CAP);
         if (error) {
           if (error.code === "PGRST205" || error.code === "42P01") SIGNATURE_READY = false;
-          else console.error("gestion read failed (signature_envelopes):", error.code, error.message);
+          else {
+            console.error("gestion read failed (signature_envelopes):", error.code, error.message);
+            failed("signature_envelopes", error);
+          }
           return [];
         }
         return (data as unknown as Row[]) ?? [];
@@ -1032,6 +1052,7 @@ export async function buildRealDataFrom(
   // Start from the honest empty assembly, then fill what the account owns.
   const base = buildEmptyData(org);
   const data: DemoData = {
+    DEGRADED: [...degraded],
     ...base,
     TODAY: today,
     CONTACTS,

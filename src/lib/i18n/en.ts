@@ -177,6 +177,8 @@ export const en: Dict = {
     datasetRealDesc: "Your own data. Empty until something is on file.",
     sampleBanner: "Sample data: {cabinet}. Nothing you see here is real, and nothing is saved.",
     sampleBack: "Back to my data",
+    readDegraded: "Part of your data could not be read: what is shown may be incomplete. Nothing has been lost.",
+    readRetry: "Try again",
     datasetBeta: "Beta",
     datasetFr: "French-speaking firm",
     datasetLu: "Luxembourgish firm",

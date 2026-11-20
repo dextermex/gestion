@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity, type Workspace } from "@/lib/workspace";
 import { refuseWhenLocked } from "@/lib/billing/gate";
+import { reportHandled } from "@/lib/monitoring";
 
 /**
  * The shared spine of every gestion write route: a signed-in session, an
@@ -185,6 +186,7 @@ export function dbError(context: string, error: { code?: string; message?: strin
   // A table, view or column this build expects that the database does not have yet: the migration is pending.
   if (code === "PGRST205" || code === "PGRST204" || code === "42P01" || code === "42703") {
     console.error(`${context}: the database lacks what this build expects:`, code);
+    reportHandled(context, code);
     return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
   }
   if (code === "42501") return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -193,5 +195,7 @@ export function dbError(context: string, error: { code?: string; message?: strin
   // the request is at fault, not the storage.
   if (code === "22P02" || code === "22003" || code === "22007" || code === "22008") return NextResponse.json({ error: "invalid" }, { status: 400 });
   console.error(`${context} failed:`, code, error?.message);
+  // Handled here, so never seen by the monitoring of unhandled errors: reported by name and code.
+  reportHandled(context, code);
   return NextResponse.json({ error: "storage_failed" }, { status: 502 });
 }

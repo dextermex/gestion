@@ -9,6 +9,7 @@
 
 import "server-only";
 import { previewEmpty, sampleDataAllowed } from "@/lib/deployment";
+import { reportHandled } from "@/lib/monitoring";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import * as frData from "./data";
@@ -33,7 +34,15 @@ type SampleId = "fr" | "lu";
 // `TODAY` is widened: the demo pins a date so its figures stay stable, while a
 // real account is simply "today". Everything else keeps its exact shape, so
 // the structural-parity check below still catches a missing collection.
-export type DemoData = Omit<typeof frData, "TODAY"> & { TODAY: string };
+export type DemoData = Omit<typeof frData, "TODAY"> & {
+  TODAY: string;
+  /**
+   * The tables a real account's read could not get (a timeout, a refusal):
+   * what is on screen may be incomplete, and the shell says so. Absent or
+   * empty when everything was read; "*" when nothing could be.
+   */
+  DEGRADED?: readonly string[];
+};
 
 export const DATASET_COOKIE = "morada_dataset";
 
@@ -99,7 +108,10 @@ export const getDemo = cache(async (scope?: ReadScope): Promise<DemoData> => {
           // engine now computes on real data through the same seam.
           return await buildRealData(org, session.accessToken, scope ?? {});
         } catch (e) {
+          // Nothing could be read: the screens are empty, and say it is not because the account is.
           console.error("real dataset hydration failed, serving empty:", e);
+          reportHandled("gestion hydration", e instanceof Error ? e.name : "unknown");
+          return { ...buildEmptyData(org), DEGRADED: ["*"] };
         }
       }
     }
