@@ -6,7 +6,7 @@ import { reconcileUnmatched } from "@/lib/banking/reconcile";
 import { openLedger } from "@/lib/gestion/lease";
 import { addDays, addMonths } from "@/domain/dates";
 import { FakeDb, type Row } from "./helpers/fake-postgrest";
-import { ORG, ctxFor, hydrate, isoToday, letTo, seedProperty } from "./helpers/tenancy";
+import { ORG, ctxFor, hydrate, isoToday, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
 
 /**
  * Money in, once. A payment and its allocations are one write; a bank
@@ -178,6 +178,34 @@ describe("payments on a tenancy", () => {
     await cancelPayment(ctx.g, first.paymentId, "Doublon");
     expect(allocatedByPeriod().map(([, c]) => c)).toEqual([MONTH, 0, 0, 0]);
     expect((await hydrate(db)).LEASE_CREDITS).toEqual({});
+  });
+
+  it("shows the tenant the same credit the owner reads, and nothing of the payments themselves", async () => {
+    const anna = { id: "user-anna", email: ANNA.email };
+    await linkAccount(db, ctx, { leaseId, contactIds: [String(db.table("lease_parties").find((lp) => lp.lease_id === leaseId)!.contact_id)] }, anna);
+    expect((await space(db, anna)).current?.creditCents).toBe(0);
+    await pay(4 * MONTH + 2500);
+    const mine = await space(db, anna);
+    expect(mine.current?.creditCents).toBe(2500);
+    expect((await hydrate(db)).LEASE_CREDITS[leaseId]).toBe(2500);
+    // The tenant's account reads no payment row.
+    const { data } = await db.tenantClient(anna).from("payments").select("*");
+    expect(data).toEqual([]);
+    // A base without the function yet: no credit, no error.
+    db.absentRpc.add("my_lease_credit");
+    expect((await space(db, anna)).current?.creditCents).toBe(0);
+  });
+
+  it("names the payment a matched bank operation became, for the bank screen to open and cancel", async () => {
+    const tx = bankLine(MONTH);
+    const paid = await pay(MONTH, { bankTransactionId: String(tx.id), match: { tier: "manual" } });
+    if (isPaymentError(paid)) throw new Error(paid.step);
+    const demo = await hydrate(db);
+    expect(demo.BANK_TXS.find((t) => t.id === tx.id)).toMatchObject({ status: "manual", matchedLeaseId: leaseId, paymentId: paid.paymentId });
+    // Cancelled, the operation is back in review and names no payment.
+    await cancelPayment(ctx.g, paid.paymentId, null);
+    const after = await hydrate(db);
+    expect(after.BANK_TXS.find((t) => t.id === tx.id)).toMatchObject({ status: "review", paymentId: undefined });
   });
 
   it("refuses to cancel a payment a quittance attests", async () => {

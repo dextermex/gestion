@@ -632,6 +632,8 @@ export const lu: Dict = {
     reviewAlready: "Dës Operatioun gouf scho rapprochéiert.",
     reviewNoLeases: "Kee lafende Bail, deem dës Operatioun kéint zougeuerdent ginn.",
     reviewReopen: "Zréck an d'Kontroll",
+    paymentOpen: "Bezuelung kucken",
+    matchCancel: "Zouuerdnung ophiewen",
   },
 
   baux: {
@@ -2875,6 +2877,9 @@ export const lu: Dict = {
     payHolder: "Inhaber",
     payBic: "BIC",
     payNoInstructions: "De Bailleur huet nach kee Bezuelkont uginn.",
+    creditTitle: "Kredit zu Äre Gonschten",
+    creditBody: "Dir hutt {amount} méi bezuelt wéi fälleg war. De Betrag gëtt mat den nächste Loyeren ofgerechent, soubal se opgemaach sinn.",
+    creditEnded: "De Bailleur huet fir dës Locatioun {amount} méi kritt wéi fälleg war.",
     space: "Locataire-Beräich",
     navHome: "Meng Wunneng",
     navLease: "Mäi Bail",

@@ -136,6 +136,15 @@ export default async function TenantPaymentsPage() {
         </Card>
       )}
 
+      {/* Money received above what was due: the tenant reads the same credit the owner does. */}
+      {lease.creditCents > 0 && (
+        <Card className="mb-5 p-5" data-tenant-credit>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.creditTitle}</p>
+          <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-emerald-800">{euros(lease.creditCents, locale)}</p>
+          <p className="mt-1 text-sm text-ink-soft">{fmt(ended ? d.tenant.creditEnded : d.tenant.creditBody, { amount: euros(lease.creditCents, locale) })}</p>
+        </Card>
+      )}
+
       {(!ended || owed) && (
         <Card className="mb-5 p-5" data-pay-instructions>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payInstructions}</p>

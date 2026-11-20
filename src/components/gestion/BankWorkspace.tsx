@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Badge, EmptyState, Select } from "@/components/pro/ui";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Badge, Button, EmptyState, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import { ReviewQueue, type LeaseOption, type ReviewLabels, type ReviewRow } from "@/components/gestion/ReviewQueue";
@@ -28,6 +30,20 @@ export interface TxRow {
   dateLabel: string;
   tier: Meta | null;
   statusMeta: Meta;
+  /** A matched operation's payment, on its tenancy's sheet. */
+  paymentHref?: string | null;
+  /** The payment to cancel, on a real account. */
+  paymentId?: string | null;
+}
+
+export interface MatchedLabels {
+  open: string;
+  cancel: string;
+  cancelBody: string;
+  cancelDo: string;
+  cancelKeep: string;
+  cancelFailed: string;
+  receiptIssued: string;
 }
 
 export type { LeaseOption, ReviewRow } from "@/components/gestion/ReviewQueue";
@@ -54,7 +70,74 @@ export interface WorkspaceLabels {
   colStatus: string;
   colAmount: string;
   countShown: string;
+  payment: MatchedLabels;
   review: ReviewLabels;
+}
+
+/**
+ * What a matched operation offers: its payment, on the tenancy it was put on,
+ * and the correction the ledger allows, cancelling that payment. The months
+ * it paid are due again and the operation comes back to the review queue.
+ */
+function MatchedActions({ row, labels }: { row: TxRow; labels: MatchedLabels }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const paymentId = row.paymentId;
+  const cancel = async () => {
+    if (!paymentId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/paiements/${encodeURIComponent(paymentId)}/annulation`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!res.ok) {
+        setError(res.status === 409 ? labels.receiptIssued : labels.cancelFailed);
+        return;
+      }
+      setConfirming(false);
+      router.refresh();
+    } catch {
+      setError(labels.cancelFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!row.paymentHref && !paymentId) return null;
+  return (
+    <div className="mt-1.5" data-matched-actions>
+      <div className="flex flex-wrap items-center gap-x-3">
+        {row.paymentHref && (
+          <Link href={row.paymentHref} className="inline-flex min-h-10 items-center text-xs font-semibold text-brand-700 hover:underline">
+            {labels.open}
+          </Link>
+        )}
+        {paymentId && !confirming && (
+          <button type="button" onClick={() => setConfirming(true)} className="inline-flex min-h-10 items-center text-xs font-semibold text-ink-soft hover:text-ink hover:underline">
+            {labels.cancel}
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <div className="mt-2 rounded-xl bg-sand-50 p-3">
+          <p className="text-xs leading-relaxed text-ink-soft">{labels.cancelBody}</p>
+          {error && (
+            <p role="alert" className="mt-2 text-xs font-semibold text-red-700">
+              {error}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirming(false)}>
+              {labels.cancelKeep}
+            </Button>
+            <Button variant="danger" loading={busy} onClick={() => void cancel()}>
+              {labels.cancelDo}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function monthsBack(todayISO: string, months: number): string {
@@ -217,6 +300,7 @@ export default function BankWorkspace({
                             <div className="mt-2 sm:hidden">
                               <MetaBadge meta={t.statusMeta} />
                             </div>
+                            <MatchedActions row={t} labels={labels.payment} />
                           </td>
                           <td className="whitespace-nowrap px-3 py-3 tabular-nums text-ink-soft max-sm:hidden">{t.dateLabel}</td>
                           <td className="px-3 py-3 max-sm:hidden">

@@ -627,6 +627,8 @@ export const en: Dict = {
     reviewAlready: "This operation has already been matched.",
     reviewNoLeases: "No live lease to assign this operation to.",
     reviewReopen: "Send back to review",
+    paymentOpen: "See the payment",
+    matchCancel: "Undo the match",
   },
 
   baux: {
@@ -2870,6 +2872,9 @@ export const en: Dict = {
     payHolder: "Holder",
     payBic: "BIC",
     payNoInstructions: "The lessor has not given a payment account yet.",
+    creditTitle: "Credit in your favour",
+    creditBody: "You have paid {amount} more than was due. It is taken off the next rents as soon as they open.",
+    creditEnded: "The lessor received {amount} more than was due on this tenancy.",
     space: "Tenant space",
     navHome: "My home",
     navLease: "My lease",

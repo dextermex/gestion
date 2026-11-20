@@ -23,6 +23,7 @@ const lease = (over: Partial<TenantLease> = {}): TenantLease => ({
   property: { name: "Résidence Beaulieu", address: "12, rue de la Gare", commune: "Luxembourg", energyClass: "C", cpeIssuedOn: null, syndicName: null, smokeDetectorsConfirmed: true, photoPath: null, photoUrl: null },
   parties: [], deposit: null, edls: [], insurances: [{ id: "i-1", kind: "liability", provider: "Foyer", policyNumber: "P-1", expiresOn: "2027-06-30" }], documents: [],
   periods: [period({ period: "2026-07" }), period({ period: "2026-08", allocatedCents: 167000, status: "partial_late" }), period({ period: "2026-09", allocatedCents: 0, status: "pending" })],
+  creditCents: 0,
   ...over,
 });
 const request = (over: Partial<TenantRequest> = {}): TenantRequest => ({

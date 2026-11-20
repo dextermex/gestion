@@ -367,6 +367,12 @@ export async function buildRealDataFrom(
       : none(),
   ]);
   const paymentAllocationRows = await inChunks(paymentRows.map((p) => s(p.id)), (ids) => q("payment_allocations", "payment_id,amount_cents,reversed_at", (b) => b.in("payment_id", ids)));
+  // The payment each matched bank operation became, so the bank screen can
+  // open it and cancel it. Read whole (`*`): the cancellation column is newer.
+  const matchedTxIds = txRows.filter((t) => s(t.match_status) === "auto" || s(t.match_status) === "manual").map((t) => s(t.id));
+  const txPaymentRows = shell || scoped ? [] : await inChunks(matchedTxIds, (ids) => q("payments", "*", (b) => b.in("bank_transaction_id", ids)));
+  const paymentOfTx = new Map<string, Row>();
+  for (const p of txPaymentRows) if (!p.cancelled_at) paymentOfTx.set(s(p.bank_transaction_id), p);
 
   // ── C. What hangs off those rows: by id, in chunks. ──
   const ticketIds = ticketRows.map((t) => s(t.id));
@@ -719,6 +725,8 @@ export async function buildRealDataFrom(
       : "unmatched") as DemoBankTx["status"],
     matchTier: sOr(t.match_tier, undefined),
     matchExplain: sOr(t.match_explain, undefined),
+    matchedLeaseId: sOr(paymentOfTx.get(s(t.id))?.lease_id, undefined),
+    paymentId: sOr(paymentOfTx.get(s(t.id))?.id, undefined),
   }));
   const IBAN_BINDINGS: DemoData["IBAN_BINDINGS"] = bindingRows.map((r) => ({
     payerIban: s(r.payer_iban),

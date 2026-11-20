@@ -627,6 +627,8 @@ export const de: Dict = {
     reviewAlready: "Dieser Umsatz wurde bereits abgeglichen.",
     reviewNoLeases: "Kein laufender Mietvertrag, dem dieser Umsatz zugeordnet werden könnte.",
     reviewReopen: "Zurück in die Prüfung",
+    paymentOpen: "Zahlung ansehen",
+    matchCancel: "Zuordnung aufheben",
   },
 
   baux: {
@@ -2870,6 +2872,9 @@ export const de: Dict = {
     payHolder: "Inhaber",
     payBic: "BIC",
     payNoInstructions: "Der Vermieter hat noch kein Zahlungskonto angegeben.",
+    creditTitle: "Guthaben zu Ihren Gunsten",
+    creditBody: "Sie haben {amount} mehr gezahlt als fällig war. Der Betrag wird mit den nächsten Mieten verrechnet, sobald sie eröffnet sind.",
+    creditEnded: "Der Vermieter hat für dieses Mietverhältnis {amount} mehr erhalten als fällig war.",
     space: "Mieterbereich",
     navHome: "Meine Wohnung",
     navLease: "Mein Bail",

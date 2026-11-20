@@ -70,6 +70,7 @@ function leaseOf(demo: DemoData, id: string): TenantLease | null {
       id: rp.id, period: rp.period, dueDate: rp.dueDate, rentCents: rp.rentCents, chargesCents: rp.chargesCents, otherCents: 0, vatCents: rp.vatCents,
       totalCents: rp.totalCents, allocatedCents: rp.allocatedCents, status: rp.status,
     })),
+    creditCents: demo.LEASE_CREDITS[lease.id] ?? 0,
   };
 }
 

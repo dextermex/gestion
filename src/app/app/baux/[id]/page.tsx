@@ -332,6 +332,7 @@ export default async function BailDetailPage({
             </ul>
           </Panel>
           {/* What was received, payment by payment: the one place a mistake is corrected. */}
+          <section id="paiements" className="min-w-0 scroll-mt-24">
           <Panel title={d.baux.paymentsTitle}>
             {credit > 0 && (
               <p className="mb-3 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900" data-lease-credit>
@@ -362,6 +363,7 @@ export default async function BailDetailPage({
               }}
             />
           </Panel>
+          </section>
         </div>
       )}
 

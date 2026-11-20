@@ -21,6 +21,9 @@
 --  9. roll_rent_periods : respecte le début du suivi, puis affecte les crédits.
 -- 10. issue_charge_period : un décompte émis porte toujours son solde au
 --     grand livre, dans la même transaction.
+-- 11. my_lease_credit : le locataire lit son crédit, et rien d'autre des
+--     paiements.
+-- 12. portal_tenant_live_lease : une partie sortie du bail n'y écrit plus.
 --
 -- Les fonctions appelées par l'application sont SECURITY INVOKER : elles
 -- écrivent sous le jeton de l'appelant, les politiques RLS décident, et
@@ -29,6 +32,8 @@
 -- exécutables par aucun rôle client : seul le planificateur les appelle.
 --
 -- Réversible :
+--   recréer gestion.portal_tenant_live_lease telle qu'en 0015 ;
+--   drop function gestion.my_lease_credit();
 --   select cron.unschedule('gestion-end-due-leases');
 --   drop function gestion.end_due_leases();
 --   drop function gestion.close_lease(uuid, date);
@@ -646,6 +651,61 @@ comment on function gestion.issue_charge_period(uuid, date, date, text) is
   'Émet un décompte en brouillon et porte son solde dû au grand livre, dans la même transaction : sur la première échéance libre, sinon sur une échéance propre.';
 
 -- ---------------------------------------------------------------------------
+-- 11. Ce que le locataire lit de son crédit
+-- ---------------------------------------------------------------------------
+-- Le locataire ne lit pas la table des paiements : la fonction lui rend, pour
+-- chaque bail dont il est partie, l'argent reçu qu'aucune échéance ne porte
+-- encore, et rien d'autre.
+create or replace function gestion.my_lease_credit()
+returns table (lease_id uuid, credit_cents integer)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p.lease_id, sum(p.amount_cents - coalesce(a.allocated_cents, 0))::integer as credit_cents
+    from gestion.payments p
+    left join lateral (
+      select sum(pa.amount_cents) as allocated_cents
+        from gestion.payment_allocations pa
+       where pa.payment_id = p.id and pa.reversed_at is null
+    ) a on true
+   where p.lease_id is not null
+     and p.cancelled_at is null
+     and gestion.portal_tenant_lease(p.lease_id)
+   group by p.lease_id
+  having sum(p.amount_cents - coalesce(a.allocated_cents, 0)) > 0
+$$;
+
+comment on function gestion.my_lease_credit() is
+  'Par bail dont l''appelant est locataire : l''argent reçu non encore affecté (son crédit). Rien d''autre des paiements.';
+
+-- ---------------------------------------------------------------------------
+-- 12. Écrire depuis l'espace locataire : partie au bail, pas encore sortie
+-- ---------------------------------------------------------------------------
+-- Un colocataire sorti du bail (moved_out_on passé) garde la lecture de son
+-- histoire ; il n'ouvre plus de demande et ne dépose plus de pièce.
+create or replace function gestion.portal_tenant_live_lease(p_lease uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+      from gestion.leases l
+      join gestion.lease_parties lp on lp.lease_id = l.id and lp.org_id = l.org_id
+      join gestion.contacts c on c.id = lp.contact_id and c.org_id = l.org_id
+     where l.id = p_lease
+       and l.status in ('active', 'notice')
+       and lp.role in ('tenant', 'colocataire')
+       and (lp.moved_out_on is null or lp.moved_out_on > gestion.today())
+       and c.user_id = auth.uid()
+  )
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Droits d'exécution, explicites (même geste que 0018)
 -- ---------------------------------------------------------------------------
 revoke all on function gestion.apply_lease_credit(uuid, boolean) from public, anon;
@@ -654,6 +714,8 @@ revoke all on function gestion.cancel_payment(uuid, text) from public, anon;
 revoke all on function gestion.settle_lease_end(uuid) from public, anon;
 revoke all on function gestion.close_lease(uuid, date) from public, anon;
 revoke all on function gestion.issue_charge_period(uuid, date, date, text) from public, anon;
+revoke all on function gestion.my_lease_credit() from public, anon;
+revoke all on function gestion.portal_tenant_live_lease(uuid) from public, anon;
 
 grant execute on function gestion.apply_lease_credit(uuid, boolean) to authenticated;
 grant execute on function gestion.record_payment(uuid, integer, date, uuid, text, text, boolean, uuid[], jsonb, text, integer) to authenticated;
@@ -661,6 +723,8 @@ grant execute on function gestion.cancel_payment(uuid, text) to authenticated;
 grant execute on function gestion.settle_lease_end(uuid) to authenticated;
 grant execute on function gestion.close_lease(uuid, date) to authenticated;
 grant execute on function gestion.issue_charge_period(uuid, date, date, text) to authenticated;
+grant execute on function gestion.my_lease_credit() to authenticated;
+grant execute on function gestion.portal_tenant_live_lease(uuid) to authenticated;
 
 -- Les fonctions de nuit ne sont pas des RPC : seul le planificateur les exécute.
 revoke all on function gestion.end_due_leases() from public, anon, authenticated;

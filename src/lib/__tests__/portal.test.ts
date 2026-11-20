@@ -630,7 +630,7 @@ describe("the portal's vocabulary", () => {
       lastAdjustmentOn: null, previousRentCents: null,
       unit: { label: "Apt", floor: "", areaSqm: 0, rooms: 0, bedrooms: null },
       property: { name: "P", address: "", commune: "", energyClass: "", cpeIssuedOn: null, syndicName: null, smokeDetectorsConfirmed: false, photoPath: null, photoUrl: null },
-      parties: [], deposit: null, edls: [], insurances: [], documents: [], periods: [],
+      parties: [], deposit: null, edls: [], insurances: [], documents: [], periods: [], creditCents: 0,
     };
     const covered = { id: "i", kind: "liability", provider: "X", policyNumber: "1", expiresOn: "2027-01-01" };
     expect(alertsFor({ ...base, insurances: [covered] }, null, today)).toEqual([]);

@@ -147,6 +147,9 @@ export default async function BanquePage({
       dateLabel: formatDate(t.bookedAt, locale),
       tier: t.matchTier ? tierMeta[t.matchTier] : null,
       statusMeta: txMeta[status],
+      // A matched operation is a payment on a tenancy: it opens there, and is cancelled from here or there.
+      paymentHref: (status === "auto" || status === "manual") && t.matchedLeaseId ? `/app/baux/${t.matchedLeaseId}#paiements` : null,
+      paymentId: (status === "auto" || status === "manual") && real ? (t.paymentId ?? null) : null,
     };
   });
 
@@ -200,6 +203,15 @@ export default async function BanquePage({
     colStatus: d.banque.colStatus,
     colAmount: d.banque.colAmount,
     countShown: d.banque.countShown,
+    payment: {
+      open: d.banque.paymentOpen,
+      cancel: d.banque.matchCancel,
+      cancelBody: d.baux.paymentCancelBody,
+      cancelDo: d.baux.paymentCancelDo,
+      cancelKeep: d.baux.paymentCancelKeep,
+      cancelFailed: d.baux.paymentCancelFailed,
+      receiptIssued: d.baux.paymentReceiptIssued,
+    },
     review: {
       assign: d.banque.reviewAssign,
       pick: d.banque.reviewPick,

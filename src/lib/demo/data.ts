@@ -591,6 +591,8 @@ export interface DemoBankTx extends BankTransaction {
   matchTier?: string;
   matchExplain?: string;
   matchedLeaseId?: string;
+  /** The payment a matched operation became (a real account only): the bank screen opens and cancels it. */
+  paymentId?: string;
 }
 
 export const IBAN_BINDINGS: IbanBinding[] = [

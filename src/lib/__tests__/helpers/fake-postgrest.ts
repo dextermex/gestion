@@ -219,8 +219,18 @@ export class FakeDb {
         this.table("contacts").some((c) => c.id === lp.contact_id && c.user_id === userId),
     );
   }
+  /** gestion.portal_tenant_live_lease (0032): a tenant party not moved out, of a tenancy in force. */
   tenantLiveLease(leaseId: unknown, userId: string): boolean {
-    return this.tenantLease(leaseId, userId) && this.table("leases").some((l) => l.id === leaseId && LIVE.has(String(l.status)));
+    return (
+      this.table("leases").some((l) => l.id === leaseId && LIVE.has(String(l.status))) &&
+      this.table("lease_parties").some(
+        (lp) =>
+          lp.lease_id === leaseId &&
+          TENANT_ROLES.has(String(lp.role)) &&
+          (lp.moved_out_on == null || String(lp.moved_out_on) > this.today) &&
+          this.table("contacts").some((c) => c.id === lp.contact_id && c.user_id === userId),
+      )
+    );
   }
   tenantTicket(ticketId: unknown, userId: string): boolean {
     return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && this.tenantLease(t.lease_id, userId));
@@ -339,6 +349,10 @@ export class FakeDb {
             return { lease_id: lp.lease_id, contact_id: c.id, display_name: c.display_name, role: lp.role, moved_in_on: lp.moved_in_on, moved_out_on: lp.moved_out_on, is_me: c.user_id === uid };
           });
         return { data: rows, error: null };
+      }
+      case "my_lease_credit": {
+        if (!uid) return { data: [], error: null };
+        return { data: this.leaseCredit().filter((c) => this.tenantLease(c.lease_id, uid)).map((c) => ({ lease_id: c.lease_id, credit_cents: c.credit_cents })), error: null };
       }
       case "my_payment_instructions": {
         if (!uid) return { data: [], error: null };

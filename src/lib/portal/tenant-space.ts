@@ -98,6 +98,8 @@ export interface TenantLease {
   insurances: Array<{ id: string; kind: string; provider: string; policyNumber: string; expiresOn: string | null }>;
   documents: TenantDocument[];
   periods: TenantPeriod[];
+  /** Money received on this tenancy that no period carries yet (its credit), in cents; 0 when none. */
+  creditCents: number;
 }
 
 export interface TenantMessage {
@@ -259,13 +261,16 @@ export async function buildTenantSpace(
   // requests' own: asked for by those ids, not "everything the policy lets
   // through" and sorted out in memory.
   const ticketIds = ticketRows.map((t) => s(t.id));
-  const [documentRows, conversationRows, visitRows] = await Promise.all([
+  const [documentRows, conversationRows, visitRows, creditRows] = await Promise.all([
     read("documents", "id,class,name,storage_path,related_type,related_id,created_at", (q) =>
       q.in("related_id", [...leaseIds, ...ticketIds]).order("created_at", { ascending: false }),
     ),
     read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "lease").in("scope_id", leaseIds)),
     ticketIds.length > 0 ? rpcOptional("my_visits") : Promise.resolve([] as Row[]),
+    // The credit (0032): money received above what was due, by tenancy.
+    rpcOptional("my_lease_credit"),
   ]);
+  const creditByLease = new Map(creditRows.map((r) => [s(r.lease_id), n(r.credit_cents)]));
   const conversationIds = conversationRows.map((c) => s(c.id));
   const messageRows = conversationIds.length > 0
     ? await read("messages", "*", (q) => q.in("conversation_id", conversationIds).order("sent_at"))
@@ -356,6 +361,7 @@ export async function buildTenantSpace(
             status: s(rp.status),
           };
         }),
+      creditCents: Math.max(creditByLease.get(id) ?? 0, 0),
     };
   });
 
