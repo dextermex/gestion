@@ -170,7 +170,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
         {live && (
           <TenantReply
             leaseId={request.leaseId}
-            labels={{ placeholder: d.tenant.replyPlaceholder, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed }}
+            labels={{ placeholder: d.tenant.replyPlaceholder, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed, sessionEnded: d.tenant.sessionEnded, signInAgain: d.tenant.signInAgain, forbidden: d.tenant.threadForbidden }}
             sampleNote={sampleNote}
             before={open ? <TenantAddPhotos compact requestId={request.id} labels={{ add: d.tenant.attachPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed, someFailed: d.tenant.filesSomeFailed, pieces: pieceLabels }} sampleNote={sampleNote} /> : undefined}
           />

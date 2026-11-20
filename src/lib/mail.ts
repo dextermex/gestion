@@ -36,7 +36,13 @@ export function mailFrom(): string {
   return process.env.MORADA_MAIL_FROM?.trim() || "Morada Gestion <gestion@morada.lu>";
 }
 
-export async function sendMail(message: MailMessage): Promise<MailResult> {
+/**
+ * How long the mail service may take before the message is reported
+ * unreachable: a send waits for it, and a person waits for the send.
+ */
+export const MAIL_TIMEOUT_MS = 8_000;
+
+export async function sendMail(message: MailMessage, timeoutMs = MAIL_TIMEOUT_MS): Promise<MailResult> {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) return { sent: false, reason: "not_configured" };
   const from = mailFrom();
@@ -50,6 +56,7 @@ export async function sendMail(message: MailMessage): Promise<MailResult> {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       console.error("mail rejected:", res.status, (await res.text()).slice(0, 300));

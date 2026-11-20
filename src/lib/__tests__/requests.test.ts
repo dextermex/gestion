@@ -48,6 +48,29 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     ({ propertyId, unitId } = seedProperty(db));
   });
 
+  it("keeps a message once when the same draft is sent again with its id, on both sides, and nobody is told twice", async () => {
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    await linkAccount(db, ctx, rental, anna);
+    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
+    const tenant = db.tenantClient(anna);
+    const tenantId = "6f1d1c2e-4a55-4f4b-9d39-1b2f3c4d5e01";
+    const first = await addTenantMessage(tenant, anna, lease, "La porte du garage est bloquée.", tenantId);
+    const again = await addTenantMessage(tenant, anna, lease, "La porte du garage est bloquée.", tenantId);
+    expect([("id" in first) && first.id, ("id" in again) && again.id]).toEqual([tenantId, tenantId]);
+    const conversationId = String(db.table("conversations")[0].id);
+    const deskId = "6f1d1c2e-4a55-4f4b-9d39-1b2f3c4d5e02";
+    const reply = await addManagerMessage(ctx, { conversationId }, "Le technicien passe demain.", deskId);
+    const replyAgain = await addManagerMessage(ctx, { conversationId }, "Le technicien passe demain.", deskId);
+    expect([("id" in reply) && reply.id, ("id" in replyAgain) && replyAgain.id, ("mail" in replyAgain) && replyAgain.mail]).toEqual([deskId, deskId, "none"]);
+    expect(db.table("messages").map((m) => [m.id, m.sender_kind])).toEqual([
+      [tenantId, "tenant"],
+      [deskId, "manager"],
+    ]);
+    // An id that names someone else's message is not taken over.
+    expect(await addTenantMessage(tenant, anna, lease, "Autre chose.", deskId)).toEqual({ error: "forbidden" });
+    expect(db.table("messages")).toHaveLength(2);
+  });
+
   it("runs the whole flow: chat, request with photos, replies, a second request, more chat, resolution, history", async () => {
     const rental = await letTo(ctx, unitId, [ANNA]);
     await linkAccount(db, ctx, rental, anna);

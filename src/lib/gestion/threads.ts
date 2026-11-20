@@ -97,3 +97,51 @@ export function latestMoment(moments: ReadonlyArray<string | null | undefined>):
   for (const m of moments) if (m && (latest === "" || instant(m) > instant(latest))) latest = m;
   return latest;
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A message's own id chosen by the screen that writes it, when it is one: anything else is ignored. */
+export function clientMessageId(v: unknown): string | null {
+  return typeof v === "string" && UUID.test(v) ? v.toLowerCase() : null;
+}
+
+/**
+ * The id a screen sends with a message. The same draft sent again (after a
+ * failure, or an answer that never came) carries the same id, so the
+ * database keeps it once; another text is another message. Null where the
+ * browser cannot make one: the message then goes without.
+ */
+export function sendingId(previous: { text: string; id: string | null } | undefined, text: string, make: () => string | null = newId): { text: string; id: string | null } {
+  if (previous && previous.text === text && previous.id) return previous;
+  return { text, id: make() };
+}
+
+function newId(): string | null {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return typeof c?.randomUUID === "function" ? c.randomUUID() : null;
+}
+
+/**
+ * Why a message did not go, from the route's answer: the session ended
+ * (the draft stays, signing in again opens beside it), the subscription
+ * does not allow writing, the role or the tenancy does not, or anything
+ * else (try again). The draft is kept in every case.
+ */
+export type SendRefusal = "session" | "subscription" | "forbidden" | "failed";
+export function sendRefusal(status: number): SendRefusal {
+  if (status === 401) return "session";
+  if (status === 402) return "subscription";
+  if (status === 403) return "forbidden";
+  return "failed";
+}
+
+/** The sign-in page, back to `returnTo` afterwards: opened beside the page, so the draft on it stays. */
+export function signInBeside(returnTo: string): string {
+  return `/connexion?next=${encodeURIComponent(returnTo)}`;
+}
+
+/** Return sends, except while an input method is composing a character (Japanese, Chinese, accents on some keyboards). */
+export function sendsOnEnter(e: { key: string; shiftKey: boolean; nativeEvent?: { isComposing?: boolean }; keyCode?: number }): boolean {
+  return e.key === "Enter" && !e.shiftKey && e.nativeEvent?.isComposing !== true && e.keyCode !== 229;
+}
+

@@ -1544,6 +1544,10 @@ export const de: Dict = {
     threadLoadFailed: "Die Unterhaltung konnte nicht geladen werden.",
     threadRetry: "Erneut versuchen",
     threadEarlier: "Frühere Nachrichten anzeigen",
+    sessionEnded: "Ihre Sitzung ist abgelaufen. Ihre Nachricht bleibt erhalten: Melden Sie sich erneut an und senden Sie sie dann.",
+    signInAgain: "Erneut anmelden",
+    sendLocked: "Der Versand ist mit einem aktiven Abonnement wieder möglich. Ihre Nachricht bleibt erhalten.",
+    sendForbidden: "Ihre Rolle erlaubt es nicht, Mietern zu schreiben. Ihre Nachricht bleibt erhalten.",
   },
 
   finance: {
@@ -3058,6 +3062,9 @@ export const de: Dict = {
     threadSend: "Senden",
     threadSent: "Nachricht gesendet.",
     threadFailed: "Die Nachricht konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal.",
+    sessionEnded: "Ihre Sitzung ist abgelaufen. Ihre Nachricht bleibt erhalten: Melden Sie sich erneut an und senden Sie sie dann.",
+    signInAgain: "Erneut anmelden",
+    threadForbidden: "Diese Nachricht kann nicht aus Ihrem Bereich gesendet werden. Ihre Nachricht bleibt erhalten.",
     attachments: "Angehängte Fotos",
     msgTitle: "Nachrichten",
     msgSub: "Ihre Unterhaltung mit Ihrem Verwalter. Ihre Anfragen erscheinen ebenfalls hier.",

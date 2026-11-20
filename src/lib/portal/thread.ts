@@ -59,8 +59,18 @@ export async function leaseConversation(
  */
 export async function appendMessage(
   g: GestionReader,
-  input: { orgId: string; conversationId: string; senderKind: "manager" | "tenant"; senderUserId: string; body: string; ticketId?: string | null; touch: boolean },
-): Promise<{ id: string; sentAt: string } | { error: ThreadFailure }> {
+  input: {
+    orgId: string;
+    conversationId: string;
+    senderKind: "manager" | "tenant";
+    senderUserId: string;
+    body: string;
+    ticketId?: string | null;
+    touch: boolean;
+    /** The id the writing screen chose: sent again (a retry, an answer that never came), the message is kept once. */
+    clientId?: string | null;
+  },
+): Promise<{ id: string; sentAt: string; repeated?: boolean } | { error: ThreadFailure }> {
   const now = new Date().toISOString();
   // The anchor column (0019) is named only when a ticket is anchored, so a
   // plain message still goes through on a database that lacks it.
@@ -73,7 +83,17 @@ export async function appendMessage(
     sent_at: now,
   };
   if (input.ticketId) row.ticket_id = input.ticketId;
+  if (input.clientId) row.id = input.clientId;
   const { data, error } = await g.from("messages").insert(row).select("id").single();
+  if (error?.code === "23505" && input.clientId) {
+    // Already written by an earlier send of the same draft: that one stands, nothing is written twice.
+    const { data: kept } = await g.from("messages").select("id,sent_at,conversation_id,sender_user_id").eq("id", input.clientId).maybeSingle();
+    const k = (kept as Row | null) ?? null;
+    if (k && String(k.conversation_id) === input.conversationId && String(k.sender_user_id) === input.senderUserId) {
+      return { id: String(k.id), sentAt: String(k.sent_at ?? now), repeated: true };
+    }
+    return { error: "forbidden" };
+  }
   if (error || !data) return failure(error, `${input.senderKind} message insert`);
   if (input.touch) await g.from("conversations").update({ last_message_at: now }).eq("id", input.conversationId);
   return { id: String((data as Row).id), sentAt: now };

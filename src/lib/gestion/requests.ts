@@ -118,6 +118,8 @@ export async function addManagerMessage(
   ctx: OrgContext,
   target: { ticketId: string } | { conversationId: string } | { leaseId: string },
   body: unknown,
+  /** The id the desk's screen chose for this message (see `appendMessage`). */
+  clientId: string | null = null,
 ): Promise<{ id: string; conversationId: string; mail: MailNotice } | { error: RequestWriteFailure }> {
   const text = str(body, 4000);
   if (!text) return { error: "invalid" };
@@ -150,8 +152,10 @@ export async function addManagerMessage(
     leaseId = await leaseOfConversation(ctx, conversationId);
   }
 
-  const sent = await appendMessage(ctx.g, { orgId: ctx.org.id, conversationId, senderKind: "manager", senderUserId: ctx.userId, body: text, touch: true });
+  const sent = await appendMessage(ctx.g, { orgId: ctx.org.id, conversationId, senderKind: "manager", senderUserId: ctx.userId, body: text, touch: true, clientId });
   if ("error" in sent) return sent;
+  // The same send again: the word stands as written the first time, and nobody is told twice.
+  if (sent.repeated) return { id: sent.id, conversationId, mail: "none" };
   // A reply on a request also counts as activity on it.
   if ("ticketId" in target) await ctx.g.from("tickets").update({ updated_at: sent.sentAt }).eq("org_id", ctx.org.id).eq("id", target.ticketId);
   // The tenants are told by e-mail when the workspace wants it; the word stands whatever becomes of the mail.

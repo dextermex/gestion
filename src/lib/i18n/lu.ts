@@ -1549,6 +1549,10 @@ export const lu: Dict = {
     threadLoadFailed: "D'Conversatioun konnt net geluede ginn.",
     threadRetry: "Nach eng Kéier probéieren",
     threadEarlier: "Fréier Messagen uweisen",
+    sessionEnded: "Är Sessioun ass ofgelaf. Äre Message bleift gespäichert: mellt Iech nees un, a schéckt en dann.",
+    signInAgain: "Nees umellen",
+    sendLocked: "D'Schécken geet mat engem aktiven Abonnement weider. Äre Message bleift gespäichert.",
+    sendForbidden: "Är Roll erlaabt et net, de Locatairen ze schreiwen. Äre Message bleift gespäichert.",
   },
 
   finance: {
@@ -3063,6 +3067,9 @@ export const lu: Dict = {
     threadSend: "Schécken",
     threadSent: "Noriicht geschéckt.",
     threadFailed: "D'Noriicht konnt net geschéckt ginn. Probéiert et gläich nach eng Kéier.",
+    sessionEnded: "Är Sessioun ass ofgelaf. Äre Message bleift gespäichert: mellt Iech nees un, a schéckt en dann.",
+    signInAgain: "Nees umellen",
+    threadForbidden: "Dëse Message kann net aus Ärem Espace geschéckt ginn. Äre Message bleift gespäichert.",
     attachments: "Ugehaange Fotoen",
     msgTitle: "Messagen",
     msgSub: "Är Conversatioun mat Ärem Gestionnaire. Är Ufroe stinn och hei.",

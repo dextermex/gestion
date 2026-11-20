@@ -552,6 +552,10 @@ export class FakeDb {
 
   /** The unique indexes, checked on every insert and update. */
   uniqueConflictOf(table: string, row: Row): DbError | null {
+    // Every table's primary key: an id given twice collides, as in SQL.
+    if (row.id !== undefined && row.id !== null && this.table(table).some((r) => r !== row && r.id === row.id)) {
+      return { code: "23505", message: `duplicate key value violates unique constraint "${table}_pkey"` };
+    }
     for (const key of UNIQUE[table] ?? []) {
       // As in SQL, a key with a null part never collides.
       if (key.some((k) => row[k] === null || row[k] === undefined)) continue;

@@ -1555,6 +1555,10 @@ export const fr = {
     threadLoadFailed: "La conversation n'a pas pu être chargée.",
     threadRetry: "Réessayer",
     threadEarlier: "Afficher les messages précédents",
+    sessionEnded: "Votre session a expiré. Votre message est gardé : reconnectez-vous, puis envoyez-le.",
+    signInAgain: "Se reconnecter",
+    sendLocked: "L'envoi reprend avec un abonnement actif. Votre message est gardé.",
+    sendForbidden: "Votre rôle ne permet pas d'écrire aux locataires. Votre message est gardé.",
   },
 
   finance: {
@@ -3069,6 +3073,9 @@ export const fr = {
     threadSend: "Envoyer",
     threadSent: "Message envoyé.",
     threadFailed: "Le message n'a pas pu être envoyé. Réessayez dans un instant.",
+    sessionEnded: "Votre session a expiré. Votre message est gardé : reconnectez-vous, puis envoyez-le.",
+    signInAgain: "Se reconnecter",
+    threadForbidden: "Ce message ne peut pas être envoyé depuis votre espace. Votre message est gardé.",
     attachments: "Photos jointes",
     msgTitle: "Messages",
     msgSub: "Votre conversation avec votre gestionnaire. Vos demandes y apparaissent aussi.",

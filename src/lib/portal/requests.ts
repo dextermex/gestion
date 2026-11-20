@@ -151,13 +151,17 @@ export async function addTenantMessage(
   user: { id: string },
   lease: TenantLeaseRef,
   body: string,
+  /** The id the tenant's screen chose for this message (see `appendMessage`). */
+  clientId: string | null = null,
 ): Promise<{ id: string; conversationId: string } | { error: RequestFailure }> {
   const text = str(body, 4000);
   if (!text) return { error: "invalid" };
   const thread = await leaseConversation(g, lease);
   if ("error" in thread) return thread;
-  const sent = await appendMessage(g, { orgId: lease.orgId, conversationId: thread.id, senderKind: "tenant", senderUserId: user.id, body: text, touch: false });
+  const sent = await appendMessage(g, { orgId: lease.orgId, conversationId: thread.id, senderKind: "tenant", senderUserId: user.id, body: text, touch: false, clientId });
   if ("error" in sent) return sent;
+  // The same send again: kept once, and the desk is not told twice.
+  if (sent.repeated) return { id: sent.id, conversationId: thread.id };
   await notifyManagerFromTenant(g, { id: lease.id, subject: lease.subject }, { kind: "message", text });
   return { id: sent.id, conversationId: thread.id };
 }

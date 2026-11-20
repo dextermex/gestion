@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push:
 const t = fr.tenant;
 const manager = "Cabinet Reuter";
 const labels = {
-  empty: t.threadEmpty, noneYet: t.msgNoneYet, write: t.threadWrite, send: t.threadSend, sent: t.threadSent, failed: t.threadFailed, view: t.msgView, requestBadge: fr.messages.requestBadge, newRequest: t.reqNew,
+  empty: t.threadEmpty, noneYet: t.msgNoneYet, write: t.threadWrite, send: t.threadSend, sent: t.threadSent, failed: t.threadFailed, sessionEnded: t.sessionEnded, signInAgain: t.signInAgain, forbidden: t.threadForbidden, view: t.msgView, requestBadge: fr.messages.requestBadge, newRequest: t.reqNew,
   photo: t.chatPhoto, photoTitle: t.chatPhotoTitle, photoPick: t.chatPhotoPick, photoNone: t.chatPhotoNone, photoMessage: t.chatPhotoMessage, photoChoose: t.photoPick, photoFailed: t.photoFailed, uploading: t.uploading, close: fr.common.close,
   pieces: { badType: t.fileBadType, tooLarge: t.fileTooLarge, notSent: t.fileNotSent, closed: t.fileRequestClosed, tooMany: t.fileTooMany },
 };
@@ -245,5 +245,63 @@ describe("the tenant's Messages on a phone", () => {
   it("offers no camera where no request can be written", async () => {
     await render({ initialView: "chat", initialId: "lease:l-old" });
     expect(document.querySelector(`button[aria-label="${t.chatPhoto}"]`)).toBeNull();
+  });
+});
+
+describe("the tenant's message when the answer is not the expected one", () => {
+  let sends: Array<Record<string, unknown>>;
+  const answerSendsWith = (statuses: number[]) => {
+    sends = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/locataire/messages" && init?.method === "POST") {
+        sends.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        const status = statuses.shift() ?? 200;
+        return new Response(JSON.stringify(status === 200 ? { ok: true, id: "m-9" } : { error: "x" }), { status, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+  };
+  const field = () => document.getElementById("tenant-message-body") as HTMLTextAreaElement;
+  const type = async (text: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field(), text);
+      field().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const enter = async (composing = false) => {
+    await act(async () => {
+      field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, isComposing: composing }));
+    });
+    await settle();
+  };
+  const status = () => field().closest("form")!.querySelector("[role=status]");
+
+  it("keeps the draft when the session ended, offers to sign in again beside the page, and sends it once, with the same id, afterwards", async () => {
+    answerSendsWith([401, 200]);
+    await render({ initialView: "chat", initialId: "c-3b" });
+    await type("La chaudière fait du bruit.");
+    const before = window.location.href;
+    await enter();
+    expect(window.location.href).toBe(before);
+    expect(field().value).toBe("La chaudière fait du bruit.");
+    expect(status()?.textContent).toContain(t.sessionEnded);
+    const link = status()?.querySelector("a[data-sign-in-again]");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("href")).toBe(`/connexion?next=${encodeURIComponent("/locataire/messages")}`);
+    await enter();
+    expect(sends).toHaveLength(2);
+    expect(sends[1].clientId).toBe(sends[0].clientId);
+    expect(field().value).toBe("");
+  });
+
+  it("says when the space may not send the message, and does not send while a character is being composed", async () => {
+    answerSendsWith([403]);
+    await render({ initialView: "chat", initialId: "c-3b" });
+    await type("Bonjour");
+    await enter(true);
+    expect(sends).toEqual([]);
+    await enter();
+    expect(status()?.textContent).toBe(t.threadForbidden);
+    expect(field().value).toBe("Bonjour");
   });
 });

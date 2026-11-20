@@ -11,7 +11,7 @@ import { documentMail, excerptOf, messageMail, requestMail, tenantMessageMail } 
 import { sendDocumentByMail } from "@/lib/delivery/outbox";
 import { generateDocument, type Generated } from "@/lib/documents/generate";
 import { templateVersion } from "@/lib/documents/wording";
-import { sendMail } from "@/lib/mail";
+import { MAIL_TIMEOUT_MS, sendMail } from "@/lib/mail";
 import { FakeDb, type Row } from "@/lib/__tests__/helpers/fake-postgrest";
 
 /**
@@ -139,6 +139,13 @@ describe("the sender", () => {
     expect(await sendMail({ to: "a@example.lu", subject: "s", text: "t", html: "" })).toEqual({ sent: false, reason: "rejected" });
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("down"));
     expect(await sendMail({ to: "a@example.lu", subject: "s", text: "t", html: "" })).toEqual({ sent: false, reason: "unreachable" });
+    // A service that does not answer is given up on in bounded time: the send waits for it, and a person for the send.
+    const hang = vi.spyOn(globalThis, "fetch").mockImplementationOnce(
+      (_url, init) => new Promise((_resolve, reject) => (init?.signal as AbortSignal).addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")))),
+    );
+    expect(await sendMail({ to: "a@example.lu", subject: "s", text: "t", html: "" }, 50)).toEqual({ sent: false, reason: "unreachable" });
+    expect((hang.mock.calls[0][1]?.signal as AbortSignal).aborted).toBe(true);
+    expect(MAIL_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
   });
 });
 

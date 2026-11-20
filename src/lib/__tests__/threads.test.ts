@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OrgContext } from "@/lib/gestion/api";
 import { addManagerMessage, deskUnread, markConversationRead, readConversation } from "@/lib/gestion/requests";
-import { byMostRecent, lastSpokenAt, latestMoment, mergeLines, mostRecent, threadMessageLine, unreadSignature } from "@/lib/gestion/threads";
+import { byMostRecent, clientMessageId, lastSpokenAt, latestMoment, mergeLines, mostRecent, sendRefusal, sendingId, sendsOnEnter, signInBeside, threadMessageLine, unreadSignature } from "@/lib/gestion/threads";
 import { markTenantRead, tenantUnread } from "@/lib/portal/thread";
 import { dayKey, timeOfDay, whenShort } from "@/lib/portal/format";
 import { formatDateTime } from "@/lib/types";
@@ -283,5 +283,35 @@ describe("read and unread, the same on every device", () => {
     expect(unreadSignature(0, "")).toBe("0|0");
     expect(latestMoment([at(9), "", null, at(11), at(10)])).toBe(at(11));
     expect(latestMoment([])).toBe("");
+  });
+});
+
+describe("sending a message from a screen", () => {
+  it("sends the same draft again with the same id, and another text with a new one", () => {
+    let n = 0;
+    const make = () => `00000000-0000-4000-8000-00000000000${++n}`;
+    const first = sendingId(undefined, "Bonjour", make);
+    expect(sendingId(first, "Bonjour", make)).toBe(first);
+    expect(sendingId(first, "Bonjour, autre chose", make).id).toBe("00000000-0000-4000-8000-000000000002");
+    // A browser that cannot make an id sends without one.
+    expect(sendingId(undefined, "Bonjour", () => null)).toEqual({ text: "Bonjour", id: null });
+  });
+
+  it("takes only a well-formed id from a request", () => {
+    expect(clientMessageId("6F1D1C2E-4A55-4F4B-9D39-1B2F3C4D5E01")).toBe("6f1d1c2e-4a55-4f4b-9d39-1b2f3c4d5e01");
+    expect([clientMessageId("1; drop table"), clientMessageId(42), clientMessageId(undefined)]).toEqual([null, null, null]);
+  });
+
+  it("reads a refusal by its status, and signs in again beside the page", () => {
+    expect([401, 402, 403, 404, 413, 502].map(sendRefusal)).toEqual(["session", "subscription", "forbidden", "failed", "failed", "failed"]);
+    expect(signInBeside("/app/messages?fil=c-1")).toBe("/connexion?next=%2Fapp%2Fmessages%3Ffil%3Dc-1");
+  });
+
+  it("sends on Return, not on Shift-Return nor while a character is being composed", () => {
+    expect(sendsOnEnter({ key: "Enter", shiftKey: false, nativeEvent: { isComposing: false } })).toBe(true);
+    expect(sendsOnEnter({ key: "Enter", shiftKey: true })).toBe(false);
+    expect(sendsOnEnter({ key: "Enter", shiftKey: false, nativeEvent: { isComposing: true } })).toBe(false);
+    expect(sendsOnEnter({ key: "Enter", shiftKey: false, keyCode: 229 })).toBe(false);
+    expect(sendsOnEnter({ key: "a", shiftKey: false })).toBe(false);
   });
 });

@@ -6,7 +6,7 @@ import { LegalNote } from "@/components/gestion/bits";
 import PieceThumb from "@/components/gestion/PieceThumb";
 import { Badge, Button, Card, Modal, PageHeader, Select, Spinner, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
-import { THREAD_PAGE, mergeLines, type ThreadMessageLine } from "@/lib/gestion/threads";
+import { THREAD_PAGE, mergeLines, sendRefusal, sendingId, sendsOnEnter, signInBeside, type ThreadMessageLine } from "@/lib/gestion/threads";
 import { isRequestOpen, REQUEST_STATUSES, type RequestStatus } from "@/lib/portal/types";
 import { initials, type Meta } from "@/lib/types";
 import { usePageRefresh, useTabVisible } from "@/lib/page-refresh";
@@ -131,6 +131,12 @@ export interface MessagesLabels {
   /** The message is in the tenant's space, but the e-mail that tells them so did not leave. */
   sentNoMail: string;
   sendFailed: string;
+  /** The session ended while a message was being written: it is kept, and signing in again opens beside the page. */
+  sessionEnded: string;
+  signInAgain: string;
+  /** The subscription, or the role, does not allow writing: said, and the message kept. */
+  sendLocked: string;
+  sendForbidden: string;
   statusFailed: string;
   /** An intervention is under way: the request stays in progress whatever was chosen. */
   statusHeld: string;
@@ -158,7 +164,7 @@ export type Tab = "conversations" | "requests";
 /** What a phone shows: the list, or one conversation filling the screen. A laptop shows both. */
 export type PhoneView = "list" | "chat";
 
-type Notice = { tone: "ok" | "error" | "sample"; text: string } | null;
+type Notice = { tone: "ok" | "error" | "sample"; text: string; link?: { href: string; label: string } } | null;
 type Busy = "send" | "status" | "intervention" | null;
 
 const SENDER_COLORS: Record<MessageView["kind"], string> = {
@@ -249,6 +255,8 @@ export default function MessagesCenter({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  /** The id each conversation's draft was last sent with, while that draft is not through. */
+  const pendingSends = useRef(new Map<string, { text: string; id: string | null }>());
   /** The conversations this screen read by itself, by id. */
   const [readings, setReadings] = useState<Record<string, ThreadReading>>({});
   /** The loads that ended on an error or ran out of time, by load key. */
@@ -564,16 +572,22 @@ export default function MessagesCenter({
     if (sampleOnly()) return;
     setBusy("send");
     setNotice(null);
+    // The same draft sent again (after a failure, or an answer that never came) carries the same id: kept once.
+    const sending = sendingId(pendingSends.current.get(thread.id), body);
+    pendingSends.current.set(thread.id, sending);
     try {
       // A first word to a tenancy opens its conversation; the screen then follows it.
       const target = thread.leaseId && thread.id.startsWith("lease:") ? `/api/baux/${thread.leaseId}/messages` : `/api/conversations/${thread.id}/messages`;
-      const res = await fetch(target, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) });
-      if (res.status === 401) return signInAgain();
+      const res = await fetch(target, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body, clientId: sending.id }) });
       const data = (await res.json().catch(() => ({}))) as { conversationId?: string; mail?: string };
       if (!res.ok) {
-        setNotice({ tone: "error", text: labels.sendFailed });
+        // The draft stays in every case; what is said depends on why it did not go.
+        const why = sendRefusal(res.status);
+        if (why === "session") setNotice({ tone: "error", text: labels.sessionEnded, link: { href: signInBeside(window.location.pathname + window.location.search), label: labels.signInAgain } });
+        else setNotice({ tone: "error", text: why === "subscription" ? labels.sendLocked : why === "forbidden" ? labels.sendForbidden : labels.sendFailed });
         return;
       }
+      pendingSends.current.delete(thread.id);
       setDrafts((all) => ({ ...all, [thread.id]: "" }));
       setFocusRequestId(null);
       const conversationId = data.conversationId ?? thread.id;
@@ -779,7 +793,7 @@ export default function MessagesCenter({
                     value={drafts[active.id] ?? ""}
                     onChange={(e) => setDrafts((all) => ({ ...all, [active.id]: e.target.value }))}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
+                      if (sendsOnEnter(e)) {
                         e.preventDefault();
                         void send(active);
                       }
@@ -829,6 +843,15 @@ function NoticeLine({ notice }: { notice: Notice }) {
       }
     >
       {notice?.text ?? ""}
+      {notice?.link && (
+        <>
+          {" "}
+          {/* A tab of its own: the page, and the message being written on it, stay as they are. */}
+          <a href={notice.link.href} target="_blank" rel="noopener" className="inline-flex min-h-10 items-center text-brand-700 underline underline-offset-2" data-sign-in-again>
+            {notice.link.label}
+          </a>
+        </>
+      )}
     </p>
   );
 }

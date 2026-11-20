@@ -1544,6 +1544,10 @@ export const en: Dict = {
     threadLoadFailed: "The conversation could not be loaded.",
     threadRetry: "Try again",
     threadEarlier: "Show earlier messages",
+    sessionEnded: "Your session has expired. Your message is kept: sign in again, then send it.",
+    signInAgain: "Sign in again",
+    sendLocked: "Sending resumes with an active subscription. Your message is kept.",
+    sendForbidden: "Your role does not allow writing to tenants. Your message is kept.",
   },
 
   finance: {
@@ -3058,6 +3062,9 @@ export const en: Dict = {
     threadSend: "Send",
     threadSent: "Message sent.",
     threadFailed: "The message could not be sent. Try again in a moment.",
+    sessionEnded: "Your session has expired. Your message is kept: sign in again, then send it.",
+    signInAgain: "Sign in again",
+    threadForbidden: "This message cannot be sent from your space. Your message is kept.",
     attachments: "Attached photos",
     msgTitle: "Messages",
     msgSub: "Your conversation with your manager. Your requests appear here too.",

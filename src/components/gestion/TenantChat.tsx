@@ -6,6 +6,7 @@ import { Badge, Button, Card, Modal, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import PieceThumb from "@/components/gestion/PieceThumb";
 import { usePageRefresh, useTabVisible } from "@/lib/page-refresh";
+import { sendRefusal, sendingId, sendsOnEnter, signInBeside } from "@/lib/gestion/threads";
 import { PIECE_ACCEPT, pieceLine, preparePieces, sendPieces, type PieceLabels, type PieceOutcome } from "@/lib/portal/pieces";
 import { initials } from "@/lib/types";
 
@@ -66,6 +67,11 @@ export interface TenantChatLabels {
   send: string;
   sent: string;
   failed: string;
+  /** The session ended while the message was written: it is kept, and signing in again opens beside the page. */
+  sessionEnded: string;
+  signInAgain: string;
+  /** The space may not send this message: said, and the message kept. */
+  forbidden: string;
   view: string;
   requestBadge: string;
   newRequest: string;
@@ -133,6 +139,10 @@ export default function TenantChat({
   const markedFor = useRef("");
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed" | "sample">("idle");
+  /** Why the last send failed, when it says more than "try again". */
+  const [refusal, setRefusal] = useState<"session" | "forbidden" | null>(null);
+  /** The id the draft was last sent with, while it is not through: sent again, it is kept once. */
+  const pending = useRef<{ text: string; id: string | null } | undefined>(undefined);
   const bodyRef = useRef<HTMLDivElement>(null);
   const count = messages.length;
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -222,16 +232,18 @@ export default function TenantChat({
       return;
     }
     setState("sending");
+    setRefusal(null);
+    pending.current = sendingId(pending.current, body);
     try {
-      const res = await fetch("/api/locataire/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body, leaseId }) });
-      if (res.status === 401) {
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
-        return;
-      }
+      const res = await fetch("/api/locataire/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body, leaseId, clientId: pending.current.id }) });
       if (!res.ok) {
+        // The draft stays whatever happened; a session that ended is said, with a way back in beside the page.
+        const why = sendRefusal(res.status);
+        setRefusal(why === "session" ? "session" : why === "forbidden" ? "forbidden" : null);
         setState("failed");
         return;
       }
+      pending.current = undefined;
       setDraft("");
       setState("sent");
       page.refresh();
@@ -378,7 +390,7 @@ export default function TenantChat({
               if (state !== "idle" && state !== "sending") setState("idle");
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (sendsOnEnter(e)) {
                 e.preventDefault();
                 void send();
               }
@@ -396,7 +408,16 @@ export default function TenantChat({
             (state === "failed" ? "text-red-700" : state === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-emerald-800")
           }
         >
-          {state === "sent" ? labels.sent : state === "failed" ? labels.failed : state === "sample" ? sampleNote : ""}
+          {state === "sent" ? labels.sent : state === "failed" ? (refusal === "session" ? labels.sessionEnded : refusal === "forbidden" ? labels.forbidden : labels.failed) : state === "sample" ? sampleNote : ""}
+          {state === "failed" && refusal === "session" && (
+            <>
+              {" "}
+              {/* A tab of its own: this page, and the message on it, stay as they are. */}
+              <a href={signInBeside(typeof window === "undefined" ? "/locataire/messages" : window.location.pathname + window.location.search)} target="_blank" rel="noopener" className="inline-flex min-h-10 items-center text-brand-700 underline underline-offset-2" data-sign-in-again>
+                {labels.signInAgain}
+              </a>
+            </>
+          )}
         </p>
       </form>
 

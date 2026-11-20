@@ -58,6 +58,10 @@ const labels: MessagesLabels = {
   sent: m.replySent,
   sentNoMail: m.replySentNoMail,
   sendFailed: m.sendFailed,
+  sessionEnded: m.sessionEnded,
+  signInAgain: m.signInAgain,
+  sendLocked: m.sendLocked,
+  sendForbidden: m.sendForbidden,
   statusFailed: m.statusFailed,
   statusHeld: m.statusHeld,
   interventionFailed: m.interventionFailed,
@@ -433,5 +437,83 @@ describe("what is on the screen is read", () => {
     await flush();
     expect(posts).toEqual([]);
     expect(unreadDot("Marc Thill")).toBeNull();
+  });
+});
+
+describe("writing to a tenant when the answer is not the expected one", () => {
+  /** The sends the screen made, each answered with the next status of the list. */
+  let sends: Array<{ url: string; body: Record<string, unknown> }>;
+  const answerSendsWith = (statuses: number[]) => {
+    sends = [];
+    const reads = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST" && String(input).endsWith("/messages")) {
+        sends.push({ url: String(input), body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        const status = statuses.shift() ?? 200;
+        return Promise.resolve(new Response(JSON.stringify(status === 200 ? { id: "m-new", conversationId: "t-thill" } : { error: "x" }), { status, headers: { "Content-Type": "application/json" } }));
+      }
+      return reads(input, init);
+    }) as typeof fetch;
+  };
+  const composer = () => document.getElementById("messages-reply") as HTMLTextAreaElement;
+  const type = async (text: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(composer(), text);
+      composer().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const pressEnter = async (composing = false) => {
+    await act(async () => {
+      composer().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, isComposing: composing }));
+    });
+    await flush();
+  };
+  const status = () => composer().closest("form")!.querySelector("[role=status]");
+
+  it("keeps the draft when the session ended, offers to sign in again beside the page, and sends it once signed in", async () => {
+    answerSendsWith([401, 200]);
+    await render([thill]);
+    await type("Le plombier passe jeudi.");
+    const before = window.location.href;
+    await pressEnter();
+    expect(window.location.href).toBe(before);
+    expect(composer().value).toBe("Le plombier passe jeudi.");
+    expect(status()?.textContent).toContain(m.sessionEnded);
+    const link = status()?.querySelector("a[data-sign-in-again]");
+    expect([link?.getAttribute("target"), link?.getAttribute("href")]).toEqual(["_blank", `/connexion?next=${encodeURIComponent("/app/messages")}`]);
+    // Signed in again in that tab: the same draft goes, with the same id, and only then is the field emptied.
+    await pressEnter();
+    expect(sends).toHaveLength(2);
+    expect(sends[1].body.clientId).toBe(sends[0].body.clientId);
+    expect(String(sends[0].body.clientId)).toMatch(/^[0-9a-f-]{36}$/);
+    expect(composer().value).toBe("");
+  });
+
+  it("says why when the subscription or the role does not allow writing, and keeps the draft", async () => {
+    answerSendsWith([402, 403, 502]);
+    await render([thill]);
+    await type("Bonjour");
+    await pressEnter();
+    expect(status()?.textContent).toBe(m.sendLocked);
+    await pressEnter();
+    expect(status()?.textContent).toBe(m.sendForbidden);
+    await pressEnter();
+    expect(status()?.textContent).toBe(m.sendFailed);
+    expect(composer().value).toBe("Bonjour");
+    // Another text is another message: a new id.
+    await type("Bonjour, autre chose");
+    answerSendsWith([200]);
+    await pressEnter();
+    expect(sends).toHaveLength(1);
+  });
+
+  it("does not send on Return while an input method is still composing a character", async () => {
+    answerSendsWith([200]);
+    await render([thill]);
+    await type("こんにちは");
+    await pressEnter(true);
+    expect(sends).toEqual([]);
+    await pressEnter(false);
+    expect(sends).toHaveLength(1);
   });
 });

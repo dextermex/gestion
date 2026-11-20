@@ -3,7 +3,7 @@ import { withTenant } from "@/lib/portal/session";
 import { addTenantMessage } from "@/lib/portal/requests";
 import { tenantUnread } from "@/lib/portal/thread";
 import { leaseSubject } from "@/lib/portal/types";
-import { unreadSignature } from "@/lib/gestion/threads";
+import { clientMessageId, unreadSignature } from "@/lib/gestion/threads";
 
 /**
  * A message from the tenant to their manager, in the tenancy's own
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   if (!home) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const lease = { id: String(home.lease_id), orgId: String(home.org_id), subject: leaseSubject(String(home.unit_label ?? ""), String(home.property_name ?? "")) };
-  const result = await addTenantMessage(g, { id: session.userId }, lease, text);
+  const result = await addTenantMessage(g, { id: session.userId }, lease, text, clientMessageId(body.clientId));
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: result.error === "forbidden" ? 403 : result.error === "invalid" ? 400 : 502 });
   }

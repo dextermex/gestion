@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg } from "@/lib/gestion/api";
+import { clientMessageId } from "@/lib/gestion/threads";
 import { addManagerMessage, readConversation, statusOfFailure } from "@/lib/gestion/requests";
 import { threadMessageLine } from "@/lib/gestion/threads";
 import { getI18n } from "@/lib/i18n";
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-  const result = await addManagerMessage(ctx, { conversationId: id }, body.body);
+  const result = await addManagerMessage(ctx, { conversationId: id }, body.body, clientMessageId(body.clientId));
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: statusOfFailure(result.error) });
   return NextResponse.json({ ok: true, id: result.id, conversationId: result.conversationId, mail: result.mail });
 }
