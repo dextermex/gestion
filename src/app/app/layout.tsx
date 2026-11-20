@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
 import ProvisionError from "@/components/gestion/ProvisionError";
+import { ApiErrorsProvider } from "@/components/gestion/ApiErrors";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
@@ -9,6 +10,7 @@ import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
+import { quickLeaseOptions } from "@/lib/gestion/quick-lease";
 
 export const metadata: Metadata = {
   title: "Morada Gestion",
@@ -73,6 +75,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // the two must never be mistaken for each other on the same screen.
   const sampleCabinet = datasetId === "real" ? null : demo.ORG.shortName;
 
+  // The quick "Bail" sheet joins a lot that can be let to a recorded tenant: nothing else is offered.
+  const quickLease = quickLeaseOptions(demo);
+
   const shellData = {
     datasetId,
     sampleCabinet,
@@ -98,7 +103,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       id: l.id,
       label: `${demo.leaseUnitLabel(l)} \u00b7 ${demo.leaseTenantNames(l).join(", ")}`,
     })),
-    contactOptions: demo.CONTACTS.map((c) => ({ id: c.id, label: c.name })),
+    vacantUnitOptions: quickLease.units,
+    tenantOptions: quickLease.tenants,
     // The getting-started card ticks what the rows attest, never what a
     // browser remembers: the same records Biens, Contacts and Loyers read.
     progress: {
@@ -119,7 +125,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <GestionShell locale={locale} dict={d} shell={shellData}>
-      {children}
+      {/* Every form of the space reads what a refusal means from here (src/lib/api-errors.ts). */}
+      <ApiErrorsProvider copy={d.apiErrors}>{children}</ApiErrorsProvider>
     </GestionShell>
   );
 }

@@ -155,6 +155,7 @@ export default async function ReglagesPage() {
                 civilityF: d.modify.civilityF,
                 civilityX: d.modify.civilityX,
                 fieldBirthDate: d.modify.birthDate,
+                datePlaceholder: d.loyers.datePlaceholder,
                 fieldBirthPlace: d.modify.birthPlace,
                 fieldNationality: d.modify.nationality,
                 nationalityHint: d.modify.nationalityHint,

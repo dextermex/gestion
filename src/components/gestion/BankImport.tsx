@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useApiProblems } from "./ApiErrors";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
@@ -43,6 +44,7 @@ export default function BankImport({
   variant?: "primary" | "secondary";
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [open, setOpen] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [label, setLabel] = useState("");
@@ -83,10 +85,11 @@ export default function BankImport({
         if (fileRef.current) fileRef.current.value = "";
         router.refresh();
       } else {
-        setError(body.error === "too_large" ? labels.tooLarge : body.error === "no_rows" ? labels.empty : body.error === "invalid" ? labels.invalid : labels.failed);
+        // The import's own sentences for what it knows; the rest by its status (a subscription, a role).
+        setError(problems.of(res.status, body, { fallback: labels.failed, codes: { too_large: labels.tooLarge, no_rows: labels.empty, invalid: labels.invalid } }).message);
       }
     } catch {
-      setError(labels.failed);
+      setError(problems.network({ fallback: labels.failed }).message);
     }
     setBusy(false);
   };

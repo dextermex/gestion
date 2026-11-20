@@ -68,6 +68,50 @@ describe("the three-stage property journey", () => {
     expect(payload).toMatchObject({ type: "house", name: "Maison du Parc", street: "Rue du Parc", city: "Luxembourg", country: "LU" });
     expect(document.body.textContent).toContain(fr.biens.wizDoneTitle.replace("{name}", "Maison du Parc"));
   });
+  it("never creates the property twice when the connection is cut while its photographs go up", async () => {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:photo", revokeObjectURL: () => {} }));
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: "property-created", units: [] }) })
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetch);
+    await act(async () => root.render(<PropertyWizard d={fr} notice="sample" real />));
+    await essentials();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { value: [new File(["photo"], "facade.jpg", { type: "image/jpeg" })] });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await Promise.resolve();
+    });
+    await click(fr.experience.skipExtras);
+    await click(fr.biens.wizCreate);
+    // The property is created once, the photograph was attempted once, and the wizard is past "Créer".
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual(["/api/biens/create", "/api/biens/photo"]);
+    expect(document.body.textContent).toContain(fr.biens.wizDoneTitle.replace("{name}", "Maison du Parc"));
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(fr.biens.wizPhotoFailed);
+    expect([...document.querySelectorAll("button")].some((b) => b.textContent === fr.biens.wizCreate)).toBe(false);
+  });
+  it("says in words why a creation is refused, and keeps the wizard on its review", async () => {
+    const refusals: Array<[number, string, string, string]> = [
+      [503, "schema_outdated", "parking", fr.biens.wizParkingUnavailable],
+      [402, "subscription_required", "house", fr.apiErrors.subscription],
+      [403, "forbidden", "house", fr.apiErrors.forbidden],
+      [502, "storage_failed", "house", fr.biens.wizSaveFailed],
+    ];
+    for (const [status, error, type, sentence] of refusals) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error }), { status })));
+      await act(async () => root.render(<PropertyWizard key={`${status}-${type}`} d={fr} notice="sample" real />));
+      await act(async () => document.querySelector<HTMLInputElement>(`input[value="${type}"]`)!.click());
+      await fill(fr.biens.wizNameLabel, "Maison du Parc");
+      await fill(fr.biens.wizStreet, "Rue du Parc");
+      await fill(fr.biens.wizCity, "Luxembourg");
+      await click(fr.common.next);
+      await click(fr.experience.skipExtras);
+      await click(fr.biens.wizCreate);
+      expect(document.querySelector('[role="alert"]')?.textContent, `${status} ${error}`).toBe(sentence);
+      expect([...document.querySelectorAll("button")].some((b) => b.textContent === fr.biens.wizCreate)).toBe(true);
+    }
+  });
   it("allows all optional details to be skipped without a write in a sample cabinet", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);

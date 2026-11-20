@@ -6,6 +6,7 @@ import { Button } from "@/components/pro/ui";
 import type { DocumentKind } from "@/lib/documents/kinds";
 import { describeMissing, missingOf, type MissingLabels } from "@/lib/documents/missing";
 import { callJson } from "./call";
+import { useApiProblems } from "./ApiErrors";
 
 /**
  * One document of the workspace, from one record: the control that asks
@@ -76,6 +77,7 @@ export default function GenerateDocument({
   const [error, setError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<ExistingDocument | null>(null);
   const [sending, setSending] = useState(false);
+  const problems = useApiProblems();
   const doc = fresh ?? existing;
 
   // The piece, mailed to the tenants of its lease with the file attached:
@@ -100,14 +102,14 @@ export default function GenerateDocument({
         if (failed.length > 0 && sent.length === 0 && recorded.length === 0) setError(labels.sendFailed);
         else setNote([sent.length > 0 ? labels.sentTo.replace("{email}", sent.join(", ")) : "", recorded.length > 0 ? labels.sendRecorded.replace("{email}", recorded.join(", ")) : ""].filter(Boolean).join(" "));
         router.refresh();
-      } else setError(res.payload.error === "no_recipient" ? labels.sendNoRecipient : labels.sendFailed);
+      } else setError(res.payload.error === "no_recipient" ? labels.sendNoRecipient : problems.of(res.status, res.payload, { fallback: labels.sendFailed }).message);
     } catch {
       setError(labels.sendFailed);
     }
     setSending(false);
   };
 
-  const explain = (payload: Record<string, unknown>): string => {
+  const explain = (status: number, payload: Record<string, unknown>): string => {
     const code = String(payload.error ?? "");
     if (code === "template_not_validated" || code === "no_template") return labels.errTemplate;
     if (code === "settings_incomplete") {
@@ -120,7 +122,8 @@ export default function GenerateDocument({
       const reasons: Record<string, string> = { unpaid: labels.reasonUnpaid, keys_out: labels.reasonKeysOut, unsealed: labels.reasonUnsealed, no_content: labels.reasonNoContent, no_tenant: labels.reasonNoTenant, abroad: labels.reasonAbroad };
       return labels.errNotReady.replace("{reason}", reasons[String(payload.reason)] ?? String(payload.reason ?? ""));
     }
-    return labels.errFailed;
+    // Anything else by its status: a base that does not carry the documents yet, a subscription, a role (src/lib/api-errors.ts).
+    return problems.of(status, payload, { fallback: labels.errFailed }).message;
   };
 
   const produce = async (force: boolean) => {
@@ -139,7 +142,7 @@ export default function GenerateDocument({
         setFresh({ documentId: String(res.payload.documentId), name, producedLabel: "" });
         setNote(labels.produced.replace("{name}", name));
         router.refresh();
-      } else setError(explain(res.payload));
+      } else setError(explain(res.status, res.payload));
     } catch {
       setError(labels.errFailed);
     }

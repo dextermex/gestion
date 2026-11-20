@@ -7,6 +7,7 @@ import { allowedWorkOrderActions, type WorkOrderAction } from "@/lib/gestion/int
 import type { Locale } from "@/lib/i18n/config";
 import { euros, formatDate, type Meta, type WorkOrderStatus } from "@/lib/types";
 import { callForm, callJson } from "./call";
+import DateField from "./DateField";
 
 /**
  * One intervention, opened from its row: the ticket and the work order
@@ -22,6 +23,8 @@ export interface InterventionLabels {
   artisanNone: string;
   artisanNoneYet: string;
   scheduledOn: string;
+  /** How a day is typed: day, month, year. */
+  datePlaceholder: string;
   amount: string;
   vat: string;
   workOrderStatus: string;
@@ -171,7 +174,7 @@ export default function InterventionSheet({
               </Select>
             </Field>
             <Field label={labels.scheduledOn}>
-              <Input type="date" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} disabled={busy} />
+              <DateField value={scheduledAt} onChange={setScheduledAt} placeholder={labels.datePlaceholder} disabled={busy} />
             </Field>
             <Field label={labels.amount}>
               <Input value={amount} inputMode="decimal" placeholder="0,00" onChange={(e) => setAmount(e.target.value)} disabled={busy} />

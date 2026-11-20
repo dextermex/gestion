@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
+import { ApiProblemNote, useApiProblems } from "@/components/gestion/ApiErrors";
+import type { ApiProblem } from "@/lib/api-errors";
 
 /**
  * "+ Ajouter un lot": one small form, one POST, and the building's page is
@@ -37,6 +39,9 @@ export default function LotCreate({ propertyId, labels, sampleNote }: { property
   const [bedrooms, setBedrooms] = useState("");
   const [furnished, setFurnished] = useState(false);
   const [state, setState] = useState<"idle" | "saving" | "failed" | "sample">("idle");
+  // Why the save was refused, in words (src/lib/api-errors.ts); the form stays as typed.
+  const problems = useApiProblems();
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
 
   const close = () => {
     setOpen(false);
@@ -56,11 +61,8 @@ export default function LotCreate({ propertyId, labels, sampleNote }: { property
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ propertyId, label, kind, floor, areaSqm: area, rooms, bedrooms, furnished }),
       });
-      if (res.status === 401) {
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-        return;
-      }
       if (!res.ok) {
+        setProblem(await problems.read(res, { keepsInput: true, fallback: labels.failed }));
         setState("failed");
         return;
       }
@@ -73,6 +75,7 @@ export default function LotCreate({ propertyId, labels, sampleNote }: { property
       close();
       router.refresh();
     } catch {
+      setProblem(problems.network({ fallback: labels.failed }));
       setState("failed");
     }
   };
@@ -123,11 +126,7 @@ export default function LotCreate({ propertyId, labels, sampleNote }: { property
               {labels.furnished}
             </label>
           )}
-          {state === "failed" && (
-            <p role="alert" className="text-xs font-semibold text-red-700">
-              {labels.failed}
-            </p>
-          )}
+          {state === "failed" && <ApiProblemNote problem={problem} className="text-xs font-semibold text-red-700" />}
           {state === "sample" && sampleNote && (
             <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
               {sampleNote}

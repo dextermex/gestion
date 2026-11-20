@@ -7,8 +7,12 @@ import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/
 import { Icon } from "@/components/pro/icons";
 import { useDismiss } from "@/lib/useDismiss";
 import { PHONE_SHEET_QUERY, useMediaQuery } from "@/lib/hooks";
-import { shrinkPhoto } from "@/lib/photo";
-import type { EditField, EditTopic, MenuGroup, SpecialEditor } from "@/lib/gestion/editors";
+import { COVER_PHOTO_MAX_MB, shrinkPhoto } from "@/lib/photo";
+import { ApiProblemNote, useApiProblems } from "@/components/gestion/ApiErrors";
+import type { ApiProblem } from "@/lib/api-errors";
+import DateField from "@/components/gestion/DateField";
+import { invalidDayField } from "@/lib/forms";
+import { initialValues, topicBody, type EditField, type EditTopic, type EditValues, type MenuGroup, type SpecialEditor } from "@/lib/gestion/editors";
 
 /**
  * One button for changing anything about a property.
@@ -31,6 +35,8 @@ export interface ModifyLabels {
   emailTaken: string;
   /** Fields the database does not carry yet (a migration awaiting approval). */
   schemaOutdated: string;
+  /** How a day is typed in a date field: day, month, year. */
+  datePlaceholder: string;
   /** Photos editor. */
   photoCurrent: string;
   photoChoose: string;
@@ -180,10 +186,12 @@ function FieldView({
   field,
   value,
   onChange,
+  datePlaceholder,
 }: {
   field: EditField;
   value: string | boolean;
   onChange: (v: string | boolean) => void;
+  datePlaceholder: string;
 }) {
   if (field.kind === "toggle") {
     return (
@@ -196,6 +204,14 @@ function FieldView({
         />
         <span className="text-sm text-ink">{field.label}</span>
       </label>
+    );
+  }
+  if (field.kind === "date") {
+    // The product's own date field: day, month, year on every browser, handing back an ISO day.
+    return (
+      <Field label={field.label} hint={field.hint}>
+        <DateField value={String(value)} onChange={onChange} min={field.min} max={field.max} placeholder={datePlaceholder} />
+      </Field>
     );
   }
   const common = { value: String(value), onChange: (e: { target: { value: string } }) => onChange(e.target.value) };
@@ -214,7 +230,7 @@ function FieldView({
       ) : (
         <Input
           {...common}
-          type={field.kind === "date" ? "date" : "text"}
+          type="text"
           inputMode={field.kind === "euro" || field.kind === "number" ? "decimal" : undefined}
           required={"required" in field ? field.required : undefined}
           maxLength={"maxLength" in field ? field.maxLength : undefined}
@@ -231,35 +247,42 @@ function FieldView({
 
 function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: ModifyLabels; onClose: () => void }) {
   const router = useRouter();
-  const [values, setValues] = useState<Record<string, string | boolean>>(() =>
-    Object.fromEntries(topic.fields.map((f) => [f.name, f.kind === "toggle" ? f.value : String(f.value)])),
-  );
+  const [values, setValues] = useState<EditValues>(() => initialValues(topic));
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const problems = useApiProblems();
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
 
   const submit = async () => {
+    // Only what changed is sent: a field left as it opened is never written back.
+    const body = topicBody(topic, values);
+    if (!body) {
+      onClose();
+      return;
+    }
     setSaving(true);
-    setError(null);
+    setProblem(null);
     try {
       const res = await fetch(topic.endpoint, {
         method: topic.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(topic.extra ?? {}), ...values }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         onClose();
         router.refresh();
         return;
       }
-      if (res.status === 401) {
-        // The session lapsed while the editor was open: sign in and come back here.
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-        return;
-      }
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(data.error === "email_taken" ? labels.emailTaken : data.error === "schema_outdated" ? labels.schemaOutdated : labels.failed);
+      // The refusal in words: which field, what conflicts, a session that ended (the form stays as typed).
+      setProblem(
+        await problems.read(res, {
+          keepsInput: true,
+          fallback: labels.failed,
+          fields: Object.fromEntries(topic.fields.map((f) => [f.name, f.label])),
+          codes: { email_taken: labels.emailTaken, schema_outdated: labels.schemaOutdated },
+        }),
+      );
     } catch {
-      setError(labels.failed);
+      setProblem(problems.network({ fallback: labels.failed }));
     }
     setSaving(false);
   };
@@ -270,22 +293,21 @@ function TopicEditor({ topic, labels, onClose }: { topic: EditTopic; labels: Mod
         className="space-y-1"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!saving) void submit();
+          // A date typed that is not a day is corrected first: sent as it is, it would erase the stored one.
+          const badDay = invalidDayField(e.currentTarget);
+          if (badDay) badDay.focus();
+          else if (!saving) void submit();
         }}
       >
         <div className="grid grid-cols-2 gap-x-3">
           {topic.fields.map((f) => (
             <div key={f.name} className={f.span === 2 || f.kind === "textarea" ? "col-span-2" : "col-span-2 sm:col-span-1"}>
-              <FieldView field={f} value={values[f.name]} onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} />
+              <FieldView field={f} value={values[f.name]} onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} datePlaceholder={labels.datePlaceholder} />
             </div>
           ))}
         </div>
         {topic.note && <p className="pt-2 text-xs leading-relaxed text-ink-soft">{topic.note}</p>}
-        {error && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-            {error}
-          </p>
-        )}
+        <ApiProblemNote problem={problem} />
         <div className="flex justify-end gap-2 pt-4">
           <Button type="button" variant="ghost" onClick={onClose}>
             {labels.cancel}
@@ -314,24 +336,21 @@ function SpecialEditorView({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const problems = useApiProblems();
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
   const done = () => {
     onClose();
     router.refresh();
   };
   const call = async (input: RequestInfo, init: RequestInit) => {
     setBusy(true);
-    setError(null);
+    setProblem(null);
     try {
       const res = await fetch(input, init);
       if (res.ok) return true;
-      if (res.status === 401) {
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-        return false;
-      }
-      setError(labels.failed);
+      setProblem(await problems.read(res, { keepsInput: true, fallback: labels.failed, maxMb: COVER_PHOTO_MAX_MB }));
     } catch {
-      setError(labels.failed);
+      setProblem(problems.network({ fallback: labels.failed }));
     }
     setBusy(false);
     return false;
@@ -407,10 +426,10 @@ function SpecialEditorView({
           </div>
         </div>
       )}
-      {error && (
-        <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-          {error}
-        </p>
+      {problem && (
+        <div className="mt-3">
+          <ApiProblemNote problem={problem} />
+        </div>
       )}
     </Modal>
   );

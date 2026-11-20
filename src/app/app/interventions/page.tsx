@@ -29,7 +29,7 @@ export default async function InterventionsPage() {
   const workOrderMeta = workOrderStatusMeta(d);
   const artisans = demo.CONTACTS.filter((c) => c.roles.includes("artisan")).map((c) => ({ id: c.id, name: c.name }));
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: demo.ORG.shortName }) : null;
-  const sheetLabels = { ...d.interventions, close: d.common.close };
+  const sheetLabels = { ...d.interventions, close: d.common.close, datePlaceholder: d.loyers.datePlaceholder };
   const open = TICKETS.filter((t) => !["done", "closed", "cancelled"].includes(t.status));
   const urgent = open.filter((t) => t.severity === "urgent" || t.severity === "emergency");
   const pendingTenant = open.filter((t) => t.status === "pending_tenant");

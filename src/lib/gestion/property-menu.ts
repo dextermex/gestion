@@ -8,6 +8,8 @@ import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { euros } from "@/lib/types";
 import { computeCapitalInvesti, proposeResidentialAdjustment } from "@/domain/indexation/engine";
+import { adjustmentBlockedText } from "@/lib/i18n/engine";
+import { contactTopic, legalNameRule } from "@/lib/gestion/contact-menu";
 
 /**
  * What "Modifier" offers on one property.
@@ -46,6 +48,9 @@ export function propertyMenu(
 
   /* ------------------------------- the property ------------------------------ */
 
+  // The address opens on its stored parts and travels as one: the column is
+  // replaced whole, so a change to one part carries the four others as they are.
+  const address = p.addressParts;
   const info: EditTopic = {
     id: "info",
     title: d.modify.propertyInfo,
@@ -53,23 +58,19 @@ export function propertyMenu(
     method: "PATCH",
     fields: [
       { kind: "text", name: "name", label: d.biens.wizNameLabel, value: p.name, required: true, maxLength: 120, span: 2 },
-      { kind: "text", name: "street", label: d.biens.wizStreet, value: addressPart(p.address, "street"), required: true, maxLength: 160, span: 2 },
-      { kind: "text", name: "number", label: d.biens.wizNumber, value: addressPart(p.address, "number"), maxLength: 10 },
-      { kind: "text", name: "postal", label: d.biens.wizPostal, value: addressPart(p.address, "postal"), maxLength: 10 },
-      { kind: "text", name: "city", label: d.biens.wizCity, value: p.commune, required: true, maxLength: 80 },
+      { kind: "text", name: "street", label: d.biens.wizStreet, value: address.street, required: true, maxLength: 160, span: 2 },
+      { kind: "text", name: "number", label: d.biens.wizNumber, value: address.number, maxLength: 10 },
+      { kind: "text", name: "postal", label: d.biens.wizPostal, value: address.postalCode, maxLength: 10 },
+      { kind: "text", name: "city", label: d.biens.wizCity, value: address.city || p.commune, required: true, maxLength: 80 },
       {
         kind: "select",
         name: "country",
         label: d.biens.wizCountry,
-        value: "LU",
-        options: [
-          { value: "LU", label: "Luxembourg" },
-          { value: "FR", label: "France" },
-          { value: "BE", label: "Belgique" },
-          { value: "DE", label: "Deutschland" },
-        ],
+        value: PROPERTY_COUNTRIES.some((c) => c.value === address.country) ? address.country : "LU",
+        options: PROPERTY_COUNTRIES,
       },
     ],
+    together: [["street", "number", "postal", "city", "country"]],
   };
 
   const characteristics: MenuEntry = single
@@ -109,9 +110,9 @@ export function propertyMenu(
       { kind: "date", name: "cpeIssuedOn", label: d.modify.cpeIssuedOn, value: p.cpeIssuedOn || "" },
       { kind: "number", name: "constructionYear", label: d.biens.wizYear, value: p.constructionYear ? String(p.constructionYear) : "" },
       { kind: "text", name: "syndicName", label: d.biens.syndic, value: p.syndicName ?? "", maxLength: 120 },
-      { kind: "text", name: "cadastralCommune", label: d.bien.commune, value: "", maxLength: 80 },
-      { kind: "text", name: "cadastralSection", label: d.biens.wizSection, value: "", maxLength: 20 },
-      { kind: "text", name: "cadastralNumber", label: d.biens.wizParcel, value: "", maxLength: 40 },
+      { kind: "text", name: "cadastralCommune", label: d.bien.commune, value: p.cadastralParts.commune, maxLength: 80 },
+      { kind: "text", name: "cadastralSection", label: d.biens.wizSection, value: p.cadastralParts.section, maxLength: 20 },
+      { kind: "text", name: "cadastralNumber", label: d.biens.wizParcel, value: p.cadastralParts.number, maxLength: 40 },
       { kind: "toggle", name: "smokeDetectorsConfirmed", label: d.modify.smokeConfirmed, value: p.smokeDetectorsConfirmed, span: 2 },
     ],
     note: d.modify.metersNote,
@@ -173,29 +174,14 @@ export function propertyMenu(
     const identities: MenuEntry[] = demo.IDENTITY_READY
       ? tenants.map((tenant, i) => {
           const label = `${d.modify.tenantIdentity} \u00b7 ${tenant.name}`;
-          return { id: `identity-${i}`, label, topic: identityTopic(d, tenant, `identity-${i}`, label) };
+          return { id: `identity-${i}`, label, topic: identityTopic(d, tenant, `identity-${i}`, label, demo.TODAY) };
         })
       : [];
 
     const entries: MenuEntry[] = [
       ...tenants.map((tenant, i) => {
         const label = tenants.length > 1 ? `${d.modify.tenant} \u00b7 ${tenant.name}` : d.modify.tenant;
-        return {
-          id: `tenant-${i}`,
-          label,
-          topic: {
-            id: `tenant-${i}`,
-            title: label,
-            endpoint: `/api/contacts/${tenant.id}`,
-            method: "PATCH" as const,
-            fields: [
-              { kind: "text" as const, name: "firstName", label: d.location.firstName, value: firstOf(tenant.name), maxLength: 80 },
-              { kind: "text" as const, name: "lastName", label: d.location.lastName, value: lastOf(tenant.name), maxLength: 80 },
-              { kind: "text" as const, name: "email", label: d.location.email, value: tenant.email ?? "", maxLength: 160, span: 2 as const },
-              { kind: "text" as const, name: "phone", label: d.location.phone, value: tenant.phone ?? "", maxLength: 40, span: 2 as const },
-            ],
-          },
-        };
+        return { id: `tenant-${i}`, label, topic: contactTopic(d, tenant, `tenant-${i}`, label) };
       }),
       ...identities,
       {
@@ -280,7 +266,7 @@ export function propertyMenu(
                       (s) => ({ value: s, label: d.status.deposit[s] }),
                     ),
                   },
-                  { kind: "date" as const, name: "receivedOn", label: d.modify.receivedOn, value: "" },
+                  { kind: "date" as const, name: "receivedOn", label: d.modify.receivedOn, value: deposit.receivedOn ?? "", max: demo.TODAY },
                 ],
               },
             },
@@ -295,7 +281,12 @@ export function propertyMenu(
           allowed: Boolean(proposal?.allowed && proposal.proposedMonthlyRent > lease.rentCents),
           currentLabel: euros(lease.rentCents, locale),
           proposedLabel: proposal ? euros(proposal.proposedMonthlyRent, locale) : "",
-          reason: proposal?.blockedReason ?? d.bien.indexationNone,
+          // From the proposal's structure, in the reader's language: the engine's own note is English and internal.
+          reason: proposal
+            ? adjustmentBlockedText(d, locale, proposal, demo.TODAY) || d.bien.indexationNone
+            : lease.type === "residential"
+              ? d.indexation.capitalNone
+              : d.bien.indexationNone,
         },
       },
       { id: "edl", label: d.hubs.edl, href: `/app/biens/etat-des-lieux?bail=${lease.id}` },
@@ -377,17 +368,13 @@ function insuranceTopic(
   };
 }
 
-/** The demo shape stores a formatted address; the editor needs its parts. */
-function addressPart(formatted: string, part: "street" | "number" | "postal"): string {
-  const [first = ""] = formatted.split(",");
-  if (part === "number") {
-    const m = first.trim().match(/^(\d+[A-Za-z]?)\b/);
-    return m ? m[1] : "";
-  }
-  if (part === "street") return first.replace(/^\d+[A-Za-z]?[,\s]+/, "").trim();
-  const m = formatted.match(/\b([A-Z]{1,2}-\d{4,5})\b/);
-  return m ? m[1] : "";
-}
+/** Where a property can stand: the countries the property routes accept. */
+const PROPERTY_COUNTRIES = [
+  { value: "LU", label: "Luxembourg" },
+  { value: "FR", label: "France" },
+  { value: "BE", label: "Belgique" },
+  { value: "DE", label: "Deutschland" },
+];
 
 /** Where a tenant can live before moving in, or where a company has its seat: the usual countries, named in their own language. */
 const COUNTRIES = [
@@ -415,7 +402,7 @@ const COUNTRIES = [
  * form, register number, representative and seat. The kind is the first
  * field; the other kind's fields show once it is saved.
  */
-function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string): EditTopic {
+function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string, today: string): EditTopic {
   const idn = tenant.identity;
   const legal = tenant.kind === "legal";
   const choose = { value: "", label: d.modify.choose };
@@ -440,7 +427,7 @@ function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string):
   const fields: EditField[] = legal
     ? [
         kind,
-        { kind: "text", name: "legalName", label: d.modify.legalName, value: tenant.name, required: true, maxLength: 160, span: 2 },
+        { kind: "text", name: "legalName", label: d.modify.legalName, value: tenant.legalName || tenant.name, required: true, maxLength: 160, span: 2 },
         { kind: "select", name: "legalForm", label: d.modify.legalForm, value: idn?.legalForm ?? "", options: [choose, ...LEGAL_FORMS.map((f) => ({ value: f, label: d.modify.legalForms[f] }))] },
         { kind: "text", name: "rcsNumber", label: d.modify.rcsNumber, value: idn?.rcsNumber ?? "", hint: d.modify.rcsHint, maxLength: 40 },
         { kind: "text", name: "representativeName", label: d.modify.representative, value: idn?.representativeName ?? "", maxLength: 160 },
@@ -456,19 +443,19 @@ function identityTopic(d: Dict, tenant: DemoContact, id: string, title: string):
           value: idn?.civility ?? "",
           options: [choose, { value: "m", label: d.modify.civilityM }, { value: "f", label: d.modify.civilityF }, { value: "x", label: d.modify.civilityX }],
         },
-        { kind: "date", name: "birthDate", label: d.modify.birthDate, value: idn?.birthDate ?? "" },
+        { kind: "date", name: "birthDate", label: d.modify.birthDate, value: idn?.birthDate ?? "", max: today },
         { kind: "text", name: "birthPlace", label: d.modify.birthPlace, value: idn?.birthPlace ?? "", maxLength: 120 },
         { kind: "text", name: "nationality", label: d.modify.nationality, value: idn?.nationality ?? "", hint: d.modify.nationalityHint, maxLength: 80 },
         ...address,
       ];
-  return { id, title, endpoint: `/api/contacts/${tenant.id}`, method: "PATCH", fields, note: legal ? d.modify.identityNoteLegal : d.modify.identityNote };
-}
-
-function firstOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts.length > 1 ? parts.slice(0, -1).join(" ") : name;
-}
-function lastOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts.length > 1 ? parts[parts.length - 1] : "";
+  return {
+    id,
+    title,
+    endpoint: `/api/contacts/${tenant.id}`,
+    method: "PATCH",
+    fields,
+    together: [address.map((f) => f.name)],
+    ...(legal ? legalNameRule(tenant) : {}),
+    note: legal ? d.modify.identityNoteLegal : d.modify.identityNote,
+  };
 }

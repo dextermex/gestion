@@ -6,6 +6,8 @@ import { Button, Input, Select } from "@/components/pro/ui";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { euros, formatDate as formatIso, type DepositStatus } from "@/lib/types";
 import { callForm, callJson } from "./call";
+import { refusalLine, useApiProblems } from "./ApiErrors";
+import DateField from "./DateField";
 
 /**
  * What the desk does with a guarantee, as writes: received on a date; a
@@ -16,6 +18,8 @@ import { callForm, callJson } from "./call";
  * each one. A sample cabinet plays the outcome and writes nothing.
  */
 export interface DepositLabels {
+  /** How a day is typed: day, month, year. */
+  datePlaceholder: string;
   actReceivedOn: string;
   actReceive: string;
   actReceived: string;
@@ -59,10 +63,10 @@ export interface DepositLabels {
 
 const BACK = "/app/garanties";
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/avif";
-const dateInput = (label: string, value: string, set: (v: string) => void, max: string, min?: string, disabled?: boolean) => (
+const dateInput = (label: string, value: string, set: (v: string) => void, max: string, placeholder: string, min?: string, disabled?: boolean) => (
   <label className="block">
     <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{label}</span>
-    <Input type="date" value={value} min={min} max={max} onChange={(e) => set(e.target.value)} className="w-44 max-sm:w-full" disabled={disabled} />
+    <DateField value={value} min={min} max={max} onChange={set} placeholder={placeholder} className="w-44 max-sm:w-full" disabled={disabled} />
   </label>
 );
 
@@ -85,6 +89,7 @@ function Notice({ note, error }: { note: string | null; error: string | null }) 
 /** A guarantee still pending: the day it was received makes it held. */
 export function DepositReceive({ depositId, todayISO, locale, writable, sampleNote, labels }: { depositId: string; todayISO: string; locale: Locale; writable: boolean; sampleNote: string | null; labels: DepositLabels }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [date, setDate] = useState(todayISO);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -104,9 +109,9 @@ export function DepositReceive({ depositId, todayISO, locale, writable, sampleNo
       if (res.ok) {
         setNote(done);
         router.refresh();
-      } else setError(res.status === 409 ? labels.actRefused : labels.actFailed);
+      } else setError(res.status === 409 ? labels.actRefused : refusalLine(problems, res, labels.actFailed));
     } catch {
-      setError(labels.actFailed);
+      setError(problems.network({ fallback: labels.actFailed }).message);
     }
     setBusy(false);
   };
@@ -115,7 +120,7 @@ export function DepositReceive({ depositId, todayISO, locale, writable, sampleNo
   return (
     <div className="mt-2" data-deposit-receive={depositId}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
-        {dateInput(labels.actReceivedOn, date, setDate, todayISO, undefined, busy)}
+        {dateInput(labels.actReceivedOn, date, setDate, todayISO, labels.datePlaceholder, undefined, busy)}
         <Button size="sm" loading={busy} disabled={!date} onClick={receive}>
           {labels.actReceive}
         </Button>
@@ -143,6 +148,7 @@ export function DepositLineActions({
   labels: DepositLabels;
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [open, setOpen] = useState(false);
   const [ref, setRef] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -177,7 +183,7 @@ export function DepositLineActions({
         const stored = await callForm("/api/documents", form, BACK);
         if (!stored) return;
         if (!stored.ok) {
-          setError(stored.status === 415 ? labels.actJustifyBadFile : labels.actFailed);
+          setError(stored.status === 415 ? labels.actJustifyBadFile : refusalLine(problems, stored, labels.actFailed));
           setBusy(false);
           return;
         }
@@ -191,9 +197,9 @@ export function DepositLineActions({
       } else if (res.status === 409 && res.payload.error === "expired") {
         setError(labels.actJustifyLate);
         router.refresh();
-      } else setError(res.status === 409 ? (res.payload.error === "already" ? labels.actAlready : labels.actRefused) : labels.actFailed);
+      } else setError(res.status === 409 ? (res.payload.error === "already" ? labels.actAlready : labels.actRefused) : refusalLine(problems, res, labels.actFailed));
     } catch {
-      setError(labels.actFailed);
+      setError(problems.network({ fallback: labels.actFailed }).message);
     }
     setBusy(false);
   };
@@ -217,7 +223,7 @@ export function DepositLineActions({
             <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{labels.actJustifyRef}</span>
             <Input value={ref} maxLength={160} onChange={(e) => setRef(e.target.value)} disabled={busy} />
           </label>
-          {dateInput(labels.actJustifyOn, date, setDate, todayISO, undefined, busy)}
+          {dateInput(labels.actJustifyOn, date, setDate, todayISO, labels.datePlaceholder, undefined, busy)}
           <Button size="sm" loading={busy} disabled={!date || (writable && !file)} onClick={() => run("PATCH", { justifiedOn: date }, labels.actJustified)}>
             {labels.actJustify}
           </Button>
@@ -272,6 +278,7 @@ export function DepositSettlementActions({
   labels: DepositLabels;
 }) {
   const router = useRouter();
+  const problems = useApiProblems();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -298,9 +305,9 @@ export function DepositSettlementActions({
       if (res.ok) {
         setNote(typeof done === "string" ? done : done(res.payload));
         router.refresh();
-      } else setError(res.status === 409 ? conflict(res.payload.error) : labels.actFailed);
+      } else setError(res.status === 409 ? conflict(res.payload.error) : refusalLine(problems, res, labels.actFailed));
     } catch {
-      setError(labels.actFailed);
+      setError(problems.network({ fallback: labels.actFailed }).message);
     }
     setBusy(false);
   };
@@ -347,7 +354,7 @@ export function DepositSettlementActions({
 
       {!decompteIssuedOn && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
-          {dateInput(labels.actDecompteOn, decompteOn, setDecompteOn, todayISO, keyHandoverOn, busy)}
+          {dateInput(labels.actDecompteOn, decompteOn, setDecompteOn, todayISO, labels.datePlaceholder, keyHandoverOn, busy)}
           <Button size="sm" variant="secondary" loading={busy} disabled={!decompteOn} onClick={() => run(base, "PATCH", { decompteIssuedOn: decompteOn }, fmt(labels.actDecompteIssued, { date: formatIso(decompteOn, locale) }))}>
             {labels.actDecompteIssue}
           </Button>
@@ -379,7 +386,7 @@ export function DepositSettlementActions({
 
       {!miseEnDemeureArOn && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
-          {dateInput(labels.actMedArOn, medArOn, setMedArOn, todayISO, keyHandoverOn, busy)}
+          {dateInput(labels.actMedArOn, medArOn, setMedArOn, todayISO, labels.datePlaceholder, keyHandoverOn, busy)}
           <Button size="sm" variant="ghost" loading={busy} disabled={!medArOn} onClick={() => run(base, "PATCH", { miseEnDemeureArOn: medArOn }, fmt(labels.actMedArSaved, { date: formatIso(medArOn, locale) }))}>
             {labels.actMedArSave}
           </Button>

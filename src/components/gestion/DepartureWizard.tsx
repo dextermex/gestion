@@ -10,6 +10,8 @@ import { StepCard, WizardFooter } from "@/components/gestion/WizardChrome";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
 import { todayISO } from "@/lib/clock";
+import { networkProblem, readApiProblem } from "@/lib/api-errors";
+import DateField from "@/components/gestion/DateField";
 
 /**
  * A tenant leaves.
@@ -106,6 +108,8 @@ export default function DepartureWizard({
   const [decompteIssuedOn, setDecompteIssuedOn] = useState(ex?.decompteIssuedOn ?? "");
   const [metersDone, setMetersDone] = useState(ex?.metersDone ?? false);
   const [readings, setReadings] = useState<Record<string, string>>({});
+  // The readings already written in this visit, by meter: a retry after a failure never writes the same one twice.
+  const recordedMeters = useRef(new Map<string, string>());
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,18 +217,20 @@ export default function DepartureWizard({
       setError(null);
       try {
         for (const m of typed) {
+          if (recordedMeters.current.get(m.id) === readings[m.id].trim()) continue;
           const res = await fetch(`/api/compteurs/${m.id}/releves`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ value: readings[m.id], readOn: dateOk ? endDate : undefined, source: "edl" }),
           });
           if (!res.ok) {
-            setError(d.departure.saveFailed);
+            setError((await readApiProblem(res, d.apiErrors, { fallback: d.departure.saveFailed })).message);
             return;
           }
+          recordedMeters.current.set(m.id, readings[m.id].trim());
         }
       } catch {
-        setError(d.departure.saveFailed);
+        setError(networkProblem(d.apiErrors).message);
         return;
       } finally {
         setSaving(false);
@@ -253,12 +259,9 @@ export default function DepartureWizard({
         window.location.assign(`/connexion?next=${encodeURIComponent(`/app/biens/depart?bail=${lease.id}`)}`);
         return;
       }
-      if (res.status === 400) {
-        setError(d.departure.endBeforeStart);
-        return;
-      }
       if (!res.ok) {
-        setError(d.departure.saveFailed);
+        // The refusal by its own code: the end date before the start is one reason among others, never the name of every 400.
+        setError((await readApiProblem(res, d.apiErrors, { fallback: d.departure.saveFailed, codes: { end_before_start: d.departure.endBeforeStart } })).message);
         return;
       }
       setResult((await res.json()) as { droppedPeriods: number });
@@ -379,7 +382,7 @@ export default function DepartureWizard({
                   </p>
                 )}
                 <Field label={d.departure.endDate} hint={d.departure.endDateHint}>
-                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  <DateField value={endDate} onChange={setEndDate} placeholder={d.loyers.datePlaceholder} />
                 </Field>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">{d.departure.dateNote}</p>
                 {errorLine}
@@ -468,7 +471,7 @@ export default function DepartureWizard({
                 {keysReturned && (
                   <div className="mt-3">
                     <Field label={d.departure.keysReturnedOn}>
-                      <Input type="date" value={keysReturnedOn} placeholder={endDate} onChange={(e) => setKeysReturnedOn(e.target.value)} />
+                      <DateField value={keysReturnedOn} onChange={setKeysReturnedOn} placeholder={d.loyers.datePlaceholder} />
                     </Field>
                   </div>
                 )}
@@ -528,7 +531,7 @@ export default function DepartureWizard({
                     </Field>
                   )}
                   <Field label={d.departure.decompteIssuedOn} hint={d.departure.decompteHint}>
-                    <Input type="date" value={decompteIssuedOn} onChange={(e) => setDecompteIssuedOn(e.target.value)} />
+                    <DateField value={decompteIssuedOn} onChange={setDecompteIssuedOn} placeholder={d.loyers.datePlaceholder} />
                   </Field>
                 </div>
                 {errorLine}

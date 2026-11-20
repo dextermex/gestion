@@ -156,7 +156,7 @@ test("settings: nothing is produced before the templates are validated and the l
   // The lessor as the lease contract names her: a person, with her civility, birth and nationality.
   await form.getByLabel("Le bailleur est").selectOption("natural");
   await form.getByLabel("Civilité").selectOption("f");
-  await form.getByLabel("Date de naissance").fill("1975-04-12");
+  await form.getByLabel("Date de naissance").fill("12/04/1975");
   await form.getByLabel("Lieu de naissance").fill("Esch-sur-Alzette");
   await form.getByLabel("Nationalité").fill("luxembourgeoise");
   const badIban = page.waitForResponse((r) => r.url().endsWith("/api/reglages") && r.request().method() === "PATCH");

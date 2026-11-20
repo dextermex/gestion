@@ -4,7 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { MotionGlobalConfig } from "motion/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ModifyMenu, { type ModifyLabels } from "@/components/gestion/ModifyMenu";
-import type { MenuGroup } from "@/lib/gestion/editors";
+import type { EditTopic, MenuGroup } from "@/lib/gestion/editors";
+import { ApiErrorsProvider } from "@/components/gestion/ApiErrors";
 import { fr } from "@/lib/i18n/fr";
 
 /**
@@ -30,6 +31,7 @@ const labels: ModifyLabels = {
   failed: fr.modify.failed,
   emailTaken: fr.modify.emailTaken,
   schemaOutdated: fr.modify.schemaOutdated,
+  datePlaceholder: fr.loyers.datePlaceholder,
   photoCurrent: fr.modify.photoCurrent,
   photoChoose: fr.modify.photoChoose,
   photoRemove: fr.modify.photoRemove,
@@ -116,5 +118,114 @@ describe("the Modifier menu", () => {
     const menu = document.querySelector("[role=menu]");
     expect(menu).not.toBeNull();
     expect([...menu!.querySelectorAll("[role=menuitem]")].map((e) => e.textContent?.trim())).toEqual(["Photos", "Archiver le bien", "Les lots"]);
+  });
+});
+
+/**
+ * An editor behind Modifier: it opens on the stored values, a date reads
+ * day, month, year, a save sends only what changed, and a refusal is said
+ * in words with the form left as typed.
+ */
+describe("an editor behind Modifier", () => {
+  const guarantee: EditTopic = {
+    id: "deposit",
+    title: "Garantie",
+    endpoint: "/api/garanties/dep-1",
+    method: "PATCH",
+    fields: [
+      { kind: "euro", name: "amount", label: "Montant", value: "2 900,00" },
+      { kind: "select", name: "status", label: "État", value: "held", options: [{ value: "held", label: "Détenue" }, { value: "disputed", label: "Contestée" }] },
+      { kind: "date", name: "receivedOn", label: "Reçue le", value: "2024-03-01", max: "2026-11-19" },
+    ],
+  };
+  const editorGroups: MenuGroup[] = [{ label: "Location", entries: [{ id: "deposit", label: "Garantie", topic: guarantee }] }];
+
+  const openEditor = async () => {
+    phone = false;
+    await act(async () =>
+      root.render(
+        <ApiErrorsProvider copy={fr.apiErrors}>
+          <ModifyMenu groups={editorGroups} labels={labels} />
+        </ApiErrorsProvider>,
+      ),
+    );
+    await act(async () => trigger().click());
+    await act(async () => document.querySelector<HTMLElement>("[role=menuitem]")!.click());
+    return document.querySelector<HTMLElement>("[role=dialog]")!;
+  };
+  const set = async (el: HTMLInputElement | HTMLSelectElement, value: string) => {
+    const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+      el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+    });
+  };
+  const save = async (dialog: HTMLElement) => {
+    await act(async () => dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("opens a date as day, month, year, on the stored day", async () => {
+    const dialog = await openEditor();
+    const date = dialog.querySelector<HTMLInputElement>("input[data-day]")!;
+    expect(date.type).toBe("text");
+    expect(date.value).toBe("01/03/2024");
+    expect(date.placeholder).toBe(fr.loyers.datePlaceholder);
+  });
+
+  it("sends only the field that changed, never the date nobody retyped", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const dialog = await openEditor();
+    await set(dialog.querySelector<HTMLSelectElement>("select")!, "disputed");
+    await save(dialog);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/garanties/dep-1");
+    expect(JSON.parse(String(init.body))).toEqual({ status: "disputed" });
+  });
+
+  it("closes without a request when nothing changed", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const dialog = await openEditor();
+    await save(dialog);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+  });
+
+  it("waits for a date that is not a day instead of erasing the stored one", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const dialog = await openEditor();
+    const date = dialog.querySelector<HTMLInputElement>("input[data-day]")!;
+    await set(date, "31/02/2024");
+    await save(dialog);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(date);
+  });
+
+  it("says in words why a save is refused, and keeps the form as typed", async () => {
+    const dialog = await openEditor();
+    const amount = dialog.querySelector<HTMLInputElement>("input:not([data-day])")!;
+    await set(amount, "3 000,00");
+    for (const [status, body, sentence] of [
+      [403, { error: "forbidden" }, fr.apiErrors.forbidden],
+      [402, { error: "subscription_required" }, fr.apiErrors.subscription],
+      [409, { error: "refused" }, fr.apiErrors.conflicts.refused],
+      [400, { error: "invalid", field: "amount" }, "Le champ « Montant » n'est pas valide."],
+      [503, { error: "schema_outdated" }, fr.modify.schemaOutdated],
+      [401, { error: "unauthenticated" }, fr.apiErrors.sessionKeep],
+      [502, { error: "storage_failed" }, fr.modify.failed],
+    ] as const) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status })));
+      await save(dialog);
+      expect(dialog.querySelector("[role=alert]")?.textContent, String(status)).toContain(sentence);
+      expect(amount.value).toBe("3 000,00");
+    }
+    // The session that ended is signed in again beside the form.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401 })));
+    await save(dialog);
+    expect(dialog.querySelector("[role=alert] a")?.getAttribute("target")).toBe("_blank");
   });
 });

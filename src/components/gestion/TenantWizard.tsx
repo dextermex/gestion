@@ -20,6 +20,12 @@ import {
   type RentalStep,
 } from "@/lib/gestion/rental-flow";
 import { todayISO } from "@/lib/clock";
+import { ApiProblemNote } from "@/components/gestion/ApiErrors";
+import DateField from "@/components/gestion/DateField";
+import { networkProblem, readApiProblem, type ApiProblem } from "@/lib/api-errors";
+import { isZeroAmount, parseEuroInput } from "@/lib/gestion/euros";
+import { dayToText } from "@/lib/day-input";
+import { fmt } from "@/lib/i18n/config";
 
 /**
  * Putting a tenant into a lot, as a conversation the owner can pause.
@@ -104,14 +110,16 @@ export default function TenantWizard({
   const [saving, setSaving] = useState(false);
   // Which move the save belongs to, so only that button shows it.
   const [leaving, setLeaving] = useState(false);
+  // A field the wizard itself finds wrong, or a refusal said in words (src/lib/api-errors.ts).
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveProblem, setSaveProblem] = useState<ApiProblem | null>(null);
   const [leaseId, setLeaseId] = useState<string | null>(existing?.leaseId ?? null);
   const [completed, setCompleted] = useState<RentalStep[]>(existing?.completed ?? []);
   // What the written lease still lacks, as the legal engine said it at the
   // last save. Informative: the rental runs regardless once activated.
   const [compliance, setCompliance] = useState<string[]>([]);
   const [activating, setActivating] = useState(false);
-  const [activateError, setActivateError] = useState<string | null>(null);
+  const [activateError, setActivateError] = useState<ApiProblem | null>(null);
 
   const [people, setPeople] = useState<Person[]>(
     existing && existing.tenants.length > 0 ? existing.tenants : [blankPerson()],
@@ -173,6 +181,13 @@ export default function TenantWizard({
     window.history.replaceState(window.history.state, "", `/app/biens/locataire?bail=${id}&etape=${stepNumber(at)}`);
   };
 
+  /** How a refusal is read on every step: what was typed stays, and signing in again returns to this dossier. */
+  const refusal = {
+    keepsInput: true,
+    fallback: d.location.saveFailed,
+    returnTo: `/app/biens/locataire?${leaseId ? `bail=${leaseId}` : `lot=${unitId}`}`,
+  };
+
   /**
    * Writes the dossier as it stands, from the step the owner is on, and
    * answers with its id (null when nothing was written). The server decides
@@ -180,8 +195,21 @@ export default function TenantWizard({
    * dossier comes into existence and the URL learns its id.
    */
   const save = async (from: RentalStep): Promise<string | null> => {
-    setSaving(true);
     setSaveError(null);
+    setSaveProblem(null);
+    // The amounts are read here the way the route reads them, so a refusal names the field:
+    // "1,850" is not an amount, and neither is a letter left in the charges.
+    const badAmount =
+      rent.trim() !== "" && parseEuroInput(rent) === null
+        ? d.location.rent
+        : !isZeroAmount(charges) && parseEuroInput(charges) === null
+          ? d.location.charges
+          : null;
+    if (badAmount) {
+      setSaveError(fmt(d.apiErrors.invalidField, { field: badAmount }));
+      return null;
+    }
+    setSaving(true);
     // The guarantee is the owner's answer, not the form's pre-filled one: it
     // is written only once the guarantee step has been reached.
     const guaranteeReached = completed.includes("guarantee") || stepNumber(from) >= stepNumber("guarantee");
@@ -199,7 +227,8 @@ export default function TenantWizard({
           startDate,
           endDate: endDate || undefined,
           rent,
-          charges,
+          // No provision is an empty field for the route, never a zero.
+          charges: isZeroAmount(charges) ? "" : charges,
           paymentDay,
           payerName,
           payerIban,
@@ -207,14 +236,9 @@ export default function TenantWizard({
           depositForm,
         }),
       });
-      if (res.status === 401) {
-        const here = `/app/biens/locataire?${leaseId ? `bail=${leaseId}` : `lot=${unitId}`}`;
-        window.location.assign(`/connexion?next=${encodeURIComponent(here)}`);
-        return null;
-      }
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setSaveError(data.error === "already_let" ? d.location.alreadyLet : data.error === "email_taken" ? d.modify.emailTaken : d.location.saveFailed);
+        // The step stays as typed. A session that ended is signed in again beside it, and the dossier resumes here.
+        setSaveProblem(await readApiProblem(res, d.apiErrors, { ...refusal, codes: { already_let: d.location.alreadyLet, email_taken: d.modify.emailTaken } }));
         return null;
       }
       const saved = (await res.json()) as {
@@ -234,7 +258,7 @@ export default function TenantWizard({
       });
       return saved.leaseId;
     } catch {
-      setSaveError(d.location.saveFailed);
+      setSaveProblem(networkProblem(d.apiErrors));
       return null;
     } finally {
       setSaving(false);
@@ -259,10 +283,15 @@ export default function TenantWizard({
         router.refresh();
         return;
       }
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      setActivateError(data.error === "incomplete" ? d.location.activationIncomplete : d.bien.draftActivateFailed);
+      setActivateError(
+        await readApiProblem(res, d.apiErrors, {
+          ...refusal,
+          fallback: d.bien.draftActivateFailed,
+          codes: { incomplete: d.location.activationIncomplete, already_let: d.location.alreadyLet },
+        }),
+      );
     } catch {
-      setActivateError(d.bien.draftActivateFailed);
+      setActivateError(networkProblem(d.apiErrors));
     } finally {
       setActivating(false);
     }
@@ -294,6 +323,8 @@ export default function TenantWizard({
     if (busy) return;
     if (real && leaseId && insurer.trim() !== "" && !insuranceDone) {
       setSaving(true);
+      setSaveError(null);
+      setSaveProblem(null);
       try {
         const res = await fetch("/api/assurances/create", {
           method: "POST",
@@ -306,7 +337,15 @@ export default function TenantWizard({
             expiresOn: insuranceExpires,
           }),
         });
-        if (res.ok) setInsuranceDone(true);
+        if (!res.ok) {
+          // A policy that was not recorded is said, and the wizard stays on the step that holds it.
+          setSaveProblem(await readApiProblem(res, d.apiErrors, refusal));
+          return;
+        }
+        setInsuranceDone(true);
+      } catch {
+        setSaveProblem(networkProblem(d.apiErrors));
+        return;
       } finally {
         setSaving(false);
       }
@@ -414,10 +453,15 @@ export default function TenantWizard({
     />
   );
 
-  const errorLine = saveError && (
-    <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-      {saveError}
-    </p>
+  const errorLine = (saveError || saveProblem) && (
+    <div className="mt-4">
+      {saveError && (
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+          {saveError}
+        </p>
+      )}
+      <ApiProblemNote problem={saveProblem} />
+    </div>
   );
 
   const overlay = (
@@ -558,10 +602,10 @@ export default function TenantWizard({
                 </Field>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <Field label={d.location.startDate}>
-                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    <DateField value={startDate} onChange={setStartDate} placeholder={d.loyers.datePlaceholder} />
                   </Field>
                   <Field label={d.location.endDate} hint={d.location.endDateHint}>
-                    <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                    <DateField value={endDate} onChange={setEndDate} min={startDate || undefined} placeholder={d.loyers.datePlaceholder} />
                   </Field>
                 </div>
                 {errorLine}
@@ -767,7 +811,7 @@ export default function TenantWizard({
                       <Input maxLength={80} value={insurancePolicy} onChange={(e) => setInsurancePolicy(e.target.value)} />
                     </Field>
                     <Field label={d.assurances.fieldExpires}>
-                      <Input type="date" value={insuranceExpires} onChange={(e) => setInsuranceExpires(e.target.value)} />
+                      <DateField value={insuranceExpires} onChange={setInsuranceExpires} placeholder={d.loyers.datePlaceholder} />
                     </Field>
                   </div>
                 </div>
@@ -838,7 +882,7 @@ export default function TenantWizard({
                   </div>
                   <div>
                     <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.startDate}</dt>
-                    <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{startDate || d.common.none}</dd>
+                    <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{dayToText(startDate) || d.common.none}</dd>
                   </div>
                   <div>
                     <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.location.paymentDay}</dt>
@@ -870,9 +914,9 @@ export default function TenantWizard({
                   </div>
                 )}
                 {activateError && (
-                  <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                    {activateError}
-                  </p>
+                  <div className="mt-4">
+                    <ApiProblemNote problem={activateError} />
+                  </div>
                 )}
                 {errorLine}
 

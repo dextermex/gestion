@@ -74,6 +74,11 @@ export interface DemoContact {
   id: string;
   kind: "natural" | "legal";
   name: string;
+  /** The name as it is stored: a person's two parts, or a company's own name.
+   *  An editor opens on these; the label above is for reading only. */
+  firstName?: string;
+  lastName?: string;
+  legalName?: string;
   email: string | null;
   phone: string | null;
   language: string;
@@ -87,6 +92,9 @@ export interface DemoContact {
   notes?: string;
   /** A Morada account is attached to this person: their tenant space is open. */
   portalLinked?: boolean;
+  /** The day the record was created and how it came in, when the base says so. */
+  createdAt?: string;
+  source?: string;
   /** What a lease contract names of them, when the base carries it. */
   identity?: ContactIdentity;
 }
@@ -107,32 +115,32 @@ export interface DemoBilling {
 export const BILLING: DemoBilling = { trialDay: 12, rhythm: "quarter" };
 
 export const CONTACTS: DemoContact[] = [
-  { id: "c-muller", kind: "natural", name: "Jean Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
-  { id: "c-jeanne", kind: "natural", name: "Jeanne Muller", email: "jeanne.muller@gmail.com", phone: "+352 621 654 321", language: "fr", roles: ["tenant"] },
-  { id: "c-santos", kind: "natural", name: "Ana Santos", email: "ana.santos@gmail.com", phone: "+352 691 222 333", language: "pt", roles: ["tenant"] },
-  { id: "c-weber", kind: "natural", name: "Lucas Weber", email: "l.weber@education.lu", phone: "+352 621 888 111", language: "lu", roles: ["tenant"] },
-  { id: "c-dubois", kind: "natural", name: "Claire Dubois", email: "claire.dubois@outlook.com", phone: "+352 691 444 555", language: "fr", roles: ["tenant"] },
-  { id: "c-hoffmann", kind: "natural", name: "Marc Hoffmann", email: "marc.hoffmann@pt.lu", phone: "+352 621 777 999", language: "de", roles: ["tenant"], portalLinked: true },
-  { id: "c-krier", kind: "natural", name: "Paul Krier", email: "p.krier@krier-fils.lu", phone: "+352 621 300 200", language: "lu", roles: ["artisan"], notes: "Chauffage et sanitaire, intervient sous 48 h" },
-  { id: "c-da-silva", kind: "natural", name: "José Da Silva", email: "contact@dasilva-peinture.lu", phone: "+352 691 600 700", language: "pt", roles: ["artisan"], notes: "Peinture, sols" },
-  { id: "c-elektro", kind: "legal", name: "Elektro Thill Sàrl", email: "info@elektrothill.lu", phone: "+352 26 44 55 66", language: "de", roles: ["artisan"] },
+  { id: "c-muller", kind: "natural", name: "Jean Muller", firstName: "Jean", lastName: "Muller", email: "jean.muller@pt.lu", phone: "+352 621 123 456", language: "fr", roles: ["tenant"], portalLinked: true },
+  { id: "c-jeanne", kind: "natural", name: "Jeanne Muller", firstName: "Jeanne", lastName: "Muller", email: "jeanne.muller@gmail.com", phone: "+352 621 654 321", language: "fr", roles: ["tenant"] },
+  { id: "c-santos", kind: "natural", name: "Ana Santos", firstName: "Ana", lastName: "Santos", email: "ana.santos@gmail.com", phone: "+352 691 222 333", language: "pt", roles: ["tenant"] },
+  { id: "c-weber", kind: "natural", name: "Lucas Weber", firstName: "Lucas", lastName: "Weber", email: "l.weber@education.lu", phone: "+352 621 888 111", language: "lu", roles: ["tenant"] },
+  { id: "c-dubois", kind: "natural", name: "Claire Dubois", firstName: "Claire", lastName: "Dubois", email: "claire.dubois@outlook.com", phone: "+352 691 444 555", language: "fr", roles: ["tenant"] },
+  { id: "c-hoffmann", kind: "natural", name: "Marc Hoffmann", firstName: "Marc", lastName: "Hoffmann", email: "marc.hoffmann@pt.lu", phone: "+352 621 777 999", language: "de", roles: ["tenant"], portalLinked: true },
+  { id: "c-krier", kind: "natural", name: "Paul Krier", firstName: "Paul", lastName: "Krier", email: "p.krier@krier-fils.lu", phone: "+352 621 300 200", language: "lu", roles: ["artisan"], notes: "Chauffage et sanitaire, intervient sous 48 h" },
+  { id: "c-da-silva", kind: "natural", name: "José Da Silva", firstName: "José", lastName: "Da Silva", email: "contact@dasilva-peinture.lu", phone: "+352 691 600 700", language: "pt", roles: ["artisan"], notes: "Peinture, sols" },
+  { id: "c-elektro", kind: "legal", name: "Elektro Thill Sàrl", legalName: "Elektro Thill Sàrl", email: "info@elektrothill.lu", phone: "+352 26 44 55 66", language: "de", roles: ["artisan"] },
   {
-    id: "c-sci-bealieu", kind: "legal", name: "SCI Beaulieu", email: "sci.beaulieu@fiduciaire-reuter.lu", phone: null, language: "fr",
+    id: "c-sci-bealieu", kind: "legal", name: "SCI Beaulieu", legalName: "SCI Beaulieu", email: "sci.beaulieu@fiduciaire-reuter.lu", phone: null, language: "fr",
     roles: ["owner"], amlTier: "full_cdd", riskBand: "low",
     notes: "Société civile immobilière transparente (art. 175 LIR), modèle 200",
   },
-  { id: "c-faber", kind: "natural", name: "Marie Faber", email: "marie.faber@pt.lu", phone: "+352 621 100 100", language: "fr", roles: ["owner"], residency: "resident" },
-  { id: "c-faber-p", kind: "natural", name: "Pierre Faber", email: "pierre.faber@pt.lu", phone: "+352 621 100 101", language: "fr", roles: ["owner"], residency: "resident" },
+  { id: "c-faber", kind: "natural", name: "Marie Faber", firstName: "Marie", lastName: "Faber", email: "marie.faber@pt.lu", phone: "+352 621 100 100", language: "fr", roles: ["owner"], residency: "resident" },
+  { id: "c-faber-p", kind: "natural", name: "Pierre Faber", firstName: "Pierre", lastName: "Faber", email: "pierre.faber@pt.lu", phone: "+352 621 100 101", language: "fr", roles: ["owner"], residency: "resident" },
   {
-    id: "c-lambert", kind: "natural", name: "Sophie Lambert", email: "sophie.lambert@skynet.be", phone: "+32 475 12 34 56", language: "fr",
+    id: "c-lambert", kind: "natural", name: "Sophie Lambert", firstName: "Sophie", lastName: "Lambert", email: "sophie.lambert@skynet.be", phone: "+32 475 12 34 56", language: "fr",
     roles: ["owner"], residency: "non_resident", country: "Belgique",
     notes: "Non-résidente (BE), pack fiscal double : modèle 100 LU + cadre III BE",
     amlTier: "full_cdd", riskBand: "medium",
   },
-  { id: "c-bock", kind: "legal", name: "Boulangerie Bock Sàrl", email: "info@bock.lu", phone: "+352 26 12 34 56", language: "lu", roles: ["tenant"], amlTier: "light" },
-  { id: "c-schmit", kind: "natural", name: "Tom Schmit", email: "tom.schmit@gmail.com", phone: "+352 691 010 203", language: "en", roles: ["lead"] },
-  { id: "c-wagner", kind: "natural", name: "Lea Wagner", email: "lea.wagner@gmail.com", phone: "+352 621 040 506", language: "de", roles: ["lead"] },
-  { id: "c-notaire", kind: "natural", name: "Me Nathalie Thill", email: "etude@thill-notaire.lu", phone: "+352 26 00 11 22", language: "fr", roles: ["notary"] },
+  { id: "c-bock", kind: "legal", name: "Boulangerie Bock Sàrl", legalName: "Boulangerie Bock Sàrl", email: "info@bock.lu", phone: "+352 26 12 34 56", language: "lu", roles: ["tenant"], amlTier: "light" },
+  { id: "c-schmit", kind: "natural", name: "Tom Schmit", firstName: "Tom", lastName: "Schmit", email: "tom.schmit@gmail.com", phone: "+352 691 010 203", language: "en", roles: ["lead"] },
+  { id: "c-wagner", kind: "natural", name: "Lea Wagner", firstName: "Lea", lastName: "Wagner", email: "lea.wagner@gmail.com", phone: "+352 621 040 506", language: "de", roles: ["lead"] },
+  { id: "c-notaire", kind: "natural", name: "Me Nathalie Thill", firstName: "Nathalie", lastName: "Thill", email: "etude@thill-notaire.lu", phone: "+352 26 00 11 22", language: "fr", roles: ["notary"] },
 ];
 
 export const contactById = (id: string) => CONTACTS.find((c) => c.id === id)!;
@@ -143,8 +151,13 @@ export interface DemoProperty {
   id: string;
   name: string;
   address: string;
+  /** The address as it is stored, part by part. An editor opens on these: the
+   *  printed line above is for reading and is never taken apart again. */
+  addressParts: { street: string; number: string; postalCode: string; city: string; country: string };
   commune: string;
   cadastralRef: string;
+  /** The cadastral reference as it is stored: commune, section, parcel. */
+  cadastralParts: { commune: string; section: string; number: string };
   type: string;
   constructionYear: number;
   completionDate: string;
@@ -170,8 +183,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-beaulieu",
     name: "Résidence Beaulieu",
     address: "12, rue de la Gare, L-1611 Luxembourg",
+    addressParts: { street: "rue de la Gare", number: "12", postalCode: "L-1611", city: "Luxembourg", country: "LU" },
     commune: "Luxembourg",
     cadastralRef: "Luxembourg / Section HoA / n° 372/1145",
+    cadastralParts: { commune: "Luxembourg", section: "HoA", number: "372/1145" },
     type: "Immeuble de rapport",
     constructionYear: 2008,
     completionDate: "2008-09-01",
@@ -191,8 +206,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-bertrange",
     name: "Maison Bertrange",
     address: "8, rue des Champs, L-8053 Bertrange",
+    addressParts: { street: "rue des Champs", number: "8", postalCode: "L-8053", city: "Bertrange", country: "LU" },
     commune: "Bertrange",
     cadastralRef: "Bertrange / Section B / n° 214/889",
+    cadastralParts: { commune: "Bertrange", section: "B", number: "214/889" },
     type: "Maison",
     constructionYear: 2022,
     completionDate: "2022-05-15",
@@ -209,8 +226,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-kirchberg",
     name: "Bureaux Kirchberg",
     address: "4, avenue J.F. Kennedy, L-1855 Luxembourg",
+    addressParts: { street: "avenue J.F. Kennedy", number: "4", postalCode: "L-1855", city: "Luxembourg", country: "LU" },
     commune: "Luxembourg",
     cadastralRef: "Luxembourg / Section EiB / n° 501/2231",
+    cadastralParts: { commune: "Luxembourg", section: "EiB", number: "501/2231" },
     type: "Commercial",
     constructionYear: 2015,
     completionDate: "2015-11-01",
@@ -229,8 +248,10 @@ export const PROPERTIES: DemoProperty[] = [
     id: "p-gare",
     name: "Studio Quartier Gare",
     address: "31, rue de Strasbourg, L-2561 Luxembourg",
+    addressParts: { street: "rue de Strasbourg", number: "31", postalCode: "L-2561", city: "Luxembourg", country: "LU" },
     commune: "Luxembourg",
     cadastralRef: "Luxembourg / Section HoA / n° 388/2020",
+    cadastralParts: { commune: "Luxembourg", section: "HoA", number: "388/2020" },
     type: "Appartement",
     constructionYear: 2024,
     completionDate: "2024-04-30",
@@ -623,6 +644,8 @@ export interface DemoDeposit {
   form: DemoLease["depositForm"];
   amountCents: number;
   status: DepositStatus;
+  /** The day the guarantee was received, when one is recorded. */
+  receivedOn?: string | null;
   keyHandoverOn?: string;
   decompteIssuedOn?: string | null;
   miseEnDemeureArOn?: string | null;

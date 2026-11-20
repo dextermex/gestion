@@ -15,6 +15,9 @@ import {
 } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import ModifyMenu from "@/components/gestion/ModifyMenu";
+import { contactMenu } from "@/lib/gestion/contact-menu";
+import { modifyLabels } from "@/app/app/biens/[id]/sheet";
 
 // No generateStaticParams: the page reads the locale cookie, so it must be
 // request-rendered — a build-time prerender would bake one language in.
@@ -22,7 +25,7 @@ import { fmt } from "@/lib/i18n/config";
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
-  const { CONTACTS, LEASES, TICKETS, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { CONTACTS, LEASES, TICKETS, IBAN_BINDINGS, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const contact = CONTACTS.find((c) => c.id === id);
   if (!contact) notFound();
   const c = contact!;
@@ -34,6 +37,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const leases = LEASES.filter((l) => l.tenantContactIds.includes(c.id));
   const tickets = TICKETS.filter((t) => t.artisanContactId === c.id);
   const isOwner = c.roles.includes("owner");
+  // The accounts their rent was seen coming from, bound to their leases: a fact of the ledger, never a placeholder.
+  const payerIbans = [...new Set(IBAN_BINDINGS.filter((b) => leases.some((l) => l.id === b.leaseId)).map((b) => b.payerIban))].filter((iban) => iban !== c.iban);
 
   const timeline = [
     ...(c.id === "c-muller"
@@ -54,7 +59,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           { kind: "system", label: d.contacts.tlLambertReview, sub: d.contacts.tlLambertReviewSub, at: formatDate("2026-02-10", locale) },
         ]
       : []),
-    { kind: "system", label: d.contacts.tlCreated, sub: d.contacts.tlCreatedSub, at: "2025" },
+    // The record's own creation, when the base dates it: the day it carries, and its source only when it is known to be a manual entry.
+    ...(c.createdAt
+      ? [{ kind: "system", label: d.contacts.tlCreated, sub: c.source === "manual" ? d.contacts.tlCreatedSub : undefined, at: formatDate(c.createdAt, locale) }]
+      : []),
   ];
 
   return (
@@ -89,6 +97,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           {c.roles.map((r) => (
             <MetaBadge key={r} meta={roleMeta[r]} />
           ))}
+        </div>
+        {/* The contact is corrected from its own sheet: identity and reach, bank details, note. */}
+        <div className="max-sm:w-full">
+          <ModifyMenu groups={contactMenu(c, d)} labels={modifyLabels(d)} />
         </div>
       </div>
 
@@ -131,7 +143,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-ink">
-                        {t.ref} — {t.title}
+                        {t.ref} · {t.title}
                       </p>
                       <p className="text-xs text-ink-soft">{t.unitLabel}</p>
                     </div>
@@ -139,14 +151,14 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 text-xs text-ink-soft">{d.contacts.ticketsFoot}</p>
             </Panel>
           )}
 
           {isOwner && (
             <Panel title={d.contacts.mandateTitle}>
-              <p className="text-sm leading-relaxed text-ink">{c.notes ?? d.contacts.mandateDefault}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              {/* What is written on the record, or nothing: no mandate is announced that no record attests. */}
+              {c.notes && <p className="mb-3 text-sm leading-relaxed text-ink">{c.notes}</p>}
+              <div className="flex flex-wrap gap-2">
                 <Link
                   href="/app/finance"
                   className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
@@ -163,19 +175,38 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </Panel>
           )}
 
-          <Panel title={d.contacts.activityTitle}>
-            <Timeline entries={timeline} />
-          </Panel>
+          {/* A note written on the record shows on the record, whoever the contact is. */}
+          {!isOwner && c.notes && (
+            <Panel title={d.shell.fieldNote}>
+              <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{c.notes}</p>
+            </Panel>
+          )}
+
+          {timeline.length > 0 && (
+            <Panel title={d.contacts.activityTitle}>
+              <Timeline entries={timeline} />
+            </Panel>
+          )}
         </div>
 
         <div className="flex flex-col gap-5">
           <Panel title={d.contacts.bankTitle}>
-            {leases.length > 0 || c.iban ? (
+            {c.iban || payerIbans.length > 0 ? (
               <ul className="space-y-2 text-sm">
-                <li className="flex justify-between gap-3">
-                  <span className="text-ink-soft">IBAN</span>
-                  <span className="font-semibold tabular-nums text-ink">{c.iban ?? d.contacts.bankCaptured}</span>
-                </li>
+                {c.iban && (
+                  <li className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
+                    <span className="text-ink-soft">{d.location.payerIban}</span>
+                    <span className="font-semibold tabular-nums text-ink">{c.iban}</span>
+                  </li>
+                )}
+                {payerIbans.map((iban) => (
+                  <li key={iban} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
+                    <span className="text-ink-soft">
+                      {d.location.payerIban} · {d.contacts.bankCaptured}
+                    </span>
+                    <span className="font-semibold tabular-nums text-ink">{iban}</span>
+                  </li>
+                ))}
               </ul>
             ) : (
               <p className="text-sm text-ink-soft">{d.contacts.bankNone}</p>

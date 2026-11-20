@@ -1,6 +1,7 @@
 import type { InvestmentCopy } from "./fr";
 
 export const investmentLu = {
+  datePlaceholder: "dd/mm/jjjj",
   allocationNeeded: "Dës Eenheet deelt e Kredit vum Gebai. Benotzt d’Projektioun vum ganze Gebai, bis d’Finanzéierung op d’Eenheete verdeelt ass.", unitScopeHint: "Projektioun fir déi ausgewielten Eenheet an déi direkt zougeuerdent Kreditter. Kautiounen a Locatiounschargë sinn ausgeschloss.",
   loans: "Immobilieprêten", acquisitions: "Kafprojeten", simulator: "E Kaf plangen",
   loansHint: "Är Remboursementer, Reschtscholden an disponibel Mietakommes.",
