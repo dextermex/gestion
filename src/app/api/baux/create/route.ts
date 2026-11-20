@@ -9,10 +9,10 @@ import { BILLED_UNIT_KINDS } from "@/domain/billing/pricing";
 /**
  * The quick-add lease: an existing contact on an existing lot.
  *
- * The guided flow on a vacant lot (/api/locations/create) creates the tenant
- * first and then lands in the same place — both share `createLease`, so the
- * rule engine, the deposit and the rent ledger behave identically whichever
- * door the owner came through.
+ * The guided flow on a vacant lot is another door: `/api/locations/save`
+ * keeps a draft dossier (the tenant, then the lease) and
+ * `PATCH /api/baux/[id]` with `action: activate` makes it the tenancy in
+ * force. This route creates the lease at once, through `createLease`.
  */
 export async function POST(req: NextRequest) {
   const ctx = await withOrg("write");
