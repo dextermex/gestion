@@ -157,3 +157,63 @@ describe("changing the rent of a tenancy in force", () => {
     expect(period(addMonths(thisMonth, -1)).due_date).toBe(addMonths(thisMonth, -1));
   });
 });
+
+describe("the arrears ladder and the adjustment letter", () => {
+  let db: FakeDb;
+  let leaseId: string;
+  let contactIds: string[];
+  const LUC = { firstName: "Luc", lastName: "Weber", email: "luc.weber@example.lu" };
+
+  beforeEach(async () => {
+    db = new FakeDb(today);
+    current = ctxFor(db);
+    const { unitId } = seedProperty(db);
+    ({ leaseId, contactIds } = await letTo(current, unitId, [ANNA, LUC], "1 250", addMonths(thisMonth, -26)));
+    await openLedger(current, { id: leaseId, startDate: addMonths(thisMonth, -26), endDate: null, rentCents: 125000, chargesCents: 15000, paymentDay: 1 }, today);
+  });
+
+  const late = () => db.table("rent_periods").filter((rp) => rp.lease_id === leaseId).sort((a, b) => (String(a.period) < String(b.period) ? -1 : 1))[0];
+  const step = async (stage: string, rentPeriodId: unknown) => {
+    const { POST } = await import("@/app/api/baux/[id]/relances/route");
+    return POST(call(`/api/baux/${leaseId}/relances`, "POST", { stage, rentPeriodId: String(rentPeriodId) }), params({ id: leaseId }));
+  };
+
+  it("names every tenant of record, a closed tenancy's included, and records a step once", async () => {
+    const rp = late();
+    // The tenancy closed since: its people left on its last day.
+    const { departOn } = await import("./helpers/tenancy");
+    await departOn(db, current, leaseId, addDays(today, -1));
+    const res = await step("mise_en_demeure", rp.id);
+    expect(res.status).toBe(200);
+    const letter = db.table("registered_letters")[0];
+    expect([...((letter.content as Record<string, unknown>).recipientContactIds as string[])].sort()).toEqual([...contactIds].sort());
+    expect(contactIds).toContain(letter.recipient_contact_id);
+    expect(db.table("arrears_actions").find((a) => a.rent_period_id === rp.id)?.registered_letter_id).toBe(letter.id);
+    expect((await step("mise_en_demeure", rp.id)).status).toBe(409);
+    expect(db.table("registered_letters")).toHaveLength(1);
+  });
+
+  it("says the base is behind when the letter cannot carry its content, and records nothing", async () => {
+    db.absentColumns.set("registered_letters", new Set(["content"]));
+    const res = await step("mise_en_demeure", late().id);
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: string }).error).toBe("schema_outdated");
+    expect(db.table("arrears_actions")).toHaveLength(0);
+    expect(db.table("registered_letters")).toHaveLength(0);
+  });
+
+  it("applies the rent the letter announced, never today's larger computation", async () => {
+    const lease = db.table("leases").find((l) => l.id === leaseId)!;
+    lease.capital_investi = [{ year: 2010, amount: 100_000_000, kind: "construction" }];
+    // The letter announced 1 280,00 €; the engine, today, would allow more.
+    db.insertRow("registered_letters", {
+      org_id: ORG, template_key: "rent_adjustment", related_type: "lease", related_id: leaseId, content_sha256: "x", status: "ar_received",
+      dispatched_on: addDays(today, -40), ar_received_on: addDays(today, -35), content: { template: "rent_adjustment", proposedRentCents: 128000 },
+    });
+    const { POST } = await import("@/app/api/baux/[id]/indexation/route");
+    const res = await POST(call(`/api/baux/${leaseId}/indexation`, "POST"), params({ id: leaseId }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { newRentCents: number }).newRentCents).toBe(128000);
+    expect(lease.rent_cents).toBe(128000);
+  });
+});

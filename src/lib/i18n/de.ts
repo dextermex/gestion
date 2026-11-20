@@ -498,6 +498,7 @@ export const de: Dict = {
     arrearsStepDone: "{stage} erfasst am {date}.",
     arrearsHistory: "Erledigte Schritte",
     arrearsFailed: "Der Schritt konnte nicht erfasst werden. Versuchen Sie es gleich noch einmal.",
+    arrearsOutdated: "Dieser Schritt wartet auf eine Aktualisierung der Datenbank: Er wurde nicht erfasst.",
     arrearsAlready: "Dieser Schritt ist für diese Fälligkeit bereits erfasst.",
     arrearsNeedsAr: "Die Akte für das Friedensgericht braucht zuerst den Rückschein der Mise en demeure.",
     arrearsLegal: "Freundliche Erinnerung bei T+3, formell bei T+10, Mise en demeure bei T+24 (Einschreiben, vom Verwalter bestätigt, Rechtswirkung ab AR-Datum), Export des Friedensgerichtsdossiers bei T+45. Ein Zahlungsplan pausiert die Leiter. Das Produkt bietet keine Versorgungssperre an: das wäre illegal.",

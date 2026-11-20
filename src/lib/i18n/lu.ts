@@ -503,6 +503,7 @@ export const lu: Dict = {
     arrearsStepDone: "{stage} registréiert den {date}.",
     arrearsHistory: "Gemaachte Schrëtt",
     arrearsFailed: "De Schrëtt konnt net registréiert ginn. Probéiert et gläich nach eng Kéier.",
+    arrearsOutdated: "Dëse Schrëtt waart op en Update vun der Datebank: e gouf net registréiert.",
     arrearsAlready: "Dëse Schrëtt ass fir dës Echéance scho registréiert.",
     arrearsNeedsAr: "Den Dossier fir d'Friddensgeriicht brauch fir d'éischt den AR vun der Mise en demeure.",
     arrearsLegal: "Frëndlech Relance bei D+3, formell bei D+10, Mise en demeure bei D+24 (LRAR, vum Gestionnaire confirméiert, legalen Effet vum AR-Datum), Export vum Friddensgeriichts-Dossier bei D+45. E Bezuelplang suspendéiert d'Leeder. De Produit bitt keng Servicecoupure un: dat wier illegal.",

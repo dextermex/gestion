@@ -101,6 +101,7 @@ export default async function LoyersPage({
     justiceDone: d.loyers.arrearsJusticeDone,
     stepDone: d.loyers.arrearsStepDone,
     failed: d.loyers.arrearsFailed,
+    outdated: d.loyers.arrearsOutdated,
     already: d.loyers.arrearsAlready,
     needsAr: d.loyers.arrearsNeedsAr,
     sampleConfirmed: d.loyers.arrearsConfirmed,

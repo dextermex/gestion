@@ -28,6 +28,7 @@
 -- 12. portal_tenant_live_lease : une partie sortie du bail n'y écrit plus.
 -- 13. lease_keeps_tenant : un bail en cours n'est jamais laissé sans
 --     locataire présent.
+-- 14. arrears_actions_period_stage_key : une étape de relance par échéance.
 --
 -- Les fonctions appelées par l'application sont SECURITY INVOKER : elles
 -- écrivent sous le jeton de l'appelant, les politiques RLS décident, et
@@ -36,6 +37,7 @@
 -- exécutables par aucun rôle client : seul le planificateur les appelle.
 --
 -- Réversible :
+--   drop index if exists gestion.arrears_actions_period_stage_key;
 --   drop trigger lease_keeps_tenant on gestion.lease_parties;
 --   drop trigger lease_starts_with_tenant on gestion.leases;
 --   drop function gestion.guard_live_lease_tenant();
@@ -799,6 +801,28 @@ create trigger lease_starts_with_tenant
   for each row
   when (old.status = 'draft' and new.status in ('active', 'notice'))
   execute function gestion.guard_live_lease_tenant();
+
+-- ---------------------------------------------------------------------------
+-- 14. Une étape de relance par échéance
+-- ---------------------------------------------------------------------------
+-- Deux clics ne font qu'une étape. Si la base porte déjà des doublons
+-- (écrits avant cette règle), l'index n'est pas posé et une notice le dit :
+-- les doublons se trient d'abord, la migration se rejoue ensuite.
+do $$
+begin
+  if exists (
+    select 1 from gestion.arrears_actions
+     where rent_period_id is not null
+     group by rent_period_id, stage
+    having count(*) > 1
+  ) then
+    raise notice 'arrears_actions: duplicate steps exist, index arrears_actions_period_stage_key not created';
+  else
+    create unique index if not exists arrears_actions_period_stage_key
+      on gestion.arrears_actions (rent_period_id, stage)
+      where rent_period_id is not null;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- Droits d'exécution, explicites (même geste que 0018)

@@ -498,6 +498,7 @@ export const en: Dict = {
     arrearsStepDone: "{stage} recorded on {date}.",
     arrearsHistory: "Steps taken",
     arrearsFailed: "The step could not be recorded. Try again in a moment.",
+    arrearsOutdated: "This step waits for a database update: it was not recorded.",
     arrearsAlready: "This step is already recorded for this period.",
     arrearsNeedsAr: "The justice de paix file needs the mise en demeure's AR first.",
     arrearsLegal: "Friendly reminder at D+3, formal at D+10, mise en demeure at D+24 (registered letter confirmed by the manager, legal effect from the AR date), justice de paix file export at D+45. A payment plan pauses the ladder. The product offers no service cut-off: that would be illegal.",

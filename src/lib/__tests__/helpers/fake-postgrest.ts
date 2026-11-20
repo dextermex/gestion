@@ -150,6 +150,7 @@ const GENERATED: Record<string, (row: Row) => void> = {
 
 const UNIQUE: Record<string, string[][]> = {
   rent_periods: [["lease_id", "period"]],
+  arrears_actions: [["rent_period_id", "stage"]],
   iban_bindings: [["org_id", "payer_iban", "lease_id"]],
   workspace_settings: [["org_id"]],
   template_validations: [["org_id", "kind", "lang"]],
@@ -199,6 +200,8 @@ export class FakeDb {
   private tables = new Map<string, Row[]>();
   /** Tables the base does not carry yet (a migration not applied): every query on them fails as PostgREST says. */
   readonly absent = new Set<string>();
+  /** Columns the base does not carry yet, by table: a read naming one or a write setting one fails as PostgREST says. */
+  readonly absentColumns = new Map<string, Set<string>>();
   private leaseSeq = 0;
 
   constructor(public today: string) {}
@@ -978,7 +981,7 @@ class FakeQuery implements PromiseLike<Result> {
 
   // The columns are accepted for the caller's sake and ignored: rows come back whole.
   select(columns?: string, opts?: { count?: "exact" | "planned" | "estimated"; head?: boolean }): this {
-    void columns;
+    if (this.op === "select" && columns) this.columns = columns.split(",").map((c) => c.trim());
     this.wantRows = true;
     if (opts?.count) this.wantCount = true;
     return this;
@@ -1128,8 +1131,18 @@ class FakeQuery implements PromiseLike<Result> {
     return { data: rows, error: null };
   }
 
+  private columns: string[] = [];
+
   private run(): Result {
     if (this.db.absent.has(this.table)) return { data: null, error: { code: "PGRST205", message: `Could not find the table 'gestion.${this.table}' in the schema cache` } };
+    // A column the base does not carry yet: named in a read, it is unknown; written, PostgREST does not find it.
+    const missing = this.db.absentColumns.get(this.table);
+    if (missing) {
+      if (this.op === "select" && this.columns.some((c) => missing.has(c))) return { data: null, error: { code: "42703", message: `column ${this.table}.${this.columns.find((c) => missing.has(c))} does not exist` } };
+      const written = this.op === "update" ? [this.patch] : this.op === "insert" || this.op === "upsert" ? this.payload : [];
+      const key = written.flatMap((r) => Object.keys(r)).find((k) => missing.has(k));
+      if (key) return { data: null, error: { code: "PGRST204", message: `Could not find the '${key}' column of '${this.table}' in the schema cache` } };
+    }
     try {
       switch (this.op) {
         case "select": {

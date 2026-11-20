@@ -514,6 +514,7 @@ export const fr = {
     arrearsStepDone: "{stage} enregistrée le {date}.",
     arrearsHistory: "Étapes effectuées",
     arrearsFailed: "L'étape n'a pas pu être enregistrée. Réessayez dans un instant.",
+    arrearsOutdated: "Cette étape attend une mise à jour de la base de données : elle n'a pas été enregistrée.",
     arrearsAlready: "Cette étape est déjà enregistrée pour cette échéance.",
     arrearsNeedsAr: "Le dossier justice de paix exige d'abord l'AR de la mise en demeure.",
     arrearsLegal: "Relance amiable à J+3, formelle à J+10, mise en demeure à J+24 (LRAR confirmée par le gestionnaire, effet légal à la date de l'AR), export du dossier justice de paix à J+45. Un plan de paiement suspend l'échelle. Le produit ne propose aucune coupure de service : c'est illégal.",
