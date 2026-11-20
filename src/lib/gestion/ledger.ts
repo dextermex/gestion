@@ -64,14 +64,20 @@ export function nextDueOn(today: string, paymentDay: number, startDate?: string,
 }
 
 /**
- * Whether a tenancy is still in force today. A lease that carries an end date
- * (a departure recorded ahead, a term that was not renewed) stays in force
- * until that day and is over from it on: the nightly
- * `gestion.end_due_leases()` writes `ended` on the row, and until it has run
- * the date itself decides, so no screen waits for the job.
+ * Whether a tenancy is still in force today. A departure recorded ahead puts
+ * the lease on notice until its date and it is over from that day on: the
+ * nightly `gestion.end_due_leases()` writes `ended` on the row, and until it
+ * has run the date itself decides, so no screen waits for the job. The term
+ * a lease was signed for is not a departure: a lease whose term has passed
+ * with nobody leaving carries on (prolonged by law), its rent still due.
  */
 export function effectiveLeaseStatus<S extends string>(status: S, endDate: string | null, today: string): S | "ended" {
-  return (status === "active" || status === "notice") && endDate !== null && endDate !== "" && endDate <= today ? "ended" : status;
+  return status === "notice" && endDate !== null && endDate !== "" && endDate <= today ? "ended" : status;
+}
+
+/** The day a tenancy stops being owed: its departure date when one is recorded (notice), never its contractual term. */
+export function departureDate(lease: { status: string; endDate: string | null }): string | null {
+  return lease.status === "notice" || lease.status === "ended" ? lease.endDate : null;
 }
 
 /** Whether something of a period is still to pay and its due date is behind us. */

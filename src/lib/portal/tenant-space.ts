@@ -454,7 +454,7 @@ export async function buildTenantSpace(
 }
 
 /** The tenant's money picture, derived from the ledger rows and nothing else. */
-export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "startDate" | "endDate">, today: string): TenantPayments {
+export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "startDate" | "endDate"> & { status?: string }, today: string): TenantPayments {
   const month = today.slice(0, 7);
   const sorted = [...lease.periods].sort((a, b) => (a.period < b.period ? -1 : 1));
   const thisMonth = sorted.find((p) => p.period === month) ?? null;
@@ -464,7 +464,9 @@ export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "
   // not behind.
   const outstandingCents = open.filter((p) => p.dueDate < today).reduce((a, p) => a + (p.totalCents - p.allocatedCents), 0);
   const upcoming = open.find((p) => p.dueDate >= today) ?? null;
-  const nextDue = upcoming ? upcoming.dueDate : nextDueOn(today, lease.paymentDay, lease.startDate, lease.endDate);
+  // A term passed with nobody leaving is not an end: only a recorded departure stops the rent.
+  const until = lease.status === undefined || lease.status === "notice" || lease.status === "ended" ? lease.endDate : null;
+  const nextDue = upcoming ? upcoming.dueDate : nextDueOn(today, lease.paymentDay, lease.startDate, until);
   const nextDueCents = upcoming ? upcoming.totalCents - upcoming.allocatedCents : sorted.length > 0 ? sorted[sorted.length - 1].totalCents : 0;
   return { thisMonth, nextDueOn: nextDue, nextDueCents, outstandingCents, history: [...sorted].reverse() };
 }

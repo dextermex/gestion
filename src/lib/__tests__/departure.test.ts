@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OrgContext } from "@/lib/gestion/api";
-import { closeLease } from "@/lib/gestion/lease";
-import { effectiveLeaseStatus } from "@/lib/gestion/ledger";
+import { closeLease, openLedger } from "@/lib/gestion/lease";
+import { departureDate, effectiveLeaseStatus, nextDueOn } from "@/lib/gestion/ledger";
 import { buildPortfolio, findCard, occupancyOf } from "@/lib/gestion/portfolio";
 import { rentDue } from "@/lib/portal/view";
 import { createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
@@ -114,15 +114,31 @@ describe("a departure and its date", () => {
     expect(mine.current).toBeNull();
     expect(mine.past.map((l) => [l.id, l.status])).toEqual([[rental.leaseId, "ended"]]);
 
-    // An active lease with a term behind it is no different.
+    // A lease whose term has passed with nobody leaving is not over: it carries on, prolonged by law.
     Object.assign(db.table("leases").find((l) => l.id === rental.leaseId)!, { status: "active", end_date: addDays(today, -10) });
-    expect((await hydrate(db)).LEASES.find((l) => l.id === rental.leaseId)!.status).toBe("ended");
+    const carried = await hydrate(db);
+    expect(carried.LEASES.find((l) => l.id === rental.leaseId)!.status).toBe("active");
+    expect(occupancyOf(findCard(buildPortfolio(carried), propertyId)!)).not.toBe("vacant");
+    expect((await space(db, anna)).current?.id).toBe(rental.leaseId);
+  });
+
+  it("keeps a lease's rent falling due after its term when nobody left", async () => {
+    const rental = await letTo(ctx, unitId, [ANNA], "1 250", started);
+    // Signed for a term that ended last month; the tenant is still there.
+    const lease = db.table("leases").find((l) => l.id === rental.leaseId)!;
+    lease.end_date = addDays(thisMonth, -1);
+    await openLedger(ctx, { id: rental.leaseId, startDate: started, endDate: null, rentCents: 125000, chargesCents: 15000, paymentDay: 1 }, today);
+    const months = db.table("rent_periods").filter((rp) => rp.lease_id === rental.leaseId).map((rp) => String(rp.period));
+    expect(months).toContain(thisMonth);
+    expect(months).toContain(addMonths(thisMonth, 1));
+    expect(nextDueOn(today, 1, started, departureDate({ status: "active", endDate: String(lease.end_date) }))).not.toBeNull();
   });
 
   it("decides by the date alone", () => {
     expect(effectiveLeaseStatus("notice", addDays(today, 1), today)).toBe("notice");
     expect(effectiveLeaseStatus("notice", today, today)).toBe("ended");
-    expect(effectiveLeaseStatus("active", addDays(today, -1), today)).toBe("ended");
+    // The term signed for is not a departure.
+    expect(effectiveLeaseStatus("active", addDays(today, -1), today)).toBe("active");
     expect(effectiveLeaseStatus("active", null, today)).toBe("active");
     expect(effectiveLeaseStatus("draft", addDays(today, -1), today)).toBe("draft");
   });

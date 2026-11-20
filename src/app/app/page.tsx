@@ -169,6 +169,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }
   }
 
+  // A lease's term passing is not a departure: the tenancy carries on (prolonged
+  // by law) and its rent stays due. The owner is told, so a departure that is
+  // happening gets recorded, or the prolongation is known.
+  const termLease = LEASES.filter((l) => l.status === "active" && l.endDate && diffDays(TODAY, l.endDate) <= 60).sort((a, b) =>
+    (a.endDate ?? "") < (b.endDate ?? "") ? -1 : 1,
+  )[0];
+  if (termLease?.endDate) {
+    const passed = termLease.endDate < TODAY;
+    todo.push({
+      href: `/app/baux/${termLease.id}`,
+      title: fmt(passed ? d.dash.todoTermPassed : d.dash.todoTermSoon, { unit: leaseUnitLabel(termLease), date: formatDate(termLease.endDate, locale) }),
+      sub: d.dash.todoTermSub,
+      badge: { label: d.dash.badgeLease, color: "bg-sand-100 text-ink-soft" },
+    });
+  }
+
   const consentAccount = BANK_ACCOUNTS.filter((b) => b.consentExpiresAt).sort((a, b) =>
     (a.consentExpiresAt ?? "") < (b.consentExpiresAt ?? "") ? -1 : 1,
   )[0];

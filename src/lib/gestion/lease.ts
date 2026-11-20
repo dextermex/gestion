@@ -405,7 +405,8 @@ export async function createLease(
     {
       id: lease.id as string,
       startDate: input.startDate,
-      endDate: input.endDate,
+      // The term signed for is not a departure: the ledger runs while the tenancy does.
+      endDate: null,
       rentCents: input.rentCents,
       chargesCents: input.chargesCents,
       paymentDay: input.paymentDay,
@@ -413,7 +414,7 @@ export async function createLease(
     },
     today,
   );
-  if (periodsOpened === 0 && ledgerMonths(input.startDate, input.endDate, today, ledgerFrom).length > 0) pending.push("ledger");
+  if (periodsOpened === 0 && ledgerMonths(input.startDate, null, today, ledgerFrom).length > 0) pending.push("ledger");
 
   return {
     id: lease.id as string,
@@ -534,7 +535,8 @@ export async function activateLease(
     {
       id: row.id,
       startDate: row.start_date,
-      endDate: row.end_date,
+      // The term signed for is not a departure: the ledger runs while the tenancy does.
+      endDate: null,
       rentCents: row.rent_cents,
       chargesCents: row.charges_cents,
       paymentDay: row.payment_day,

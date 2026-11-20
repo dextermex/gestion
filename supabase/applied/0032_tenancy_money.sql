@@ -19,7 +19,8 @@
 --  6. cancel_payment : annule un paiement et ses affectations, avec trace.
 --  7. settle_lease_end, close_lease : un départ à venir met le bail en
 --     préavis jusqu'à sa date ; le jour venu, le bail se clôt.
---  8. end_due_leases : chaque nuit, clôt les baux dont la date est arrivée.
+--  8. end_due_leases : chaque nuit, clôt les baux en préavis dont la date de
+--     départ est arrivée (le terme d'un bail en cours ne le clôt pas).
 --  9. roll_rent_periods : respecte le début du suivi, ouvre les mois au loyer
 --     saisi d'avance quand il y en a un (et le met en vigueur le jour venu),
 --     puis affecte les crédits.
@@ -521,7 +522,9 @@ begin
   for r in
     select l.id
     from gestion.leases l
-    where l.status in ('active', 'notice')
+    -- Un départ enregistré (préavis) seulement : le terme d'un bail que
+    -- personne n'a quitté n'est pas une fin, le bail se prolonge.
+    where l.status = 'notice'
       and l.end_date is not null
       and l.end_date <= gestion.today()
   loop
@@ -533,7 +536,7 @@ end;
 $$;
 
 comment on function gestion.end_due_leases() is
-  'Clôt chaque bail en cours dont la date de fin est arrivée. Appelée par le planificateur seulement.';
+  'Clôt chaque bail en préavis dont la date de départ est arrivée. Le terme d''un bail en cours n''est pas un départ. Appelée par le planificateur seulement.';
 
 -- ---------------------------------------------------------------------------
 -- 9. Le grand livre se prolonge depuis le début du suivi, puis reçoit les crédits
@@ -571,7 +574,10 @@ begin
          end;
 
   with live as (
-    select l.id, l.org_id, l.start_date, l.end_date, l.rent_cents, l.charges_cents, l.payment_day,
+    select l.id, l.org_id, l.start_date, l.rent_cents, l.charges_cents, l.payment_day,
+           -- Le dernier mois dû est celui du départ enregistré ; le terme
+           -- d'un bail en cours ne l'arrête pas (prolongation de plein droit).
+           case when l.status = 'notice' then l.end_date end as end_date,
            -- Le loyer saisi d'avance, pour les mois à partir du sien.
            case when (l.details -> 'rentChange' ->> 'from') ~ '^\d{4}-\d{2}-01$'
                  and (l.details -> 'rentChange' ->> 'rentCents') ~ '^[1-9]\d{0,8}$'
@@ -697,7 +703,7 @@ begin
           and (not v_live or greatest((v_carried + (l.payment_day - 1))::date, l.start_date) >= p_due_on);
         v_carried := (v_carried + interval '1 month')::date;
       end loop;
-      if v_live and (l.end_date is null or v_carried <= date_trunc('month', l.end_date)::date) then
+      if v_live and (l.status <> 'notice' or l.end_date is null or v_carried <= date_trunc('month', l.end_date)::date) then
         -- Un mois que le bail devra de toute façon : son loyer, plus le solde.
         insert into gestion.rent_periods (org_id, lease_id, period, due_date, rent_cents, charges_cents, other_cents, other_label, vat_cents)
         values (v_org, v_lease, v_carried, greatest((v_carried + (l.payment_day - 1))::date, l.start_date), l.rent_cents, l.charges_cents, v_balance, p_label, 0);
