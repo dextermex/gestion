@@ -45,22 +45,24 @@ test("the language, Créer and account menus list entries a thumb can hit, and C
   }
   await page.keyboard.press("Escape");
   // Créer: the five things one creates; the Document entry, which opened nothing, is gone.
+  // The menu lives in the bar: Accueil's own round actions (Paiement, Bail, Bien) carry the same names below it.
+  const bar = page.getByRole("banner");
   await menus.nth(1).click();
   for (const name of ["Bien", "Bail", "Contact", "Paiement", "Intervention"]) {
-    const item = page.getByRole("button", { name, exact: true });
+    const item = bar.getByRole("button", { name, exact: true });
     await expect(item).toBeVisible();
     expect(await settledHeight(item), `${name} is a thumb's size`).toBeGreaterThanOrEqual(44);
   }
-  await expect(page.getByRole("button", { name: "Document", exact: true })).toHaveCount(0);
+  await expect(bar.getByRole("button", { name: "Document", exact: true })).toHaveCount(0);
   // A count asks for the numeric keyboard; the contact form does not offer the manager's own identity.
-  await page.getByRole("button", { name: "Bail", exact: true }).click();
+  await bar.getByRole("button", { name: "Bail", exact: true }).click();
   const sheet = page.getByRole("dialog");
   await expect(sheet).toBeVisible();
   await expect(sheet.locator("input[name='depositMonths']")).toHaveAttribute("inputmode", "numeric");
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await menus.nth(1).click();
-  await page.getByRole("button", { name: "Contact", exact: true }).click();
+  await bar.getByRole("button", { name: "Contact", exact: true }).click();
   await expect(sheet).toBeVisible();
   for (const field of ["name", "email", "phone"]) await expect(sheet.locator(`input[name='${field}']`)).toHaveAttribute("autocomplete", "off");
   await page.keyboard.press("Escape");

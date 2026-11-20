@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Card, EmptyState, PageHeader } from "@/components/pro/ui";
+import { EmptyState, PageHeader } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
-import { CollapsiblePanel, LegalNote, Pagination, Panel } from "@/components/gestion/bits";
+import { CollapsiblePanel, LegalNote, Pagination } from "@/components/gestion/bits";
 import DocumentUpload from "@/components/gestion/DocumentUpload";
 import DocumentList, { type DocumentRow } from "@/components/gestion/DocumentList";
 import DocumentFilters from "@/components/gestion/DocumentFilters";
@@ -129,135 +129,158 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
     </Link>
   );
 
+  const upload = (
+    <DocumentUpload
+      classes={Object.keys(cls).map((value) => ({ value, label: cls[value] }))}
+      properties={PROPERTIES.map((p) => ({ id: p.id, label: p.name }))}
+      writable={!sample}
+      sampleNote={sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null}
+      labels={{ ...d.documents, close: d.common.close }}
+      recognition={recognitionConfigured()}
+      locale={locale}
+    />
+  );
+  const pieces = (n: number) => plural(locale, n, d.documents.piecesOne, d.documents.piecesMany);
+  // The shelves are the folders: where the register files a piece by its class. One address each.
+  const folders: Array<{ key: string; href: string; label: string; count: number; current: boolean; tone?: "late" }> = [
+    { key: "all", href: "/app/documents", label: d.documents.allDocs, count: summary.total, current: !filtering },
+    ...shelves.map((g) => ({ key: g, href: `/app/documents?groupe=${g}`, label: grp[g], count: summary.byGroup[g], current: group === g && !purge })),
+    ...(summary.purgeDue > 0 ? [{ key: "purge", href: "/app/documents?vue=purge", label: d.documents.purgeFolder, count: summary.purgeDue, current: purge, tone: "late" as const }] : []),
+  ];
+  const empty = summary.total === 0 && documents.length === 0 && !filtering;
+
   return (
     <div>
-      <PageHeader
-        title={d.documents.title}
-        subtitle={d.documents.subtitle}
-        actions={
-          <DocumentUpload
-            classes={Object.keys(cls).map((value) => ({ value, label: cls[value] }))}
-            properties={PROPERTIES.map((p) => ({ id: p.id, label: p.name }))}
-            writable={!sample}
-            sampleNote={sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null}
-            labels={{ ...d.documents, close: d.common.close }}
-            recognition={recognitionConfigured()}
-            locale={locale}
-          />
-        }
-      />
+      <PageHeader title={d.documents.title} subtitle={d.documents.lead} actions={upload} />
 
-      {summary.total === 0 && documents.length === 0 && !filtering ? (
+      {empty ? (
         <EmptyState icon="documents" title={d.documents.emptyTitle} body={d.documents.emptyBody} />
       ) : (
-        <>
-          <section className="crm-doc-overview" aria-label={d.documents.registerTitle}>
-            {/* The register leads: how much it holds, how much of it is sealed, and its shelves. */}
-            <Card className="crm-metric crm-doc-hero">
-              <div className="crm-metric-top">
-                <span>{d.documents.registerTitle}</span>
-                <span className="crm-symbol">
-                  <Icon name="documents" size={22} />
-                </span>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[15.5rem_minmax(0,1fr)] lg:gap-8">
+          {/* The folder column: a rail of chips on a phone, a list beside the files from `lg`. */}
+          <nav aria-label={d.documents.foldersAria} className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+            <p className="mb-2 px-1 text-sm font-semibold text-ink-soft max-lg:hidden">{d.documents.foldersTitle}</p>
+            <ul className="scroll-x flex gap-1.5 lg:flex-col lg:gap-0.5">
+              {folders.map((f) => (
+                <li key={f.key} className="shrink-0">
+                  <Link
+                    href={f.href}
+                    aria-current={f.current ? "page" : undefined}
+                    className={
+                      "tactile flex min-h-11 items-center gap-2.5 rounded-2xl px-3.5 text-[15px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-lg:border max-lg:border-sand-200 max-lg:bg-white/80 " +
+                      (f.current ? "bg-brand-50 text-brand-800 max-lg:border-brand-200" : "text-ink-soft hover:bg-white/80 hover:text-ink")
+                    }
+                  >
+                    <Icon name={f.key === "purge" ? "clock" : "folder"} size={18} className={"shrink-0 " + (f.tone === "late" ? "text-red-700" : "")} />
+                    <span className="min-w-0 flex-1 truncate">{f.label}</span>
+                    <span className={"shrink-0 text-[13px] tabular-nums " + (f.tone === "late" ? "font-semibold text-red-700" : "font-medium text-ink-soft")}>{f.count}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div className="min-w-0">
+            {/* What the register holds, in one line. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-3xl border border-sand-200/80 bg-white/75 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold text-ink">{pieces(summary.total)}</p>
+                <p className="mt-0.5 text-[13px] text-ink-soft">
+                  {[registerSub, summary.generated > 0 ? plural(locale, summary.generated, d.documents.producedOne, d.documents.producedMany) : null].filter(Boolean).join(" · ")}
+                </p>
               </div>
-              <p className="crm-metric-value">{summary.total}</p>
-              <p className="crm-metric-sub">{registerSub}</p>
-              {shelves.length > 0 && (
-                <ul className="crm-doc-groups">
+              {summary.purgeDue > 0 && summary.nextPurge && (
+                <Link href="/app/documents?vue=purge" className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                  <Icon name="clock" size={15} />
+                  {fmt(d.documents.purgeNext, { date: formatDate(summary.nextPurge, locale) })}
+                </Link>
+              )}
+            </div>
+
+            {/* The folders as tiles, while the whole register is on the screen. */}
+            {!filtering && shelves.length > 0 && (
+              <section className="mt-7">
+                <div className="mb-3 flex items-baseline justify-between gap-3 px-1">
+                  <h2 className="font-display text-lg font-bold text-ink">{d.documents.foldersTitle}</h2>
+                  <p className="text-sm text-ink-soft">{fmt(d.documents.foldersCount, { n: shelves.length })}</p>
+                </div>
+                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                   {shelves.map((g) => (
-                    <li key={g}>
-                      <Link href={`/app/documents?groupe=${g}`} aria-current={group === g && !purge ? "page" : undefined}>
-                        <span>{grp[g]}</span>
-                        <span>{summary.byGroup[g]}</span>
+                    <li key={g} className="min-w-0">
+                      <Link href={`/app/documents?groupe=${g}`} className="tactile block h-full rounded-3xl border border-sand-200/80 bg-white/75 p-4 transition hover:border-brand-200 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+                        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-brand-50 text-brand-700">
+                          <Icon name="folder" size={20} />
+                        </span>
+                        <span className="mt-4 block truncate text-[15px] font-semibold text-ink">{grp[g]}</span>
+                        <span className="mt-0.5 block text-[13px] text-ink-soft">{pieces(summary.byGroup[g])}</span>
                       </Link>
                     </li>
                   ))}
                 </ul>
-              )}
-            </Card>
+              </section>
+            )}
 
-            <Card className={"crm-metric" + (summary.purgeDue > 0 ? " crm-metric-attention" : "")}>
-              <div className="crm-metric-top">
-                <span>{d.documents.clocksTitle}</span>
-                <span className="crm-symbol">
-                  <Icon name="clock" size={22} />
-                </span>
+            <section className="mt-7">
+              <div className="mb-3 flex items-baseline justify-between gap-3 px-1">
+                <h2 className="font-display text-lg font-bold text-ink">{filtering ? listTitle : d.documents.filesTitle}</h2>
+                <p className="text-sm text-ink-soft">{pieces(paging.total)}</p>
               </div>
-              <p className="crm-metric-value">{summary.purgeDue}</p>
-              <p className="crm-metric-sub">{summary.nextPurge ? fmt(d.documents.purgeNext, { date: formatDate(summary.nextPurge, locale) }) : d.documents.purgeNone}</p>
-              {summary.purgeDue > 0 && (
-                <Link href="/app/documents?vue=purge" className="crm-metric-action">
-                  {d.documents.purgeAction}
-                  <Icon name="chevron-right" size={15} />
-                </Link>
-              )}
-            </Card>
-
-            <Card className="crm-metric">
-              <div className="crm-metric-top">
-                <span>{d.documents.producedTitle}</span>
-                <span className="crm-symbol">
-                  <Icon name="contract" size={22} />
-                </span>
-              </div>
-              <p className="crm-metric-value">{summary.generated}</p>
-              <p className="crm-metric-sub">{d.documents.producedSub}</p>
-            </Card>
-          </section>
-
-          <Panel title={listTitle}>
-            <DocumentFilters
-              group={group ?? ""}
-              q={query}
-              purge={purge}
-              labels={{
-                search: d.documents.search,
-                group: d.documents.filterGroup,
-                all: d.documents.grpAll,
-                reset: d.common.resetFilters,
-                groups: DOCUMENT_GROUP_KEYS.map((g) => ({ value: g, label: grp[g] })),
-              }}
-            />
-            {rows.length === 0 ? (
-              <EmptyState title={d.documents.filteredTitle} body={d.documents.filteredBody} action={resetLink} />
-            ) : (
-              <>
-                <DocumentList
-                  rows={rows}
+              <div className="rounded-3xl border border-sand-200/80 bg-white/75 p-4 sm:p-5">
+                <DocumentFilters
+                  shelf={false}
+                  group={group ?? ""}
+                  q={query}
+                  purge={purge}
                   labels={{
-                    colDoc: d.documents.colDoc,
-                    colClass: d.documents.colClass,
-                    colAdded: d.documents.colAdded,
-                    colSize: d.documents.colSize,
-                    details: d.documents.details,
-                    close: d.common.close,
-                    openFile: d.documents.openFile,
-                    klass: d.documents.klass,
-                    related: d.documents.related,
-                    relatedNone: d.documents.relatedNone,
-                    added: d.documents.sheetAdded,
-                    size: d.documents.colSize,
-                    retention: d.documents.colRetention,
-                    kind: d.documents.sheetKind,
-                    fingerprint: d.documents.fingerprint,
-                    sealed: d.documents.sealedAria,
-                    sealedNote: d.documents.sealedNote,
-                    noFile: sample ? null : d.documents.noFile,
+                    search: d.documents.search,
+                    group: d.documents.filterGroup,
+                    all: d.documents.grpAll,
+                    reset: d.common.resetFilters,
+                    groups: DOCUMENT_GROUP_KEYS.map((g) => ({ value: g, label: grp[g] })),
                   }}
                 />
-                <div className="crm-doc-foot">
-                  <p className="crm-bank-count">{fmt(d.documents.countShown, { shown: rows.length, total: paging.total })}</p>
-                  <Pagination
-                    page={paging.page}
-                    pages={paging.pages}
-                    hrefFor={hrefFor}
-                    labels={{ prev: d.common.pagePrev, next: d.common.pageNext, pageOf: fmt(d.common.pageOf, { page: paging.page, pages: paging.pages }) }}
-                  />
-                </div>
-              </>
-            )}
-          </Panel>
-        </>
+                {rows.length === 0 ? (
+                  <EmptyState title={d.documents.filteredTitle} body={d.documents.filteredBody} action={resetLink} />
+                ) : (
+                  <>
+                    <DocumentList
+                      rows={rows}
+                      labels={{
+                        colDoc: d.documents.colDoc,
+                        colClass: d.documents.colClass,
+                        colAdded: d.documents.colAdded,
+                        colSize: d.documents.colSize,
+                        details: d.documents.details,
+                        close: d.common.close,
+                        openFile: d.documents.openFile,
+                        klass: d.documents.klass,
+                        related: d.documents.related,
+                        relatedNone: d.documents.relatedNone,
+                        added: d.documents.sheetAdded,
+                        size: d.documents.colSize,
+                        retention: d.documents.colRetention,
+                        kind: d.documents.sheetKind,
+                        fingerprint: d.documents.fingerprint,
+                        sealed: d.documents.sealedAria,
+                        sealedNote: d.documents.sealedNote,
+                        noFile: sample ? null : d.documents.noFile,
+                      }}
+                    />
+                    <div className="crm-doc-foot">
+                      <p className="crm-bank-count">{fmt(d.documents.countShown, { shown: rows.length, total: paging.total })}</p>
+                      <Pagination
+                        page={paging.page}
+                        pages={paging.pages}
+                        hrefFor={hrefFor}
+                        labels={{ prev: d.common.pagePrev, next: d.common.pageNext, pageOf: fmt(d.common.pageOf, { page: paging.page, pages: paging.pages }) }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+          </div>
+        </div>
       )}
 
       <CollapsiblePanel title={d.documents.refTitle} className="mt-5">

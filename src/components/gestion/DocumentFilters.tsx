@@ -19,7 +19,7 @@ export interface FilterLabels {
   groups: Array<{ value: string; label: string }>;
 }
 
-export default function DocumentFilters({ group, q, purge, labels }: { group: string; q: string; purge: boolean; labels: FilterLabels }) {
+export default function DocumentFilters({ group, q, purge, labels, shelf = true }: { group: string; q: string; purge: boolean; labels: FilterLabels; /** The shelf as a select; off where the page shows the shelves as folders. */ shelf?: boolean }) {
   const router = useRouter();
   const [text, setText] = useState(q);
 
@@ -60,14 +60,16 @@ export default function DocumentFilters({ group, q, purge, labels }: { group: st
           className="ui-field crm-filter w-full rounded-full border border-sand-300 bg-white py-2 pl-10 pr-4 text-sm text-ink placeholder:text-ink-soft max-sm:min-h-11 max-sm:text-base focus:outline-none"
         />
       </div>
-      <Select value={group} onChange={(e) => go({ group: e.target.value })} aria-label={labels.group} className="crm-filter crm-filters-select">
-        <option value="">{labels.all}</option>
-        {labels.groups.map((g) => (
-          <option key={g.value} value={g.value}>
-            {g.label}
-          </option>
-        ))}
-      </Select>
+      {shelf && (
+        <Select value={group} onChange={(e) => go({ group: e.target.value })} aria-label={labels.group} className="crm-filter crm-filters-select">
+          <option value="">{labels.all}</option>
+          {labels.groups.map((g) => (
+            <option key={g.value} value={g.value}>
+              {g.label}
+            </option>
+          ))}
+        </Select>
+      )}
       {filtering && (
         <button
           type="button"
