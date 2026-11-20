@@ -57,6 +57,54 @@ describe("the dictionaries", () => {
   });
 });
 
+/**
+ * Keys no screen reads today, kept on purpose: an area still at work on the
+ * screen they belong to (a former tenant's balance and the request steps on
+ * the tenant side, the bank's automatic assignment, the indexation letter,
+ * the charges statement, the guided rental, a property's past leases, a
+ * contact's note), or a key the dashboard of another branch still names
+ * until the branches meet.
+ * Anything else a screen stops reading leaves the four dictionaries with it.
+ */
+const KEPT_UNREAD = new Set([
+  "home.arrearsSub", "shell.fieldNote",
+  "tenant.stepPlanned", "tenant.stepVisitAt", "tenant.stepOn", "tenant.threadManager",
+  "tenant.payOutstandingTitle", "tenant.payOutstandingBody", "tenant.rentOutstanding", "tenant.pastOpen",
+  "banque.kpiAutoSub", "banque.kpiReviewSub", "banque.accountCamt", "banque.colTier", "banque.autoAssign", "banque.autoAssignDone",
+  "indexation.lagSend", "indexation.lagSent", "indexation.capitalTitle",
+  "charges.colYear", "charges.sourceSyndic",
+  "location.reviewNote", "location.createRental", "location.activated",
+  "bien.pastLeases",
+]);
+
+describe("every key of the dictionaries", () => {
+  it("is read by the code, by name or through a key the code builds", () => {
+    const root = join(process.cwd(), "src");
+    const dictionaries = new Set(["fr", "en", "de", "lu"].map((l) => join(root, "lib", "i18n", `${l}.ts`)));
+    const code = [...sources(root), ...sources(join(process.cwd(), "e2e"))]
+      .filter((f) => !dictionaries.has(f))
+      .map((f) => uncommented(readFileSync(f, "utf8")))
+      .join("\n");
+    // A key built from a prefix (`kind_${x}`, "col" + name) counts for every key that starts with it.
+    const prefixes = [...code.matchAll(/`([A-Za-z_]\w+)\$\{|["']([A-Za-z_]\w+)["']\s*\+/g)].map((m) => m[1] ?? m[2]);
+    const unread = leaves(fr)
+      .map(([path]) => path.replace(/(\[\d+\])+$/, ""))
+      .filter((path, i, all) => all.indexOf(path) === i && !KEPT_UNREAD.has(path))
+      .filter((path) => {
+        const leaf = path.split(".").pop()!;
+        const e = leaf.replace(/\$/g, "\\$");
+        const read = new RegExp(`(?:\\.${e}\\b|["'\`]${e}["'\`]|[{,]\\s*${e}\\s*[,}:=])`).test(code);
+        return !read && !prefixes.some((p) => leaf.startsWith(p));
+      });
+    expect(unread).toEqual([]);
+  });
+
+  it("kept unread on purpose still exists, so the list says what is true", () => {
+    const paths = new Set(leaves(fr).map(([path]) => path));
+    for (const key of KEPT_UNREAD) expect(paths.has(key), key).toBe(true);
+  });
+});
+
 /** The application's own source, outside tests: pages, components, libraries. */
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
