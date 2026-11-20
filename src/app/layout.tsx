@@ -5,35 +5,15 @@ import { getDict, getLocale } from "@/lib/i18n";
 import { htmlLang } from "@/lib/i18n/config";
 import "./globals.css";
 
-// Morada Gestion is its own environment in the Morada ecosystem — same design
-// language as Morada.lu, different space. UI in FR/EN/DE/LU (cookie-switched).
-const META: Record<string, { title: string; description: string }> = {
-  fr: {
-    title: "Morada Gestion — la gestion locative, simplement",
-    description:
-      "La plateforme de gestion locative de l'écosystème Morada : loyers, baux, conformité luxembourgeoise, rapprochement bancaire et pack fiscal — pour propriétaires et gestionnaires.",
-  },
-  en: {
-    title: "Morada Gestion — property management, simply",
-    description:
-      "The Morada ecosystem's property-management platform: rents, leases, Luxembourg compliance, bank reconciliation and the year-end tax pack — for owners and managers.",
-  },
-  de: {
-    title: "Morada Gestion — Immobilienverwaltung, einfach",
-    description:
-      "Die Immobilienverwaltungs-Plattform des Morada-Ökosystems: Mieten, Mietverträge, Luxemburger Compliance, Bankabgleich und Steuerpaket — für Eigentümer und Verwalter.",
-  },
-  lu: {
-    title: "Morada Gestion — Immobiliëverwaltung, einfach",
-    description:
-      "D'Verwaltungsplattform vum Morada-Ökosystem: Loyeren, Bailen, Lëtzebuerger Konformitéit, Bankofgläich a Steierpak — fir Proprietären a Gestionnairen.",
-  },
-};
-
+// Morada Gestion is its own environment in the Morada ecosystem: same design
+// language as Morada.lu, different space. UI in FR/EN/DE/LU (cookie-switched);
+// the tab's name and the description a search engine or a link preview reads
+// come from the dictionary of the person's language (`meta`).
 export async function generateMetadata(): Promise<Metadata> {
-  const locale = await getLocale();
+  const { meta } = getDict(await getLocale());
   return {
-    ...(META[locale] ?? META.fr),
+    title: meta.title,
+    description: meta.description,
     // Added to a phone's home screen, the app opens on its own, without the
     // browser around it (the manifest is app/manifest.ts, the icons sit next
     // to it). The status bar stays the light one: the app's bars are white

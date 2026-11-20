@@ -8,7 +8,7 @@ import QuerySelect from "@/components/gestion/QuerySelect";
 import { FoldRow, GroupHead, Hero, HeroAction, HeroStat, MonthSwitch, Money, Row, Rows, Section, Segments } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
-import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatMonth, formatPct } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/config";
 import { getI18n } from "@/lib/i18n";
 import { dateInWords, fmt } from "@/lib/i18n/config";
@@ -41,7 +41,8 @@ function sampleStatement(demo: DemoData) {
   const krierInvoice = 124_000; // boiler repair, owner charge
   const netToOwner = collected - fee.gross - krierInvoice;
   // Co-owner split through the SCI (60/40): exact to the cent.
-  const [faberShare, pierreShare] = splitExact(netToOwner, [60, 40]);
+  const sharesPct = [60, 40] as const;
+  const [faberShare, pierreShare] = splitExact(netToOwner, [...sharesPct]);
   return {
     collectedRows,
     fee,
@@ -49,6 +50,7 @@ function sampleStatement(demo: DemoData) {
     netToOwner,
     faberShare,
     pierreShare,
+    sharesPct,
     sci: contactById("c-sci-bealieu"),
     ownerA: contactById("c-faber"),
     ownerB: contactById("c-faber-p"),
@@ -133,11 +135,11 @@ function Books({ statement, demo, d, locale }: { statement: NonNullable<ReturnTy
                 </p>
                 <ul className="mt-2 space-y-1.5 text-sm">
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">{statement.ownerA.name} · 60 %</span>
+                    <span className="text-ink-soft">{statement.ownerA.name} · {formatPct(statement.sharesPct[0], locale)}</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(statement.faberShare, locale)}</span>
                   </li>
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">{statement.ownerB.name} · 40 %</span>
+                    <span className="text-ink-soft">{statement.ownerB.name} · {formatPct(statement.sharesPct[1], locale)}</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(statement.pierreShare, locale)}</span>
                   </li>
                 </ul>

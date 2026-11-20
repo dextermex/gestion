@@ -192,10 +192,16 @@ export function Avatar({ name, size = 32 }: { name: string; size?: number }) {
 
 /* ----------------------------- Async state UI ------------------------------ */
 
+/**
+ * A spinner is said only when it stands alone: `label`, in the reader's
+ * language, names what is loading. Beside words that already say it (a
+ * busy button, a "reading the file" line) it is decoration, hidden from
+ * assistive technology.
+ */
 export function Spinner({
   size = 20,
   className,
-  label = "Chargement",
+  label,
 }: {
   size?: number;
   className?: string;
@@ -208,20 +214,11 @@ export function Spinner({
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      aria-label={label}
+      {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true })}
     >
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.2" strokeWidth="4" />
       <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
     </svg>
-  );
-}
-
-export function Loading({ label = "Chargement…" }: { label?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-ink-soft">
-      <Spinner size={28} />
-      <p className="text-sm">{label}</p>
-    </div>
   );
 }
 
@@ -280,14 +277,15 @@ export function Modal({
   title,
   children,
   wide,
-  closeLabel = "Fermer",
+  closeLabel,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   wide?: boolean;
-  closeLabel?: string;
+  /** The close button's name, in the reader's language. */
+  closeLabel: string;
 }) {
   const reduced = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);

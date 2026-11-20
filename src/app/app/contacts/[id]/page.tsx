@@ -1,3 +1,4 @@
+import { Icon } from "@/components/pro/icons";
 import Link from "next/link";
 import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
@@ -64,7 +65,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   return (
     <div>
       <div className="mb-2">
-        <Link href="/app/contacts" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/app/contacts" className="inline-flex items-center gap-0.5 text-sm font-semibold text-brand-700 hover:underline max-sm:min-h-10">
+          <Icon name="chevron-left" size={16} />
           {d.contacts.backToList}
         </Link>
       </div>
@@ -81,12 +83,12 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{c.name}</h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-soft">
-            <ContactLink email={c.email} />
+            <ContactLink email={c.email} none={d.common.none} />
             <span aria-hidden>·</span>
-            <ContactLink phone={c.phone} />
+            <ContactLink phone={c.phone} none={d.common.none} />
             <span aria-hidden>·</span>
             <span>{fmt(d.contacts.languageLabel, { lang: c.language.toUpperCase() })}</span>
-            {c.residency === "non_resident" && <span>· {fmt(d.contacts.nonResident, { country: c.country ?? "—" })}</span>}
+            {c.residency === "non_resident" && <span>· {fmt(d.contacts.nonResident, { country: c.country ?? d.common.none })}</span>}
           </p>
         </div>
         <div className="flex items-center gap-1.5">

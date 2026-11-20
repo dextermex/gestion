@@ -810,7 +810,8 @@ export async function buildRealDataFrom(
     const senderName = (m: Row): string =>
       contactIndex.get(s(m.sender_contact_id))?.name ??
       contactIndex.get(contactByUser.get(s(m.sender_user_id)) ?? "")?.name ??
-      (s(m.sender_kind) === "manager" ? org.name : "Système");
+      // A message the product posts has no author: the screens name it in the reader's language.
+      (s(m.sender_kind) === "manager" ? org.name : "");
     // The other side of the desk: the tenants of the lease or request, the
     // contact, else whoever wrote first from outside the cabinet.
     const partyNames =

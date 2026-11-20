@@ -17,10 +17,10 @@ import { getTenantView } from "@/lib/portal/space";
 import { todoFor, unreadCount } from "@/lib/portal/view";
 import { getSession } from "@/lib/supabase/server";
 
-export const metadata: Metadata = {
-  title: "Morada Gestion · Espace locataire",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n();
+  return { title: `Morada Gestion · ${d.tenant.space}`, robots: { index: false, follow: false } };
+}
 
 /**
  * The tenant's space: five destinations, one header, no configuration. The

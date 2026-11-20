@@ -37,7 +37,7 @@ export interface ConnectLabels {
   /** The link that opens the journey in a tab instead. */
   openTab?: string;
   /** The dialog's close button. */
-  close?: string;
+  close: string;
 }
 
 const CREDENTIALS = new Set(["ApiKeyNotFound", "AppIdNotProvided", "SecretNotProvided", "WrongSecret", "InvalidSecret", "ClientNotFound"]);
@@ -135,7 +135,7 @@ export default function SaltEdgeConnect({
           {error}
         </p>
       )}
-      <Modal open={url !== null} onClose={() => setUrl(null)} title={label} wide closeLabel={labels.close ?? "Fermer"}>
+      <Modal open={url !== null} onClose={() => setUrl(null)} title={label} wide closeLabel={labels.close}>
         {url && (
           <>
             <div className="relative overflow-hidden rounded-xl border border-sand-200 bg-sand-50" data-connect-dialog>

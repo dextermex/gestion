@@ -151,7 +151,7 @@ export default async function AmlPage() {
                 <p className="truncate text-xs text-ink-soft">
                   {c.kind === "legal" ? d.contacts.personLegal : d.contacts.personNatural}
                   {c.residency === "non_resident" &&
-                    ` · ${fmt(d.contacts.nonResidentEdd, { country: c.country ?? "—" })}`}
+                    ` · ${fmt(d.contacts.nonResidentEdd, { country: c.country ?? d.common.none })}`}
                 </p>
               </div>
               <div className="col-start-2 flex flex-wrap items-center gap-2 sm:ml-auto">

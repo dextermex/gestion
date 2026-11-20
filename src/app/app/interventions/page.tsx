@@ -85,7 +85,7 @@ export default async function InterventionsPage() {
                       {t.ref} · {formatDate(t.createdAt, locale)}
                     </p>
                   </td>
-                  <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.interventions.colUnit}>{t.unitLabel || "—"}</td>
+                  <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.interventions.colUnit}>{t.unitLabel || d.common.none}</td>
                   <td className="px-3 py-3 text-right" data-label={d.interventions.colSeverity}>
                     <MetaBadge meta={severityMeta[t.severity]} />
                   </td>

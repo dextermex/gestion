@@ -82,6 +82,12 @@ export const fr = {
     fileFailed: "Le fichier n'a pas pu être préparé. Réessayez dans un instant : si le problème persiste, écrivez-nous.",
     fileBack: "Revenir à l'écran précédent",
   },
+  // Le nom de l'onglet et la description que lit un moteur ou un aperçu de lien
+  meta: {
+    title: "Morada Gestion · la gestion locative, simplement",
+    description: "La plateforme de gestion locative de l'écosystème Morada : loyers, baux, conformité luxembourgeoise, rapprochement bancaire et pack fiscal, pour propriétaires et gestionnaires.",
+    invitation: "Invitation",
+  },
   nav: {
     mortgages: "Crédits immobiliers",
     acquisitions: "Projets d’achat",
@@ -661,6 +667,7 @@ export const fr = {
 
   baux: {
     docContract: "Contrat de bail",
+    lastMessage: "{from} : {body}",
     docCertificate: "Attestation de logement",
     edlReport: "Rapport",
     title: "Baux",
@@ -699,7 +706,7 @@ export const fr = {
     colDeposit: "Garantie",
     colStatus: "Statut",
     colocationSigned: "colocation (pacte signé)",
-    backToList: "← Baux",
+    backToList: "Baux",
     since: "depuis le {date}",
     until: "terme le {date}",
     indefinite: "durée indéterminée",
@@ -1263,7 +1270,7 @@ export const fr = {
     vacantMany: "{n} lots vacants",
     smokeMissing: "Détecteurs à poser",
     energyAria: "Classe énergétique {cls}",
-    backToList: "← Biens",
+    backToList: "Biens",
     cpeBadge: "CPE {cls} · expire {date}",
     unitsTitle: "Lots",
     unitMeta: "{floor} · {area} m²",
@@ -1477,7 +1484,7 @@ export const fr = {
     footArchive: "Fiches archivées : l'e-mail se libère, l'actif reste dédupliqué",
     footSuppression: "Suppression : liste de suppression anti-résurrection (sync e-mail)",
     footApplicants: "Candidats non retenus : purge automatique à 3 mois (RGPD)",
-    backToList: "← Contacts",
+    backToList: "Contacts",
     languageLabel: "langue : {lang}",
     nonResidentEdd: "non-résident ({country}), vigilance renforcée",
     leasesTitle: "Baux",
@@ -1531,6 +1538,7 @@ export const fr = {
     cardArtisansBody: "Ils répondent par lien direct, sans compte ni application. Le fil garde la trace des créneaux proposés et acceptés.",
     cardSystem: "Système",
     cardSystemBody: "Les événements notables (attestation générée, écart d'indexation, AR reçu) se postent d'eux-mêmes dans le bon fil.",
+    systemSender: "Système",
     legal: "Les notes internes du gestionnaire vivent dans des tables séparées, jamais exposées au portail locataire.",
     unreadAria: "{n} non lus",
     tabConversations: "Conversations",

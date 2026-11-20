@@ -11,7 +11,7 @@ import { getI18n } from "@/lib/i18n";
 import { fmt, plural, type Locale } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { amortReasonText, energyReasonText } from "@/lib/i18n/engine";
-import { euros, eurosWhole, formatDate } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatPct } from "@/lib/types";
 import { getParamValue } from "@/domain/legal/params";
 import { selectFiscal, type FiscalOwnerYear } from "@/lib/fiscal/pack";
 import { attachmentLabel, filingDeadline, flatText, lineLabel, regimeLabel, sectionLabel, warningText } from "@/lib/fiscal/labels";
@@ -427,7 +427,7 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
                       </td>
                       <td className="px-3 py-3 font-medium text-ink">{regimeLabel(d, r.result.regime.regime)}</td>
                       <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-md:hidden">{money(r.result.regime.cappedBase)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{r.result.regime.ratePct} %</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{formatPct(r.result.regime.ratePct, locale)}</td>
                       <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink">{money(r.result.buildingAmount)}</td>
                       <td className="px-3 py-3 text-right tabular-nums text-ink max-md:hidden">{money(r.taxpayerShareAmount)}</td>
                     </tr>
@@ -439,7 +439,7 @@ export default async function FiscalitePage({ searchParams }: { searchParams: Pr
                         </td>
                         <td className="px-3 py-3 text-ink-soft">{d.fiscalite.regimeEnergy}</td>
                         <td className="px-3 py-3 max-md:hidden" />
-                        <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{r.result.energy.ratePct} %</td>
+                        <td className="px-3 py-3 text-right tabular-nums text-ink-soft max-sm:hidden">{formatPct(r.result.energy.ratePct, locale)}</td>
                         <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink">{money(r.result.energy.amount)}</td>
                         <td className="px-3 py-3 max-md:hidden" />
                       </tr>

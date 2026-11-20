@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import InvitePanel from "@/components/gestion/InvitePanel";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
@@ -14,6 +15,7 @@ import {
   euros,
   formatDate,
   formatMonth,
+  formatPct,
   initials,
   inviteStateMeta,
   leaseStatusMeta,
@@ -149,7 +151,7 @@ export default async function BailDetailPage({
       l.type === "residential" ? "residential.deposit_max_months" : "commercial.deposit_max_months",
       TODAY,
     ),
-    date: l.endDate ? formatDate(l.endDate, locale) : "—",
+    date: l.endDate ? formatDate(l.endDate, locale) : d.common.none,
   };
 
   const capital =
@@ -227,7 +229,8 @@ export default async function BailDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/app/baux" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/app/baux" className="inline-flex items-center gap-0.5 text-sm font-semibold text-brand-700 hover:underline max-sm:min-h-10">
+          <Icon name="chevron-left" size={16} />
           {d.baux.backToList}
         </Link>
       </div>
@@ -269,7 +272,7 @@ export default async function BailDetailPage({
         <Card className="p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.baux.kpiVat}</p>
           <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">
-            {vatLine.vatRatePct > 0 ? `${vatLine.vatRatePct} %` : d.baux.vatExempt}
+            {vatLine.vatRatePct > 0 ? formatPct(vatLine.vatRatePct, locale) : d.baux.vatExempt}
           </p>
           <p className="mt-0.5 truncate text-xs text-ink-soft" title={vatLine.exemptionMention ?? undefined}>
             {vatLine.vatRatePct > 0
@@ -701,7 +704,7 @@ export default async function BailDetailPage({
                         ? fmt(d.baux.edlDone, { date: formatDate(e.completedAt, locale) })
                         : e.scheduledAt
                           ? fmt(d.baux.edlScheduled, { date: formatDate(e.scheduledAt, locale) })
-                          : "—"}
+                          : d.common.none}
                       {e.itemsCount > 0 &&
                         ` · ${fmt(d.baux.edlItems, { items: e.itemsCount, photos: e.photosCount })}`}
                     </p>
@@ -787,7 +790,7 @@ export default async function BailDetailPage({
                       </div>
                       {last && (
                         <p className="mt-0.5 truncate text-xs text-ink-soft">
-                          {last.from} : {last.body}
+                          {fmt(d.baux.lastMessage, { from: last.kind === "system" ? d.messages.systemSender : last.from, body: last.body })}
                         </p>
                       )}
                     </li>
