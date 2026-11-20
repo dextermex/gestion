@@ -50,7 +50,11 @@ export async function POST(request: NextRequest) {
         const changed = await updateSignupUser(session.accessToken, { email });
         if (changed.error) {
           const code = changed.error.code;
-          return NextResponse.json({ error: code === "email_exists" || code === "user_already_exists" ? "email_exists" : code === "over_email_send_rate_limit" || code === "over_request_rate_limit" ? "rate_limited" : "save_failed" }, { status: 400 });
+          // An address another account holds is answered like any other: a code is
+          // awaited, none comes, and the screen says what that may mean. Whether an
+          // account exists for an address is not said here (nor at sign-in or reset).
+          if (code === "email_exists" || code === "user_already_exists") return NextResponse.json({ ok: true, emailPending: true });
+          return NextResponse.json({ error: code === "over_email_send_rate_limit" || code === "over_request_rate_limit" ? "rate_limited" : "save_failed" }, { status: 400 });
         }
       }
       // An address confirmed through a linked Google/Apple identity skips the code.
@@ -71,6 +75,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "password") {
+      // The first password only. Changing one goes through the reset link the
+      // account's address receives, never through a session alone.
+      if (prior.password_set_at) return NextResponse.json({ error: "password_set" }, { status: 409 });
       // Tenants have no tailoring questions; accounts finished before
       // passwords existed stay finished.
       const finished = prior.stage === "complete" || prior.role === "tenant";
