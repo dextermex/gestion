@@ -30,7 +30,7 @@
     "clsx": "^2.1.1",
     "libphonenumber-js": "1.12.21",
     "motion": "^12.42.2",
-    "next": "^15.5.23",
+    "next": "^15.5.29",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
