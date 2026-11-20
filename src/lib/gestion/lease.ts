@@ -82,6 +82,8 @@ export interface LeaseResult {
   issues: LeaseIssue[];
   /** Monthly periods the ledger opened on the spot. */
   periodsOpened: number;
+  /** Steps after the tenancy itself that did not land: the screen says so. */
+  pending: Array<"reference" | "deposit" | "ledger">;
 }
 
 export function normalizeDepositForm(raw: unknown): DepositForm {
@@ -185,10 +187,120 @@ export async function openLedger(ctx: OrgContext, lease: LedgerLease, today: str
   return opened;
 }
 
+/** A database that does not carry a column yet (a migration not applied): the write is retried without it. */
+const columnMissing = (e: { code?: string } | null): boolean => e?.code === "PGRST204" || e?.code === "42703";
+
+/**
+ * The month rent tracking starts from, as YYYY-MM-01. A tenancy that already
+ * ran when it was recorded is followed from the current month unless the
+ * owner says otherwise (`"start"`: from its first month; a month: from that
+ * one), never before its start and never after today: months nobody asked
+ * Morada to follow are not opened as unpaid rent.
+ */
+export function trackingMonth(startDate: string, today: string, asked?: string | null): string {
+  const startMonth = `${startDate.slice(0, 7)}-01`;
+  const thisMonth = `${today.slice(0, 7)}-01`;
+  if (startMonth >= thisMonth) return startMonth;
+  if (asked === "start") return startMonth;
+  if (asked && /^\d{4}-\d{2}/.test(asked)) {
+    const month = `${asked.slice(0, 7)}-01`;
+    return month < startMonth ? startMonth : month > thisMonth ? thisMonth : month;
+  }
+  return thisMonth;
+}
+
+/**
+ * Before a start date corrected on a running tenancy is written: moved
+ * earlier, it must not open the months before the ones already followed
+ * (the nightly roll would otherwise open them as unpaid). The ledger's first
+ * month is pinned, once, to the earliest period it holds. Returns the month
+ * to pin, or null when the lease already carries one or holds no period.
+ */
+export async function ledgerPinFor(ctx: OrgContext, lease: { id: string; status: string; ledgerFrom: string | null }): Promise<string | null> {
+  if (!(LIVE_STATUSES as readonly string[]).includes(lease.status) || lease.ledgerFrom) return null;
+  const { g, org } = ctx;
+  const { data, error } = await g.from("rent_periods").select("period").eq("org_id", org.id).eq("lease_id", lease.id).order("period", { ascending: true }).limit(1);
+  if (error) {
+    console.error("ledger pin lookup failed:", error.code, error.message);
+    return null;
+  }
+  const earliest = ((data as Array<{ period: string }> | null) ?? [])[0]?.period;
+  return earliest ? `${String(earliest).slice(0, 7)}-01` : null;
+}
+
+/**
+ * After a start date moved later on a running tenancy: the months before the
+ * new start were never owed. Those nothing was ever paid on leave the ledger;
+ * one that carries a reversed payment is written off (its history stays); one
+ * that carries a décompte balance keeps the balance alone; one with money on
+ * it stays, because it happened. The first month is due no earlier than the
+ * day the tenancy now starts. Returns how many months stopped being owed.
+ */
+export async function trimLedgerBefore(ctx: OrgContext, leaseId: string, startDate: string, paymentDay: number): Promise<number> {
+  const { g, org } = ctx;
+  const startMonth = `${startDate.slice(0, 7)}-01`;
+  const { data: periods, error } = await g
+    .from("rent_periods")
+    .select("id,period,due_date,other_cents,written_off")
+    .eq("org_id", org.id)
+    .eq("lease_id", leaseId)
+    .lte("period", startMonth);
+  if (error) {
+    console.error("ledger trim lookup failed:", error.code, error.message);
+    return 0;
+  }
+  const rows = (periods as Array<{ id: string; period: string; due_date: string; other_cents: number; written_off: boolean }> | null) ?? [];
+  if (rows.length === 0) return 0;
+  const { data: allocs, error: allocErr } = await g
+    .from("payment_allocations")
+    .select("rent_period_id,reversed_at")
+    .eq("org_id", org.id)
+    .in("rent_period_id", rows.map((r) => r.id));
+  if (allocErr) {
+    console.error("ledger trim allocations lookup failed:", allocErr.code, allocErr.message);
+    return 0;
+  }
+  const live = new Set<string>();
+  const any = new Set<string>();
+  for (const a of (allocs as Array<{ rent_period_id: string; reversed_at: string | null }> | null) ?? []) {
+    any.add(a.rent_period_id);
+    if (!a.reversed_at) live.add(a.rent_period_id);
+  }
+  const before = rows.filter((r) => String(r.period).slice(0, 10) < startMonth && !live.has(r.id));
+  const drop = before.filter((r) => !any.has(r.id) && Number(r.other_cents) === 0).map((r) => r.id);
+  const writeOff = before.filter((r) => any.has(r.id) && Number(r.other_cents) === 0 && !r.written_off).map((r) => r.id);
+  const balanceOnly = before.filter((r) => Number(r.other_cents) !== 0).map((r) => r.id);
+  let trimmed = 0;
+  if (drop.length > 0) {
+    const { data, error: e } = await g.from("rent_periods").delete().eq("org_id", org.id).in("id", drop).select("id");
+    if (e) console.error("ledger trim failed:", e.code, e.message);
+    else trimmed += data?.length ?? 0;
+  }
+  if (writeOff.length > 0) {
+    const { data, error: e } = await g.from("rent_periods").update({ written_off: true }).eq("org_id", org.id).in("id", writeOff).select("id");
+    if (e) console.error("ledger write-off failed:", e.code, e.message);
+    else trimmed += data?.length ?? 0;
+  }
+  if (balanceOnly.length > 0) {
+    const { error: e } = await g.from("rent_periods").update({ rent_cents: 0, charges_cents: 0, vat_cents: 0 }).eq("org_id", org.id).in("id", balanceOnly);
+    if (e) console.error("ledger trim (balance kept) failed:", e.code, e.message);
+  }
+  // The first month is owed from the day the tenancy starts, not before it.
+  const first = rows.find((r) => String(r.period).slice(0, 10) === startMonth && !live.has(r.id));
+  const due = dueDateFor(startMonth, paymentDay, startDate);
+  if (first && String(first.due_date).slice(0, 10) < due) {
+    const { error: e } = await g.from("rent_periods").update({ due_date: due }).eq("org_id", org.id).eq("id", first.id);
+    if (e) console.error("first due date update failed:", e.code, e.message);
+  }
+  return trimmed;
+}
+
 export async function createLease(
   ctx: OrgContext,
   d: Dict,
   input: LeaseInput,
+  /** From which month rent is tracked: see `trackingMonth`. */
+  trackFrom: string | null = null,
 ): Promise<LeaseResult | { error: string }> {
   const { g, org } = ctx;
   const today = isoToday();
@@ -207,27 +319,32 @@ export async function createLease(
   // The owner is recording a rental that exists: it is in force from the day
   // it says it is. What the written lease still lacks is returned alongside,
   // for the dossier to show; it decides nothing here.
-  const { data: lease, error: leaseErr } = await g
-    .from("leases")
-    .insert({
-      org_id: org.id,
-      unit_id: input.unitId,
-      lease_type: input.type,
-      status: "active",
-      start_date: input.startDate,
-      end_date: input.endDate,
-      rent_cents: input.rentCents,
-      charges_cents: input.chargesCents,
-      charges_regime: "advances",
-      payment_day: input.paymentDay,
-      mentions: mentionsFor(input.type),
-      furnished: input.furnished,
-      colocation: input.colocation,
-      vat_regime: "exempt",
-      details: { depositMonths: input.depositMonths, depositForm: input.depositForm },
-    })
-    .select("id,seq")
-    .single();
+  const ledgerFrom = trackingMonth(input.startDate, today, trackFrom);
+  const row: Record<string, unknown> = {
+    org_id: org.id,
+    unit_id: input.unitId,
+    lease_type: input.type,
+    status: "active",
+    start_date: input.startDate,
+    end_date: input.endDate,
+    rent_cents: input.rentCents,
+    charges_cents: input.chargesCents,
+    charges_regime: "advances",
+    payment_day: input.paymentDay,
+    mentions: mentionsFor(input.type),
+    furnished: input.furnished,
+    colocation: input.colocation,
+    vat_regime: "exempt",
+    details: { depositMonths: input.depositMonths, depositForm: input.depositForm },
+    ledger_from: ledgerFrom,
+  };
+  let { data: lease, error: leaseErr } = await g.from("leases").insert(row).select("id,seq").single();
+  if (columnMissing(leaseErr)) {
+    delete row.ledger_from;
+    ({ data: lease, error: leaseErr } = await g.from("leases").insert(row).select("id,seq").single());
+  }
+  // The base keeps one tenancy in force per lot and says so with a unique violation.
+  if (leaseErr?.code === "23505") return { error: "already_let" };
   if (leaseErr || !lease) return { error: leaseErr?.code ?? "lease_insert_failed" };
 
   // The database assigns the lease number; the permanent structured
@@ -250,7 +367,18 @@ export async function createLease(
     moved_in_on: input.startDate,
   }));
   const { error: partyErr } = await g.from("lease_parties").insert(parties);
-  if (partyErr) console.error("lease parties insert failed:", partyErr.code, partyErr.message);
+  if (partyErr) {
+    // A tenancy with nobody on it is not one: the row just written is taken
+    // back (nothing hangs off it yet) and the lot stays free.
+    console.error("lease parties insert failed:", partyErr.code, partyErr.message);
+    const { error: undoErr } = await g.from("leases").delete().eq("org_id", org.id).eq("id", lease.id);
+    if (undoErr) console.error("lease creation rollback failed:", undoErr.code, undoErr.message);
+    return { error: "parties_failed" };
+  }
+
+  // What did not land after the tenancy itself: said to the caller, not only logged.
+  const pending: Array<"reference" | "deposit" | "ledger"> = [];
+  if (rfErr) pending.push("reference");
 
   // No guarantee means no deposit row: an empty record is not a fact.
   if (input.depositMonths > 0) {
@@ -261,7 +389,10 @@ export async function createLease(
       amount_cents: input.rentCents * input.depositMonths,
       status: "pending",
     });
-    if (depErr) console.error("deposit insert failed:", depErr.code, depErr.message);
+    if (depErr) {
+      console.error("deposit insert failed:", depErr.code, depErr.message);
+      pending.push("deposit");
+    }
   }
 
   // An active lease opens its ledger on the spot. That is the whole of
@@ -275,13 +406,16 @@ export async function createLease(
       rentCents: input.rentCents,
       chargesCents: input.chargesCents,
       paymentDay: input.paymentDay,
+      ledgerFrom,
     },
     today,
   );
+  if (periodsOpened === 0 && ledgerMonths(input.startDate, input.endDate, today, ledgerFrom).length > 0) pending.push("ledger");
 
   return {
     id: lease.id as string,
     status: "active",
+    pending,
     rfReference,
     issues: issues.map((i) => ({
       code: i.code,
@@ -314,6 +448,8 @@ export async function activateLease(
   ctx: OrgContext,
   leaseId: string,
   today: string = isoToday(),
+  /** From which month rent is tracked: see `trackingMonth`. */
+  trackFrom: string | null = null,
 ): Promise<
   { ok: true; periodsOpened: number } | { error: "not_found" | "not_draft" | "already_let" | "incomplete" | "storage_failed" }
 > {
@@ -358,12 +494,18 @@ export async function activateLease(
   }
   if ((busy ?? []).length > 0) return { error: "already_let" };
 
-  const { data: updated, error: updErr } = await g
+  // The ledger's first month is fixed with the activation: the current month
+  // for a tenancy that already ran, unless the owner chose an earlier one.
+  const ledgerFrom = trackingMonth(row.start_date, today, trackFrom);
+  let { data: updated, error: updErr } = await g
     .from("leases")
-    .update({ status: "active" })
+    .update({ status: "active", ledger_from: ledgerFrom })
     .eq("org_id", org.id)
     .eq("id", leaseId)
     .select("id");
+  if (columnMissing(updErr)) {
+    ({ data: updated, error: updErr } = await g.from("leases").update({ status: "active" }).eq("org_id", org.id).eq("id", leaseId).select("id"));
+  }
   if (updErr) {
     // The database keeps the same rule (one live lease per lot) and says so
     // with a unique violation when two activations race.
@@ -393,6 +535,7 @@ export async function activateLease(
       rentCents: row.rent_cents,
       chargesCents: row.charges_cents,
       paymentDay: row.payment_day,
+      ledgerFrom,
     },
     today,
   );

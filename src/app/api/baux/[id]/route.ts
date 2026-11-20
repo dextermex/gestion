@@ -5,10 +5,12 @@ import {
   activateLease,
   discardDraft,
   effectiveMonth,
+  ledgerPinFor,
   normalizePaymentDay,
   readDeparture,
   repriceOpenPeriods,
   saveDeparture,
+  trimLedgerBefore,
 } from "@/lib/gestion/lease";
 import { todayISO } from "@/lib/clock";
 
@@ -40,7 +42,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
   if (body.action === "activate") {
-    const result = await activateLease(ctx, id);
+    // `trackFrom`: "start" to follow the rent from the tenancy's first month,
+    // a month (YYYY-MM) to follow it from there; left out, from this month.
+    const trackFrom = body.trackFrom === "start" ? "start" : /^\d{4}-\d{2}$/.test(str(body.trackFrom, 7)) ? str(body.trackFrom, 7) : null;
+    const result = await activateLease(ctx, id, todayISO(), trackFrom);
     if ("error" in result) return lifecycleError(result.error);
     return NextResponse.json({ ok: true, periodsOpened: result.periodsOpened });
   }
@@ -61,7 +66,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: lease, error: findErr } = await g
     .from("leases")
-    .select("id,status,rent_cents,charges_cents,payment_day,start_date,details")
+    .select("*")
     .eq("org_id", org.id)
     .eq("id", id)
     .maybeSingle();
@@ -147,9 +152,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
 
-  const { data, error } = await g.from("leases").update(patch).eq("org_id", org.id).eq("id", id).select("id");
+  // A start date corrected on a running tenancy must not open the months
+  // before the ones already followed: the ledger's first month is pinned to
+  // the earliest period it holds, once, before the date moves.
+  const startMoved = typeof patch.start_date === "string" && patch.start_date !== String(lease.start_date ?? "").slice(0, 10);
+  const pin = startMoved ? await ledgerPinFor(ctx, { id, status: String(lease.status), ledgerFrom: (lease.ledger_from as string | null | undefined) ?? null }) : null;
+  if (pin) patch.ledger_from = pin;
+
+  let { data, error } = await g.from("leases").update(patch).eq("org_id", org.id).eq("id", id).select("id");
+  if (pin && (error?.code === "PGRST204" || error?.code === "42703")) {
+    delete patch.ledger_from;
+    ({ data, error } = await g.from("leases").update(patch).eq("org_id", org.id).eq("id", id).select("id"));
+  }
   if (error) return dbError("lease update", error);
   if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // A start moved later: the months before it were never owed.
+  if (startMoved && (lease.status === "active" || lease.status === "notice") && String(patch.start_date) > String(lease.start_date ?? "").slice(0, 10)) {
+    await trimLedgerBefore(ctx, id, String(patch.start_date), Number(patch.payment_day ?? lease.payment_day) || 1);
+  }
 
   let repriced = 0;
   if (moneyChanged) {
