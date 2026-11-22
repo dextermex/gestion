@@ -240,13 +240,17 @@ export function Overview({
   d,
   locale,
   real,
+  base,
 }: {
   card: PropertyCard;
   demo: DemoData;
   d: Dict;
   locale: Locale;
   real: boolean;
+  /** The sheet's own address, when it is not the property's (a lot's): "see all" opens this sheet's tabs. */
+  base?: string;
 }) {
+  const sheet = base ?? `/app/biens/${card.property.id}`;
   const p = card.property;
   const single = card.single;
   const unit = single?.unit;
@@ -402,7 +406,8 @@ export function Overview({
       <Panel
         title={d.bien.recentDocuments}
         action={
-          <Link href="/app/documents" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+          // This property's documents, in its own tab: the workspace's register cannot be narrowed to one property.
+          <Link href={`${sheet}?onglet=documents`} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
             {d.bien.seeAll}
           </Link>
         }
@@ -840,8 +845,9 @@ export function Interventions({
     <Panel
       title={d.hubs.interventions}
       action={
+        // The list here is already this property's own: the link says it leaves for the whole workspace's.
         <Link href="/app/interventions" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
-          {d.bien.seeAll}
+          {d.bien.allInterventions}
         </Link>
       }
     >

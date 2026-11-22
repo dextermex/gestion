@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/pro/ui";
 import GestionLogo from "@/components/gestion/GestionLogo";
 import { fmt } from "@/lib/i18n/config";
@@ -84,22 +85,24 @@ export default function InvitationAccept({
   };
 
   const outcome = (): { title: string; body: string; actions: React.ReactNode } | null => {
-    if (preview.state === "unknown") return { title: t.unknownTitle, body: t.unknownBody, actions: null };
-    if (preview.state === "expired") return { title: t.expiredTitle, body: t.expiredBody, actions: null };
-    if (preview.state === "revoked") return { title: t.revokedTitle, body: t.revokedBody, actions: null };
+    // A link that opens nothing still leaves a door: the person's own space when signed in, the sign-in screen otherwise ("/" routes by session).
+    const door = <Link href="/" className={secondary}>{session ? t.goSpace : t.signIn}</Link>;
+    if (preview.state === "unknown") return { title: t.unknownTitle, body: t.unknownBody, actions: door };
+    if (preview.state === "expired") return { title: t.expiredTitle, body: t.expiredBody, actions: door };
+    if (preview.state === "revoked") return { title: t.revokedTitle, body: t.revokedBody, actions: door };
     if (preview.state === "accepted") {
       return preview.mine
-        ? { title: t.acceptedTitle, body: fmt(t.acceptedBody, { home: preview.home }), actions: <a href="/locataire" className={primary}>{t.goSpace}</a> }
+        ? { title: t.acceptedTitle, body: fmt(t.acceptedBody, { home: preview.home }), actions: <Link href="/locataire" className={primary}>{t.goSpace}</Link> }
         : { title: t.usedTitle, body: t.usedBody, actions: <a href={`/connexion?next=${next}`} className={primary}>{t.signIn}</a> };
     }
     if (phase === "failed" && failure) {
       switch (failure) {
-        case "unknown": return { title: t.unknownTitle, body: t.unknownBody, actions: null };
-        case "used": return { title: t.usedTitle, body: t.usedBody, actions: null };
-        case "revoked": return { title: t.revokedTitle, body: t.revokedBody, actions: null };
-        case "expired": return { title: t.expiredTitle, body: t.expiredBody, actions: null };
+        case "unknown": return { title: t.unknownTitle, body: t.unknownBody, actions: door };
+        case "used": return { title: t.usedTitle, body: t.usedBody, actions: door };
+        case "revoked": return { title: t.revokedTitle, body: t.revokedBody, actions: door };
+        case "expired": return { title: t.expiredTitle, body: t.expiredBody, actions: door };
         case "wrong_account": return { title: t.wrongAccountTitle, body: fmt(t.wrongAccountBody, { email: preview.email }), actions: switchButton };
-        case "linked_elsewhere": return { title: t.linkedElsewhereTitle, body: t.linkedElsewhereBody, actions: null };
+        case "linked_elsewhere": return { title: t.linkedElsewhereTitle, body: t.linkedElsewhereBody, actions: door };
         case "another_contact": return { title: t.anotherContactTitle, body: t.anotherContactBody, actions: switchButton };
         case "sign_in": return { title: t.failedTitle, body: t.failedBody, actions: <a href={`/connexion?next=${next}`} className={primary}>{t.signIn}</a> };
         default: return { title: t.failedTitle, body: t.failedBody, actions: <Button onClick={accept}>{t.retry}</Button> };
@@ -123,9 +126,10 @@ export default function InvitationAccept({
     <div className="flex min-h-dvh flex-col bg-sand-50">
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-safe-4 pb-[max(2.5rem,calc(var(--safe-bottom)+1.5rem))] pt-[max(2.5rem,calc(var(--safe-top)+1.5rem))] sm:px-safe-6">
         <div className="flex justify-center">
-          <a href={`${MORADA_URL}/welcome`} aria-label="Morada">
+          {/* The application's own door: the person's space when signed in, the sign-in screen otherwise. */}
+          <Link href="/" aria-label="Morada">
             <GestionLogo />
-          </a>
+          </Link>
         </div>
 
         <div className="mt-8 rounded-2xl border border-sand-200 bg-white p-6 shadow-sm sm:p-8">

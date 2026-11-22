@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import EdlWizard, { type MeterOption } from "@/components/gestion/EdlWizard";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
@@ -8,7 +8,9 @@ import { METER_UNITS } from "@/lib/types";
  * An inspection always belongs to a tenancy, so it opens from one. The rooms
  * are suggested from what the lot actually has — a studio is not offered four
  * bedrooms — and the meters offered are the ones attached to that lot or its
- * building, so the walk-through records them once and for all.
+ * building, so the walk-through records them once and for all. Opened
+ * without a tenancy, there is nothing to inspect: the properties are where
+ * an inspection starts.
  */
 export default async function EtatDesLieuxPage({
   searchParams,
@@ -20,7 +22,8 @@ export default async function EtatDesLieuxPage({
   const demo = await getDemo();
   const datasetId = await getDatasetId();
 
-  const lease = bail ? demo.LEASES.find((l) => l.id === bail) : undefined;
+  if (!bail) redirect("/app/biens");
+  const lease = demo.LEASES.find((l) => l.id === bail);
   if (!lease) notFound();
   const unit = demo.UNITS.find((u) => u.id === lease.unitId);
   if (!unit) notFound();
@@ -48,6 +51,7 @@ export default async function EtatDesLieuxPage({
       leaseId={lease.id}
       kind={type === "exit" ? "exit" : "entry"}
       unitLabel={unit.label}
+      unitId={unit.id}
       propertyId={property.id}
       propertyName={property.name}
       meters={meters}

@@ -134,10 +134,10 @@ export default async function IndexationPage() {
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums text-ink" data-label={d.indexation.colCurrent}>{euros(l.rentCents, locale)}</td>
                   <td className="px-3 py-3 text-right tabular-nums text-ink-soft" data-label={d.indexation.colCeiling}>
-                    {proposal ? euros(proposal.caps.ceilingMonthly, locale) : "—"}
+                    {proposal ? euros(proposal.caps.ceilingMonthly, locale) : d.common.none}
                   </td>
                   <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink" data-label={d.indexation.colProposal}>
-                    {proposal?.allowed ? euros(proposal.proposedMonthlyRent, locale) : "—"}
+                    {proposal?.allowed ? euros(proposal.proposedMonthlyRent, locale) : d.common.none}
                   </td>
                   <td className="px-3 py-3 text-right" data-label={d.indexation.colDecision}>
                     {!proposal ? (
@@ -236,8 +236,8 @@ export default async function IndexationPage() {
               <li className="flex justify-between gap-3">
                 <span className="text-ink-soft">{d.indexation.commercialIndex}</span>
                 <span className="font-semibold tabular-nums text-ink">
-                  {formatNumber(commercial.indexationClause!.baseIndexValue, locale)} →{" "}
-                  {formatNumber(DEMO_LATEST_IPC.value, locale)}
+                  {/* Read as the label is written: the base, then the current one. */}
+                  {formatNumber(commercial.indexationClause!.baseIndexValue, locale)} / {formatNumber(DEMO_LATEST_IPC.value, locale)}
                 </span>
               </li>
               <li className="flex justify-between gap-3">

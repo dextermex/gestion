@@ -491,20 +491,6 @@ summary {
   }
 }
 
-/* Dashboard ring KPIs — draw from empty to value on load. The global
-   prefers-reduced-motion block above collapses this to an instant render. */
-@keyframes morada-ring {
-  from {
-    stroke-dashoffset: var(--ring-c);
-  }
-  to {
-    stroke-dashoffset: var(--ring-target);
-  }
-}
-.ring-draw {
-  animation: morada-ring 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 /* Morada CRM, September 2026.
    Layer order: content 0, toolbar 30, navigation 40, dialogs 50, skip link 80.
    Glass is a web approximation, reserved for floating navigation and controls.
@@ -581,9 +567,6 @@ summary {
 .crm-shell .ui-badge { line-height: 1.4; }
 .crm-shell .ui-empty { min-height: 19rem; border-style: solid; border-radius: var(--crm-radius); }
 .crm-shell .ui-empty > span { height: 3.75rem; width: 3.75rem; border-radius: 1.25rem; background: var(--color-brand-50); box-shadow: inset 0 1px 0 #fff, 0 8px 24px -12px rgb(16 80 92 / 0.24); }
-.crm-shell .crm-kpi { box-shadow: none; }
-.crm-shell .crm-count-card { border-color: var(--crm-edge); box-shadow: none; border-radius: 1.25rem; }
-.crm-shell .crm-count-card[aria-current="true"] { background: var(--color-brand-50); border-color: var(--color-brand-300); box-shadow: inset 0 2px 0 var(--color-brand-600); }
 .crm-filter { min-height: 2.5rem; }
 .crm-shell .table-scroll { border-radius: 1rem; }
 .crm-shell .table-scroll thead tr { background: var(--color-sand-50); text-transform: none; letter-spacing: 0; font-size: 0.75rem; }
@@ -713,7 +696,6 @@ summary {
 .crm-shell .table-scroll .tabular-nums { white-space: nowrap; }
 .crm-shell .table-scroll th:first-child,
 .crm-shell .table-scroll td:first-child { min-width: 12rem; }
-.crm-shell .crm-cashflow .table-scroll th:first-child { min-width: 8rem; }
 @media (width < 40rem) {
   .crm-shell .table-scroll th:first-child,
   .crm-shell .table-scroll td:first-child { min-width: 9rem; }
@@ -739,7 +721,8 @@ summary {
   .crm-mobile-sidebar { overflow-y: auto; overscroll-behavior: contain; }
   .crm-mobile-sidebar .crm-sidebar-inner { height: auto; min-height: 100%; }
   .crm-mobile-sidebar .crm-navigation { flex: none; overflow-y: visible; }
-  .crm-mobile-sidebar .crm-workspace { display: none; }
+  /* The switch between workspaces stays: it is the only way to another one. */
+  .crm-mobile-sidebar .crm-workspace:not(.crm-workspace-switch) { display: none; }
 }
 
 .crm-onboarding { max-width: calc(100vw - 2rem); }
@@ -923,34 +906,10 @@ summary {
 .crm-action-category { display: block; margin-bottom: .4rem; color: var(--color-ink-soft); font-size: .8125rem; }
 .crm-action-title { font-size: .9375rem; font-weight: 550; line-height: 1.55; }
 .crm-action-description { margin-top: .5rem; color: var(--color-ink-soft); font-size: .875rem; line-height: 1.65; }
-.cashflow-summary { display: flex; flex-wrap: wrap; align-items: end; gap: 1.5rem 3rem; margin-block: 1.5rem 2rem; }
-.cashflow-period { font-size: .875rem; color: var(--color-ink-soft); margin-bottom: .5rem; }
-.cashflow-total { font-size: clamp(2rem, 3vw, 2.75rem); line-height: 1.15; font-weight: 550; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.cashflow-expected-value { font-size: 1.375rem; line-height: 1.5; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
-.cashflow-key { display: flex; gap: .5rem; align-items: center; font-size: .8125rem; margin-top: .625rem; color: var(--color-ink-soft); }
-.cashflow-key i { width: 1.25rem; height: 3px; border-radius: 2px; background: #286786; }
-.cashflow-key.expected i { background: none; border-top: 2px dashed #7b8e9e; }
-.cashflow-graph { position: relative; height: 14rem; padding-left: 3.5rem; }
-.cashflow-graph > svg { height: 100%; width: 100%; overflow: visible; }
-.cashflow-axis { position: absolute; inset: 12% auto 10% 0; display: flex; flex-direction: column; justify-content: space-between; width: 3rem; font-size: .8125rem; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }
-.cashflow-axis span { transform: translateY(-50%); }
-.cashflow-axis span:last-child { transform: translateY(50%); }
-.cashflow-point { position: absolute; width: .8rem; height: .8rem; border: 3px solid #fff; background: #286786; box-shadow: 0 0 0 1px #286786; border-radius: 50%; transform: translate(-50%,-50%); }
-.cashflow-months { display: flex; justify-content: space-between; margin-left: 3.5rem; gap: .25rem; }
-.cashflow-months button { min-width: 2.75rem; min-height: 2.75rem; padding: .5rem .75rem; border-radius: .875rem; color: var(--color-ink-soft); font-size: .8125rem; cursor: pointer; }
-.cashflow-months button[aria-pressed="true"] { background: #e4eff7; color: #1d4c69; font-weight: 650; }
-@media (hover: hover) { .cashflow-months button:hover { background: #edf4f9; } }
-.cashflow-details { margin-top: 1.25rem; border-top: 1px solid var(--color-sand-100); }
-.cashflow-details > summary { width: fit-content; min-height: 2.75rem; padding-top: 1rem; cursor: pointer; font-size: .875rem; font-weight: 550; color: var(--color-brand-700); }
 @media (width < 40rem) {
   .crm-action-row { grid-template-columns: 2.5rem minmax(0,1fr); gap: .75rem; }
   .crm-action-row > svg { display: none; }
   .crm-action-row .crm-symbol { width: 2.5rem; height: 2.5rem; }
-  .cashflow-summary { gap: 1rem; }
-  .cashflow-summary > div { min-width: 0; }
-  .cashflow-expected-value { font-size: 1.125rem; }
-  .cashflow-graph { height: 11rem; }
-  .cashflow-months button { padding-inline: .25rem; min-width: 2rem; }
 }
 .crm-metric-attention .crm-symbol { color: #a24724; background: #fff0e7; }
 .crm-metric-attention .crm-metric-sub { color: #9b411f; font-weight: 550; }
@@ -1476,12 +1435,8 @@ summary {
   .crm-main .ui-badge { font-size: .75rem; }
   .crm-main .table-scroll th { font-size: .75rem; }
 
-  /* Controls under the thumb's size: the ledger's exports, the chart's
-     months as a strip that scrolls with 44px buttons. */
+  /* Controls under the thumb's size: the ledger's exports. */
   .crm-ledger-tools a { min-height: 2.75rem; }
-  .cashflow-months { margin-left: 0; justify-content: flex-start; gap: .25rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; padding-bottom: .25rem; }
-  .cashflow-months::-webkit-scrollbar { display: none; }
-  .cashflow-months button { flex: 0 0 auto; min-width: 2.75rem; padding-inline: .5rem; scroll-snap-align: center; }
 }
 
 /* The head of a manager screen (Hero.tsx): the sky card the overview already used, the one raised element of a page. */

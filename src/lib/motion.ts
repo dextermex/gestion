@@ -1,5 +1,3 @@
-import type { Transition, Variants } from "motion/react";
-
 /**
  * One motion vocabulary for all of Morada.
  *
@@ -10,10 +8,8 @@ import type { Transition, Variants } from "motion/react";
  */
 
 // Premium ease-out — decelerates hard at the end, the way native/Apple UI does.
-// Use for entering elements. (Exits should feel quicker — see EASE_IN.)
+// Use for entering elements.
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
-export const EASE_IN = [0.4, 0, 1, 1] as const;
-export const EASE_IN_OUT = [0.65, 0, 0.35, 1] as const;
 
 /** Duration scale (seconds). Micro-interactions stay in the 150–300ms band. */
 export const DUR = {
@@ -23,38 +19,9 @@ export const DUR = {
   slow: 0.7, // hero / large surfaces
 } as const;
 
-/** Spring presets — natural physics beats fixed curves for interactive motion. */
-export const springSoft: Transition = { type: "spring", stiffness: 240, damping: 26 };
-export const springSnappy: Transition = { type: "spring", stiffness: 420, damping: 30 };
-export const springGentle: Transition = { type: "spring", stiffness: 150, damping: 24 };
-
 /**
  * The house modal spring (dialogs, sheets, the drawer), named so a gesture
  * can hand its release velocity to it. Damping ratio about 0.82 and a
  * response of about 0.32s: Apple's drawer and sheet setting (0.8 / 0.3).
  */
 export const springSheet = { type: "spring", stiffness: 380, damping: 32 } as const;
-
-/** Fade-and-rise, the house reveal. Enter is unhurried, tuned to EASE_OUT. */
-export const revealUp: Variants = {
-  hidden: { opacity: 0, y: 24 },
-  show: { opacity: 1, y: 0, transition: { duration: DUR.base, ease: EASE_OUT } },
-};
-
-/** Same feel, coming from the side — for split/asymmetric sections. */
-export const revealLeft: Variants = {
-  hidden: { opacity: 0, x: 28 },
-  show: { opacity: 1, x: 0, transition: { duration: DUR.base, ease: EASE_OUT } },
-};
-
-/**
- * Stagger container: children reveal one after another (40–60ms apart is the
- * sweet spot — enough to read as a sequence, quick enough not to feel slow).
- */
-export const staggerContainer = (stagger = 0.06, delayChildren = 0): Variants => ({
-  hidden: {},
-  show: { transition: { staggerChildren: stagger, delayChildren } },
-});
-
-/** Standard viewport trigger for scroll reveals: play once, a touch early. */
-export const inViewOnce = { once: true, amount: 0.2 } as const;

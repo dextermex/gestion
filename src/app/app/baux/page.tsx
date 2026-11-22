@@ -63,7 +63,19 @@ export default async function BauxPage({
         </ChipLink>
       </div>
 
-      {rows.length === 0 ? (
+      {all.length === 0 ? (
+        // No lease at all: say so, and where one starts. The reset link below is for a filter that matched nothing.
+        <EmptyState
+          icon="contract"
+          title={d.baux.noneTitle}
+          body={d.baux.noneBody}
+          action={
+            <Link href="/app/biens" className="ui-button inline-flex min-h-11 items-center justify-center rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
+              {d.hubs.portfolio}
+            </Link>
+          }
+        />
+      ) : rows.length === 0 ? (
         <EmptyState
           title={d.baux.emptyTitle}
           body={d.baux.emptyBody}

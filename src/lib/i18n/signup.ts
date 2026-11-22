@@ -67,8 +67,8 @@ const en: SignupCopy = {
   "properties": [
     "None just yet",
     "1 property",
-    "2–5 properties",
-    "6–10 properties",
+    "2 to 5 properties",
+    "6 to 10 properties",
     "11 or more properties"
   ],
   "challengeTitle": "What takes the most time?",
@@ -254,8 +254,8 @@ const de: SignupCopy = {
   "properties": [
     "Noch keine",
     "1 Immobilie",
-    "2–5 Immobilien",
-    "6–10 Immobilien",
+    "2 bis 5 Immobilien",
+    "6 bis 10 Immobilien",
     "11 oder mehr Immobilien"
   ],
   "challengeTitle": "Was möchten Sie\nvereinfachen?",
@@ -441,8 +441,8 @@ const lu: SignupCopy = {
   "properties": [
     "Nach keng",
     "1 Immobilie",
-    "2–5 Immobilien",
-    "6–10 Immobilien",
+    "2 bis 5 Immobilien",
+    "6 bis 10 Immobilien",
     "11 Immobilien oder méi"
   ],
   "challengeTitle": "Wat wëllt Dir\nvereinfachen?",

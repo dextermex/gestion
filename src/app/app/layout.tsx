@@ -52,6 +52,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // opened on purpose, from there (POST /api/espace/creer), when wanted.
     if (tenant) redirect("/locataire");
     const email = identity.email;
+    // No space to open is not always "no space yet". An account that is a member of a space the
+    // database refuses it (its role does not open the properties) must not be handed the shell
+    // under that space's name: every action in it would be refused. It is told so instead.
+    if (session) {
+      const { data: memberships } = await authedClient(session.accessToken).from("crm_members").select("agency_id").eq("user_id", session.userId).eq("status", "active").limit(1);
+      if ((memberships ?? []).length > 0) return <ProvisionError d={d} email={email} refused />;
+    }
     identity = await provisionDefaultWorkspace();
     if (!identity?.active) return <ProvisionError d={d} email={email} />;
   }
@@ -121,6 +128,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           rents: billedRents(demo.UNITS, demo.LEASES),
         })
       : null,
+    // The workspaces the account may open, for the switch in the rail: shown only when there are several.
+    workspaceId: workspace.id,
+    workspaces: identity.workspaces.map((w) => ({ id: w.id, name: w.name })),
   };
 
   return (

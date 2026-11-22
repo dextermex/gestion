@@ -8,17 +8,12 @@ export const APP_NAME = "Morada Gestion";
 export const APP_SHORT_NAME = "Morada";
 
 /**
- * Ecosystem URLs. Morada Gestion is the third space of the Morada ecosystem,
- * alongside the portal and Morada Pro. The space gateway lives on the main
- * site, so every link out is configurable for preview deployments.
+ * The public site: the product's presentation, its legal pages and its
+ * calculators. Configurable for preview deployments. Only addresses the
+ * public site serves are linked: its home, `/<locale>/legal` and
+ * `/<locale>/calculators/<slug>`.
  */
 export const MORADA_URL = process.env.NEXT_PUBLIC_MORADA_URL ?? "https://morada.lu";
-
-/** The gateway that lets one account pick between the three spaces. */
-export const WELCOME_URL = `${MORADA_URL}/welcome`;
-
-/** Morada Pro, the workspace for agencies and real-estate professionals. */
-export const PRO_URL = `${MORADA_URL}/pro`;
 
 /**
  * Where this application answers. Links that leave the app (the invitation
@@ -28,5 +23,5 @@ export const PRO_URL = `${MORADA_URL}/pro`;
  */
 export const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://app.morada.lu")).replace(/\/+$/, "");
 
-/** Where the team answers: a portfolio beyond the published terms, an agency's own terms (the public site's contact address). */
+/** Where the team answers: a portfolio beyond the published terms, an agency's own terms, a member to add to a workspace (the public site's contact address). */
 export const TEAM_EMAIL = "bonjour@morada.lu";

@@ -16,8 +16,8 @@ import { BANK_RETURN_MESSAGE } from "@/components/gestion/BankReturnRelay";
  * code and, when the provider refused, per class of refusal: wrong
  * credentials, an app not yet allowed to reach real banks, a request the
  * provider does not take, a signature it expects. The class itself is
- * printed so support can look it up, next to a link to the deployment's own
- * diagnosis.
+ * printed so support can look it up. The deployment's own diagnosis
+ * (/api/banking/health) is the team's tool: no link to it is shown here.
  */
 export interface ConnectLabels {
   notConfigured: string;
@@ -32,14 +32,12 @@ export interface ConnectLabels {
   signatureRequired?: string;
   /** "{code}" is the provider's class of refusal. */
   failedWithCode?: string;
-  /** Where the deployment's own diagnosis can be read. */
-  diagnostic?: string;
   /** What the dialog says while the journey loads. */
   opening?: string;
   /** The link that opens the journey in a tab instead. */
   openTab?: string;
   /** The dialog's close button. */
-  close?: string;
+  close: string;
 }
 
 const CREDENTIALS = new Set(["ApiKeyNotFound", "AppIdNotProvided", "SecretNotProvided", "WrongSecret", "InvalidSecret", "ClientNotFound"]);
@@ -135,17 +133,9 @@ export default function SaltEdgeConnect({
       {error && (
         <p role="alert" className="mt-2 max-w-72 text-xs leading-relaxed text-red-700" data-connect-error>
           {error}
-          {labels.diagnostic && (
-            <>
-              {" "}
-              <a href="/api/banking/health" className="font-semibold underline" target="_blank" rel="noreferrer">
-                {labels.diagnostic}
-              </a>
-            </>
-          )}
         </p>
       )}
-      <Modal open={url !== null} onClose={() => setUrl(null)} title={label} wide closeLabel={labels.close ?? "Fermer"}>
+      <Modal open={url !== null} onClose={() => setUrl(null)} title={label} wide closeLabel={labels.close}>
         {url && (
           <>
             <div className="relative overflow-hidden rounded-xl border border-sand-200 bg-sand-50" data-connect-dialog>

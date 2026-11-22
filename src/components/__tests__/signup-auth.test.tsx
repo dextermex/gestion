@@ -57,6 +57,17 @@ it("fails closed without a security token, including programmatic submission", a
   expect(auth.signInWithOtp).not.toHaveBeenCalled();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("security check");
 });
+it("notes the public site's placement tag on the account it creates", async () => {
+  auth.signInWithOtp.mockResolvedValue({ error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" placement="hero" />));
+  await phone(); await click("Solve test challenge");
+  await submit();
+  await act(async () => host.querySelector<HTMLButtonElement>(".signup-confirm-dialog .signup-primary")!.click());
+  expect(auth.signInWithOtp).toHaveBeenCalledWith({
+    phone: "+352621123456",
+    options: { captchaToken: "one-use-captcha", shouldCreateUser: true, data: { preferred_language: "en", morada_signup: { version: 1, stage: "role", ref: "hero" } } },
+  });
+});
 it("normalizes autofilled input, submits one OTP request, and cannot verify on a rejected code", async () => {
   let resolve!: (result: { error: null }) => void;
   auth.signInWithOtp.mockImplementation(() => new Promise((done) => { resolve = done; }));

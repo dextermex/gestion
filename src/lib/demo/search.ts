@@ -1,4 +1,5 @@
 import type { DemoData } from "./index";
+import { isLettable } from "@/lib/gestion/portfolio";
 
 /**
  * Serializable search corpus for the ⌘K palette, built server-side from the
@@ -26,13 +27,17 @@ export function buildSearchIndex(demo: DemoData): SearchHit[] {
       hay: `${p.name} ${p.address}`.toLowerCase(),
     });
   }
+  // A property's one lettable lot is the property's own sheet (a house, a flat). Every other lot has a
+  // sheet of its own: the lots of a building, and the annexes (a parking space, a cellar).
+  const lettable = new Map<string, number>();
+  for (const u of demo.UNITS) if (isLettable(u)) lettable.set(u.propertyId, (lettable.get(u.propertyId) ?? 0) + 1);
   for (const u of demo.UNITS) {
     const p = demo.propertyById(u.propertyId);
     hits.push({
       type: "unit",
       label: `${u.label} · ${p.name}`,
       sub: p.address,
-      href: `/app/biens/${p.id}`,
+      href: isLettable(u) && (lettable.get(u.propertyId) ?? 0) <= 1 ? `/app/biens/${p.id}` : `/app/biens/${p.id}/lots/${u.id}`,
       hay: `${u.label} ${p.name}`.toLowerCase(),
     });
   }

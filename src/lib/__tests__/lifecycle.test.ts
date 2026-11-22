@@ -380,6 +380,13 @@ describe("the lifecycle of a rental", () => {
     expect(await saveRentalDraft(ctx, fr, dossier({ unitId: "not-a-unit", step: "tenant", firstName: "X" }))).toEqual({ error: "not_found" });
     expect(await saveRentalDraft(ctx, fr, dossier({ leaseId: "not-a-lease", unitId, step: "rent", rent: "1" }))).toEqual({ error: "not_found" });
   });
+
+  it("starts no rental on a lot that carries no lease of its own", async () => {
+    // A parking space of the same property: the sheet shows no tenancy for it, so none is written.
+    const parking = db.insertRow("units", { org_id: ORG, property_id: propertyId, label: "Parking 1", kind: "parking", area_sqm: 12, rooms: 0 });
+    expect(await saveRentalDraft(ctx, fr, dossier({ unitId: String(parking.id), step: "tenant", tenants: [ANNA] }))).toEqual({ error: "not_found" });
+    expect((await hydrate(db)).LEASES).toHaveLength(0);
+  });
 });
 
 describe("the lifecycle of a lot: free, dossier, tenancy, departure, history, free again", () => {

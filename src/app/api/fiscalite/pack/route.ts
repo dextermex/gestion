@@ -9,6 +9,7 @@ import { csvDocument, csvEuros, safeFileName } from "@/lib/fiscal/csv";
 import { composeFiscalPack } from "@/lib/fiscal/pack-pdf";
 import { prepareOwnerYear } from "@/lib/fiscal/pack";
 import { lineLabel, sectionLabel } from "@/lib/fiscal/labels";
+import { answerNavigation } from "@/lib/http/navigation";
 
 /**
  * The exercise as files: the pack (PDF), the lines of the 190/210
@@ -27,7 +28,12 @@ function attachment(name: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
+/** The downloads are plain links: a person whose link has nothing to give is sent to a screen that says so, a script keeps the JSON error. */
 export async function GET(req: NextRequest) {
+  return answerNavigation(req, await pack(req));
+}
+
+async function pack(req: NextRequest): Promise<Response> {
   if ((await getDatasetId()) === "real") {
     const ctx = await withOrg();
     if (ctx instanceof NextResponse) return ctx;

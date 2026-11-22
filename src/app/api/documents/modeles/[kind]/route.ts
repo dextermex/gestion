@@ -8,6 +8,7 @@ import { previewInput } from "@/lib/documents/preview";
 import { renderPdf } from "@/lib/documents/render";
 import { templateFor } from "@/lib/documents/wording";
 import type { Locale } from "@/lib/i18n/config";
+import { answerNavigation } from "@/lib/http/navigation";
 
 /**
  * A template as the person validating it reads it: the preview, with
@@ -21,7 +22,12 @@ type Params = { params: Promise<{ kind: string }> };
 const LANGS = ["fr", "en", "de", "lu"] as const;
 const langOf = (v: unknown): Locale | null => (typeof v === "string" && (LANGS as readonly string[]).includes(v) ? (v as Locale) : null);
 
-export async function GET(req: NextRequest, { params }: Params) {
+/** "Aperçu" is a plain link: a person whose link has nothing to show is sent to a screen that says so, a script keeps the JSON error. */
+export async function GET(req: NextRequest, route: Params) {
+  return answerNavigation(req, await preview(req, route));
+}
+
+async function preview(req: NextRequest, { params }: Params): Promise<Response> {
   const ctx = await withOrg();
   if (ctx instanceof NextResponse) return ctx;
   const { kind } = await params;

@@ -11,13 +11,14 @@ export default async function AmlPage() {
   const { d } = await getI18n();
   const { CONTACTS, TODAY } = await getDemo();
 
-  // The screen walks the two-speed CDD around the sample SCI; a real
-  // account without that record sees its empty state until the production
-  // AML backend (aml_parties, screenings) is wired.
+  // The screen walks the two-speed CDD around the sample SCI. A real account
+  // has no AML backend yet (aml_parties, screenings): the rail does not list
+  // the screen there, and whoever opens it by address is told so in plain
+  // words rather than shown an empty state that records could never fill.
   if (!CONTACTS.some((c) => c.id === "c-sci-bealieu"))
     return (
       <div>
-        <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.aml })} body={d.common.emptyBody} />
+        <EmptyState icon="shield-check" title={d.aml.soonTitle} body={d.aml.soonBody} />
       </div>
     );
   const sciName = CONTACTS.find((c) => c.id === "c-sci-bealieu")!.name;
@@ -150,7 +151,7 @@ export default async function AmlPage() {
                 <p className="truncate text-xs text-ink-soft">
                   {c.kind === "legal" ? d.contacts.personLegal : d.contacts.personNatural}
                   {c.residency === "non_resident" &&
-                    ` · ${fmt(d.contacts.nonResidentEdd, { country: c.country ?? "—" })}`}
+                    ` · ${fmt(d.contacts.nonResidentEdd, { country: c.country ?? d.common.none })}`}
                 </p>
               </div>
               <div className="col-start-2 flex flex-wrap items-center gap-2 sm:ml-auto">

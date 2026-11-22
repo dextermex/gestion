@@ -117,12 +117,14 @@ function errorMessage(stage: SignupStage, failure: { code?: string; status?: num
 /** A session delivered by an email link (confirmation, magic link, recovery). */
 const fromAuthLink = (url: URL) => /access_token=|refresh_token=|type=(signup|magiclink|recovery|invite|email_change)|[?&]code=/.test(url.hash + url.search);
 
-export default function SignupFunnel({ locale: initialLocale, preview = false, signedIn = false, next, loginMode = false, phoneLogin = false, oauthIntent, initialEmail = "", recovery = false }: {
+export default function SignupFunnel({ locale: initialLocale, preview = false, signedIn = false, next, loginMode = false, phoneLogin = false, oauthIntent, initialEmail = "", recovery = false, placement }: {
   locale: Locale; preview?: boolean; signedIn?: boolean; next?: string; loginMode?: boolean; phoneLogin?: boolean; oauthIntent?: "link" | "login";
   /** An invitation's address: prefilled, never trusted (Auth confirms it). */
   initialEmail?: string;
   /** Arriving from a password-recovery email: choose a new password. */
   recovery?: boolean;
+  /** Where on the public site the person pressed "try it" (`?ref=`): noted on the account it creates, nowhere else. */
+  placement?: string;
 }) {
   const [locale, setLocale] = useState(initialLocale);
   const c = signupCopy[locale];
@@ -289,7 +291,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         const answer = await getSupabase().auth.signInWithOtp({
           phone: number, options: {
             captchaToken: captcha, shouldCreateUser: !loginMode,
-            ...(!loginMode ? { data: { preferred_language: locale, morada_signup: { version: 1, stage: "role" } } } : {}),
+            ...(!loginMode ? { data: { preferred_language: locale, morada_signup: { version: 1, stage: "role", ...(placement ? { ref: placement } : {}) } } } : {}),
           },
         });
         if (answer.error) { setPendingPhone(""); setError(errorMessage("send", answer.error, c)); return; }

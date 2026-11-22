@@ -148,7 +148,7 @@ export default async function CompteursPage({
                           <p className="text-[11px] text-ink-soft">{formatDate(m.lastReading.date, locale)}</p>
                         </div>
                       ) : (
-                        <span className="text-xs text-ink-soft">—</span>
+                        <span className="text-xs text-ink-soft">{d.common.none}</span>
                       )}
                     </td>
                     <td className="px-3 py-3 text-right" data-label={d.compteurs.colSource}>
@@ -181,7 +181,7 @@ export default async function CompteursPage({
                           </Badge>
                         </div>
                       ) : (
-                        <span className="text-xs text-ink-soft">—</span>
+                        <span className="text-xs text-ink-soft">{d.common.none}</span>
                       )}
                     </td>
                   </tr>

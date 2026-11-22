@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import GestionLogo from "@/components/gestion/GestionLogo";
+import KeepFresh from "@/components/KeepFresh";
 import ScrollHeader from "@/components/gestion/ScrollHeader";
 import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
@@ -16,10 +17,10 @@ import { getTenantView } from "@/lib/portal/space";
 import { todoFor, unreadCount } from "@/lib/portal/view";
 import { getSession } from "@/lib/supabase/server";
 
-export const metadata: Metadata = {
-  title: "Morada Gestion · Espace locataire",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n();
+  return { title: `Morada Gestion · ${d.tenant.space}`, robots: { index: false, follow: false } };
+}
 
 /**
  * The tenant's space: five destinations, one header, no configuration. The
@@ -61,6 +62,8 @@ export default async function TenantLayout({ children }: { children: React.React
 
   return (
     <div className="tenant-space min-h-dvh bg-sand-50">
+      {/* The documents and photographs of this space are links signed for an hour: a page left open is read again before they run out. */}
+      <KeepFresh />
       {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
           is the whole screen: the bar, the sample line, the foot and the bottom bar
           step aside, and the conversation's own header takes the top. */}
@@ -77,9 +80,9 @@ export default async function TenantLayout({ children }: { children: React.React
           </span>
           {canManage && (
             <nav aria-label={d.shell.roleAria} className="ml-1 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 max-sm:hidden">
-              <a href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
+              <Link href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
                 {d.shell.roleOwner}
-              </a>
+              </Link>
               <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
                 {d.shell.roleTenant}
               </span>
@@ -91,7 +94,7 @@ export default async function TenantLayout({ children }: { children: React.React
               name={space.me.name}
               email={space.me.email}
               signedIn={Boolean(session)}
-              labels={{ menu: d.tenant.accountMenu, profile: d.tenant.navProfile, settings: d.tenant.navSettings, signOut: d.tenant.signOutShort, sampleNotice: d.common.demoNotice }}
+              labels={{ menu: d.tenant.accountMenu, profile: d.tenant.navProfile, settings: d.tenant.navSettings, documents: d.tenant.navDocuments, help: d.tenant.navHelp, signOut: d.tenant.signOutShort, sampleNotice: d.common.demoNotice }}
             />
           )}
         </div>

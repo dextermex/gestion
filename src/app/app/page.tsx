@@ -9,11 +9,11 @@ import { getIdentity } from "@/lib/workspace";
 import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { settlementNotes } from "@/lib/i18n/engine";
 import { cpeExpiryDeadline, vacancyClock } from "@/domain/compliance/deadlines";
 import { computeSettlement } from "@/domain/deposits/settlement";
 import { monthlyCashflow } from "@/domain/finance/cashflow";
-import { addDays, addMonths, diffDays } from "@/domain/dates";
+import { addDays, diffDays } from "@/domain/dates";
+import { monthWindow } from "@/lib/months";
 
 /**
  * Aujourd'hui: the command center. Every block is DERIVED — a row appears
@@ -52,7 +52,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   } = demo;
 
   const liveMonth = TODAY.slice(0, 7);
-  const chartMonths = [-4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  // The same months Loyers pages through: a chip of this screen always opens the month it shows.
+  const chartMonths = monthWindow(liveMonth);
   // The month on the screen: the one the address names when it is one of the bars and has begun, else this one.
   const pastMonths = chartMonths.filter((m) => m <= liveMonth);
   const shownMonth = params.mois && pastMonths.includes(params.mois) ? params.mois : liveMonth;
@@ -80,14 +81,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const occupiedCount = lettable.filter((u) => occupied.has(u.id)).length;
 
   // ── Recommended actions: each row exists because its signal exists ──
-  const todo: Array<{ priority?: number; href: string; title: string; sub: string; amount?: string; badge: { label: string; color: string } }> = [];
+  const todo: Array<{ priority?: number; href: string; title: string; amount?: string; badge: { label: string; color: string } }> = [];
 
   const reviewQueue = BANK_TXS.filter((t) => t.status === "review");
   if (reviewQueue.length > 0) {
     todo.push({
       href: "/app/banque",
       title: fmt(d.dash.todoReview, { n: reviewQueue.length }),
-      sub: d.dash.todoReviewSub,
       badge: { label: d.dash.badgeBank, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -105,7 +105,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         unit: leaseUnitLabel(lagLease),
         amount: euros(lagLease.rentCents - (lagLease.previousRentCents ?? 0), locale),
       }),
-      sub: d.dash.todoLagSub,
       badge: { label: d.dash.badgeIndexation, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -122,7 +121,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       priority: 1,
       href: "/app/loyers?vue=impayes",
       title: earlierOpen.length === 1 ? d.home.arrearsOne : fmt(d.home.arrearsMany, { n: earlierOpen.length }),
-      sub: d.home.arrearsSub,
       amount: eurosWhole(earlierOpen.reduce((sum, rp) => sum + rp.totalCents - rp.allocatedCents, 0), locale),
       badge: { label: d.dash.badgeArrears, color: "bg-red-100 text-red-700" },
     });
@@ -161,7 +159,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         priority: 2,
         href: "/app/garanties",
         title: fmt(d.dash.todoDeposit, { unit: labelOfLease(dep.leaseId), n: pending }),
-        sub: settlementNotes(d, locale, input, settlement)[0] ?? "",
         badge: { label: d.dash.badgeDeposit, color: "bg-sand-100 text-ink-soft" },
       });
       break;
@@ -175,7 +172,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     todo.push({
       href: "/app/banque",
       title: fmt(d.dash.todoConsent, { date: formatDate(consentAccount.consentExpiresAt, locale) }),
-      sub: d.dash.todoConsentSub,
       badge: { label: d.dash.badgeConnection, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -191,7 +187,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         date: formatDate(agProperty.nextAgDate, locale),
         deadline: formatDate(addDays(agProperty.nextAgDate, -15), locale),
       }),
-      sub: d.dash.todoAgSub,
       badge: { label: d.dash.badgeSyndic, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -309,7 +304,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             fraction={month.length === 0 ? 0 : paidCount / month.length}
             value={`${paidCount}/${month.length}`}
             label={d.home.ringLabel}
-            sub={lateCount > 0 ? fmt(d.home.ringOpen, { n: month.length - paidCount }) : d.home.ringAllPaid}
+            // "All collected" only when every rent of the month is paid; a rent not yet due is still to collect.
+            sub={month.length === 0 ? undefined : paidCount === month.length ? d.home.ringAllPaid : fmt(d.home.ringOpen, { n: month.length - paidCount })}
           />
         }
         actions={
@@ -325,11 +321,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           {fmt(d.home.collectedOf, { pct, expected: eurosWhole(expected, locale) })}
         </HeroChip>
         {lateCount > 0 && (
-          <HeroChip href="/app/loyers?vue=impayes" icon="alert" tone="late">
+          <HeroChip href={shownMonth === liveMonth ? "/app/loyers?vue=impayes" : `/app/loyers?mois=${shownMonth}&vue=impayes`} icon="alert" tone="late">
             {fmt(d.home.lateChip, { n: lateCount, amount: eurosWhole(lateMonthCents, locale) })}
           </HeroChip>
         )}
-        <HeroChip href="/app/biens?occupation=vacants" icon="key">
+        <HeroChip href="/app/biens" icon="key">
           {fmt(d.home.lotsChip, { let: occupiedCount, total: lettable.length })}
         </HeroChip>
       </Hero>

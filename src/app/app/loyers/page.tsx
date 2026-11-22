@@ -2,13 +2,13 @@ import Link from "next/link";
 import ArrearsActions, { type ArrearsLabels } from "@/components/gestion/ArrearsActions";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { LegalNote } from "@/components/gestion/bits";
-import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Rows, Step, Steps } from "@/components/gestion/Hero";
+import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Rows, Segments, Step, Steps } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
-import { euros, eurosWhole, formatDate, formatMonth, initials, rentStatusMeta } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatMonth, formatPct, initials, rentStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
-import { addMonths } from "@/domain/dates";
+import { monthWindow } from "@/lib/months";
 import { existingOf, generateLabels } from "@/lib/documents/labels";
 
 export default async function LoyersPage({
@@ -21,11 +21,13 @@ export default async function LoyersPage({
   const { ARREARS_ACTIONS, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const rentMeta = rentStatusMeta(d);
-  // The live month and its four neighbours, derived from today — the demo
-  // pins its date, a real account simply follows the calendar.
+  // The live month and its neighbours, derived from today (the demo pins its
+  // date, a real account simply follows the calendar): the same months
+  // Accueil pages through, so a month opened from there is the one shown.
   const liveMonth = TODAY.slice(0, 7);
-  const MONTHS = [-3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  const MONTHS = monthWindow(liveMonth);
   const month = MONTHS.includes(params.mois ?? "") ? params.mois! : liveMonth;
+  // The view lives in the address: everything, what is still to collect, what is paid.
   const view = params.vue === "impayes" || params.vue === "payes" ? params.vue : undefined;
 
   const monthRows = RENT_PERIODS.filter((rp) => rp.period === month);
@@ -110,6 +112,14 @@ export default async function LoyersPage({
   // The paper of a period: its notice, and its receipt once the ledger says
   // it is paid. Both come from the register, produced from the rows.
   const docLabels = generateLabels(d);
+  /** The address of a month in a view; the live month and the whole list are the bare address. */
+  const hrefFor = (m: string, v: typeof view) => {
+    const q = new URLSearchParams();
+    if (m !== liveMonth) q.set("mois", m);
+    if (v) q.set("vue", v);
+    const qs = q.toString();
+    return qs ? `/app/loyers?${qs}` : "/app/loyers";
+  };
   const backTo = `/app/loyers?mois=${month}${view ? `&vue=${view}` : ""}`;
 
   type Period = (typeof RENT_PERIODS)[number];
@@ -121,7 +131,10 @@ export default async function LoyersPage({
   const openCents = (rows: Period[]) => rows.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
   const lateTenants = new Set([...openNow, ...earlier].map((rp) => rp.leaseId)).size;
   const at = MONTHS.indexOf(month);
-  const hrefOf = (m: string) => (m === liveMonth ? "/app/loyers" : `/app/loyers?mois=${m}`);
+  // Changing month keeps the view on screen.
+  const hrefOf = (m: string) => hrefFor(m, view);
+  // What the view on screen lists; when that is nothing, the screen says so.
+  const listed = (view === "payes" ? 0 : openNow.length + earlier.length) + (view === "impayes" ? 0 : upcoming.length) + (view === "impayes" ? 0 : paid.length);
 
   /** The papers of a rent period: its notice, its receipt once paid, and the way to the lease. */
   const papers = (rp: Period) => (
@@ -256,7 +269,7 @@ export default async function LoyersPage({
           expected > 0 ? (
             <HeroRing
               fraction={collected / expected}
-              value={`${Math.round((collected / expected) * 100)} %`}
+              value={formatPct(Math.round((collected / expected) * 100), locale)}
               label={fmt(d.loyers.chipCollected, { amount: eurosWhole(collected, locale) })}
               sub={fmt(d.loyers.ofExpected, { expected: eurosWhole(expected, locale) })}
             />
@@ -271,15 +284,31 @@ export default async function LoyersPage({
         }
       >
         {lateTenants > 0 && (
-          <HeroChip href="#a-encaisser" icon="alert" tone="late">
+          <HeroChip href={view === "payes" ? `${hrefFor(month, "impayes")}#a-encaisser` : "#a-encaisser"} icon="alert" tone="late">
             {fmt(d.loyers.chipLate, { n: lateTenants })}
           </HeroChip>
         )}
       </Hero>
 
       <div className="mx-auto max-w-4xl">
-        {monthRows.length === 0 && earlier.length === 0 && <p className="px-1 text-sm text-ink-soft">{d.loyers.nothingDue}</p>}
-        {monthRows.length > 0 && openNow.length === 0 && upcoming.length === 0 && view !== "payes" && <p className="px-1 text-sm font-medium text-emerald-800">{d.loyers.allPaid}</p>}
+        {/* The view is said and can be left: a filter nobody can see is a list that looks wrong. */}
+        <div className="mb-6">
+          <Segments
+            label={d.loyers.tabsAria}
+            items={[
+              { href: hrefFor(month, undefined), label: d.loyers.tabAll, current: view === undefined },
+              { href: hrefFor(month, "impayes"), label: d.loyers.tabOpen, count: openNow.length + earlier.length, current: view === "impayes" },
+              { href: hrefFor(month, "payes"), label: d.loyers.tabPaid, count: paid.length, current: view === "payes" },
+            ]}
+          />
+        </div>
+        {monthRows.length === 0 && earlier.length === 0 ? (
+          <p className="px-1 text-sm text-ink-soft">{d.loyers.nothingDue}</p>
+        ) : monthRows.length > 0 && openNow.length === 0 && upcoming.length === 0 && view !== "payes" ? (
+          <p className="px-1 text-sm font-medium text-emerald-800">{d.loyers.allPaid}</p>
+        ) : listed === 0 ? (
+          <p className="px-1 text-sm text-ink-soft">{d.loyers.emptyBody}</p>
+        ) : null}
 
         {view !== "payes" && openNow.length > 0 && (
           <>

@@ -9,7 +9,9 @@ import { useDismiss } from "@/lib/useDismiss";
 
 /**
  * The tenant's account, behind their name and avatar: the profile, the
- * settings and signing out, the way the management space's own menu reads.
+ * settings and signing out, the way the management space's own menu reads,
+ * and the two places the tabs of a wide screen do not name (the documents
+ * and the help page), so both are one click from every screen.
  * One button on every screen (the name beside the avatar from `sm`), a
  * menu that closes on Escape or a press outside, rows a thumb can hit.
  * Signing out leaves every Morada space: one session, one cookie. On a
@@ -24,7 +26,7 @@ export default function TenantAccountMenu({
   name: string;
   email: string;
   signedIn: boolean;
-  labels: { menu: string; profile: string; settings: string; signOut: string; sampleNotice: string };
+  labels: { menu: string; profile: string; settings: string; documents: string; help: string; signOut: string; sampleNotice: string };
 }) {
   const [open, setOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -71,6 +73,14 @@ export default function TenantAccountMenu({
           <Link role="menuitem" href="/locataire/parametres" onClick={() => setOpen(false)} className={`${row} text-ink hover:bg-sand-50`}>
             <span className={`${tile} bg-brand-50 text-brand-700`}><Icon name="settings" size={16} /></span>
             {labels.settings}
+          </Link>
+          <Link role="menuitem" href="/locataire/documents" onClick={() => setOpen(false)} className={`${row} text-ink hover:bg-sand-50`}>
+            <span className={`${tile} bg-brand-50 text-brand-700`}><Icon name="documents" size={16} /></span>
+            {labels.documents}
+          </Link>
+          <Link role="menuitem" href="/locataire/aide" onClick={() => setOpen(false)} className={`${row} text-ink hover:bg-sand-50`}>
+            <span className={`${tile} bg-brand-50 text-brand-700`}><Icon name="phone" size={16} /></span>
+            {labels.help}
           </Link>
           <div className="mt-1 border-t border-sand-100 pt-1">
             {note ? (

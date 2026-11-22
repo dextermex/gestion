@@ -8,6 +8,7 @@ import { useDismiss } from "@/lib/useDismiss";
 import { Button, Field, InlineError, Input, Modal, Select } from "@/components/pro/ui";
 import { Icon, type IconName } from "@/components/pro/icons";
 import NavigationProgress from "@/components/NavigationProgress";
+import KeepFresh from "@/components/KeepFresh";
 import GestionLogo from "./GestionLogo";
 import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
@@ -24,6 +25,8 @@ import DateField from "@/components/gestion/DateField";
 import { networkProblem, readApiProblem, type ApiProblem } from "@/lib/api-errors";
 import { isZeroAmount, parseEuroInput } from "@/lib/gestion/euros";
 import { todayISO } from "@/lib/clock";
+import { inSection } from "@/lib/nav-match";
+import { WORKSPACE_COOKIE } from "@/lib/workspace-cookie";
 
 /** Everything the shell needs from the active demo dataset, precomputed
  *  server-side in the layout — the client bundle never ships the datasets. */
@@ -50,6 +53,9 @@ export interface ShellData {
   progress: Progress;
   /** The workspace's subscription, when subscriptions are on and the data is its own. */
   billing: ShellBilling | null;
+  /** The workspace on screen and every workspace the account may open: more than one shows the switch in the rail. */
+  workspaceId?: string;
+  workspaces?: Array<{ id: string; name: string }>;
 }
 
 /* --------------------------------- nav model --------------------------------
@@ -73,10 +79,12 @@ type NavItem = {
   also?: string[];
 };
 
-function destinations(d: Dict, badges: { review: number; unread: number }, workspaceKind: string): NavItem[] {
+function destinations(d: Dict, badges: { review: number; unread: number }, workspaceKind: string, sample: boolean): NavItem[] {
   // AML/KYC is a cabinet obligation: on an owner-kind workspace the entry
-  // simply does not exist — same product, two densities, zero configuration.
-  const cabinet = workspaceKind !== "owner";
+  // simply does not exist. The screen has no backend on an account's own
+  // data yet, so the rail lists it on a sample cabinet only: nobody is led
+  // to a screen with nothing behind it.
+  const cabinet = workspaceKind !== "owner" && sample;
   // One flat list, as a landlord names things: the places of every day
   // first, each a single line; only what really has several rooms (the
   // books, the documents, the settings) opens on sub-entries. A bail, a
@@ -152,6 +160,11 @@ function matchesOf(i: NavItem): string[] {
   return [...(i.children?.map((c) => c.href) ?? [i.href]), ...(i.also ?? [])];
 }
 
+/** A path is inside a section when it is one of its addresses or sits under one: `/app/compteurs` is not inside `/app/compte`. */
+function within(pathname: string, i: NavItem): boolean {
+  return inSection(pathname, matchesOf(i));
+}
+
 /** Everything ⌘K can route to: home, every sub-section, Workflows, and the
  *  registers that moved into the property context. Simplifying the rail took
  *  nothing off the map — these still answer to their name in the palette. */
@@ -179,8 +192,8 @@ function navigable(nav: NavItem[], d: Dict): Array<{ href: string; label: string
 /** How long the palette keeps the search corpus before asking for it again. */
 const SEARCH_INDEX_TTL = 60_000;
 
-type CreateKind = "property" | "lease" | "contact" | "payment" | "ticket" | "document";
-const QUICK_KINDS = new Set<string>(["lease", "contact", "payment", "ticket", "document"]);
+type CreateKind = "property" | "lease" | "contact" | "payment" | "ticket";
+const QUICK_KINDS = new Set<string>(["lease", "contact", "payment", "ticket"]);
 
 function quickAdd(d: Dict): Array<{ kind: CreateKind; label: string }> {
   return [
@@ -255,8 +268,8 @@ export default function GestionShell({
   const reduced = useReducedMotion();
 
   const NAV = useMemo(
-    () => destinations(d, shell.badges, shell.workspaceKind),
-    [d, shell.badges, shell.workspaceKind],
+    () => destinations(d, shell.badges, shell.workspaceKind, shell.sampleCabinet !== null),
+    [d, shell.badges, shell.workspaceKind, shell.sampleCabinet],
   );
   const NAVIGABLE = useMemo(() => navigable(NAV, d), [NAV, d]);
 
@@ -264,15 +277,13 @@ export default function GestionShell({
   // opens it. Explicit choices last for this visit.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    const active = destinations(d, shell.badges, shell.workspaceKind).find(
-      (i) => i.children && matchesOf(i).some((m) => pathname.startsWith(m)),
+    const active = NAV.find(
+      (i) => i.children && within(pathname, i),
     );
     if (active) setExpanded((prev) => (prev[active.href] ? prev : { ...prev, [active.href]: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
   const real = shell.datasetId === "real";
-  // The document vault has no real upload backend yet: on a real account the
-  // quick-add offers only what actually persists.
   const QUICK_ADD = useMemo(() => quickAdd(d), [d]);
 
   // ⌘K / Ctrl-K
@@ -305,13 +316,14 @@ export default function GestionShell({
       >
         <GestionLogo />
       </Link>
-      <div className="crm-workspace">
-        <span className="crm-workspace-icon"><Icon name="properties" size={19} /></span>
-        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{shell.orgShortName}</span>
-          {/* The role is named only where there is a second one to tell it from. */}
-          {shell.tenant && <span className="block text-xs text-ink-soft">{d.shell.roleOwner}</span>}
-        </span>
-      </div>
+      {/* The role is named only where there is a second one to tell it from; the workspace becomes a switch only where there is another to open. */}
+      <WorkspaceBlock
+        name={shell.orgShortName}
+        role={shell.tenant ? d.shell.roleOwner : null}
+        currentId={shell.workspaceId ?? ""}
+        others={shell.sampleCabinet ? [] : (shell.workspaces ?? [])}
+        label={d.shell.switchSpace}
+      />
       <SidebarNav items={NAV} pathname={pathname} expanded={expanded} onNavigate={() => setMobileOpen(false)}
         onToggle={(href) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }))} />
     </nav>
@@ -345,6 +357,7 @@ export default function GestionShell({
         {d.common.skipToContent}
       </a>
       <NavigationProgress />
+      <KeepFresh />
       <div className="crm-shell min-h-dvh">
         {/* Desktop sidebar */}
         <aside className="crm-sidebar chrome-material fixed z-40 hidden lg:block">
@@ -375,7 +388,7 @@ export default function GestionShell({
               </svg>
             </button>
 
-            <p className="crm-location hidden truncate text-sm font-medium text-ink md:block">{NAV.find((item) => item.href === "/app" ? pathname === "/app" : matchesOf(item).some((path) => pathname.startsWith(path)))?.label ?? d.nav.home}</p>
+            <p className="crm-location hidden truncate text-sm font-medium text-ink md:block">{NAV.find((item) => item.href === "/app" ? pathname === "/app" : within(pathname, item))?.label ?? d.nav.home}</p>
             {/* The badge marks sample data, so it must not sit next to a real
                 workspace name. */}
             {shell.sampleCabinet && (
@@ -495,6 +508,7 @@ export default function GestionShell({
         <CreateDialog
           kind={createKind}
           onClose={() => setCreateKind(null)}
+          onCreate={setCreateKind}
           d={d}
           real={real}
           unitOptions={shell.unitOptions}
@@ -507,9 +521,71 @@ export default function GestionShell({
 
         {/* A "0% done" checklist on top of a full sample cabinet contradicts
             itself. It belongs to the real account only. */}
-        {!shell.sampleCabinet && <GettingStarted d={d} progress={shell.progress} />}
+        {!shell.sampleCabinet && <GettingStarted d={d} progress={shell.progress} kind={shell.workspaceKind} />}
       </div>
     </MotionConfig>
+  );
+}
+
+/* ------------------------------ workspace block ----------------------------- */
+
+/**
+ * The workspace on screen, at the head of the rail. An account that belongs
+ * to several (its own and an agency's, say) opens another from here: the
+ * choice is kept in a cookie the server checks against the account's
+ * memberships, and the app starts again on that workspace's home, since no
+ * record of one workspace exists in another.
+ */
+function WorkspaceBlock({ name, role, currentId, others, label }: { name: string; role: string | null; currentId: string; others: Array<{ id: string; name: string }>; label: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
+  const body = (
+    <>
+      <span className="crm-workspace-icon"><Icon name="properties" size={19} /></span>
+      <span className="min-w-0 flex-1 text-left">
+        <span className="block truncate text-sm font-semibold text-ink">{name}</span>
+        {role && <span className="block text-xs text-ink-soft">{role}</span>}
+      </span>
+    </>
+  );
+  if (others.length < 2) return <div className="crm-workspace">{body}</div>;
+  const pick = (id: string) => {
+    setOpen(false);
+    if (id === currentId) return;
+    document.cookie = `${WORKSPACE_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
+    window.location.assign("/app");
+  };
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-label={`${label} · ${name}`}
+        className="crm-workspace crm-workspace-switch tactile w-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      >
+        {body}
+        <Icon name="chevron-down" size={15} className="shrink-0 text-ink-soft" />
+      </button>
+      {open && (
+        <ul aria-label={label} className="absolute inset-x-0 top-full z-40 -mt-3 rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg">
+          {others.map((w) => (
+            <li key={w.id}>
+              <button
+                type="button"
+                onClick={() => pick(w.id)}
+                aria-current={w.id === currentId ? "true" : undefined}
+                className={"flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-medium hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 " + (w.id === currentId ? "text-brand-800" : "text-ink")}
+              >
+                <span className="min-w-0 truncate">{w.name}</span>
+                {w.id === currentId && <Icon name="check" size={16} className="shrink-0 text-brand-600" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -630,7 +706,7 @@ function QuickAddMenu({
             }}
             className="quick-add-item flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium text-ink hover:bg-sand-50"
           >
-            <Icon name={i.kind === "property" ? "properties" : i.kind === "lease" ? "contract" : i.kind === "contact" ? "contacts" : i.kind === "payment" ? "euro" : i.kind === "ticket" ? "tasks" : "documents"} size={21}/>{i.label}
+            <Icon name={i.kind === "property" ? "properties" : i.kind === "lease" ? "contract" : i.kind === "contact" ? "contacts" : i.kind === "payment" ? "euro" : "tasks"} size={21}/>{i.label}
           </button>
         ))}
       </Dropdown>
@@ -969,9 +1045,28 @@ function CommandPalette({
 
 /* ------------------------------ create dialog ------------------------------- */
 
+/**
+ * What a creation sheet cannot do without: a lease needs a lot and a
+ * contact, a payment a running lease, an intervention a lot. A sheet opened
+ * on an empty required list could only raise the browser's own "fill in
+ * this field": it says what is missing instead, with the way to add it.
+ */
+function CreateBlocked({ text, href, action, onAction, onClose }: { text: string; href?: string; action: string; onAction?: () => void; onClose: () => void }) {
+  const cls = "ui-button inline-flex min-h-11 items-center justify-center rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600";
+  return (
+    <div className="space-y-5" data-create-blocked>
+      <p className="text-sm leading-relaxed text-ink">{text}</p>
+      <div className="flex flex-wrap justify-end gap-2">
+        {href ? <Link href={href} onClick={onClose} className={cls}>{action}</Link> : <button type="button" onClick={onAction} className={cls}>{action}</button>}
+      </div>
+    </div>
+  );
+}
+
 export function CreateDialog({
   kind,
   onClose,
+  onCreate,
   d,
   real,
   unitOptions,
@@ -981,6 +1076,8 @@ export function CreateDialog({
 }: {
   kind: CreateKind | null;
   onClose: () => void;
+  /** Opens another creation sheet in place of this one (the contact a lease is waiting for). */
+  onCreate: (kind: CreateKind) => void;
   d: Dict;
   real: boolean;
   unitOptions: Array<{ id: string; label: string }>;
@@ -1107,8 +1204,14 @@ export function CreateDialog({
     contact: d.shell.quickAddContact,
     payment: d.shell.quickAddPayment,
     ticket: d.shell.quickAddTicket,
-    document: d.shell.quickAddDocument,
   };
+
+  // The record a sheet needs before it can be filled in, if it is not there yet.
+  const missing: "property" | "contact" | "lease" | null =
+    kind === "lease" ? (unitOptions.length === 0 ? "property" : tenantOptions.length === 0 ? "contact" : null)
+    : kind === "ticket" ? (unitOptions.length === 0 ? "property" : null)
+    : kind === "payment" ? (leaseOptions.length === 0 ? (unitOptions.length === 0 ? "property" : "lease") : null)
+    : null;
 
   return (
     <Modal
@@ -1144,7 +1247,10 @@ export function CreateDialog({
           </div>
         </div>
       )}
-      {kind && !created && (
+      {kind && !created && missing === "property" && <CreateBlocked text={d.shell.needProperty} href="/app/biens/nouveau" action={d.biens.addProperty} onClose={onClose} />}
+      {kind && !created && missing === "contact" && <CreateBlocked text={d.shell.needContact} action={d.shell.needContactAction} onAction={() => onCreate("contact")} onClose={onClose} />}
+      {kind && !created && missing === "lease" && <CreateBlocked text={d.shell.needLease} href="/app/biens" action={d.shell.needLeaseAction} onClose={onClose} />}
+      {kind && !created && !missing && (
         <form
           ref={formRef}
           className="space-y-4 crm-create-form"
@@ -1295,8 +1401,6 @@ export function CreateDialog({
               </Field>
             </>
           )}
-          {(kind === "property" || kind === "document") && null}
-
           <InlineError>{fieldError}</InlineError>
           <ApiProblemNote problem={problem} />
           {submitted && !real && <p role="status" className="rounded-xl bg-brand-50 px-4 py-3 text-sm font-medium text-brand-800">{d.common.demoCreateNotice}</p>}

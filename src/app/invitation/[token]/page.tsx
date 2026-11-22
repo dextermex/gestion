@@ -8,10 +8,10 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/config";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/types";
 
-export const metadata: Metadata = {
-  title: "Morada Gestion · Invitation",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n();
+  return { title: `Morada Gestion · ${d.meta.invitation}`, robots: { index: false, follow: false } };
+}
 
 /**
  * "Votre logement vous attend sur Morada": the page an invitation link

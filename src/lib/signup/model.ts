@@ -34,7 +34,8 @@ export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "n
  */
 export type SignupStage = "role" | "email" | "email_code" | "password" | "tailor" | "complete";
 
-type SignupMeta = { version?: number; stage?: SignupStage; role?: SignupRole; password_set_at?: string };
+/** `ref` is the public site's placement tag the account arrived with (`/inscription?ref=`), when it carried one. */
+type SignupMeta = { version?: number; stage?: SignupStage; role?: SignupRole; password_set_at?: string; ref?: string };
 
 export const signupMeta = (user: Pick<User, "user_metadata">): SignupMeta | null => user.user_metadata?.morada_signup ?? null;
 export const emailConfirmed = (user: Pick<User, "email" | "email_confirmed_at" | "new_email">) => !!user.email && !!user.email_confirmed_at && !user.new_email;

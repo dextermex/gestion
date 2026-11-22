@@ -152,7 +152,7 @@ export default function InterventionSheet({
       <Modal open={open} onClose={() => setOpen(false)} title={labels.sheetTitle} closeLabel={labels.close} wide>
         <p className="font-semibold text-ink">{ticket.title}</p>
         <p className="text-xs text-ink-soft">
-          {ticket.ref} · {ticket.unitLabel || "—"}
+          {ticket.unitLabel ? `${ticket.ref} · ${ticket.unitLabel}` : ticket.ref}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
           <span>{labels.colStatus}</span>

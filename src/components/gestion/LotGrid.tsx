@@ -54,6 +54,8 @@ export interface LotGridLabels {
   colRent: string;
   colStatus: string;
   open: string;
+  /** A cell with nothing to show: the dictionary's placeholder. */
+  none: string;
 }
 
 const VIEW_KEY = "morada_lots_view";
@@ -204,11 +206,11 @@ export default function LotGrid({
                     </p>
                     <p className="mt-3 flex items-center gap-1.5 truncate text-sm text-ink">
                       <Icon name="user" size={14} className="shrink-0 text-ink-soft" />
-                      <span className="truncate">{l.tenant || l.draftLabel || "—"}</span>
+                      <span className="truncate">{l.tenant || l.draftLabel || labels.none}</span>
                     </p>
                     <p className="mt-1.5 flex items-center gap-1.5 text-sm tabular-nums text-ink">
                       <Icon name="calendar" size={14} className="shrink-0 text-ink-soft" />
-                      {l.rentLabel || "—"}
+                      {l.rentLabel || labels.none}
                     </p>
                     <div className="mt-auto flex items-center justify-between pt-3">
                       <span className="rounded-lg bg-sand-100 px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{l.kindLabel}</span>
@@ -244,12 +246,12 @@ export default function LotGrid({
                   </span>
                   {/* A phone's second line: who, how much, and the state, instead of hiding them. */}
                   <span className="col-start-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink sm:hidden">
-                    <span className="min-w-0 truncate">{l.tenant || l.draftLabel || "—"}</span>
-                    <span className="tabular-nums text-ink-soft">{l.rentLabel || "—"}</span>
+                    <span className="min-w-0 truncate">{l.tenant || l.draftLabel || labels.none}</span>
+                    <span className="tabular-nums text-ink-soft">{l.rentLabel || labels.none}</span>
                     {l.status ? <Badge className={l.status.color}>{l.status.label}</Badge> : l.lettable ? <Badge className="bg-sand-100 text-ink-soft">{labels.vacant}</Badge> : null}
                   </span>
-                  <span className="hidden min-w-0 truncate text-sm text-ink sm:block">{l.tenant || l.draftLabel || "—"}</span>
-                  <span className="hidden text-right text-sm tabular-nums text-ink sm:block">{l.rentLabel || "—"}</span>
+                  <span className="hidden min-w-0 truncate text-sm text-ink sm:block">{l.tenant || l.draftLabel || labels.none}</span>
+                  <span className="hidden text-right text-sm tabular-nums text-ink sm:block">{l.rentLabel || labels.none}</span>
                   <span className="hidden justify-end sm:flex">
                     {l.status ? <Badge className={l.status.color}>{l.status.label}</Badge> : l.lettable ? <Badge className="bg-sand-100 text-ink-soft">{labels.vacant}</Badge> : null}
                   </span>

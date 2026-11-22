@@ -43,7 +43,7 @@ afterEach(async () => {
 const open = async (units = vacant, people = tenants) => {
   await act(async () =>
     root.render(
-      <CreateDialog kind="lease" onClose={onClose} d={fr} real unitOptions={[{ id: "u-let", label: "Apt 3B · Résidence Beaulieu" }, ...units]} leaseOptions={[]} vacantUnitOptions={units} tenantOptions={people} />,
+      <CreateDialog kind="lease" onClose={onClose} onCreate={() => {}} d={fr} real unitOptions={[{ id: "u-let", label: "Apt 3B · Résidence Beaulieu" }, ...units]} leaseOptions={[]} vacantUnitOptions={units} tenantOptions={people} />,
     ),
   );
 };
@@ -81,10 +81,17 @@ describe("the quick lease sheet", () => {
     expect(tenant.required).toBe(true);
   });
 
-  it("says why when there is no vacant lot or no tenant to choose", async () => {
-    await open([], []);
+  it("says why when there is no vacant lot to choose", async () => {
+    await open([]);
     expect(form().textContent).toContain(fr.shell.noVacantUnit);
-    expect(form().textContent).toContain(fr.shell.noTenant);
+  });
+
+  it("says that a tenant must be recorded first, and offers to add one, when there is none", async () => {
+    await open(vacant, []);
+    expect(document.querySelector("form.crm-create-form")).toBeNull();
+    const blocked = document.querySelector("[data-create-blocked]");
+    expect(blocked?.textContent).toContain(fr.shell.needContact);
+    expect(blocked?.textContent).toContain(fr.shell.needContactAction);
   });
 
   it("names the field when the rent does not read as an amount, and sends nothing", async () => {

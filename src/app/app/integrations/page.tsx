@@ -7,7 +7,7 @@ import { connectLabels, syncLabels } from "@/lib/banking/labels";
 import { saltEdgeConfigured } from "@/lib/banking/saltedge";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { MORADA_URL, PRO_URL } from "@/lib/constants";
+import { MORADA_URL } from "@/lib/constants";
 import { signatureProvider, signatureProviderLabel } from "@/lib/signature/provider";
 import Link from "next/link";
 
@@ -92,18 +92,6 @@ export default async function IntegrationsPage() {
               </div>
               <a
                 href={MORADA_URL}
-                className="shrink-0 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
-              >
-                {d.integrations.open}
-              </a>
-            </li>
-            <li className="flex items-center justify-between gap-3 rounded-xl border border-sand-200 p-3.5">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink">Morada Pro</p>
-                <p className="text-xs text-ink-soft">{d.integrations.proBody}</p>
-              </div>
-              <a
-                href={PRO_URL}
                 className="shrink-0 text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
               >
                 {d.integrations.open}

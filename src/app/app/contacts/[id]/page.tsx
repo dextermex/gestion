@@ -1,9 +1,10 @@
+import { Icon } from "@/components/pro/icons";
 import Link from "next/link";
 import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/pro/ui";
 import { LegalNote, MetaBadge, Panel, Timeline } from "@/components/gestion/bits";
-import { getDemo } from "@/lib/demo";
+import { getDemo, isSampleData } from "@/lib/demo";
 import {
   amlTierMeta,
   contactRoleMeta,
@@ -25,7 +26,7 @@ import { modifyLabels } from "@/app/app/biens/[id]/sheet";
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { locale, d } = await getI18n();
-  const { CONTACTS, LEASES, TICKETS, IBAN_BINDINGS, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { CONTACTS, FISCAL_YEARS, LEASES, TICKETS, IBAN_BINDINGS, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const contact = CONTACTS.find((c) => c.id === id);
   if (!contact) notFound();
   const c = contact!;
@@ -39,6 +40,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const isOwner = c.roles.includes("owner");
   // The accounts their rent was seen coming from, bound to their leases: a fact of the ledger, never a placeholder.
   const payerIbans = [...new Set(IBAN_BINDINGS.filter((b) => leases.some((l) => l.id === b.leaseId)).map((b) => b.payerIban))].filter((iban) => iban !== c.iban);
+  // Where an owner's buttons lead must exist: the management statements are the sample
+  // mandate's (Finance, Comptabilité), the tax pack exists for an owner with a prepared exercise.
+  const statementsHref = isOwner && (await isSampleData()) ? "/app/finance?vue=comptabilite" : null;
+  const taxPackHref = isOwner && FISCAL_YEARS.some((y) => y.ownerContactId === c.id) ? `/app/fiscalite?proprietaire=${encodeURIComponent(c.id)}&vue=detail` : null;
 
   const timeline = [
     ...(c.id === "c-muller"
@@ -68,7 +73,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   return (
     <div>
       <div className="mb-2">
-        <Link href="/app/contacts" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/app/contacts" className="inline-flex items-center gap-0.5 text-sm font-semibold text-brand-700 hover:underline max-sm:min-h-10">
+          <Icon name="chevron-left" size={16} />
           {d.contacts.backToList}
         </Link>
       </div>
@@ -85,12 +91,12 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{c.name}</h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-soft">
-            <ContactLink email={c.email} />
+            <ContactLink email={c.email} none={d.common.none} />
             <span aria-hidden>·</span>
-            <ContactLink phone={c.phone} />
+            <ContactLink phone={c.phone} none={d.common.none} />
             <span aria-hidden>·</span>
             <span>{fmt(d.contacts.languageLabel, { lang: c.language.toUpperCase() })}</span>
-            {c.residency === "non_resident" && <span>· {fmt(d.contacts.nonResident, { country: c.country ?? "—" })}</span>}
+            {c.residency === "non_resident" && <span>· {fmt(d.contacts.nonResident, { country: c.country ?? d.common.none })}</span>}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -158,20 +164,26 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             <Panel title={d.contacts.mandateTitle}>
               {/* What is written on the record, or nothing: no mandate is announced that no record attests. */}
               {c.notes && <p className="mb-3 text-sm leading-relaxed text-ink">{c.notes}</p>}
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href="/app/finance"
-                  className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
-                >
-                  {d.contacts.mandateStatements}
-                </Link>
-                <Link
-                  href="/app/fiscalite"
-                  className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700"
-                >
-                  {d.contacts.mandateTaxPack}
-                </Link>
-              </div>
+              {(statementsHref || taxPackHref) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {statementsHref && (
+                    <Link
+                      href={statementsHref}
+                      className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
+                    >
+                      {d.contacts.mandateStatements}
+                    </Link>
+                  )}
+                  {taxPackHref && (
+                    <Link
+                      href={taxPackHref}
+                      className="rounded-xl border border-sand-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand-700 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
+                    >
+                      {d.contacts.mandateTaxPack}
+                    </Link>
+                  )}
+                </div>
+              )}
             </Panel>
           )}
 

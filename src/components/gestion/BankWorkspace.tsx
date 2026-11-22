@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Badge, EmptyState, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
@@ -57,6 +58,25 @@ export interface WorkspaceLabels {
   review: ReviewLabels;
 }
 
+/** Asks the workspace to put the review queue on screen, whatever filter is on. */
+const REVIEW_EVENT = "morada:bank-review";
+const REVIEW_ID = "a-verifier";
+
+/**
+ * The way to the review queue from the page's head. The queue shows under
+ * "all" and "to check" only: where the page opened on another filter the
+ * link names the view that has it, and in either case it asks the workspace
+ * for the queue, so a filter changed on screen since never leaves the link
+ * pointing at nothing.
+ */
+export function ReviewJump({ shown, className, children }: { /** The page opened on a view that shows the queue. */ shown: boolean; className?: string; children: React.ReactNode }) {
+  return (
+    <Link href={shown ? `#${REVIEW_ID}` : `/app/banque?vue=review#${REVIEW_ID}`} className={className} onClick={() => window.dispatchEvent(new Event(REVIEW_EVENT))}>
+      {children}
+    </Link>
+  );
+}
+
 function monthsBack(todayISO: string, months: number): string {
   const [y, m, day] = todayISO.split("-").map(Number);
   const total = y * 12 + (m - 1) - months;
@@ -90,6 +110,19 @@ export default function BankWorkspace({
   const [view, setView] = useState<View>(initialView);
   const [q, setQ] = useState("");
   const [period, setPeriod] = useState<Period>("all");
+  // "Traiter la file": a filter that hides the queue gives way to the one that shows it, then the queue is scrolled to.
+  const [jumps, setJumps] = useState(0);
+  useEffect(() => {
+    const onJump = () => {
+      setView((v) => (v === "all" || v === "review" ? v : "review"));
+      setJumps((n) => n + 1);
+    };
+    window.addEventListener(REVIEW_EVENT, onJump);
+    return () => window.removeEventListener(REVIEW_EVENT, onJump);
+  }, []);
+  useEffect(() => {
+    if (jumps > 0) document.getElementById(REVIEW_ID)?.scrollIntoView({ block: "start" });
+  }, [jumps]);
 
   const counts: Record<View, number> = useMemo(
     () => ({
@@ -125,7 +158,7 @@ export default function BankWorkspace({
     <div className="crm-bank-main">
       {/* The decisions waiting on the manager come first, under "all" and "to check". */}
       {review.length > 0 && (view === "all" || view === "review") && (
-        <section id="a-verifier" className="scroll-mt-24">
+        <section id={REVIEW_ID} className="scroll-mt-24">
           <Panel title={labels.reviewTitle} action={<Badge className="bg-brand-50 text-brand-700">{fmt(labels.reviewCount, { n: review.length })}</Badge>}>
             {sample && sampleNote && <p className="-mt-2 mb-4 text-sm text-ink-soft">{sampleNote}</p>}
             <ReviewQueue rows={review} leases={leases} labels={labels.review} writable={!sample} />
