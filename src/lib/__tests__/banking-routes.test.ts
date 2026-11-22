@@ -73,22 +73,25 @@ describe("the bank connection's diagnosis", () => {
   const get = () => health(new NextRequest(`${APP}/api/banking/health`));
   const DEPLOYMENT = /deployedCommit|vercelEnv|saltedge|returnTo|VariableNames|deployedAt/;
 
-  it("tells a stranger nothing, and does not ask the provider", async () => {
+  it("tells a stranger only that it is alive, and does not ask the provider", async () => {
     requestHeaders = { host: "app.morada.lu", "x-forwarded-proto": "https" };
     vi.mocked(getSession).mockResolvedValue(null);
     const res = await get();
-    expect(res.status).toBe(401);
-    expect(JSON.stringify(await res.json())).not.toMatch(DEPLOYMENT);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
     expect(saltEdgeProbe).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("rate_take", expect.anything());
   });
 
-  it("refuses an account without a workspace and a member who may not edit the finances", async () => {
+  it("tells an account without a workspace, and a member who may not edit the finances, only that it is alive", async () => {
     vi.mocked(getIdentity).mockResolvedValueOnce({ userId: "user-1", email: "", displayName: "", workspaces: [], active: null });
-    expect((await get()).status).toBe(403);
+    const none = await get();
+    expect(none.status).toBe(200);
+    expect(JSON.stringify(await none.json())).not.toMatch(DEPLOYMENT);
     permissions = new Set(["gestion.properties.view", "gestion.finance.view"]);
     const res = await get();
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "forbidden", permission: "gestion.finance.edit" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
     expect(saltEdgeProbe).not.toHaveBeenCalled();
   });
 
@@ -102,7 +105,7 @@ describe("the bank connection's diagnosis", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("cache-control")).toBe("no-store");
       const body = await res.json();
-      expect(body).toEqual({ deployedCommit: "0123456", vercelEnv: null, saltedgeAppIdPresent: true, saltedgeSecretPresent: true, fakeProviders: false, returnTo: `${APP}/app/banque/retour`, saltedge: { ok: true } });
+      expect(body).toEqual({ ok: true, deployedCommit: "0123456", vercelEnv: null, saltedgeAppIdPresent: true, saltedgeSecretPresent: true, fakeProviders: false, returnTo: `${APP}/app/banque/retour`, saltedge: { ok: true } });
       const text = JSON.stringify(body);
       expect(text).not.toContain("dpl_secret");
       expect(text).not.toContain("app-id-value");

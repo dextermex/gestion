@@ -15,7 +15,7 @@ export type CsvCell = string | number;
  * figure.
  */
 function asText(s: string): string {
-  return /^[=+\-@\t\r]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s) ? `'${s}` : s;
+  return /^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+([.,]\d+)?$/.test(s) ? `'${s}` : s;
 }
 
 function escape(v: CsvCell): string {

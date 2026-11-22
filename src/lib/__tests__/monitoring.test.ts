@@ -68,6 +68,24 @@ describe("scrub", () => {
     expect(out.breadcrumbs?.[0].data?.url).toBe("https://x.supabase.co/rest/v1/contacts?email=[email]");
     expect(out.breadcrumbs?.[1].data).toEqual({ from: "/app", to: "/app/biens" });
   });
+
+  it("redacts free text carried in contexts, extra and tags", () => {
+    const event = {
+      contexts: {
+        nextjs: { request_path: "/invitation/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" },
+        trace: { description: "load for anna.weber@example.lu" },
+      },
+      extra: { invite_url: "https://app.morada.lu/invitation/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", iban: "LU28 0019 4006 4475 0000" },
+      tags: { invited: "luc.weber@example.lu" },
+    } as unknown as ErrorEvent;
+
+    const out = scrub(event)!;
+    expect((out.contexts as Record<string, { request_path?: string }>).nextjs.request_path).toBe("/invitation/[token]");
+    expect((out.contexts as Record<string, { description?: string }>).trace.description).toBe("load for [email]");
+    expect((out.extra as Record<string, string>).invite_url).toBe("https://app.morada.lu/invitation/[token]");
+    expect((out.extra as Record<string, string>).iban).toBe("[iban]");
+    expect((out.tags as Record<string, string>).invited).toBe("[email]");
+  });
 });
 
 describe("monitoringOptions", () => {

@@ -78,11 +78,10 @@ export async function POST(req: NextRequest) {
     if (e instanceof SaltEdgeError) {
       console.error("saltedge connect failed:", `${e.code}: ${e.message}`);
       const body: Record<string, string> = { error: "saltedge_error", code: e.code };
-      // A refusal of the request's shape names fields, never a person or a
-      // secret: it goes back too, with the return address the provider must
-      // know, so the screen can say which field and which address.
+      // A refusal of the request's shape names the return address the provider
+      // must know, so the screen can say which address. The provider's own
+      // message stays in the server log, not the response.
       if (e.code === "WrongRequestFormat") {
-        body.detail = e.message;
         body.returnTo = returnTo;
       }
       // The provider did not answer in time: a gateway's own status, so a screen can tell it from a refusal.

@@ -18,6 +18,11 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/** A subject is one line: member-supplied org/home/name values cannot fold it. */
+function oneLine(s: string): string {
+  return s.replace(/[\r\n\t\u0000-\u001f\u007f]+/g, " ").trim();
+}
+
 /** The first words of a message, enough to know what it is about, never the whole of it. */
 export function excerptOf(text: string, max = 400): string {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -52,7 +57,7 @@ export function documentMail(d: Dict, v: { firstName: string; org: string; home:
     fmt(d.mail.noReply, { org: v.org }),
     d.mail.signature,
   );
-  return { subject: fmt(d.mail.documentSubject, { kind: v.kind, home: v.home }), ...body };
+  return { subject: oneLine(fmt(d.mail.documentSubject, { kind: v.kind, home: v.home })), ...body };
 }
 
 /** A word from the desk, to the tenant. */
@@ -64,7 +69,7 @@ export function messageMail(d: Dict, v: { firstName: string; org: string; home: 
     fmt(d.mail.noReply, { org: v.org }),
     d.mail.signature,
   );
-  return { subject: fmt(d.mail.messageSubject, { org: v.org, home: v.home }), ...body };
+  return { subject: oneLine(fmt(d.mail.messageSubject, { org: v.org, home: v.home })), ...body };
 }
 
 /** A word from the tenant, to the desk. */
@@ -76,7 +81,7 @@ export function tenantMessageMail(d: Dict, v: { name: string; home: string; exce
     d.mail.managerFoot,
     d.mail.signature,
   );
-  return { subject: fmt(d.mail.tenantMessageSubject, { name: v.name, home: v.home }), ...body };
+  return { subject: oneLine(fmt(d.mail.tenantMessageSubject, { name: v.name, home: v.home })), ...body };
 }
 
 /** A request from the tenant, to the desk. */
@@ -88,5 +93,5 @@ export function requestMail(d: Dict, v: { name: string; home: string; title: str
     d.mail.managerFoot,
     d.mail.signature,
   );
-  return { subject: fmt(d.mail.requestSubject, { name: v.name, title: v.title }), ...body };
+  return { subject: oneLine(fmt(d.mail.requestSubject, { name: v.name, title: v.title })), ...body };
 }
