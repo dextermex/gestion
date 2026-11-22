@@ -20,7 +20,7 @@
 
 import { Cents } from "@/domain/money";
 import { ISODate, diffDays } from "@/domain/dates";
-import { extractRF } from "@/domain/banking/rf";
+import { extractRF, findKnownRF } from "@/domain/banking/rf";
 import { detectIndexationLag } from "@/domain/indexation/engine";
 
 export interface BankTransaction {
@@ -73,12 +73,20 @@ export interface MatchConfig {
   autoPostThreshold: number;
   minMargin: number;
   subsetSumMaxInvoices: number;
+  /**
+   * A bank operation and a payment typed by hand are the same money when
+   * they sit on the same tenancy, carry the same amount and are this many
+   * days apart at most: the operation is then attached to that payment
+   * instead of being posted a second time.
+   */
+  manualTwinDays: number;
 }
 
 export const DEFAULT_MATCH_CONFIG: MatchConfig = {
   autoPostThreshold: 0.85,
   minMargin: 0.15,
   subsetSumMaxInvoices: 6,
+  manualTwinDays: 10,
 };
 
 // ─── Jaro-Winkler ───────────────────────────────────────────────────────────
@@ -222,7 +230,20 @@ export function matchTransaction(
   // Tier 1 — deterministic RF. The reference names the tenancy, not a
   // month: the amount goes FIFO to its oldest open periods, like any other
   // receipt, so a late payer's transfer clears the oldest debt first.
-  const rf = extractRF(tx.remittanceInfo) ?? extractRF(tx.endToEndId ?? "");
+  // A reference this workspace issued is recognised as itself, wherever it
+  // sits in the text; only failing that is the text scanned for any valid one.
+  const text = `${tx.remittanceInfo} ${tx.endToEndId ?? ""}`;
+  const known = findKnownRF(text, openInvoices.map((i) => i.rfReference));
+  const rf = known.length === 1 ? known[0] : known.length > 1 ? null : (extractRF(tx.remittanceInfo) ?? extractRF(tx.endToEndId ?? ""));
+  if (known.length > 1) {
+    // Two tenancies named in one transfer: a person decides how it splits.
+    return {
+      kind: "review",
+      candidates: known.map((ref) => ({ invoiceId: openInvoices.filter((i) => i.rfReference === ref).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1))[0].id, score: 1, explain: `rf=${ref}` })),
+      reason: `Remittance names ${known.length} lease references.`,
+      suggestBinding: null,
+    };
+  }
   if (rf) {
     const hits = openInvoices.filter((i) => i.rfReference === rf).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
     if (hits.length > 0) {
@@ -239,37 +260,39 @@ export function matchTransaction(
     }
   }
 
-  // Tier 2 — learned payer-IBAN binding (saves third-party payers).
+  // Tier 2 — learned payer-IBAN binding (saves third-party payers). One
+  // account may pay several tenancies (a flat and its parking, a parent or
+  // an employer paying for two tenants): the binding then names several
+  // leases, and the amount has to say which one, or the transfer waits for a
+  // person. It is never handed to whichever binding happens to come first.
   if (tx.counterpartyIban) {
-    const binding = bindings.find((b) => b.payerIban === tx.counterpartyIban);
-    if (binding) {
-      const leaseInvoices = openInvoices
-        .filter((i) => i.leaseId === binding.leaseId)
-        .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1)); // FIFO
-      if (leaseInvoices.length > 0) {
-        const lag = detectIndexationLag(
-          tx.amount,
-          leaseInvoices[0].totalAmount,
-          leaseInvoices[0].previousRentAmount,
-        );
-        return {
-          kind: "auto",
-          tier: "iban_binding",
-          invoiceIds: allocateFifo(tx.amount, leaseInvoices).map((a) => a.invoiceId),
-          confidence: 0.95,
-          margin: null,
-          indexationLag: lag ? { shortfall: lag.shortfall } : null,
-          explain: `Known payer IBAN bound to lease ${binding.leaseId} — FIFO allocation.`,
-        };
-      }
-    }
-
-    // Subset-sum for a known payer: one transfer, several invoices.
-    const payerLeases = new Set(
-      bindings.filter((b) => b.payerIban === tx.counterpartyIban).map((b) => b.leaseId),
-    );
-    if (payerLeases.size > 0) {
-      const pool = openInvoices.filter((i) => payerLeases.has(i.leaseId));
+    const payerLeases = [...new Set(bindings.filter((b) => b.payerIban === tx.counterpartyIban).map((b) => b.leaseId))];
+    const openOf = (leaseId: string) => openInvoices.filter((i) => i.leaseId === leaseId).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1)); // FIFO
+    const withOpen = payerLeases.filter((leaseId) => openOf(leaseId).length > 0);
+    const bound = (leaseId: string): MatchDecision => {
+      const leaseInvoices = openOf(leaseId);
+      const lag = detectIndexationLag(tx.amount, leaseInvoices[0].totalAmount, leaseInvoices[0].previousRentAmount);
+      return {
+        kind: "auto",
+        tier: "iban_binding",
+        invoiceIds: allocateFifo(tx.amount, leaseInvoices).map((a) => a.invoiceId),
+        confidence: 0.95,
+        margin: null,
+        indexationLag: lag ? { shortfall: lag.shortfall } : null,
+        explain: `Known payer IBAN bound to lease ${leaseId} — FIFO allocation.`,
+      };
+    };
+    if (withOpen.length === 1) return bound(withOpen[0]);
+    if (withOpen.length > 1) {
+      // The amount decides: exactly one of the payer's tenancies owes this
+      // amount on its oldest open period, or as the sum of its open periods.
+      const exact = withOpen.filter((leaseId) => {
+        const open = openOf(leaseId);
+        return open[0].openAmount === tx.amount || open.reduce((a, i) => a + i.openAmount, 0) === tx.amount;
+      });
+      if (exact.length === 1) return bound(exact[0]);
+      // One transfer covering several invoices across those tenancies.
+      const pool = openInvoices.filter((i) => withOpen.includes(i.leaseId));
       const subset = findSubsetSum(tx.amount, pool, config.subsetSumMaxInvoices);
       if (subset) {
         return {
@@ -282,6 +305,12 @@ export function matchTransaction(
           explain: `One transfer covering ${subset.length} open invoices (exact subset-sum).`,
         };
       }
+      return {
+        kind: "review",
+        candidates: withOpen.map((leaseId) => ({ invoiceId: openOf(leaseId)[0].id, score: 0.95, explain: "iban_binding" })),
+        reason: `Payer IBAN bound to ${withOpen.length} leases and the amount names none of them alone.`,
+        suggestBinding: null,
+      };
     }
   }
 
@@ -294,8 +323,14 @@ export function matchTransaction(
     return { kind: "review", candidates: [], reason: "No open invoices to match against.", suggestBinding: null };
   }
 
+  // The margin rule tells two tenancies apart (two identical studios in one
+  // building). Two open months of the same tenancy are not rivals: the next
+  // month is always open at the same amount, with the same names and the
+  // same IBAN, and would otherwise hold every ordinary rent in review.
   const top = scored[0];
-  const runnerUp = scored[1];
+  const leaseOf = (invoiceId: string): string => openInvoices.find((i) => i.id === invoiceId)?.leaseId ?? "";
+  const topLease = leaseOf(top.invoiceId);
+  const runnerUp = scored.find((sc) => leaseOf(sc.invoiceId) !== topLease);
   const margin = runnerUp ? top.score - runnerUp.score : top.score;
 
   if (top.score >= config.autoPostThreshold && margin >= config.minMargin) {

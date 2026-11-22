@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
-import { createLease, normalizeDepositForm, normalizePaymentDay } from "@/lib/gestion/lease";
+import { LIVE_STATUSES, createLease, normalizeDepositForm, normalizePaymentDay } from "@/lib/gestion/lease";
 import { getI18n } from "@/lib/i18n";
 import { todayISO } from "@/lib/clock";
 import { BILLED_UNIT_KINDS } from "@/domain/billing/pricing";
@@ -14,6 +14,12 @@ import { BILLED_UNIT_KINDS } from "@/domain/billing/pricing";
  * `PATCH /api/baux/[id]` with `action: activate` makes it the tenancy in
  * force. This route creates the lease at once, through `createLease`.
  */
+/** "start" to follow the rent from the tenancy's first month, a month (YYYY-MM) from there; anything else, from this month. */
+function trackFromOf(raw: unknown): string | null {
+  if (raw === "start") return "start";
+  return typeof raw === "string" && /^\d{4}-\d{2}$/.test(raw) ? raw : null;
+}
+
 export async function POST(req: NextRequest) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
@@ -34,15 +40,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
 
+  // The lot and the person exist in this workspace and are still on its screens:
+  // an archived lot or contact is not let to, whatever a stale form sends.
   const [{ data: unit, error: unitErr }, { data: tenant, error: tenantErr }] = await Promise.all([
-    g.from("units").select("id,furnished,kind").eq("org_id", org.id).eq("id", unitId).maybeSingle(),
-    g.from("contacts").select("id").eq("org_id", org.id).eq("id", tenantContactId).maybeSingle(),
+    g.from("units").select("id,furnished,kind,archived_at").eq("org_id", org.id).eq("id", unitId).maybeSingle(),
+    g.from("contacts").select("id,archived_at").eq("org_id", org.id).eq("id", tenantContactId).maybeSingle(),
   ]);
   if (unitErr) return dbError("lease unit lookup", unitErr);
   if (tenantErr) return dbError("lease tenant lookup", tenantErr);
-  if (!unit || !tenant) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  if (!unit || !tenant || unit.archived_at || tenant.archived_at) return NextResponse.json({ error: "invalid" }, { status: 400 });
   // A parking space or a cellar carries no lease of its own: the property's sheet shows none, so none is written.
   if (!BILLED_UNIT_KINDS.includes(String(unit.kind))) return NextResponse.json({ error: "not_lettable" }, { status: 400 });
+  // A lot already let takes no second tenancy: said as such, before anything is written.
+  const { data: live, error: liveErr } = await g.from("leases").select("id").eq("org_id", org.id).eq("unit_id", unitId).in("status", [...LIVE_STATUSES]).limit(1);
+  if (liveErr) return dbError("lease occupancy lookup", liveErr);
+  if ((live ?? []).length > 0) return NextResponse.json({ error: "already_let" }, { status: 409 });
 
   const lease = await createLease(ctx, d, {
     unitId,
@@ -57,8 +69,12 @@ export async function POST(req: NextRequest) {
     depositMonths,
     depositForm,
     furnished: unit.furnished === true,
-  });
-  if ("error" in lease) return dbError("lease insert", { code: lease.error });
+  }, trackFromOf(body.trackFrom));
+  if ("error" in lease) {
+    // Two requests for the same lot: the base lets one through and names the other.
+    if (lease.error === "already_let") return NextResponse.json({ error: "already_let" }, { status: 409 });
+    return dbError("lease insert", { code: lease.error });
+  }
 
-  return NextResponse.json({ id: lease.id, status: lease.status, issues: lease.issues, locale });
+  return NextResponse.json({ id: lease.id, status: lease.status, issues: lease.issues, pending: lease.pending, locale });
 }

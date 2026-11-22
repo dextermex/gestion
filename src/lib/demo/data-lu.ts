@@ -10,6 +10,7 @@
 
 import * as fr from "./data";
 import { periodFromSyndic } from "./charges-seed";
+import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
 import type { DemoAuditEntry, DemoBankTx, DemoDelivery, DemoBill, DemoContact, DemoFiscalYear, DemoGenerated, DemoInsurance, DemoInvite, DemoConversation, DemoDeposit, DemoDocument, DemoEdl, DemoLease, DemoLessor, DemoMeter, DemoProperty, DemoSignatureEnvelope, DemoTemplate, DemoTicket, DemoUnit, DemoWorkflow } from "./data";
 import type { TaxpayerProperty } from "@/domain/fiscal/amortisation";
 import type { DocumentKind } from "@/lib/documents/kinds";
@@ -68,7 +69,7 @@ export const CONTACTS: DemoContact[] = overlay(fr.CONTACTS, {
   "c-notaire": { name: "Me Josée Konsbruck", firstName: "Josée", lastName: "Konsbruck", email: "etude@konsbruck-notaire.lu" },
 });
 
-export const contactById = (id: string) => CONTACTS.find((c) => c.id === id)!;
+export const contactById = (id: string) => CONTACTS.find((c) => c.id === id) ?? missingContact(id);
 
 // ─── Properties & units ─────────────────────────────────────────────────────
 
@@ -129,13 +130,13 @@ export const UNITS: DemoUnit[] = overlay(fr.UNITS, {
   "u-gare": { floor: "4. Stack" },
 });
 
-export const propertyById = (id: string) => PROPERTIES.find((p) => p.id === id)!;
-export const unitById = (id: string) => UNITS.find((u) => u.id === id)!;
+export const propertyById = (id: string) => PROPERTIES.find((p) => p.id === id) ?? missingProperty(id);
+export const unitById = (id: string) => UNITS.find((u) => u.id === id) ?? missingUnit(id);
 
 // ─── Leases & rent periods (no display strings — shared verbatim) ───────────
 
 export const LEASES: DemoLease[] = fr.LEASES;
-export const leaseById = (id: string) => LEASES.find((l) => l.id === id)!;
+export const leaseById = (id: string) => LEASES.find((l) => l.id === id) ?? missingLease(id);
 
 export function leaseTenantNames(l: DemoLease): string[] {
   return l.tenantContactIds.map((id) => contactById(id).name);
@@ -148,6 +149,11 @@ export function leaseUnitLabel(l: DemoLease): string {
 }
 
 export const RENT_PERIODS = fr.RENT_PERIODS;
+export const ARCHIVED_PROPERTIES = fr.ARCHIVED_PROPERTIES;
+export const PAYMENTS = fr.PAYMENTS;
+export const LEASE_PARTIES = fr.LEASE_PARTIES;
+export const LEASE_CREDITS = fr.LEASE_CREDITS;
+export const DEGRADED = fr.DEGRADED;
 export const IBAN_BINDINGS = fr.IBAN_BINDINGS;
 export const LEASE_TANTIEMES = fr.LEASE_TANTIEMES;
 

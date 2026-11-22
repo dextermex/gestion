@@ -129,6 +129,9 @@ export default function TenantWizard({
   const [type, setType] = useState<"residential" | "commercial">(existing?.type ?? "residential");
   const [startDate, setStartDate] = useState(existing?.startDate ?? (() => todayISO())());
   const [endDate, setEndDate] = useState(existing?.endDate ?? "");
+  // A tenancy that began before this month: the owner says from when its rent is tracked.
+  const [trackFrom, setTrackFrom] = useState<"current" | "start">("current");
+  const startedEarlier = /^\d{4}-\d{2}/.test(startDate) && startDate.slice(0, 7) < todayISO().slice(0, 7);
 
   const [rent, setRent] = useState(existing?.rent ?? "");
   const [charges, setCharges] = useState(existing?.charges ?? "");
@@ -238,7 +241,7 @@ export default function TenantWizard({
       });
       if (!res.ok) {
         // The step stays as typed. A session that ended is signed in again beside it, and the dossier resumes here.
-        setSaveProblem(await readApiProblem(res, d.apiErrors, { ...refusal, codes: { already_let: d.location.alreadyLet, email_taken: d.modify.emailTaken } }));
+        setSaveProblem(await readApiProblem(res, d.apiErrors, { ...refusal, codes: { already_let: d.location.alreadyLet, email_taken: d.modify.emailTaken, invalid_iban: d.location.payerIbanInvalid } }));
         return null;
       }
       const saved = (await res.json()) as {
@@ -276,7 +279,7 @@ export default function TenantWizard({
       const res = await fetch(`/api/baux/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "activate" }),
+        body: JSON.stringify({ action: "activate", ...(startedEarlier && trackFrom === "start" ? { trackFrom: "start" } : {}) }),
       });
       if (res.ok) {
         router.push(`/app/biens/${propertyId}?onglet=location&lot=${unitId}`);
@@ -608,6 +611,16 @@ export default function TenantWizard({
                     <DateField value={endDate} onChange={setEndDate} min={startDate || undefined} placeholder={d.loyers.datePlaceholder} />
                   </Field>
                 </div>
+                {startedEarlier && (
+                  <div className="mt-3">
+                    <Field label={d.location.trackFrom} hint={d.location.trackFromHint}>
+                      <Select value={trackFrom} onChange={(e) => setTrackFrom(e.target.value === "start" ? "start" : "current")}>
+                        <option value="current">{d.location.trackFromCurrent}</option>
+                        <option value="start">{d.location.trackFromStart}</option>
+                      </Select>
+                    </Field>
+                  </div>
+                )}
                 {errorLine}
                 {footer({ onNext: () => void advance() })}
               </form>

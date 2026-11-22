@@ -1100,6 +1100,8 @@ export function CreateDialog({
   const [receivedOn, setReceivedOn] = useState("");
   // A lease recorded with points the rule engine raised: the sheet stays open to say them.
   const [created, setCreated] = useState<{ id: string; issues: string[] } | null>(null);
+  // The payment form's own key, drawn once per opening: the API writes a key once.
+  const [paymentKey, setPaymentKey] = useState("");
   useEffect(() => {
     setLeaseStep(0);
     setSubmitted(false);
@@ -1109,6 +1111,7 @@ export function CreateDialog({
     setCreated(null);
     setStartDate(todayISO());
     setReceivedOn(todayISO());
+    setPaymentKey(kind === "payment" ? (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`) : "");
   }, [kind]);
 
   useEffect(() => {
@@ -1166,7 +1169,7 @@ export function CreateDialog({
               depositForm: v("depositForm"),
             }
           : kind === "payment"
-            ? { leaseId: v("leaseId"), amount: v("amount"), receivedOn }
+            ? { leaseId: v("leaseId"), amount: v("amount"), receivedOn, requestKey: v("requestKey") }
             : { unitId: v("unitId"), title: v("title") };
     setSaving(true);
     setProblem(null);
@@ -1383,6 +1386,8 @@ export function CreateDialog({
                   <DateField value={receivedOn} onChange={setReceivedOn} placeholder={d.loyers.datePlaceholder} />
                 </Field>
               </div>
+              {/* One key per opened form: the same payment sent twice (a double click, a retry) is written once. */}
+              <input type="hidden" name="requestKey" value={paymentKey} readOnly />
             </>
           )}
           {kind === "ticket" && (

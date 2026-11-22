@@ -3,6 +3,7 @@ import { EmptyState, PageHeader } from "@/components/pro/ui";
 import { Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Row, Rows, Section } from "@/components/gestion/Hero";
 import MonthBars, { type MonthBar } from "@/components/gestion/MonthBars";
 import GlassHouse from "@/components/gestion/GlassHouse";
+import DegradedNote from "@/components/gestion/DegradedNote";
 import { Icon, type IconName } from "@/components/pro/icons";
 import { getDemo } from "@/lib/demo";
 import { getIdentity } from "@/lib/workspace";
@@ -14,6 +15,7 @@ import { computeSettlement } from "@/domain/deposits/settlement";
 import { monthlyCashflow } from "@/domain/finance/cashflow";
 import { addDays, diffDays } from "@/domain/dates";
 import { monthWindow } from "@/lib/months";
+import { isOverdue } from "@/lib/gestion/ledger";
 
 /**
  * Aujourd'hui: the command center. Every block is DERIVED — a row appears
@@ -70,7 +72,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const expected = month.reduce((a, rp) => a + rp.totalCents, 0);
   const collected = month.reduce((a, rp) => a + rp.allocatedCents, 0);
   const paidCount = month.filter((rp) => rp.status === "paid").length;
-  const lateMonth = month.filter((rp) => (rp.status === "late" || rp.status === "partial") && rp.allocatedCents < rp.totalCents);
+  // Late is unpaid past its due date: a month part-paid before it falls due is not behind yet.
+  const lateMonth = month.filter((rp) => isOverdue(rp, TODAY));
   const lateCount = lateMonth.length;
   const lateMonthCents = lateMonth.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
 
@@ -81,7 +84,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const occupiedCount = lettable.filter((u) => occupied.has(u.id)).length;
 
   // ── Recommended actions: each row exists because its signal exists ──
-  const todo: Array<{ priority?: number; href: string; title: string; amount?: string; badge: { label: string; color: string } }> = [];
+  const todo: Array<{ priority?: number; href: string; title: string; sub?: string; amount?: string; badge: { label: string; color: string } }> = [];
 
   const reviewQueue = BANK_TXS.filter((t) => t.status === "review");
   if (reviewQueue.length > 0) {
@@ -110,9 +113,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
 
   // Oldest open arrears case, assessed by the legal ladder.
-  const lateOpen = RENT_PERIODS.filter(
-    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth && rp.allocatedCents < rp.totalCents,
-  ).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+  const lateOpen = RENT_PERIODS.filter((rp) => isOverdue(rp, TODAY) && rp.period <= liveMonth).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
   // This month's late rents are the head's own chip. What is still unpaid
   // from earlier months is a different fact, said once, here.
   const earlierOpen = lateOpen.filter((rp) => rp.period < shownMonth);
@@ -163,6 +164,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       });
       break;
     }
+  }
+
+  // A lease's term passing is not a departure: the tenancy carries on (prolonged
+  // by law) and its rent stays due. The owner is told, so a departure that is
+  // happening gets recorded, or the prolongation is known.
+  const termLease = LEASES.filter((l) => l.status === "active" && l.endDate && diffDays(TODAY, l.endDate) <= 60).sort((a, b) =>
+    (a.endDate ?? "") < (b.endDate ?? "") ? -1 : 1,
+  )[0];
+  if (termLease?.endDate) {
+    const passed = termLease.endDate < TODAY;
+    todo.push({
+      href: `/app/baux/${termLease.id}`,
+      title: fmt(passed ? d.dash.todoTermPassed : d.dash.todoTermSoon, { unit: leaseUnitLabel(termLease), date: formatDate(termLease.endDate, locale) }),
+      sub: d.dash.todoTermSub,
+      badge: { label: d.dash.badgeLease, color: "bg-sand-100 text-ink-soft" },
+    });
   }
 
   const consentAccount = BANK_ACCOUNTS.filter((b) => b.consentExpiresAt).sort((a, b) =>
@@ -283,6 +300,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="space-y-9">
+      {/* A read of this page failed (the shell says when the whole workspace could not be read). */}
+      <DegradedNote tables={demo.DEGRADED.filter((t) => t !== "hydration")} d={d} />
       {/* The month, in the one raised card of the page: what came in, of what, who is late, how full the lots are. */}
       <Hero
         title={d.nav.home}
@@ -337,7 +356,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ) : (
             <Rows>
               {todo.map((t) => (
-                <Row key={t.title} href={t.href} icon={iconOf(t.href)} tone={t.priority === 1 ? "late" : "plain"} title={t.title} sub={t.badge.label} right={t.amount} rightTone="late" />
+                <Row key={t.title} href={t.href} icon={iconOf(t.href)} tone={t.priority === 1 ? "late" : "plain"} title={t.title} sub={t.sub ? `${t.badge.label} · ${t.sub}` : t.badge.label} right={t.amount} rightTone="late" />
               ))}
             </Rows>
           )}

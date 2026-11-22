@@ -5,12 +5,14 @@ import ProvisionError from "@/components/gestion/ProvisionError";
 import { ApiErrorsProvider } from "@/components/gestion/ApiErrors";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
+import DegradedNote from "@/components/gestion/DegradedNote";
 import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
 import { isTenant } from "@/lib/portal/tenant-space";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
 import { quickLeaseOptions } from "@/lib/gestion/quick-lease";
+import { paymentLeases } from "@/lib/gestion/ledger";
 
 export const metadata: Metadata = {
   title: "Morada Gestion",
@@ -106,7 +108,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       id: u.id,
       label: `${u.label} \u00b7 ${demo.propertyById(u.propertyId).name}`,
     })),
-    leaseOptions: demo.LEASES.filter((l) => l.status !== "ended").map((l) => ({
+    // Where a payment is recorded: the tenancies in force, and those that
+    // ended still owing (a former tenant pays late). Never a dossier in
+    // preparation: it has no ledger for the money to land on.
+    leaseOptions: paymentLeases(demo).map((l) => ({
       id: l.id,
       label: `${demo.leaseUnitLabel(l)} \u00b7 ${demo.leaseTenantNames(l).join(", ")}`,
     })),
@@ -135,6 +140,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <GestionShell locale={locale} dict={d} shell={shellData}>
+      {/* The workspace could not be read at all: an empty screen is said to be a failed read. Loyers and Accueil say their own partial failures. */}
+      <DegradedNote tables={demo.DEGRADED.includes("hydration") ? demo.DEGRADED : []} d={d} />
       {/* Every form of the space reads what a refusal means from here (src/lib/api-errors.ts). */}
       <ApiErrorsProvider copy={d.apiErrors}>{children}</ApiErrorsProvider>
     </GestionShell>

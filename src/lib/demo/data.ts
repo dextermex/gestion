@@ -18,6 +18,7 @@ import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
 import { summariseDocuments, type DocumentSummary } from "@/lib/documents/summary";
 import type { PageInfo } from "./scope";
+import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
 import type { InviteRow } from "@/lib/portal/types";
 import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
 import type {
@@ -143,7 +144,7 @@ export const CONTACTS: DemoContact[] = [
   { id: "c-notaire", kind: "natural", name: "Me Nathalie Thill", firstName: "Nathalie", lastName: "Thill", email: "etude@thill-notaire.lu", phone: "+352 26 00 11 22", language: "fr", roles: ["notary"] },
 ];
 
-export const contactById = (id: string) => CONTACTS.find((c) => c.id === id)!;
+export const contactById = (id: string) => CONTACTS.find((c) => c.id === id) ?? missingContact(id);
 
 // ─── Properties & units ─────────────────────────────────────────────────────
 
@@ -302,8 +303,20 @@ export const UNITS: DemoUnit[] = [
   { id: "u-gare", propertyId: "p-gare", label: "Studio 4A", kind: "dwelling", floor: "4e", areaSqm: 34, rooms: 1, furnished: true, vacantSince: "2026-01-10" },
 ];
 
-export const propertyById = (id: string) => PROPERTIES.find((p) => p.id === id)!;
-export const unitById = (id: string) => UNITS.find((u) => u.id === id)!;
+export const propertyById = (id: string) => PROPERTIES.find((p) => p.id === id) ?? missingProperty(id);
+export const unitById = (id: string) => UNITS.find((u) => u.id === id) ?? missingUnit(id);
+
+/** A property taken off the screens: nothing of it is deleted, and it can be brought back. */
+export interface DemoArchivedProperty {
+  id: string;
+  name: string;
+  address: string;
+  type: string;
+  archivedOn: string;
+  unitsCount: number;
+}
+
+export const ARCHIVED_PROPERTIES: DemoArchivedProperty[] = [];
 
 // ─── Leases ─────────────────────────────────────────────────────────────────
 
@@ -338,6 +351,8 @@ export interface DemoLease {
   dossier?: { completed: string[]; step: string; payerName: string | null };
   /** The rooms and parts let, as the contract describes them; absent to describe the lot from its facts. */
   premises?: string;
+  /** A rent recorded ahead of the month it applies from (cents), until that month. */
+  rentChange?: { from: string; rentCents: number; chargesCents: number };
   /** A departure being recorded on a running lease: the step reached and what was entered. */
   departure?: {
     step: number;
@@ -462,7 +477,7 @@ for (const l of LEASES) {
   if (!l.rfReference) l.rfReference = leaseRF(1, l.seq);
 }
 
-export const leaseById = (id: string) => LEASES.find((l) => l.id === id)!;
+export const leaseById = (id: string) => LEASES.find((l) => l.id === id) ?? missingLease(id);
 
 export function leaseTenantNames(l: DemoLease): string[] {
   return l.tenantContactIds.map((id) => contactById(id).name);
@@ -540,6 +555,49 @@ function mkPeriods(): DemoRentPeriod[] {
 
 export const RENT_PERIODS: DemoRentPeriod[] = mkPeriods();
 
+/** A payment received on a tenancy, as the ledger keeps it. */
+export interface DemoPayment {
+  id: string;
+  leaseId: string;
+  receivedOn: string;
+  amountCents: number;
+  /** What of it sits on rent periods today; the rest is the tenancy's credit. */
+  allocatedCents: number;
+  /** The payment recognises a bank operation (it was matched, by hand or by the engine). */
+  fromBank: boolean;
+  /** The day it was cancelled, when it was; a cancelled payment counts for nothing. */
+  cancelledOn: string | null;
+  note: string | null;
+}
+
+/** The payments a sheet shows: read for the tenancy on screen, empty elsewhere. */
+export const PAYMENTS: DemoPayment[] = [];
+
+/** A person's place on a tenancy, with the days they came in and left. */
+export interface DemoLeaseParty {
+  id: string;
+  leaseId: string;
+  contactId: string;
+  role: "tenant" | "colocataire" | "guarantor";
+  movedInOn: string | null;
+  movedOutOn: string | null;
+}
+
+/** Everyone on every tenancy, those who left included (dated). */
+export const LEASE_PARTIES: DemoLeaseParty[] = LEASES.flatMap((l) => [
+  ...l.tenantContactIds.map((contactId) => ({ id: `lp-${l.id}-${contactId}`, leaseId: l.id, contactId, role: "tenant" as const, movedInOn: l.startDate, movedOutOn: null })),
+  ...(l.guarantorContactIds ?? []).map((contactId) => ({ id: `lp-${l.id}-${contactId}-g`, leaseId: l.id, contactId, role: "guarantor" as const, movedInOn: l.startDate, movedOutOn: null })),
+]);
+
+/**
+ * Money received above what was due, by tenancy (cents): kept as a credit and
+ * applied to the next periods as they open.
+ */
+export const LEASE_CREDITS: Record<string, number> = {};
+
+/** The reads that failed while the dataset was assembled: the screens say their figures are incomplete. */
+export const DEGRADED: string[] = [];
+
 // ─── Bank ───────────────────────────────────────────────────────────────────
 
 export const BANK_ACCOUNTS = [
@@ -572,6 +630,8 @@ export interface DemoBankTx extends BankTransaction {
   matchTier?: string;
   matchExplain?: string;
   matchedLeaseId?: string;
+  /** The payment a matched operation became (a real account only): the bank screen opens and cancels it. */
+  paymentId?: string;
 }
 
 export const IBAN_BINDINGS: IbanBinding[] = [

@@ -21,6 +21,7 @@ import type { DemoBankTx } from "@/lib/demo/data";
 import { diffDays } from "@/domain/dates";
 import { scoreFuzzy } from "@/domain/banking/matching";
 import { vopNameCheck } from "@/domain/banking/rf";
+import { paymentLeases } from "@/lib/gestion/ledger";
 
 /**
  * Back from the sample cabinet's demonstration journey: what Salt Edge's fake
@@ -51,7 +52,7 @@ export default async function BanquePage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const [{ BANK_ACCOUNTS, BANK_TXS, IBAN_BINDINGS, LEASES, ORG, TODAY, leaseTenantNames, leaseUnitLabel, openInvoicesForMatching }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
+  const [{ BANK_ACCOUNTS, BANK_TXS, IBAN_BINDINGS, LEASES, ORG, RENT_PERIODS, TODAY, leaseTenantNames, leaseUnitLabel, openInvoicesForMatching }, datasetId] = await Promise.all([getDemo(), getDatasetId()]);
 
   // Real accounts get the real consent journey. A sample cabinet gets the
   // same journey on Salt Edge's fake bank when the deployment carries the
@@ -93,9 +94,11 @@ export default async function BanquePage({
   const importCta = real ? <BankImport accounts={BANK_ACCOUNTS.map((b) => ({ id: b.id, label: b.label }))} labels={importLabels} /> : null;
   const sampleNote = real ? null : fmt(d.shell.sampleBanner, { cabinet: ORG.shortName });
 
-  // What a reviewed operation can be assigned to: the live leases, named by
-  // their lot and tenants; the engine's closest ones first, per operation.
-  const liveLeases = LEASES.filter((l) => l.status === "active" || l.status === "notice");
+  // What a reviewed operation can be assigned to: the tenancies in force and
+  // those that ended still owing (a former tenant's late transfer has to land
+  // somewhere), named by their lot and tenants; the engine's closest ones
+  // first, per operation.
+  const liveLeases = paymentLeases({ LEASES, RENT_PERIODS, TODAY });
   const leaseLabel = (leaseId: string): string => {
     const l = liveLeases.find((x) => x.id === leaseId);
     return l ? `${leaseUnitLabel(l)} · ${leaseTenantNames(l).join(", ")}` : leaseId;
@@ -130,6 +133,15 @@ export default async function BanquePage({
   const inCount = BANK_TXS.filter((t) => t.amount > 0).length;
   const autoRate = inCount === 0 ? null : Math.round((100 * autoCount) / inCount);
 
+  // The verdicts the ledger writes as codes, in the reader's words.
+  const explainText = (raw: string): string =>
+    raw === "payment_cancelled"
+      ? d.banque.explainCancelled
+      : raw === "several_leases"
+        ? d.banque.explainSeveral
+        : /^currency [A-Z]{3}$/.test(raw)
+          ? fmt(d.banque.explainCurrency, { currency: raw.slice(9) })
+          : raw;
   const rows: TxRow[] = BANK_TXS.map((t) => {
     const status = statusOf(t);
     return {
@@ -137,13 +149,16 @@ export default async function BanquePage({
       status,
       counterparty: t.counterpartyName ?? d.common.none,
       remittance: t.remittanceInfo ?? d.common.none,
-      explain: t.matchExplain ?? "",
+      explain: explainText(t.matchExplain ?? ""),
       amountLabel: euros(t.amount, locale),
       negative: t.amount < 0,
       bookedAt: t.bookedAt,
       dateLabel: formatDate(t.bookedAt, locale),
       tier: t.matchTier ? tierMeta[t.matchTier] : null,
       statusMeta: txMeta[status],
+      // A matched operation is a payment on a tenancy: it opens there, and is cancelled from here or there.
+      paymentHref: (status === "auto" || status === "manual") && t.matchedLeaseId ? `/app/baux/${t.matchedLeaseId}#paiements` : null,
+      paymentId: (status === "auto" || status === "manual") && real ? (t.paymentId ?? null) : null,
     };
   });
 
@@ -197,6 +212,15 @@ export default async function BanquePage({
     colStatus: d.banque.colStatus,
     colAmount: d.banque.colAmount,
     countShown: d.banque.countShown,
+    payment: {
+      open: d.banque.paymentOpen,
+      cancel: d.banque.matchCancel,
+      cancelBody: d.baux.paymentCancelBody,
+      cancelDo: d.baux.paymentCancelDo,
+      cancelKeep: d.baux.paymentCancelKeep,
+      cancelFailed: d.baux.paymentCancelFailed,
+      receiptIssued: d.baux.paymentReceiptIssued,
+    },
     review: {
       assign: d.banque.reviewAssign,
       pick: d.banque.reviewPick,

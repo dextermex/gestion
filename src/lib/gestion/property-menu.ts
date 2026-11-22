@@ -232,6 +232,10 @@ export function propertyMenu(
               options: Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) })),
             },
             { kind: "date", name: "effectiveFrom", label: d.modify.effectiveFrom, value: "", hint: d.modify.effectiveFromHint },
+            // A dwelling's rent rises through the indexation; from here, only a typing error is corrected upwards.
+            ...(lease.type === "residential"
+              ? [{ kind: "toggle" as const, name: "correction", label: d.modify.rentCorrection, value: false, span: 2 as const }]
+              : []),
           ],
           note: d.modify.rentNote,
         },

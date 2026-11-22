@@ -1,7 +1,7 @@
 import { fr } from "@/lib/i18n/fr";
 import type { OrgContext } from "@/lib/gestion/api";
 import { parseDossierInput, saveRentalDraft, type DossierInput } from "@/lib/gestion/rental";
-import { activateLease } from "@/lib/gestion/lease";
+import { activateLease, closeLease } from "@/lib/gestion/lease";
 import { buildRealDataFrom } from "@/lib/demo/data-real";
 import type { ReadScope } from "@/lib/demo/scope";
 import { orgFromWorkspace } from "@/lib/demo/data-empty";
@@ -78,4 +78,19 @@ export async function linkAccount(db: FakeDb, ctx: OrgContext, rental: { leaseId
   const accepted = await acceptInvitation(db.tenantClient(user), invite.token);
   if ("error" in accepted) throw new Error(accepted.error);
   return invite;
+}
+
+/**
+ * The owner records a departure on the day it happens: the tenancy ends
+ * there and then. (A date still ahead would only give notice.) The
+ * database's own day is moved to that date for the closure, then put back.
+ */
+export async function departOn(db: FakeDb, ctx: OrgContext, leaseId: string, endDate: string) {
+  const now = db.today;
+  db.today = endDate;
+  try {
+    return await closeLease(ctx, leaseId, { endDate, depositOutcome: "release_pending", keysReturned: true, decompteIssuedOn: null }, endDate);
+  } finally {
+    db.today = now;
+  }
 }

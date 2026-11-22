@@ -27,7 +27,7 @@ const l = fr.loyers;
 const labels: ArrearsLabels = {
   record: l.arrearsRecord, doneOn: l.arrearsDoneOn, dispatchedOn: l.arrearsDispatchedOn, confirmMed: l.arrearsConfirmMed, arOn: l.arrearsArOn, saveAr: l.arrearsSaveAr,
   awaitingAr: l.arrearsAwaitingAr, arReceived: l.arrearsArReceived, medRecorded: l.arrearsMedRecorded, justiceRecord: l.arrearsJusticeRecord, justiceDone: l.arrearsJusticeDone,
-  stepDone: l.arrearsStepDone, failed: l.arrearsFailed, already: l.arrearsAlready, needsAr: l.arrearsNeedsAr, sampleConfirmed: l.arrearsConfirmed, datePlaceholder: l.datePlaceholder,
+  stepDone: l.arrearsStepDone, failed: l.arrearsFailed, already: l.arrearsAlready, needsAr: l.arrearsNeedsAr, sampleConfirmed: l.arrearsConfirmed, datePlaceholder: l.datePlaceholder, outdated: l.arrearsOutdated,
 };
 const ladder = (next: ArrearsStep | null, awaitingLetter: { id: string; dispatchedOn: string } | null = null) => (
   <ArrearsActions leaseId="lease-1" rentPeriodId="rp-1" next={next} awaitingLetter={awaitingLetter} todayISO="2026-11-19" stageLabel="Mise en demeure" locale="fr" writable sampleNote={null} labels={labels} />

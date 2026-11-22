@@ -1,4 +1,5 @@
 import "server-only";
+import { ibanChecks } from "@/domain/banking/iban";
 import type { OrgContext } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { leaseRF } from "@/domain/banking/rf";
@@ -76,6 +77,8 @@ export interface DossierResult {
   resumeStep: RentalStep;
   /** What the written lease still lacks, for the dossier. Informative. */
   issues: LeaseIssue[];
+  /** What a step other than this one could not write; this step's own write failing fails the save. */
+  pending: Array<"reference" | "deposit" | "payer">;
 }
 
 export type DossierFailure =
@@ -95,10 +98,10 @@ const sameName = (a: { first: string; last: string }, b: { first: string; last: 
   return norm(a.first) === norm(b.first) && norm(a.last) === norm(b.last);
 };
 
-/** IBAN as stored elsewhere in the product: upper case, no spaces. */
+/** IBAN as stored elsewhere in the product: upper case, no spaces, and its check digits right (mod 97). */
 export function normalizeIban(raw: string): string | null {
   const iban = raw.replace(/[\s]/g, "").toUpperCase();
-  return /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) ? iban : null;
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) && ibanChecks(iban) ? iban : null;
 }
 
 function tenantFrom(raw: unknown, defaultLanguage: string): TenantInput | null {
@@ -197,6 +200,8 @@ const fail = (context: string, detail: { code?: string; message?: string } | nul
 });
 
 export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierInput): Promise<DossierResult | DossierFailure> {
+  /** Steps other than this one whose write did not land: said to the caller. */
+  const pending: DossierResult["pending"] = [];
   const { g, org } = ctx;
   const today = todayISO();
 
@@ -305,7 +310,10 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
         .update({ rf_reference: leaseRF(orgSeq, created.seq as number) })
         .eq("org_id", org.id)
         .eq("id", created.id);
-      if (rfErr) console.error("lease rf update failed:", rfErr.code, rfErr.message);
+      if (rfErr) {
+        console.error("lease rf update failed:", rfErr.code, rfErr.message);
+        pending.push("reference");
+      }
     }
   }
   const leaseId = String(lease.id);
@@ -414,7 +422,9 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
     const { error: linkErr } = await g
       .from("lease_parties")
       .insert({ org_id: org.id, lease_id: leaseId, contact_id: contactId, role: "tenant" });
-    if (linkErr) console.error("lease party insert failed:", linkErr.code, linkErr.message);
+    // Already on it (a save that crossed this one): one place, as wanted. Any
+    // other failure is said: the tenant step is not done without its people.
+    if (linkErr && linkErr.code !== "23505") return fail("lease party insert", linkErr);
   }
   // Someone removed from the dossier leaves the lease; they stay a contact.
   const gone = [...existing.entries()].filter(([contactId]) => !contactIds.includes(contactId)).map(([, partyId]) => partyId);
@@ -461,27 +471,46 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
     .select("id")
     .eq("org_id", org.id)
     .eq("lease_id", leaseId);
-  if (depErr) console.error("dossier deposit lookup failed:", depErr.code, depErr.message);
+  // A write that fails on the step it belongs to fails the save (the step is
+  // not done); on another step it is named in `pending`, for the screen.
+  const missed = (step: RentalStep, what: "deposit" | "payer", context: string, error: { code?: string; message?: string }): DossierFailure | null => {
+    console.error(`${context} failed:`, error.code, error.message);
+    if (input.step === step) return fail(context, error);
+    if (!pending.includes(what)) pending.push(what);
+    return null;
+  };
+  if (depErr) {
+    const stop = missed("guarantee", "deposit", "dossier deposit lookup", depErr);
+    if (stop) return stop;
+  }
   const depositId = ((depositRows as Row[] | null) ?? [])[0]?.id;
-  if (input.depositMonths > 0) {
+  if (!depErr && input.depositMonths > 0) {
     const row = { form: input.depositForm, amount_cents: input.rentCents * input.depositMonths, status: "pending" };
     const { error } = depositId
       ? await g.from("deposits").update(row).eq("org_id", org.id).eq("id", depositId)
       : await g.from("deposits").insert({ org_id: org.id, lease_id: leaseId, ...row });
-    if (error) console.error("dossier deposit write failed:", error.code, error.message);
-  } else if (depositId) {
+    const stop = error ? missed("guarantee", "deposit", "dossier deposit write", error) : null;
+    if (stop) return stop;
+  } else if (!depErr && depositId) {
     const { error } = await g.from("deposits").delete().eq("org_id", org.id).eq("id", depositId);
-    if (error) console.error("dossier deposit removal failed:", error.code, error.message);
+    const stop = error ? missed("guarantee", "deposit", "dossier deposit removal", error) : null;
+    if (stop) return stop;
   }
 
   // ── The payer account: the binding is the fact, the contact's IBAN a convenience ──
   const { error: unbindErr } = await g.from("iban_bindings").delete().eq("org_id", org.id).eq("lease_id", leaseId);
-  if (unbindErr) console.error("dossier payer reset failed:", unbindErr.code, unbindErr.message);
-  if (input.payerIban) {
+  if (unbindErr) {
+    const stop = missed("payment", "payer", "dossier payer reset", unbindErr);
+    if (stop) return stop;
+  }
+  if (input.payerIban && !unbindErr) {
     const { error: bindErr } = await g
       .from("iban_bindings")
       .insert({ org_id: org.id, payer_iban: input.payerIban, lease_id: leaseId });
-    if (bindErr) console.error("payer binding insert failed:", bindErr.code, bindErr.message);
+    if (bindErr) {
+      const stop = missed("payment", "payer", "payer binding insert", bindErr);
+      if (stop) return stop;
+    }
     const holder = payerTenantIndex(input.tenants, input.payerName);
     if (holder >= 0 && contactIds[holder]) {
       const { error } = await g
@@ -524,5 +553,6 @@ export async function saveRentalDraft(ctx: OrgContext, d: Dict, input: DossierIn
     completed,
     resumeStep: firstIncomplete(completed),
     issues: issues.map((i) => ({ code: i.code, severity: i.severity, message: leaseIssueText(d, i.code, issueVars, i.message) })),
+    pending,
   };
 }

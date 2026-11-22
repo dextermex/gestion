@@ -46,7 +46,9 @@ export default async function TenantHomePage() {
   const home = `${lease.unit.label} · ${lease.property.name}`;
   const instructions = space.paymentInstructions;
   const iban = instructions ? instructions.iban.replace(/(.{4})/g, "$1 ").trim() : "";
-  const owed = !ended && due.lateCents > 0;
+  // What is owed is said whatever the tenancy's status: a former tenant with
+  // a balance reads the same figure as the owner, and where to pay it.
+  const owed = due.lateCents > 0;
   const onlyLate = due.latePeriods.length === 1 ? due.latePeriods[0] : null;
   const total = lease.rentCents + lease.chargesCents;
 
@@ -65,7 +67,7 @@ export default async function TenantHomePage() {
       )}
 
       <div className="tenant-overview">
-        {!ended && (
+        {(!ended || owed) && (
           <Card className="tenant-rent-card p-5">
             <div className="flex items-center justify-between gap-3">
               <p className="tenant-eyebrow text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.rentTitle}</p>
@@ -305,6 +307,11 @@ export default async function TenantHomePage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-ink">{`${o.unit.label} · ${o.property.name}`}</p>
                   <p className="text-xs text-ink-soft">{fmt(d.tenant.pastRange, { from: formatDate(o.startDate, locale), to: o.endDate ? formatDate(o.endDate, locale) : d.tenant.leaseEndOpen })}</p>
+                  {/* Each tenancy has its own ledger and its own reference: what is due on this one is said here. */}
+                  {rentDue(o, space.today).lateCents > 0 && (
+                    <p className="mt-0.5 text-xs font-semibold tabular-nums text-red-700">{fmt(d.tenant.otherDueNow, { amount: euros(rentDue(o, space.today).lateCents, locale) })}</p>
+                  )}
+                  {o.rfReference && <p className="mt-0.5 text-xs tabular-nums text-ink-soft">{fmt(d.tenant.otherReference, { ref: o.rfReference })}</p>}
                 </div>
                 <MetaBadge meta={leaseMeta[o.status as keyof typeof leaseMeta] ?? leaseMeta.active} />
               </li>
@@ -321,6 +328,9 @@ export default async function TenantHomePage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-ink">{`${p.unit.label} · ${p.property.name}`}</p>
                   <p className="text-xs text-ink-soft">{fmt(d.tenant.pastRange, { from: formatDate(p.startDate, locale), to: p.endDate ? formatDate(p.endDate, locale) : d.common.none })}</p>
+                  {rentDue(p, space.today).lateCents > 0 && (
+                    <p className="mt-0.5 text-xs font-semibold tabular-nums text-red-700">{fmt(d.tenant.otherDueNow, { amount: euros(rentDue(p, space.today).lateCents, locale) })}</p>
+                  )}
                 </div>
                 <Badge>{d.tenant.currentEnded}</Badge>
               </li>

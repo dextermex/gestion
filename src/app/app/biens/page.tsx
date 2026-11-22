@@ -237,11 +237,23 @@ export default async function BiensPage({
     </Link>
   );
 
+  // The way back for a property taken off the screens: shown only when one was.
+  const archivedCount = demo.ARCHIVED_PROPERTIES.length;
+  const archivedLink =
+    archivedCount > 0 ? (
+      <p className="mt-6 text-center text-sm">
+        <Link href="/app/biens/archives" className="font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+          {d.biens.archivedLink} ({archivedCount})
+        </Link>
+      </p>
+    ) : null;
+
   if (all.length === 0) {
     return (
       <div>
         <PageHeader title={d.biens.title} subtitle={d.biens.subtitle} actions={addButton} />
         <EmptyState icon="properties" title={d.biens.emptyFirstTitle} body={d.biens.emptyFirstBody} action={addButton} />
+        {archivedLink}
       </div>
     );
   }
@@ -356,6 +368,7 @@ export default async function BiensPage({
           })}
         </div>
       )}
+      {archivedLink}
     </div>
   );
 }

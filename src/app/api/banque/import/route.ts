@@ -79,9 +79,25 @@ export async function POST(req: NextRequest) {
   if (importErr || !imported) return dbError("bank import insert", importErr);
 
   // Idempotent on (account, bank_tx_id): a statement imported twice lands once.
+  // An operation imported before the id was the whole line's carried the
+  // bank's reference as its id: found under it, on its day and for its
+  // amount, it is the same operation and is not written again.
+  const references = [...new Set(parsed.rows.map((r) => r.reference).filter((x): x is string => Boolean(x)).map((x) => x.slice(0, 120)))];
+  const legacy = new Set<string>();
+  for (let i = 0; i < references.length; i += 100) {
+    const { data: known, error: knownErr } = await g
+      .from("bank_transactions")
+      .select("bank_tx_id,booked_on,amount_cents")
+      .eq("org_id", org.id)
+      .eq("bank_account_id", accountId)
+      .in("bank_tx_id", references.slice(i, i + 100));
+    if (knownErr) return dbError("bank transactions lookup", knownErr);
+    for (const k of (known as Array<{ bank_tx_id: string; booked_on: string; amount_cents: number }> | null) ?? []) legacy.add(`${k.bank_tx_id}|${String(k.booked_on).slice(0, 10)}|${k.amount_cents}`);
+  }
+  const fresh = parsed.rows.filter((r) => !(r.reference && legacy.has(`${r.reference.slice(0, 120)}|${r.bookedOn}|${r.amountCents}`)));
   let insertedCount = 0;
-  for (let i = 0; i < parsed.rows.length; i += 400) {
-    const batch = parsed.rows.slice(i, i + 400).map((r) => ({
+  for (let i = 0; i < fresh.length; i += 400) {
+    const batch = fresh.slice(i, i + 400).map((r) => ({
       org_id: org.id,
       bank_account_id: accountId,
       import_id: imported.id,

@@ -1,7 +1,7 @@
 import "server-only";
 import type { GestionReader } from "@/lib/demo/data-real";
 import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
-import { nextDueOn } from "@/lib/gestion/ledger";
+import { effectiveLeaseStatus, nextDueOn } from "@/lib/gestion/ledger";
 import { requestKindOf, requestState, ticketRef, type RequestKind, type RequestState } from "@/lib/portal/types";
 
 /**
@@ -98,6 +98,8 @@ export interface TenantLease {
   insurances: Array<{ id: string; kind: string; provider: string; policyNumber: string; expiresOn: string | null }>;
   documents: TenantDocument[];
   periods: TenantPeriod[];
+  /** Money received on this tenancy that no period carries yet (its credit), in cents; 0 when none. */
+  creditCents: number;
 }
 
 export interface TenantMessage {
@@ -224,7 +226,10 @@ export async function buildTenantSpace(
     return (data as unknown as Row[]) ?? [];
   };
 
-  const [homes, partyRows, managerRows, instructionRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers"), rpc("my_payment_instructions")]);
+  const [everyHome, partyRows, managerRows, instructionRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers"), rpc("my_payment_instructions")]);
+  // A dossier still in preparation is the owner's working copy: a tenant
+  // sees a tenancy from its activation, never a draft that names them.
+  const homes = everyHome.filter((h) => s(h.lease_status) !== "draft");
   const leaseIds = homes.map((h) => s(h.lease_id));
   if (leaseIds.length === 0) {
     return {
@@ -256,13 +261,16 @@ export async function buildTenantSpace(
   // requests' own: asked for by those ids, not "everything the policy lets
   // through" and sorted out in memory.
   const ticketIds = ticketRows.map((t) => s(t.id));
-  const [documentRows, conversationRows, visitRows] = await Promise.all([
+  const [documentRows, conversationRows, visitRows, creditRows] = await Promise.all([
     read("documents", "id,class,name,storage_path,related_type,related_id,created_at", (q) =>
       q.in("related_id", [...leaseIds, ...ticketIds]).order("created_at", { ascending: false }),
     ),
     read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "lease").in("scope_id", leaseIds)),
     ticketIds.length > 0 ? rpcOptional("my_visits") : Promise.resolve([] as Row[]),
+    // The credit (0032): money received above what was due, by tenancy.
+    rpcOptional("my_lease_credit"),
   ]);
+  const creditByLease = new Map(creditRows.map((r) => [s(r.lease_id), n(r.credit_cents)]));
   const conversationIds = conversationRows.map((c) => s(c.id));
   const messageRows = conversationIds.length > 0
     ? await read("messages", "*", (q) => q.in("conversation_id", conversationIds).order("sent_at"))
@@ -299,7 +307,8 @@ export async function buildTenantSpace(
       orgId: s(h.org_id),
       unitId: s(h.unit_id),
       propertyId: s(h.property_id),
-      status: s(h.lease_status),
+      // In force until its last day; the date decides until the nightly job has written it.
+      status: effectiveLeaseStatus(s(h.lease_status), day(h.end_date), opts.today),
       type: s(h.lease_type) === "commercial" ? "commercial" : "residential",
       startDate: day(h.start_date) ?? "",
       endDate: day(h.end_date),
@@ -352,6 +361,7 @@ export async function buildTenantSpace(
             status: s(rp.status),
           };
         }),
+      creditCents: Math.max(creditByLease.get(id) ?? 0, 0),
     };
   });
 
@@ -363,6 +373,8 @@ export async function buildTenantSpace(
   const current = live[0] ?? null;
   const others = live.filter((l) => l !== current);
   const past = leases.filter((l) => !isLive(l)).sort(byStart);
+  /** The tenancy every page shows: the one in force, else the latest former one. */
+  const shown = current ?? past[0] ?? null;
 
   const conversationByLease = new Map(conversationRows.map((c) => [s(c.scope_id), s(c.id)]));
   const anchorByTicket = new Map<string, string>();
@@ -428,18 +440,21 @@ export async function buildTenantSpace(
     others,
     past,
     managers: managerRows.map((m) => ({ orgId: s(m.org_id), name: s(m.name), email: s(m.email) || null, phone: s(m.phone) || null })),
+    // The account to pay and the money picture are those of the tenancy on
+    // screen, in force or not: a former tenant who still owes rent is shown
+    // the same balance the owner sees, and where to pay it.
     paymentInstructions: (() => {
-      const row = current ? instructionRows.find((r) => s(r.org_id) === current.orgId) : undefined;
+      const row = shown ? instructionRows.find((r) => s(r.org_id) === shown.orgId) : undefined;
       return row && s(row.iban) ? { legalName: s(row.legal_name), iban: s(row.iban), bic: s(row.bic) || null, holderName: s(row.holder_name) || s(row.legal_name) } : null;
     })(),
     requests,
     conversations,
-    payments: current ? paymentsOf(current, opts.today) : null,
+    payments: shown ? paymentsOf(shown, opts.today) : null,
   };
 }
 
 /** The tenant's money picture, derived from the ledger rows and nothing else. */
-export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "startDate" | "endDate">, today: string): TenantPayments {
+export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "startDate" | "endDate"> & { status?: string }, today: string): TenantPayments {
   const month = today.slice(0, 7);
   const sorted = [...lease.periods].sort((a, b) => (a.period < b.period ? -1 : 1));
   const thisMonth = sorted.find((p) => p.period === month) ?? null;
@@ -449,7 +464,9 @@ export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "
   // not behind.
   const outstandingCents = open.filter((p) => p.dueDate < today).reduce((a, p) => a + (p.totalCents - p.allocatedCents), 0);
   const upcoming = open.find((p) => p.dueDate >= today) ?? null;
-  const nextDue = upcoming ? upcoming.dueDate : nextDueOn(today, lease.paymentDay, lease.startDate, lease.endDate);
+  // A term passed with nobody leaving is not an end: only a recorded departure stops the rent.
+  const until = lease.status === undefined || lease.status === "notice" || lease.status === "ended" ? lease.endDate : null;
+  const nextDue = upcoming ? upcoming.dueDate : nextDueOn(today, lease.paymentDay, lease.startDate, until);
   const nextDueCents = upcoming ? upcoming.totalCents - upcoming.allocatedCents : sorted.length > 0 ? sorted[sorted.length - 1].totalCents : 0;
   return { thisMonth, nextDueOn: nextDue, nextDueCents, outstandingCents, history: [...sorted].reverse() };
 }

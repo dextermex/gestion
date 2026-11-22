@@ -63,5 +63,5 @@ export default async function DepartPage({ searchParams }: { searchParams: Promi
     startStep,
   };
 
-  return <DepartureWizard d={d} lease={payload} real={datasetId === "real"} notice={d.common.demoCreateNotice} />;
+  return <DepartureWizard d={d} locale={locale} lease={payload} real={datasetId === "real"} notice={d.common.demoCreateNotice} />;
 }

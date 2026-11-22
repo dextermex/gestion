@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OrgContext } from "@/lib/gestion/api";
-import { closeLease } from "@/lib/gestion/lease";
 import { addManagerMessage, createIntervention, markConversationRead, parseRequestStatus, setRequestStatus, statusOfFailure } from "@/lib/gestion/requests";
 import { addTenantMessage, attachTenantFiles, createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_STATUSES, attachmentFolder, isIntervention, isRequestOpen, leaseSubject, requestState, requestStatusOf, ticketStatusFor } from "@/lib/portal/types";
 import { addDays, addMonths } from "@/domain/dates";
 import { FakeDb } from "./helpers/fake-postgrest";
-import { ORG, OTHER_ORG, ctxFor, hydrate, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
+import { ORG, OTHER_ORG, ctxFor, departOn, hydrate, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
 
 /**
  * One conversation per tenancy, with the tenant's requests inside it,
@@ -174,7 +173,7 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     expect([row.status, row.closed_at]).toEqual(["new", null]);
 
     // ── The tenant leaves: the conversation and its requests stay theirs to read; nothing new can be asked ──
-    const closed = await closeLease(ctx, rental.leaseId, { endDate: endOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today);
+    const closed = await departOn(db, ctx, rental.leaseId, endOfMonth);
     if ("error" in closed) throw new Error(closed.error);
     mine = await space(db, anna);
     expect(mine.current).toBeNull();

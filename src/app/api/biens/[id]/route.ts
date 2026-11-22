@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { LIVE_STATUSES } from "@/lib/gestion/lease";
 
 /**
  * Editing a property, and retiring one.
@@ -32,13 +33,36 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Archiving is its own verb, not a field: it is the one change that takes
   // the property off every screen, so it never rides along with an edit.
   if (body.action === "archive" || body.action === "restore") {
-    const { error } = await g
+    if (body.action === "archive") {
+      // A property with a tenancy in force is not retired: the tenancy would
+      // have nowhere to live. The menu says so before the click; this is the
+      // rule itself, for every caller.
+      const { data: lots, error: lotsErr } = await g.from("units").select("id").eq("org_id", org.id).eq("property_id", id);
+      if (lotsErr) return dbError("property lots lookup", lotsErr);
+      const lotIds = ((lots as Array<{ id: string }> | null) ?? []).map((u) => u.id);
+      if (lotIds.length > 0) {
+        const { data: live, error: liveErr } = await g
+          .from("leases")
+          .select("id")
+          .eq("org_id", org.id)
+          .in("unit_id", lotIds)
+          .in("status", [...LIVE_STATUSES])
+          .limit(1);
+        if (liveErr) return dbError("property occupancy lookup", liveErr);
+        if ((live ?? []).length > 0) return NextResponse.json({ error: "still_let" }, { status: 409 });
+      }
+    }
+    // The property's lots follow it, out and back (a trigger of the base;
+    // the screens leave a lot out as soon as its property is, either way).
+    const { data, error } = await g
       .from("properties")
       .update({ archived_at: body.action === "archive" ? new Date().toISOString() : null })
       .eq("org_id", org.id)
       .eq("id", id)
       .select("id");
     if (error) return dbError("property archive", error);
+    // Under RLS a refused update answers zero rows, not an error.
+    if (!data || data.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
     return NextResponse.json({ ok: true, archived: body.action === "archive" });
   }
 

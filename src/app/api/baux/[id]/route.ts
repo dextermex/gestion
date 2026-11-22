@@ -5,11 +5,17 @@ import {
   activateLease,
   discardDraft,
   effectiveMonth,
+  ledgerPinFor,
   normalizePaymentDay,
   readDeparture,
+  readRentChange,
+  redateOpenPeriods,
+  rentChangePatch,
   repriceOpenPeriods,
   saveDeparture,
+  trimLedgerBefore,
 } from "@/lib/gestion/lease";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Editing a running tenancy: its terms, and what it costs.
@@ -39,7 +45,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
   if (body.action === "activate") {
-    const result = await activateLease(ctx, id);
+    // `trackFrom`: "start" to follow the rent from the tenancy's first month,
+    // a month (YYYY-MM) to follow it from there; left out, from this month.
+    const trackFrom = body.trackFrom === "start" ? "start" : /^\d{4}-\d{2}$/.test(str(body.trackFrom, 7)) ? str(body.trackFrom, 7) : null;
+    const result = await activateLease(ctx, id, todayISO(), trackFrom);
     if ("error" in result) return lifecycleError(result.error);
     return NextResponse.json({ ok: true, periodsOpened: result.periodsOpened });
   }
@@ -60,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: lease, error: findErr } = await g
     .from("leases")
-    .select("id,status,rent_cents,charges_cents,payment_day,start_date,details")
+    .select("*")
     .eq("org_id", org.id)
     .eq("id", id)
     .maybeSingle();
@@ -73,15 +82,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   let chargesCents = lease.charges_cents as number;
   let moneyChanged = false;
 
+  // A rent recorded ahead is what the form edits: the amounts compared are the newest the lease knows.
+  const pending = readRentChange(lease.details);
+  const knownRent = pending?.rentCents ?? rentCents;
+  const knownCharges = pending?.chargesCents ?? chargesCents;
+  rentCents = knownRent;
+  chargesCents = knownCharges;
   if (has(body, "rent")) {
     const parsed = parseEuroInput(str(body.rent, 20));
     if (!parsed) return NextResponse.json({ error: "invalid" }, { status: 400 });
     if (parsed !== rentCents) {
-      // The previous rent is what an indexation lag is detected against, so
-      // it is kept whenever the rent actually moves.
-      patch.previous_rent_cents = rentCents;
       rentCents = parsed;
-      patch.rent_cents = parsed;
       moneyChanged = true;
     }
   }
@@ -91,14 +102,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (parsed === null) return NextResponse.json({ error: "invalid" }, { status: 400 });
     if (parsed !== chargesCents) {
       chargesCents = parsed;
-      patch.charges_cents = parsed;
       moneyChanged = true;
     }
   }
-  if (has(body, "paymentDay")) patch.payment_day = normalizePaymentDay(body.paymentDay);
+  // A dwelling's rent goes up through the adjustment (the capital investi
+  // ceiling, a registered letter, its AR): from here, only a correction of
+  // what was typed, said as such.
+  const live = lease.status === "active" || lease.status === "notice";
+  if (moneyChanged && live && rentCents > (lease.rent_cents as number) && lease.lease_type !== "commercial" && body.correction !== true) {
+    return NextResponse.json({ error: "rent_increase_needs_letter" }, { status: 409 });
+  }
+  if (has(body, "paymentDay")) {
+    const day = normalizePaymentDay(body.paymentDay);
+    if (day !== Number(lease.payment_day)) patch.payment_day = day;
+  }
   if (has(body, "type")) patch.lease_type = body.type === "commercial" ? "commercial" : "residential";
   if (has(body, "startDate") && ISO.test(str(body.startDate, 10))) patch.start_date = str(body.startDate, 10);
-  if (has(body, "endDate")) patch.end_date = ISO.test(str(body.endDate, 10)) ? str(body.endDate, 10) : null;
+  if (has(body, "endDate")) {
+    const end = ISO.test(str(body.endDate, 10)) ? str(body.endDate, 10) : null;
+    // A tenancy is over from its end date on: a date already reached would
+    // end a running lease from this form. That is a departure, and it has
+    // its own flow (the keys, the ledger, the guarantee).
+    if (end !== null && end <= todayISO() && (lease.status === "active" || lease.status === "notice")) {
+      return NextResponse.json({ error: "end_reached" }, { status: 400 });
+    }
+    patch.end_date = end;
+  }
   if (has(body, "chargesRegime")) {
     patch.charges_regime = body.chargesRegime === "forfait" ? "forfait" : "advances";
   }
@@ -135,17 +164,46 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.capital_investi = components;
   }
 
+  // The month a new rent applies from: this one or later, said by the owner.
+  const today = todayISO();
+  // A dossier not started has no ledger yet: its rent is simply the rent.
+  const fromMonth = live ? effectiveMonth(str(body.effectiveFrom, 10), today) : `${today.slice(0, 7)}-01`;
+  if (moneyChanged) {
+    const base = (patch.details as Record<string, unknown> | undefined) ?? ((lease.details as Record<string, unknown> | null) ?? null);
+    Object.assign(patch, rentChangePatch({ rentCents: lease.rent_cents as number, chargesCents: lease.charges_cents as number, details: base }, { rentCents, chargesCents }, fromMonth, today));
+  }
+
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
 
-  const { data, error } = await g.from("leases").update(patch).eq("org_id", org.id).eq("id", id).select("id");
+  // A start date corrected on a running tenancy must not open the months
+  // before the ones already followed: the ledger's first month is pinned to
+  // the earliest period it holds, once, before the date moves.
+  const startMoved = typeof patch.start_date === "string" && patch.start_date !== String(lease.start_date ?? "").slice(0, 10);
+  const pin = startMoved ? await ledgerPinFor(ctx, { id, status: String(lease.status), ledgerFrom: (lease.ledger_from as string | null | undefined) ?? null }) : null;
+  if (pin) patch.ledger_from = pin;
+
+  let { data, error } = await g.from("leases").update(patch).eq("org_id", org.id).eq("id", id).select("id");
+  if (pin && (error?.code === "PGRST204" || error?.code === "42703")) {
+    delete patch.ledger_from;
+    ({ data, error } = await g.from("leases").update(patch).eq("org_id", org.id).eq("id", id).select("id"));
+  }
   if (error) return dbError("lease update", error);
   if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  let repriced = 0;
-  if (moneyChanged) {
-    repriced = await repriceOpenPeriods(ctx, id, rentCents, chargesCents, effectiveMonth(str(body.effectiveFrom, 10)));
+  // A start moved later: the months before it were never owed.
+  if (startMoved && live && String(patch.start_date) > String(lease.start_date ?? "").slice(0, 10)) {
+    await trimLedgerBefore(ctx, id, String(patch.start_date), Number(patch.payment_day ?? lease.payment_day) || 1);
   }
-  return NextResponse.json({ ok: true, repriced });
+
+  // The months already open from that one take the new amount, except those already due or carrying money.
+  let repriced = 0;
+  if (moneyChanged) repriced = await repriceOpenPeriods(ctx, id, rentCents, chargesCents, fromMonth, today);
+  // A new payment day moves the months still to come.
+  let redated = 0;
+  if (typeof patch.payment_day === "number" && live) {
+    redated = await redateOpenPeriods(ctx, id, patch.payment_day, String(patch.start_date ?? lease.start_date).slice(0, 10), today);
+  }
+  return NextResponse.json({ ok: true, repriced, redated, effectiveFrom: moneyChanged ? fromMonth : null });
 }
 
 function lifecycleError(code: "not_found" | "not_draft" | "not_live" | "already_let" | "not_empty" | "incomplete" | "storage_failed") {

@@ -97,7 +97,9 @@ export const getDemo = cache(async (scope?: ReadScope): Promise<DemoData> => {
           // engine now computes on real data through the same seam.
           return await buildRealData(org, session.accessToken, scope ?? {});
         } catch (e) {
+          // Said on screen: an empty workspace here means the read failed, not that nothing exists.
           console.error("real dataset hydration failed, serving empty:", e);
+          return { ...buildEmptyData(org), DEGRADED: ["hydration"] };
         }
       }
     }

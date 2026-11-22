@@ -2,6 +2,7 @@ import Link from "next/link";
 import ArrearsActions, { type ArrearsLabels } from "@/components/gestion/ArrearsActions";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { LegalNote } from "@/components/gestion/bits";
+import DegradedNote from "@/components/gestion/DegradedNote";
 import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Rows, Segments, Step, Steps } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { euros, eurosWhole, formatDate, formatMonth, formatPct, initials, rentStatusMeta } from "@/lib/types";
@@ -9,6 +10,7 @@ import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
 import { monthWindow } from "@/lib/months";
+import { isOverdue } from "@/lib/gestion/ledger";
 import { existingOf, generateLabels } from "@/lib/documents/labels";
 
 export default async function LoyersPage({
@@ -18,7 +20,7 @@ export default async function LoyersPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { ARREARS_ACTIONS, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { ARREARS_ACTIONS, DEGRADED, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const rentMeta = rentStatusMeta(d);
   // The live month and its neighbours, derived from today (the demo pins its
@@ -34,7 +36,8 @@ export default async function LoyersPage({
   const expected = monthRows.reduce((a, r) => a + r.totalCents, 0);
   const collected = monthRows.reduce((a, r) => a + r.allocatedCents, 0);
   const open = expected - collected;
-  const isOpen = (rp: (typeof RENT_PERIODS)[number]) => (rp.status === "late" || rp.status === "partial") && rp.allocatedCents < rp.totalCents;
+  // Behind is what is unpaid past its due date: a month part-paid before it falls due is still to come, as the tenant reads it.
+  const isOpen = (rp: (typeof RENT_PERIODS)[number]) => isOverdue(rp, TODAY);
   // Late first, then what is partly paid, the oldest due date leading each.
   const byUrgency = (x: (typeof RENT_PERIODS)[number], y: (typeof RENT_PERIODS)[number]) =>
     x.status === y.status ? x.dueDate.localeCompare(y.dueDate) : x.status === "late" ? -1 : 1;
@@ -56,9 +59,7 @@ export default async function LoyersPage({
   // has been done is read from the rows (the steps recorded, the registered
   // letter and its AR date), never from a click.
   const letterById = new Map(REGISTERED_LETTERS.map((l) => [l.id, l]));
-  const arrearsCases = RENT_PERIODS.filter(
-    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth,
-  ).map((rp) => {
+  const arrearsCases = RENT_PERIODS.filter((rp) => isOverdue(rp, TODAY) && rp.period <= liveMonth).map((rp) => {
     const steps = ARREARS_ACTIONS.filter((a) => a.rentPeriodId === rp.id).sort((a, b) => a.executedOn.localeCompare(b.executedOn));
     const executed: Partial<Record<Exclude<ArrearsStage, "none">, string>> = {};
     for (const a of steps) executed[a.stage] = a.executedOn;
@@ -103,6 +104,7 @@ export default async function LoyersPage({
     justiceDone: d.loyers.arrearsJusticeDone,
     stepDone: d.loyers.arrearsStepDone,
     failed: d.loyers.arrearsFailed,
+    outdated: d.loyers.arrearsOutdated,
     already: d.loyers.arrearsAlready,
     needsAr: d.loyers.arrearsNeedsAr,
     sampleConfirmed: d.loyers.arrearsConfirmed,
@@ -126,7 +128,7 @@ export default async function LoyersPage({
   const caseOf = new Map(arrearsCases.map((c) => [c.rp.id, c]));
   const openNow = monthRows.filter(isOpen).sort(byUrgency);
   const earlier = RENT_PERIODS.filter((rp) => isOpen(rp) && rp.period < month).sort((x, y) => y.period.localeCompare(x.period) || byUrgency(x, y));
-  const upcoming = monthRows.filter((rp) => rp.status === "pending" || rp.status === "upcoming");
+  const upcoming = monthRows.filter((rp) => rp.status === "pending" || rp.status === "upcoming" || (rp.status === "partial" && !isOverdue(rp, TODAY)));
   const paid = monthRows.filter((rp) => rp.status === "paid");
   const openCents = (rows: Period[]) => rows.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
   const lateTenants = new Set([...openNow, ...earlier].map((rp) => rp.leaseId)).size;
@@ -252,6 +254,8 @@ export default async function LoyersPage({
 
   return (
     <div className="space-y-8">
+      {/* A read of this page failed (the shell says when the whole workspace could not be read). */}
+      <DegradedNote tables={DEGRADED.filter((t) => t !== "hydration")} d={d} />
       <Hero
         title={d.loyers.title}
         top={

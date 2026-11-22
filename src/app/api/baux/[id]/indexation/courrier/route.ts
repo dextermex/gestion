@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { tenantsOfRecord } from "@/domain/arrears/recipients";
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { adjustmentLetterState, type AdjustmentLetter } from "@/lib/gestion/indexation";
@@ -65,8 +66,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "already" }, { status: 409 });
   }
 
-  const { data: parties } = await g.from("lease_parties").select("contact_id,role,moved_out_on").eq("org_id", org.id).eq("lease_id", id);
-  const tenant = ((parties ?? []) as Array<Record<string, unknown>>).find((p) => p.role === "tenant" && !p.moved_out_on);
+  // Every tenant of record this month receives it; the first is the letter's addressee.
+  const { data: parties } = await g.from("lease_parties").select("id,contact_id,role,moved_in_on,moved_out_on").eq("org_id", org.id).eq("lease_id", id);
+  const recipients = tenantsOfRecord((parties ?? []) as Array<Record<string, unknown>>, dispatchedOn);
   const snapshot = {
     template: "rent_adjustment",
     lease: id,
@@ -74,6 +76,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     proposedRentCents: proposal.proposedMonthlyRent,
     ceilingMonthlyCents: proposal.caps.ceilingMonthly,
     bindingConstraint: proposal.bindingConstraint,
+    recipientContactIds: recipients,
     dispatchedOn,
   };
   const content = JSON.stringify(snapshot);
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       template_key: "rent_adjustment",
       related_type: "lease",
       related_id: id,
-      recipient_contact_id: tenant ? String(tenant.contact_id) : null,
+      recipient_contact_id: recipients[0] ?? null,
       content_sha256: createHash("sha256").update(content).digest("hex"),
       content: snapshot,
       status: "dispatched",
@@ -92,6 +95,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     .select("id")
     .single();
+  // A base without the letter's content column (0022) says it is behind, not that something failed.
+  if (insertErr?.code === "PGRST204" || insertErr?.code === "42703") return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
   if (insertErr || !letter) return dbError("adjustment letter insert", insertErr);
   return NextResponse.json({ id: letter.id, dispatchedOn, proposedMonthlyRent: proposal.proposedMonthlyRent });
 }

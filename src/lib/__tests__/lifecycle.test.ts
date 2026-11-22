@@ -218,14 +218,17 @@ describe("the lifecycle of a rental", () => {
     });
     expect(await activateLease(ctx, first.leaseId, today)).toEqual({ error: "not_draft" });
 
-    // ── End rental ──
+    // ── End rental: the departure is recorded on the day it happens ──
+    db.today = lastDayOfMonth;
     const closed = await closeLease(
       ctx,
       first.leaseId,
-      { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 250000, keysReturned: true, decompteIssuedOn: null },
-      today,
+      { endDate: lastDayOfMonth, depositOutcome: "release_pending", keysReturned: true, decompteIssuedOn: null },
+      lastDayOfMonth,
     );
+    db.today = today;
     if ("error" in closed) throw new Error(closed.error);
+    expect(closed.status).toBe("ended");
     expect(closed.unitId).toBe(unitId);
     // Next month was owed by nobody and paid by nobody: it goes. This month happened.
     expect(closed.droppedPeriods).toBe(1);
@@ -242,7 +245,8 @@ describe("the lifecycle of a rental", () => {
     expect(demo.leaseTenantNames(ended)).toEqual(["Anna Weber", "Luc Weber"]);
     expect(demo.RENT_PERIODS.filter((rp) => rp.leaseId === first.leaseId).map((rp) => rp.period)).toEqual([thisMonth.slice(0, 7)]);
     expect(demo.ENDED_LEASES.map((l) => l.id)).toContain(first.leaseId);
-    expect(demo.DEPOSITS.find((x) => x.leaseId === first.leaseId)!.status).toBe("released");
+    // The guarantee was never received: the closure records the keys and moves no money.
+    expect(demo.DEPOSITS.find((x) => x.leaseId === first.leaseId)).toMatchObject({ status: "pending", keyHandoverOn: lastDayOfMonth, releasedBalanceCents: 0 });
     // Former tenants keep their lease on their contact sheet.
     expect(demo.LEASES.filter((l) => l.tenantContactIds.includes(first.contactIds[1])).map((l) => l.id)).toEqual([first.leaseId]);
 
@@ -440,10 +444,10 @@ describe("the lifecycle of a lot: free, dossier, tenancy, departure, history, fr
     expect(await saveRentalDraft(ctx, fr, dossier({ unitId, step: "tenant", tenants: [{ firstName: "Nora" }] }))).toEqual({ error: "already_let" });
     expect((await db.from("leases").insert(draftRow()).select("id").single()).error).toMatchObject({ code: "23505", message: "gestion: lot already let" });
     expect((await db.from("leases").insert(activeRow()).select("id").single()).error).toMatchObject({ code: "23505", message: "gestion: lot already let" });
-    expect(await closeLease(ctx, "nope", { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today)).toEqual({ error: "not_found" });
+    expect(await closeLease(ctx, "nope", { endDate: lastDayOfMonth, depositOutcome: "release_pending", keysReturned: true, decompteIssuedOn: null }, today)).toEqual({ error: "not_found" });
 
     // ── Départ, recorded step by step, then confirmed ──
-    const progress = readDeparture({ step: 4, endDate: lastDayOfMonth, keysReturned: true, keysReturnedOn: lastDayOfMonth, depositOutcome: "released", releasedAmount: "2 000", metersDone: true });
+    const progress = readDeparture({ step: 4, endDate: lastDayOfMonth, keysReturned: true, keysReturnedOn: lastDayOfMonth, depositOutcome: "release_pending", releasedAmount: "", metersDone: true });
     expect(progress).not.toBeNull();
     expect(await saveDeparture(ctx, first.leaseId, progress!, today)).toEqual({ ok: true });
     let demo = await hydrate(db);
@@ -452,15 +456,20 @@ describe("the lifecycle of a lot: free, dossier, tenancy, departure, history, fr
     expect(occupancyOf(findCard(buildPortfolio(demo), propertyId)!)).toBe("occupied");
     expect(demo.LEASES.find((l) => l.id === first.leaseId)!.status).toBe("active");
 
+    // The guarantee was received meanwhile: the departure opens its restitution, and releases nothing.
+    db.table("deposits").find((x) => x.lease_id === first.leaseId)!.status = "held";
+    db.today = lastDayOfMonth;
     const closed = await closeLease(
       ctx,
       first.leaseId,
-      { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 200000, keysReturned: true, keysReturnedOn: lastDayOfMonth, decompteIssuedOn: null },
-      today,
+      { endDate: lastDayOfMonth, depositOutcome: "release_pending", keysReturned: true, keysReturnedOn: lastDayOfMonth, decompteIssuedOn: null },
+      lastDayOfMonth,
     );
+    db.today = today;
     if ("error" in closed) throw new Error(closed.error);
+    expect(closed.status).toBe("ended");
     expect(closed.droppedPeriods).toBe(1);
-    expect(await closeLease(ctx, first.leaseId, { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today)).toEqual({
+    expect(await closeLease(ctx, first.leaseId, { endDate: lastDayOfMonth, depositOutcome: "release_pending", keysReturned: true, decompteIssuedOn: null }, today)).toEqual({
       error: "already_ended",
     });
 
@@ -477,7 +486,8 @@ describe("the lifecycle of a lot: free, dossier, tenancy, departure, history, fr
     expect(demo.leaseTenantNames(former)).toEqual(["Anna Weber"]);
     expect(demo.ENDED_LEASES.map((l) => l.id)).toEqual([first.leaseId]);
     expect(demo.RENT_PERIODS.filter((rp) => rp.leaseId === first.leaseId).map((rp) => rp.period)).toEqual([thisMonth.slice(0, 7)]);
-    expect(demo.DEPOSITS.find((x) => x.leaseId === first.leaseId)).toMatchObject({ status: "released" });
+    expect(closed.depositStatus).toBe("release_pending");
+    expect(demo.DEPOSITS.find((x) => x.leaseId === first.leaseId)).toMatchObject({ status: "release_pending", releasedBalanceCents: 0, releasedFirstTrancheCents: 0 });
     expect(db.table("deposits").find((x) => x.lease_id === first.leaseId)!.key_handover_on).toBe(lastDayOfMonth);
     expect(db.table("lease_parties").filter((p) => p.lease_id === first.leaseId).map((p) => p.moved_out_on)).toEqual([lastDayOfMonth]);
 

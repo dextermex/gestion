@@ -206,3 +206,73 @@ describe("Jaro-Winkler", () => {
     expect(jaroWinkler("JEAN MULLER", "PIERRE SCHMIT")).toBeLessThan(0.6);
   });
 });
+
+describe("a payer bound to several tenancies", () => {
+  const PAYER = "LU9800200001112223334";
+  const bindings = [
+    { payerIban: PAYER, leaseId: "flat" },
+    { payerIban: PAYER, leaseId: "parking" },
+  ];
+  const flat = (over: Partial<OpenInvoice> = {}) => invoice({ id: "flat-may", leaseId: "flat", rfReference: RF_A, openAmount: cents(1450), totalAmount: cents(1450), unitLabel: "Apt 3B", ...over });
+  const parking = (over: Partial<OpenInvoice> = {}) => invoice({ id: "parking-may", leaseId: "parking", rfReference: RF_B, openAmount: cents(120), totalAmount: cents(120), unitLabel: "Parking 12", ...over });
+  const from = (amount: number) => tx({ amount, counterpartyIban: PAYER, counterpartyName: "PARENT MULLER", remittanceInfo: "virement" });
+
+  it("lets the amount say which tenancy a transfer pays, whatever the order of the bindings", () => {
+    for (const order of [bindings, [...bindings].reverse()]) {
+      const rent = matchTransaction(from(cents(1450)), [flat(), parking()], order, new Map());
+      expect(rent).toMatchObject({ kind: "auto", tier: "iban_binding", invoiceIds: ["flat-may"] });
+      const space = matchTransaction(from(cents(120)), [flat(), parking()], order, new Map());
+      expect(space).toMatchObject({ kind: "auto", tier: "iban_binding", invoiceIds: ["parking-may"] });
+    }
+  });
+
+  it("splits one transfer covering both tenancies exactly", () => {
+    const both = matchTransaction(from(cents(1570)), [flat(), parking()], bindings, new Map());
+    expect(both.kind).toBe("auto");
+    if (both.kind === "auto") {
+      expect(both.tier).toBe("subset_sum");
+      expect([...both.invoiceIds].sort()).toEqual(["flat-may", "parking-may"]);
+    }
+  });
+
+  it("holds for a person a transfer whose amount names neither tenancy alone", () => {
+    const odd = matchTransaction(from(cents(800)), [flat(), parking()], bindings, new Map());
+    expect(odd.kind).toBe("review");
+    // Two tenancies owing the very same amount are not told apart by it either.
+    const same = matchTransaction(from(cents(1450)), [flat(), parking({ openAmount: cents(1450), totalAmount: cents(1450) })], bindings, new Map());
+    expect(same.kind).toBe("review");
+  });
+
+  it("still routes to the one tenancy that has anything open", () => {
+    const d = matchTransaction(from(cents(500)), [flat()], bindings, new Map());
+    expect(d).toMatchObject({ kind: "auto", tier: "iban_binding", invoiceIds: ["flat-may"] });
+  });
+});
+
+describe("the margin rule compares tenancies, not two months of the same one", () => {
+  it("posts the ordinary monthly rent of a tenancy whose next month is open too", () => {
+    const d = matchTransaction(
+      tx({ remittanceInfo: "LOYER APT 3B GARE", counterpartyIban: "LU777", bookedAt: "2026-05-02" }),
+      [invoice({ id: "may", dueDate: "2026-05-01" }), invoice({ id: "jun", dueDate: "2026-06-01" })],
+      [],
+      new Map([["lease-1", new Set(["LU777"])]]),
+    );
+    expect(d).toMatchObject({ kind: "auto", tier: "fuzzy", invoiceIds: ["may"] });
+  });
+});
+
+describe("the reference a workspace issued is found as itself", () => {
+  it("matches an RF followed by a word, whatever that word does to a checksum", () => {
+    // Over a few hundred references, "<RF> loyer" compacted always holds a longer string that also passes mod 97 for some of them.
+    for (let n = 1; n <= 300; n++) {
+      const rf = leaseRF(6895, n);
+      const d = matchTransaction(tx({ remittanceInfo: `${rf} loyer`, counterpartyIban: null }), [invoice({ rfReference: rf })], [], new Map());
+      expect(d, rf).toMatchObject({ kind: "auto", tier: "rf", invoiceIds: ["inv-1"] });
+    }
+  });
+
+  it("holds a transfer naming two tenancies for a person", () => {
+    const d = matchTransaction(tx({ remittanceInfo: `${RF_A} et ${RF_B}`, amount: cents(2900) }), [invoice({}), invoice({ id: "inv-2", leaseId: "lease-2", rfReference: RF_B })], [], new Map());
+    expect(d.kind).toBe("review");
+  });
+});

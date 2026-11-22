@@ -34,6 +34,8 @@ export interface ArrearsLabels {
   justiceDone: string;
   stepDone: string;
   failed: string;
+  /** The base is behind the code (a migration not applied yet). */
+  outdated: string;
   already: string;
   needsAr: string;
   sampleConfirmed: string;
@@ -99,7 +101,7 @@ export default function ArrearsActions({
       if (res.ok) {
         setDone({ message: onOk, standing });
         router.refresh();
-      } else setError(res.status === 409 ? onConflict(payload.error) : labels.failed);
+      } else setError(res.status === 409 ? onConflict(payload.error) : payload.error === "schema_outdated" ? labels.outdated : labels.failed);
     } catch {
       setError(labels.failed);
     }

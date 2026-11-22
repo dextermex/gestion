@@ -3,10 +3,14 @@ import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { settlementOpen } from "@/lib/gestion/deposits";
 import type { DepositStatus } from "@/lib/types";
+import { settleArrearsFromDeposit } from "@/lib/banking/retention";
+import { getI18n } from "@/lib/i18n";
+import { todayISO } from "@/lib/clock";
 
 /**
  * A retention on a guarantee whose restitution is open: arrears, damage
- * from the exit inventory, or a reserve for the charges décompte. Damage
+ * from the exit inventory, or a reserve for the charges décompte. Arrears
+ * retained settle the tenancy's open months, oldest first. Damage
  * without a signed entry inventory is recorded but retains nothing: the
  * law's hard gate, written on the line so nobody argues with it later.
  * Justification (an invoice or an estimate, within the month) is a step of
@@ -53,5 +57,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .select("id")
     .single();
   if (error || !data) return dbError("deposit deduction insert", error);
-  return NextResponse.json({ id: data.id, status });
+
+  // Arrears kept from the guarantee settle the months they cover, oldest
+  // first: the line and the ledger say the same thing, or neither is written.
+  let settledCents = 0;
+  if (kind === "arrears") {
+    const { d } = await getI18n();
+    const settled = await settleArrearsFromDeposit(ctx, { leaseId: String(deposit.lease_id), deductionId: String(data.id), amountCents, today: todayISO(), note: d.garanties.retentionNote });
+    if ("error" in settled) {
+      await g.from("deposit_deductions").delete().eq("org_id", org.id).eq("id", data.id);
+      return NextResponse.json({ error: settled.error }, { status: settled.error === "schema_outdated" ? 503 : 502 });
+    }
+    settledCents = settled.settledCents;
+  }
+  return NextResponse.json({ id: data.id, status, settledCents });
 }

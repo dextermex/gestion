@@ -55,4 +55,16 @@ describe("salt edge mapping", () => {
       amount_cents: -124055,
     });
   });
+
+  it("takes the payer's account when the provider gives one, and only a real IBAN", () => {
+    const base: SeTransaction = { id: "tx-9", account_id: "a-1", made_on: "2026-09-01", amount: 1250, currency_code: "EUR", description: "Loyer", extra: { payer: "ANA SANTOS" } } as SeTransaction;
+    expect(mapTransactionRow(base, "org-1", "ba-1").counterparty_iban).toBeNull();
+    const withAccount = { ...base, extra: { payer: "ANA SANTOS", account_number: "LU28 0019 4006 4475 0000" } } as unknown as SeTransaction;
+    expect(mapTransactionRow(withAccount, "org-1", "ba-1").counterparty_iban).toBe("LU280019400644750000");
+    const inText = { ...base, extra: { payer_information: "ANA SANTOS LU280019400644750000" } } as unknown as SeTransaction;
+    expect(mapTransactionRow(inText, "org-1", "ba-1").counterparty_iban).toBe("LU280019400644750000");
+    // A number shaped like an IBAN with wrong check digits is not one.
+    const typo = { ...base, extra: { account_number: "LU280019400644750001" } } as unknown as SeTransaction;
+    expect(mapTransactionRow(typo, "org-1", "ba-1").counterparty_iban).toBeNull();
+  });
 });

@@ -180,8 +180,13 @@ export async function letLot(page: Page, unitId: string, tenant: Person, rent = 
   await page.getByLabel("Nom", { exact: true }).first().fill(tenant.last);
   await page.getByLabel("E-mail").first().fill(tenant.email);
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // tenant → lease
-  // A tenancy that began earlier opens its past months in the ledger: the arrears flows start from one.
-  if (startDate) await page.getByLabel("Début du bail").fill(frDay(startDate));
+  // A tenancy that began before this month is followed from the current month unless the
+  // owner says otherwise. The arrears flows start from one followed since its first day:
+  // its past months open in the ledger.
+  if (startDate) {
+    await page.getByLabel("Début du bail").fill(frDay(startDate));
+    if (startDate.slice(0, 7) < isoDate(new Date()).slice(0, 7)) await page.getByLabel("Suivre les loyers à partir de").selectOption("start");
+  }
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // lease → rent
   await page.getByLabel("Loyer hors charges").fill(rent);
   await page.getByLabel("Charges mensuelles").fill("150");
