@@ -33,7 +33,9 @@ function candidatesOf(raw: unknown): RecognitionCandidate[] {
 }
 
 export async function POST(req: NextRequest) {
-  const ctx = await withOrg();
+  // "write": the recognition call spends on the operator's model key, so a
+  // locked (post-trial, unsubscribed) workspace must not reach it.
+  const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   if (!recognitionConfigured()) return NextResponse.json({ configured: false, supported: false, recognition: null });
   const form = await req.formData().catch(() => null);

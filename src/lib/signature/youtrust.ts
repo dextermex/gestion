@@ -194,7 +194,11 @@ export function youtrustClient(opts: ClientOptions): SignatureClient {
       const document = await json<{ id?: string; total_anchors?: number }>("POST", `/signature_requests/${encodeURIComponent(requestId)}/documents`, form);
       if (isProviderError(document)) return abandon(document);
       // Every signer needs the anchor that places their field: a contract read without them is not sent.
-      if (typeof document.total_anchors === "number" && document.total_anchors < req.signers.length) return abandon({ error: "invalid", detail: "anchors" });
+      // Exactly one anchor per signer, no more: too few leaves a signer
+      // without a field, too many means an extra {{s..|signature|..}} was
+      // parsed out of interpolated contract text and would place a rogue
+      // signature field. Either count is refused.
+      if (typeof document.total_anchors === "number" && document.total_anchors !== req.signers.length) return abandon({ error: "invalid", detail: "anchors" });
 
       const signerIds: string[] = [];
       for (const s of req.signers) {

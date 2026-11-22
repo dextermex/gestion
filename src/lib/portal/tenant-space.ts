@@ -271,7 +271,10 @@ export async function buildTenantSpace(
   // Signed links for the property photos and the documents the tenant may open.
   const paths = [...homes.map((h) => s(h.photo_url)), ...documentRows.map((d) => s(d.storage_path))].filter((p) => p !== "" && !p.startsWith("http"));
   const signed = await opts.sign(paths);
-  const urlOf = (path: string): string | null => (path.startsWith("http") ? path : signed.get(path) ?? null);
+  // Only ever a signed bucket URL. A value carrying a scheme (http...) is
+  // never passed through: a forged document row could otherwise render an
+  // attacker's external URL as an <img>/<a> (a beacon) in another tenant's view.
+  const urlOf = (path: string): string | null => (/^[a-z][a-z0-9+.-]*:/i.test(path) ? null : signed.get(path) ?? null);
 
   const partiesByLease = new Map<string, TenantParty[]>();
   for (const p of partyRows) {

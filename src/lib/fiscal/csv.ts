@@ -8,7 +8,13 @@
 export type CsvCell = string | number;
 
 function escape(v: CsvCell): string {
-  const s = String(v);
+  let s = String(v);
+  // Neutralise a spreadsheet formula lead (= + - @ TAB CR) so a cell a person
+  // typed cannot run on open (DDE / HYPERLINK / WEBSERVICE). A genuine number,
+  // including a negative amount like "-123,45" from csvEuros, is left intact.
+  if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(?:[.,]\d+)?$/.test(s)) {
+    s = "'" + s;
+  }
   return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
