@@ -24,11 +24,14 @@ export interface InvitePreview {
 }
 
 /** Any client works here: the wrapper lives in `public` and is open to anon. */
+/** What a link that names no invitation shows: nothing about anybody. */
+export const unknownInvitation = (): InvitePreview => ({
+  state: "unknown", mine: false, firstName: "", email: "", orgName: "", propertyName: "",
+  address: { street: null, number: null, postal_code: null, city: null }, unitLabel: "", leaseStatus: "", expiresAt: null,
+});
+
 export async function previewInvitation(client: Pick<SupabaseClient, "rpc">, token: string): Promise<InvitePreview> {
-  const unknown: InvitePreview = {
-    state: "unknown", mine: false, firstName: "", email: "", orgName: "", propertyName: "",
-    address: { street: null, number: null, postal_code: null, city: null }, unitLabel: "", leaseStatus: "", expiresAt: null,
-  };
+  const unknown = unknownInvitation();
   const { data, error } = await client.rpc("gestion_invite_preview", { p_token: token });
   if (error || !data || typeof data !== "object") {
     if (error) console.error("invitation preview failed:", error.code, error.message);

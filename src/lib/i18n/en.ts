@@ -58,6 +58,19 @@ export const en: Dict = {
     draftDiscard: "Start again",
     removePhoto: "Remove the photo",
   },
+  access: {
+    spaceUnreadTitle: "Your space could not be loaded",
+    spaceUnreadBody: "Your management spaces could not be read. Nothing was changed. Try again in a moment.",
+    noSpaceTitle: "You no longer have a management space",
+    noSpaceBody: "This account is no longer a member of any management space. If this is a mistake, contact the person who runs the space. You can also open a space in your own name.",
+    noSpaceCreate: "Open my own space",
+    switchFailed: "The space could not be changed. Try again.",
+    currentSpace: "Current space",
+    forbidden: "Your role in this space does not allow this action.",
+    rateLimited: "Too many requests in a short time. Try again in a few minutes.",
+    readOnly: "Your role in this space lets you read, not change.",
+    deletionWrite: "Your request is noted on your account, but the team could not be told automatically. Write to {email} so that it is handled.",
+  },
 
   apiErrors: {
     session: "Your session has ended. Sign in again, then retry.",
@@ -219,6 +232,8 @@ export const en: Dict = {
     needLease: "No running lease yet: a payment belongs to a tenancy. Add a tenant from a property's page.",
     needContactAction: "Create a contact",
     needLeaseAction: "See my properties",
+    readDegraded: "Part of your data could not be read: what is shown may be incomplete. Nothing has been lost.",
+    readRetry: "Try again",
   },
 
   status: {
@@ -834,6 +849,10 @@ export const en: Dict = {
     portalSample: "On a sample cabinet, invitations are illustrated: nothing is sent.",
     noneTitle: "No running lease",
     noneBody: "A lease comes from a tenancy: open a vacant property and add its tenant, the guide prepares the lease with it.",
+    portalWithdraw: "Remove access",
+    portalWithdrawConfirm: "Remove access to the tenant space? This person will no longer be able to open it; a new invitation reopens it.",
+    portalWithdrawn: "Access to the space removed. A new invitation reopens it.",
+    portalWithdrawFailed: "Access could not be removed. Try again in a moment.",
   },
 
   bien: {

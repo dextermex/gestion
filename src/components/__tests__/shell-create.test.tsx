@@ -128,22 +128,37 @@ describe("the workspace at the head of the rail", () => {
     expect(document.querySelector(".crm-workspace")?.textContent).toContain("Espace test");
   });
 
-  it("opens another workspace of the account: the choice is kept and the app starts again on its home", async () => {
+  it("opens another workspace of the account: the server keeps the choice and the app starts again on its home", async () => {
     const assign = vi.fn();
     vi.stubGlobal("location", { href: "http://localhost/app/biens/p-1", assign });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(<GestionShell locale="fr" dict={fr} shell={shell(two)}><p>page</p></GestionShell>));
     const toggle = document.querySelector<HTMLButtonElement>("aside .crm-workspace-switch")!;
     expect(toggle.getAttribute("aria-label")).toContain(fr.shell.switchSpace);
     await act(async () => toggle.click());
     const rows = [...document.querySelectorAll<HTMLButtonElement>("aside .crm-workspace-switch + ul button")];
-    expect(rows.map((b) => b.textContent)).toEqual(["Cabinet Reuter", "Nadia Kremer"]);
+    expect(rows.map((b) => b.querySelector(".truncate")?.textContent)).toEqual(["Cabinet Reuter", "Nadia Kremer"]);
+    expect(rows[0].textContent).toContain(fr.access.currentSpace);
     expect(rows[0].getAttribute("aria-current")).toBe("true");
     // The workspace on screen: nothing changes.
     await act(async () => rows[0].click());
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(assign).not.toHaveBeenCalled();
     await act(async () => toggle.click());
     await act(async () => document.querySelectorAll<HTMLButtonElement>("aside .crm-workspace-switch + ul button")[1].click());
-    expect(document.cookie).toContain("morada_workspace=ag-2");
+    expect(fetchMock).toHaveBeenCalledWith("/api/espace/actif", expect.objectContaining({ method: "POST", body: JSON.stringify({ workspaceId: "ag-2" }) }));
     expect(assign).toHaveBeenCalledWith("/app");
+  });
+
+  it("says a switch that did not go through, and stays on the workspace on screen", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { href: "http://localhost/app", assign });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "not_found" }), { status: 404 })));
+    await act(async () => root.render(<GestionShell locale="fr" dict={fr} shell={shell(two)}><p>page</p></GestionShell>));
+    await act(async () => document.querySelector<HTMLButtonElement>("aside .crm-workspace-switch")!.click());
+    await act(async () => document.querySelectorAll<HTMLButtonElement>("aside .crm-workspace-switch + ul button")[1].click());
+    expect(assign).not.toHaveBeenCalled();
+    expect(document.querySelector("aside [role=alert]")?.textContent).toBe(fr.access.switchFailed);
   });
 });

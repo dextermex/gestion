@@ -2,6 +2,7 @@ import "server-only";
 import { authedClient } from "@/lib/supabase/server";
 import { signMedia, signThumbnails } from "@/lib/gestion/media";
 import { addressParts, formatAddress, type PropertyAddress } from "@/lib/gestion/address";
+import { reportHandled } from "@/lib/monitoring";
 import type { OpenInvoice } from "@/domain/banking/matching";
 import type { DemoData } from "./index";
 import type {
@@ -174,6 +175,11 @@ export async function buildRealDataFrom(
   /** The newest-first registers keep a cap: what it cuts is the oldest, and the exact count is read beside it. */
   const CAP = 2000;
   const failed = new Set<string>();
+  /** A read that failed: named in DEGRADED for the screens, and reported by its code alone. */
+  const markFailed = (table: string, error: { code?: string; message?: string }) => {
+    failed.add(table);
+    reportHandled(`gestion read (${table})`, error.code);
+  };
   /** The column that makes a table's order total, so pages never overlap. */
   const TIEBREAK: Record<string, string> = { conversation_heads: "conversation_id", edl_session_counts: "session_id", generated_documents: "document_id", workspace_settings: "org_id", template_validations: "kind", lease_credit: "lease_id" };
   const q = async (table: string, select: string, apply?: (b: Narrow) => Narrow, cap?: number, opts: { optional?: boolean } = {}): Promise<Row[]> => {
@@ -182,7 +188,7 @@ export async function buildRealDataFrom(
       const pending = error.code === "PGRST205" || error.code === "42P01" || error.code === "42703" || error.code === "PGRST204";
       if (!(opts.optional && pending)) {
         console.error(`gestion read failed (${table}):`, error.code, error.message);
-        if (!pending) failed.add(table);
+        if (!pending) markFailed(table, error);
       }
       return [];
     };
@@ -221,6 +227,7 @@ export async function buildRealDataFrom(
     const { data, error, count } = await (apply ? apply(base) : base).order(order, { ascending: false }).range(lo, hi);
     if (error) {
       console.error(`gestion page read failed (${table}):`, error.code, error.message);
+      markFailed(table, error);
       return { rows: [], total: 0 };
     }
     return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
@@ -231,6 +238,7 @@ export async function buildRealDataFrom(
     const { data, error, count } = await base.order("created_at", { ascending: false }).range(0, CAP - 1);
     if (error) {
       console.error("gestion documents summary read failed:", error.code, error.message);
+      markFailed("documents", error);
       return { rows: [], total: 0 };
     }
     return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
@@ -440,7 +448,10 @@ export async function buildRealDataFrom(
         const { data, error } = await b.order("created_at", { ascending: false }).limit(CAP);
         if (error) {
           if (error.code === "PGRST205" || error.code === "42P01") SIGNATURE_READY = false;
-          else console.error("gestion read failed (signature_envelopes):", error.code, error.message);
+          else {
+            console.error("gestion read failed (signature_envelopes):", error.code, error.message);
+            markFailed("signature_envelopes", error);
+          }
           return [];
         }
         return (data as unknown as Row[]) ?? [];

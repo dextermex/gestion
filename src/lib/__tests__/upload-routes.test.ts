@@ -138,7 +138,7 @@ describe("a bill whose piece was put in the bucket by the browser", () => {
     const bill = (uploadedPath: string) => {
       const form = new FormData();
       for (const [k, v] of Object.entries({ direction: "expense", subject: "Ravalement", category: "maintenance_repairs", vatRate: "17", amount: "1200", docDate: today, dueOn: "", uploadedPath, fileName: "devis-ravalement.pdf" })) form.set(k, v);
-      return POST(new NextRequest("https://app.morada.lu/api/finance/factures", { method: "POST", body: form }));
+      return POST(new NextRequest("https://app.morada.lu/api/finance/factures", { method: "POST", body: form, headers: { origin: "https://app.morada.lu" } }));
     };
     const res = await bill(path);
     expect(res.status).toBe(201);

@@ -1,3 +1,4 @@
+import "server-only";
 import { SIGNATURE_LEVELS, type SignatureLevel } from "./envelope";
 
 /**

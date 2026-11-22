@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import GestionLogo from "@/components/gestion/GestionLogo";
 import KeepFresh from "@/components/KeepFresh";
 import ScrollHeader from "@/components/gestion/ScrollHeader";
+import SessionKeeper from "@/components/gestion/SessionKeeper";
+import DegradedBanner from "@/components/gestion/DegradedBanner";
 import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
 import TenantTabs from "@/components/gestion/TenantTabs";
@@ -16,6 +19,7 @@ import { latestMoment, unreadSignature } from "@/lib/gestion/threads";
 import { getTenantView } from "@/lib/portal/space";
 import { todoFor, unreadCount } from "@/lib/portal/view";
 import { getSession } from "@/lib/supabase/server";
+import { REQUESTED_PATH_HEADER, signInAddress } from "@/lib/auth/return-path";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { d } = await getI18n();
@@ -40,7 +44,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const { d } = await getI18n();
   const view = await getTenantView();
-  if (view.kind === "signed_out") redirect("/connexion?next=/locataire");
+  // Signing in returns to the page that was asked for (the middleware names it).
+  if (view.kind === "signed_out") redirect(signInAddress((await headers()).get(REQUESTED_PATH_HEADER), "locataire"));
   const session = await getSession();
   const { space, sample, canManage } = view;
   const sampleCabinet = sample ? (await getDemo()).ORG.shortName : null;
@@ -65,6 +70,7 @@ export default async function TenantLayout({ children }: { children: React.React
     <div className="tenant-space min-h-dvh bg-sand-50">
       {/* The documents and photographs of this space are links signed for an hour: a page left open is read again before they run out. */}
       <KeepFresh />
+      {session && <SessionKeeper />}
       {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
           is the whole screen: the bar, the sample line, the foot and the bottom bar
           step aside, and the conversation's own header takes the top. */}
@@ -109,6 +115,8 @@ export default async function TenantLayout({ children }: { children: React.React
           <TenantSampleBanner text={fmt(d.shell.sampleBanner, { cabinet: sampleCabinet })} back={d.shell.sampleBack} />
         </div>
       )}
+
+      {space.degraded && <DegradedBanner text={d.shell.readDegraded} retry={d.shell.readRetry} />}
 
       {/* A conversation open over the phone's screen gets the screen whole: no gutter, no width limit. */}
       <main className="tenant-main mx-auto w-full max-w-6xl px-safe-4 py-6 max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6">{children}</main>

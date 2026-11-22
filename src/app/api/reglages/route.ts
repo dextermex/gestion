@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg, dbError } from "@/lib/gestion/api";
+import { withOrg, dbError, jsonBody, refuseWithout } from "@/lib/gestion/api";
 import { LESSOR_IDENTITY_COLUMNS, parseSettingsInput } from "@/lib/documents/settings-rules";
 
 /**
@@ -11,7 +11,11 @@ export async function PATCH(req: NextRequest) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org, userId } = ctx;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  // Asked first, so a role that may not edit the settings is told so (403),
+  // instead of a save that finds no row to change.
+  const refused = await refuseWithout(ctx, "gestion.settings.edit");
+  if (refused) return refused;
+  const body = await jsonBody(req);
   const parsed = parseSettingsInput(body);
   if ("problem" in parsed) return NextResponse.json({ error: "invalid", problem: parsed.problem }, { status: 400 });
   const row = {

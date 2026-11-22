@@ -58,6 +58,19 @@ export const de: Dict = {
     draftDiscard: "Neu beginnen",
     removePhoto: "Foto entfernen",
   },
+  access: {
+    spaceUnreadTitle: "Ihr Bereich konnte nicht geladen werden",
+    spaceUnreadBody: "Ihre Verwaltungsbereiche konnten nicht gelesen werden. Es wurde nichts geändert. Versuchen Sie es gleich noch einmal.",
+    noSpaceTitle: "Sie haben keinen Verwaltungsbereich mehr",
+    noSpaceBody: "Dieses Konto ist in keinem Verwaltungsbereich mehr Mitglied. Falls das ein Irrtum ist, wenden Sie sich an die Person, die den Bereich verwaltet. Sie können auch einen Bereich auf Ihren Namen eröffnen.",
+    noSpaceCreate: "Eigenen Bereich eröffnen",
+    switchFailed: "Der Bereich konnte nicht gewechselt werden. Versuchen Sie es erneut.",
+    currentSpace: "Aktueller Bereich",
+    forbidden: "Ihre Rolle in diesem Bereich erlaubt diese Aktion nicht.",
+    rateLimited: "Zu viele Anfragen in kurzer Zeit. Versuchen Sie es in einigen Minuten erneut.",
+    readOnly: "Ihre Rolle in diesem Bereich erlaubt das Lesen, nicht das Ändern.",
+    deletionWrite: "Ihre Anfrage ist in Ihrem Konto vermerkt, aber das Team konnte nicht automatisch benachrichtigt werden. Schreiben Sie an {email}, damit sie bearbeitet wird.",
+  },
 
   apiErrors: {
     session: "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an und versuchen Sie es noch einmal.",
@@ -219,6 +232,8 @@ export const de: Dict = {
     needLease: "Noch kein laufender Mietvertrag: Eine Zahlung gehört zu einem Mietverhältnis. Fügen Sie von der Seite eines Objekts aus einen Mieter hinzu.",
     needContactAction: "Kontakt anlegen",
     needLeaseAction: "Meine Objekte ansehen",
+    readDegraded: "Ein Teil Ihrer Daten konnte nicht gelesen werden: Die Anzeige ist möglicherweise unvollständig. Es ist nichts verloren gegangen.",
+    readRetry: "Erneut versuchen",
   },
 
   status: {
@@ -834,6 +849,10 @@ export const de: Dict = {
     portalSample: "Bei einem Beispielbüro werden Einladungen nur dargestellt: nichts wird gesendet.",
     noneTitle: "Kein laufender Mietvertrag",
     noneBody: "Ein Mietvertrag entsteht aus einer Vermietung: Öffnen Sie ein freies Objekt und fügen Sie den Mieter hinzu, der Assistent bereitet den Mietvertrag mit vor.",
+    portalWithdraw: "Zugang entziehen",
+    portalWithdrawConfirm: "Zugang zum Mieterbereich entziehen? Die Person kann ihn dann nicht mehr öffnen; eine neue Einladung öffnet ihn wieder.",
+    portalWithdrawn: "Zugang zum Bereich entzogen. Eine neue Einladung öffnet ihn wieder.",
+    portalWithdrawFailed: "Der Zugang konnte nicht entzogen werden. Versuchen Sie es gleich noch einmal.",
   },
 
   bien: {

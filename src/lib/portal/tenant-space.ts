@@ -1,5 +1,6 @@
 import "server-only";
 import type { GestionReader } from "@/lib/demo/data-real";
+import { reportHandled } from "@/lib/monitoring";
 import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
 import { effectiveLeaseStatus, nextDueOn } from "@/lib/gestion/ledger";
 import { requestKindOf, requestState, ticketRef, type RequestKind, type RequestState } from "@/lib/portal/types";
@@ -189,6 +190,8 @@ export interface TenantSpace {
   /** One conversation per tenancy, the current one first. */
   conversations: TenantConversation[];
   payments: TenantPayments | null;
+  /** Part of the space could not be read: the screens may be incomplete, and say so. */
+  degraded?: boolean;
 }
 
 /** The first name a greeting uses: the contact's, else the account's. */
@@ -198,14 +201,24 @@ function firstNameOf(parties: TenantParty[], fallback: string): string {
   return name.trim().split(/\s+/)[0] ?? "";
 }
 
+/** Where a tenant opens one of their pieces: a route that signs it for a minute at that moment. */
+export const tenantDocumentHref = (id: string): string => `/api/locataire/documents/${encodeURIComponent(id)}/fichier`;
+
 export async function buildTenantSpace(
   g: GestionReader,
   opts: { userId: string; email: string; displayName: string; today: string; sign: (paths: string[]) => Promise<Map<string, string>> },
 ): Promise<TenantSpace> {
+  // A read that fails is said on screen (and reported), never passed off as "nothing".
+  let degraded = false;
+  const failed = (what: string, code: string | undefined) => {
+    degraded = true;
+    reportHandled(`tenant read (${what})`, code);
+  };
   const rpc = async (name: string): Promise<Row[]> => {
     const { data, error } = await g.rpc(name);
     if (error) {
       console.error(`tenant read failed (${name}):`, error.code, error.message);
+      failed(name, error.code);
       return [];
     }
     return (data as Row[] | null) ?? [];
@@ -215,7 +228,10 @@ export async function buildTenantSpace(
   const rpcOptional = async (name: string): Promise<Row[]> => {
     const { data, error } = await g.rpc(name);
     if (error) {
-      if (error.code !== "PGRST202" && error.code !== "42883") console.error(`tenant read failed (${name}):`, error.code, error.message);
+      if (error.code !== "PGRST202" && error.code !== "42883") {
+        console.error(`tenant read failed (${name}):`, error.code, error.message);
+        failed(name, error.code);
+      }
       return [];
     }
     return (data as Row[] | null) ?? [];
@@ -236,6 +252,7 @@ export async function buildTenantSpace(
     const { data, error } = await query.limit(2000);
     if (error) {
       console.error(`tenant read failed (${table}):`, error.code, error.message);
+      failed(table, error.code);
       return [];
     }
     return (data as unknown as Row[]) ?? [];
@@ -259,6 +276,7 @@ export async function buildTenantSpace(
       requests: [],
       conversations: [],
       payments: null,
+      degraded,
     };
   }
 
@@ -312,7 +330,9 @@ export async function buildTenantSpace(
     klass: s(d.class),
     createdAt: day(d.created_at) ?? "",
     storagePath: s(d.storage_path),
-    url: urlOf(s(d.storage_path)),
+    // The object is readable (signed above), and the page links to the route that
+    // signs it for a minute when opened: no long-lived link sits in the page.
+    url: urlOf(s(d.storage_path)) ? tenantDocumentHref(s(d.id)) : null,
     relatedType: s(d.related_type),
     relatedId: s(d.related_id),
   }));
@@ -481,6 +501,7 @@ export async function buildTenantSpace(
     requests,
     conversations,
     payments: shown ? paymentsOf(shown, opts.today) : null,
+    degraded,
   };
 }
 

@@ -40,6 +40,7 @@ export function signupErrorKey(stage: SignupStage, failure: Failure): SignupMess
     case "save_failed": return "saveFailed";
     case "email_unconfirmed": return "emailUnconfirmed";
     case "password_required": return "passwordRequired";
+    case "password_set": return "passwordAlreadySet";
     case "details_required": return "sessionExpired";
     default: return "unavailable";
   }
@@ -53,3 +54,11 @@ export function signupErrorKey(stage: SignupStage, failure: Failure): SignupMess
 export function logSignupFailure(stage: SignupStage, failure: Failure): void {
   console.warn("[morada-signup]", stage, "failed", { code: failure?.code ?? null, status: failure?.status ?? null, name: failure?.name ?? null });
 }
+
+/**
+ * Signing in by phone with a number no account uses: Auth refuses to send a
+ * code ("otp_disabled"). The door answers as it does for a number that has
+ * an account (a code is awaited), so it never tells whether one exists; the
+ * code typed then fails as any wrong code does.
+ */
+export const unknownNumberAtLogin = (failure: Failure): boolean => failure?.code === "otp_disabled";

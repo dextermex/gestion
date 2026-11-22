@@ -63,6 +63,19 @@ export const lu: Dict = {
     draftDiscard: "Nei ufänken",
     removePhoto: "Foto ewechhuelen",
   },
+  access: {
+    spaceUnreadTitle: "Äre Beräich konnt net geluede ginn",
+    spaceUnreadBody: "Är Gestiounsberäicher konnten net gelies ginn. Et gouf näischt geännert. Probéiert et an engem Moment nach eng Kéier.",
+    noSpaceTitle: "Dir hutt kee Gestiounsberäich méi",
+    noSpaceBody: "Dëse Kont ass a kengem Gestiounsberäich méi Member. Wann dat e Feeler ass, mellt Iech bei der Persoun, déi de Beräich geréiert. Dir kënnt och e Beräich op Ären Numm opmaachen.",
+    noSpaceCreate: "Mäin eegene Beräich opmaachen",
+    switchFailed: "De Beräich konnt net gewiesselt ginn. Probéiert et nach eng Kéier.",
+    currentSpace: "Aktuelle Beräich",
+    forbidden: "Är Roll an dësem Beräich erlaabt dës Aktioun net.",
+    rateLimited: "Ze vill Ufroen a kuerzer Zäit. Probéiert et an e puer Minutten nach eng Kéier.",
+    readOnly: "Är Roll an dësem Beräich erlaabt ze liesen, net ze änneren.",
+    deletionWrite: "Är Ufro ass op Ärem Kont notéiert, mee d'Equipe konnt net automatesch informéiert ginn. Schreift un {email}, fir datt se behandelt gëtt.",
+  },
 
   apiErrors: {
     session: "Är Sessioun ass ofgelaf. Mellt Iech nees un a probéiert nach eng Kéier.",
@@ -224,6 +237,8 @@ export const lu: Dict = {
     needLease: "Nach kee lafende Bail: eng Bezuelung gehéiert zu enger Locatioun. Setzt vun der Säit vun engem Bien aus e Locataire bäi.",
     needContactAction: "Kontakt uleeën",
     needLeaseAction: "Meng Biene kucken",
+    readDegraded: "En Deel vun Ären Donnéeën konnt net gelies ginn: wat ugewise gëtt, ass vläicht net komplett. Et ass näischt verluer gaangen.",
+    readRetry: "Nach eng Kéier probéieren",
   },
 
   status: {
@@ -839,6 +854,10 @@ export const lu: Dict = {
     portalSample: "Bei engem Beispill-Cabinet ginn Invitatiounen nëmmen duergestallt: näischt geet fort.",
     noneTitle: "Kee lafende Bail",
     noneBody: "E Bail entsteet aus enger Locatioun: maacht e fräie Bien op a setzt säi Locataire bäi, den Assistent bereet de Bail mat vir.",
+    portalWithdraw: "Zougang ewechhuelen",
+    portalWithdrawConfirm: "Zougang zum Locataire-Beräich ewechhuelen? D'Persoun kann en dann net méi opmaachen; eng nei Invitatioun mécht en erëm op.",
+    portalWithdrawn: "Zougang zum Beräich ewechgeholl. Eng nei Invitatioun mécht en erëm op.",
+    portalWithdrawFailed: "De Zougang konnt net ewechgeholl ginn. Probéiert et gläich nach eng Kéier.",
   },
 
   bien: {

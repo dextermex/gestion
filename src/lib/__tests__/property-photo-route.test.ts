@@ -46,7 +46,7 @@ function post(size = 1000) {
   const form = new FormData();
   form.set("file", new File([new Uint8Array(size)], "facade.jpg", { type: "image/jpeg" }));
   form.set("propertyId", "p-1");
-  return POST(new NextRequest("https://app.morada.lu/api/biens/photo", { method: "POST", body: form }));
+  return POST(new NextRequest("https://app.morada.lu/api/biens/photo", { method: "POST", body: form, headers: { origin: "https://app.morada.lu" } }));
 }
 
 beforeEach(() => {

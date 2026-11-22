@@ -40,9 +40,12 @@ export function partyInvitations(
     const c = data.contactById(cid);
     const invite = inviteFor(data.INVITES, cid, lease.id);
     const linked = c.portalLinked === true;
-    const state: InviteState = linked ? "accepted" : invite ? inviteState(invite, nowIso) : "none";
+    // Accepted once, no longer linked: the desk withdrew the access. The space is closed; a new invitation reopens it.
+    const withdrawn = !linked && invite?.acceptedAt != null;
+    const state: InviteState = linked ? "accepted" : withdrawn ? "revoked" : invite ? inviteState(invite, nowIso) : "none";
     let detail = "";
-    if (state === "accepted") detail = invite?.acceptedAt ? fmt(d.baux.portalAcceptedOn, { date: date(invite.acceptedAt) }) : "";
+    if (withdrawn) detail = d.baux.portalWithdrawn;
+    else if (state === "accepted") detail = invite?.acceptedAt ? fmt(d.baux.portalAcceptedOn, { date: date(invite.acceptedAt) }) : "";
     else if (state === "sent" && invite) detail = fmt(d.baux.portalSentOn, { date: date(invite.sentAt ?? invite.createdAt), expires: date(invite.expiresAt) });
     else if (state === "revoked" && invite) detail = fmt(d.baux.portalRevokedOn, { date: date(invite.revokedAt) });
     else if (state === "expired" && invite) detail = fmt(d.baux.portalExpiredOn, { date: date(invite.expiresAt) });
@@ -81,6 +84,9 @@ export function inviteLabels(d: Dict) {
     notLive: d.baux.portalNotLive,
     failed: d.baux.portalFailed,
     sample: d.baux.portalSample,
+    withdraw: d.baux.portalWithdraw,
+    withdrawConfirm: d.baux.portalWithdrawConfirm,
+    withdrawFailed: d.baux.portalWithdrawFailed,
   };
 }
 export type InviteLabels = ReturnType<typeof inviteLabels>;

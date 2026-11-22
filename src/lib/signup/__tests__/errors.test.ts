@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { logSignupFailure, signupErrorKey } from "../errors";
+import { logSignupFailure, signupErrorKey, unknownNumberAtLogin } from "../errors";
+import { arrivedFromRecoveryLink } from "../model";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -41,4 +42,22 @@ it("logs the code and status only, never the number, address or provider message
   expect(logged).toContain("422");
   expect(logged).not.toContain("+352");
   expect(logged).not.toContain("VA123");
+});
+
+it("names a second password as one to change through the reset link", () => {
+  expect(signupErrorKey("save", { code: "password_set", status: 409 })).toBe("passwordAlreadySet");
+});
+
+it("recognises a number without an account at login, and nothing else, as a code to await", () => {
+  expect(unknownNumberAtLogin({ code: "otp_disabled", status: 422 })).toBe(true);
+  for (const code of ["sms_send_failed", "captcha_failed", "over_sms_send_rate_limit"]) expect(unknownNumberAtLogin({ code })).toBe(false);
+  expect(unknownNumberAtLogin(null)).toBe(false);
+});
+
+it("knows the recovery link's own arrival from a session that merely exists", () => {
+  expect(arrivedFromRecoveryLink(new URL("https://app.morada.lu/connexion?mode=reset#access_token=a&refresh_token=b&type=recovery"))).toBe(true);
+  expect(arrivedFromRecoveryLink(new URL("https://app.morada.lu/connexion?mode=reset&code=abc"))).toBe(true);
+  expect(arrivedFromRecoveryLink(new URL("https://app.morada.lu/connexion?mode=reset&token_hash=abc&type=recovery"))).toBe(true);
+  expect(arrivedFromRecoveryLink(new URL("https://app.morada.lu/connexion?mode=reset"))).toBe(false);
+  expect(arrivedFromRecoveryLink(new URL("https://app.morada.lu/connexion?mode=reset#access_token=a&type=signup"))).toBe(false);
 });

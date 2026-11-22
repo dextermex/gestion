@@ -8,6 +8,8 @@
  */
 
 import "server-only";
+import { previewEmpty, sampleDataAllowed } from "@/lib/deployment";
+import { reportHandled } from "@/lib/monitoring";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import * as frData from "./data";
@@ -32,7 +34,15 @@ type SampleId = "fr" | "lu";
 // `TODAY` is widened: the demo pins a date so its figures stay stable, while a
 // real account is simply "today". Everything else keeps its exact shape, so
 // the structural-parity check below still catches a missing collection.
-export type DemoData = Omit<typeof frData, "TODAY"> & { TODAY: string };
+export type DemoData = Omit<typeof frData, "TODAY"> & {
+  TODAY: string;
+  /**
+   * The tables a real account's read could not get (a timeout, a refusal):
+   * what is on screen may be incomplete, and the shell says so. Absent or
+   * empty when everything was read; "*" when nothing could be.
+   */
+  DEGRADED?: readonly string[];
+};
 
 export const DATASET_COOKIE = "morada_dataset";
 
@@ -44,9 +54,10 @@ const DATASETS = { fr: frData, lu: luData } satisfies Record<SampleId, DemoData>
  * Sample cabinets are off unless the deployment asks for them. Production
  * leaves `MORADA_SAMPLE_DATA` unset: the cookie is then ignored and every
  * account reads its own space only. The test suite and a demonstration
- * deployment set it to "1".
+ * deployment set it to "1"; the deployment that serves customers ignores it
+ * even when set (src/lib/deployment.ts).
  */
-export const sampleDataEnabled = () => process.env.MORADA_SAMPLE_DATA === "1";
+export const sampleDataEnabled = () => sampleDataAllowed();
 
 export async function getDatasetId(): Promise<DatasetId> {
   if (!sampleDataEnabled()) return "real";
@@ -82,7 +93,7 @@ export const getDemo = cache(async (scope?: ReadScope): Promise<DemoData> => {
   const dataset = await getDatasetId();
   if (dataset !== "real") return DATASETS[dataset];
 
-  if (process.env.MORADA_PREVIEW_EMPTY === "1") {
+  if (previewEmpty()) {
     return buildEmptyData(orgFromWorkspace({ id: "preview", name: "Espace de test", kind: "manager" }));
   }
 
@@ -97,8 +108,9 @@ export const getDemo = cache(async (scope?: ReadScope): Promise<DemoData> => {
           // engine now computes on real data through the same seam.
           return await buildRealData(org, session.accessToken, scope ?? {});
         } catch (e) {
-          // Said on screen: an empty workspace here means the read failed, not that nothing exists.
+          // Nothing could be read: the screens are empty, and say it is not because the account is.
           console.error("real dataset hydration failed, serving empty:", e);
+          reportHandled("gestion hydration", e instanceof Error ? e.name : "unknown");
           return { ...buildEmptyData(org), DEGRADED: ["hydration"] };
         }
       }

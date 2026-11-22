@@ -9,13 +9,21 @@ import { TEAM_EMAIL } from "@/lib/constants";
 
 /**
  * Shown in place of the management space when the account cannot be given
- * one: the silent first-run provisioning could not create it, or (`refused`)
+ * one: the silent first-run provisioning could not create it, (`refused`)
  * the account is a member of a space whose role does not open the
- * properties to it. Rendered in place rather than redirecting: bouncing a
+ * properties to it, or (with its own words) the account's spaces could not
+ * be read at all. Rendered in place rather than redirecting: bouncing a
  * signed-in visitor to the sign-in page would come straight back here and
  * loop.
  */
-export default function ProvisionError({ d, email, refused = false }: { d: Dict; email: string; /** A membership exists and the database refuses it: nothing to prepare, someone has to open the space. */ refused?: boolean }) {
+export default function ProvisionError({ d, email, refused = false, title, body }: {
+  d: Dict;
+  email: string;
+  /** A membership exists and the database refuses it: nothing to prepare, someone has to open the space. */
+  refused?: boolean;
+  title?: string;
+  body?: string;
+}) {
   const [leaving, setLeaving] = useState(false);
 
   const signOut = async () => {
@@ -28,9 +36,9 @@ export default function ProvisionError({ d, email, refused = false }: { d: Dict;
     <div className="flex min-h-dvh flex-col items-center justify-center bg-sand-50 px-safe-4 pb-[max(3rem,calc(var(--safe-bottom)+1.5rem))] pt-[max(3rem,calc(var(--safe-top)+1.5rem))] text-center">
       <GestionLogo />
       <h1 className="mt-7 text-balance font-display text-2xl font-bold tracking-tight text-ink">
-        {refused ? d.auth.noAccessTitle : d.auth.provisionFailedTitle}
+        {title ?? (refused ? d.auth.noAccessTitle : d.auth.provisionFailedTitle)}
       </h1>
-      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">{refused ? d.auth.noAccessBody : d.auth.provisionFailedBody}</p>
+      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">{body ?? (refused ? d.auth.noAccessBody : d.auth.provisionFailedBody)}</p>
       {refused && (
         <a href={`mailto:${TEAM_EMAIL}`} className="mt-3 inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline">
           {TEAM_EMAIL}

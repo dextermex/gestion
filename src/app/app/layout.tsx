@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import GestionShell from "@/components/gestion/Shell";
 import UnreadWatch from "@/components/gestion/UnreadWatch";
+import SessionKeeper from "@/components/gestion/SessionKeeper";
 import ProvisionError from "@/components/gestion/ProvisionError";
 import { ApiErrorsProvider } from "@/components/gestion/ApiErrors";
+import NoWorkspace from "@/components/gestion/NoWorkspace";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
-import DegradedNote from "@/components/gestion/DegradedNote";
-import { getIdentity, provisionDefaultWorkspace } from "@/lib/workspace";
-import { isTenant } from "@/lib/portal/tenant-space";
+import { previewEmpty } from "@/lib/deployment";
+import { WORKSPACE_SEEN, getIdentity, hadWorkspace, provisionDefaultWorkspace, tenantAnswer } from "@/lib/workspace";
 import { authedClient, getSession } from "@/lib/supabase/server";
+import { updateSignupUser } from "@/lib/signup/update-user";
+import { REQUESTED_PATH_HEADER, signInAddress } from "@/lib/auth/return-path";
 import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
 import { quickLeaseOptions } from "@/lib/gestion/quick-lease";
@@ -29,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // See src/lib/demo/index.ts: the same development harness, which stands in
   // for a session so every screen can be walked in its empty state.
   let identity =
-    process.env.MORADA_PREVIEW_EMPTY === "1"
+    previewEmpty()
       ? {
           userId: "preview",
           email: "test@example.invalid",
@@ -38,33 +43,65 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           active: { id: "preview", name: "Espace de test", kind: "manager", role: "owner" },
         }
       : await getIdentity();
-  if (!identity) redirect("/connexion?next=/app");
+  // Signing in returns to the page that was asked for (the middleware names it).
+  if (!identity) redirect(signInAddress((await headers()).get(REQUESTED_PATH_HEADER), "app"));
 
   // One account, two roles. Whether this account is a tenant anywhere is the
   // predicate the tenant space starts from (`gestion.is_tenant()`), asked
   // once per request and answered yes or no.
-  const session = process.env.MORADA_PREVIEW_EMPTY === "1" ? null : await getSession();
-  const tenant = session ? await isTenant(authedClient(session.accessToken).schema("gestion")) : false;
+  const session = previewEmpty() ? null : await getSession();
+  // Yes, no, or unknown (the question could not be asked): an unknown is not a "no".
+  const tenantKnown = session ? await tenantAnswer(session.accessToken) : false;
+  const tenant = tenantKnown === true;
 
   // A first-time account gets its management space silently and lands in the
   // dashboard like everyone else: one continuous product, no onboarding
   // screens between signing in and the existing Gestion page.
   if (!identity.active) {
+    const email = identity.email;
+    // "No space" is only acted on when it is a fact. When the memberships,
+    // or whether this account is a tenant, could not be read, nothing is
+    // created and nobody is sent elsewhere: the person is told, and retries.
+    if (identity.membershipUnread || tenantKnown === null) {
+      return <ProvisionError d={d} email={email} title={d.access.spaceUnreadTitle} body={d.access.spaceUnreadBody} />;
+    }
     // ...unless the account was created to accept a tenant invitation: it is
     // a tenant, not (yet) a manager, and is not given a workspace it never
     // asked for. Its own space is the tenant one; a management space is
     // opened on purpose, from there (POST /api/espace/creer), when wanted.
     if (tenant) redirect("/locataire");
-    const email = identity.email;
+    // An account that had a space and has none left was removed from it: it
+    // is told so, and opens a space of its own only if it asks to.
+    if (hadWorkspace(session?.metadata)) {
+      return (
+        <NoWorkspace
+          email={email}
+          labels={{ title: d.access.noSpaceTitle, body: d.access.noSpaceBody, create: d.access.noSpaceCreate, failed: d.auth.provisionFailedBody, signOut: d.shell.signOut }}
+        />
+      );
+    }
     // No space to open is not always "no space yet". An account that is a member of a space the
     // database refuses it (its role does not open the properties) must not be handed the shell
     // under that space's name: every action in it would be refused. It is told so instead.
     if (session) {
-      const { data: memberships } = await authedClient(session.accessToken).from("crm_members").select("agency_id").eq("user_id", session.userId).eq("status", "active").limit(1);
+      const { data: memberships, error } = await authedClient(session.accessToken).from("crm_members").select("agency_id").eq("user_id", session.userId).eq("status", "active").limit(1);
+      if (error) return <ProvisionError d={d} email={email} title={d.access.spaceUnreadTitle} body={d.access.spaceUnreadBody} />;
       if ((memberships ?? []).length > 0) return <ProvisionError d={d} email={email} refused />;
     }
     identity = await provisionDefaultWorkspace();
     if (!identity?.active) return <ProvisionError d={d} email={email} />;
+  }
+
+  // Noted on the account once, after the response: this account has had a
+  // management space. Its absence on a later visit is then a removal, not a
+  // first visit, and nothing is created silently a second time.
+  if (session && !hadWorkspace(session.metadata)) {
+    const previous = (session.metadata?.morada_account as Record<string, unknown> | undefined) ?? {};
+    const token = session.accessToken;
+    after(async () => {
+      const saved = await updateSignupUser(token, { data: { morada_account: { ...previous, [WORKSPACE_SEEN]: new Date().toISOString() } } }).catch(() => ({ error: { code: "unreachable" } }));
+      if (saved.error) console.error("[workspace] could not note the first space on the account:", saved.error.code);
+    });
   }
 
   // The shell's own read: the portfolio, the people and the badges, no
@@ -103,6 +140,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // ORG is built from the signed-in workspace.
     workspaceKind: demo.ORG.kind,
     orgShortName: sampleCabinet ?? identity.active.name,
+    // A read that failed is said (the shell's banner), so an empty list never passes for an empty
+    // workspace. Loyers and Accueil also say the partial failures of their own reads.
+    degraded: (demo.DEGRADED?.length ?? 0) > 0,
     userName: identity.displayName,
     userEmail: identity.email,
     badges: {
@@ -138,16 +178,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           rents: billedRents(demo.UNITS, demo.LEASES),
         })
       : null,
-    // The workspaces the account may open, for the switch in the rail: shown only when there are several.
+    // The workspaces the account may open, for the switch in the rail: shown only when there are several, never on a sample cabinet.
     workspaceId: workspace.id,
-    workspaces: identity.workspaces.map((w) => ({ id: w.id, name: w.name })),
+    workspaces: sampleCabinet === null && identity.workspaces.length > 1 ? identity.workspaces.map((w) => ({ id: w.id, name: w.name })) : [],
   };
 
   return (
     <>
+      {session && <SessionKeeper />}
       <GestionShell locale={locale} dict={d} shell={shellData}>
-        {/* The workspace could not be read at all: an empty screen is said to be a failed read. Loyers and Accueil say their own partial failures. */}
-        <DegradedNote tables={demo.DEGRADED.includes("hydration") ? demo.DEGRADED : []} d={d} />
         {/* Every form of the space reads what a refusal means from here (src/lib/api-errors.ts). */}
         <ApiErrorsProvider copy={d.apiErrors}>{children}</ApiErrorsProvider>
       </GestionShell>

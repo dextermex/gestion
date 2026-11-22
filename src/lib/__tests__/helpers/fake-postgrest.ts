@@ -547,6 +547,9 @@ export class FakeDb {
         inv.accepted_by = uid;
         return { data: { org_id: inv.org_id, role: inv.role, lease_id: inv.lease_id, already: false }, error: null };
       }
+      case "can":
+        // The fake's manager is the workspace's owner, who holds every permission; a tenant or a visitor holds none.
+        return { data: principal.kind === "manager", error: null };
       default:
         return { data: null, error: { code: "PGRST202", message: `unknown rpc ${name}` } };
     }

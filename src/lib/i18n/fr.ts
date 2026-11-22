@@ -62,6 +62,21 @@ export const fr = {
     draftDiscard: "Recommencer",
     removePhoto: "Retirer la photo",
   },
+  // Who may do what, and how often: the workspace in use, a role that
+  // does not allow an action, a space that could not be read.
+  access: {
+    spaceUnreadTitle: "Votre espace n'a pas pu être chargé",
+    spaceUnreadBody: "La lecture de vos espaces de gestion n'a pas abouti. Rien n'a été modifié. Réessayez dans un instant.",
+    noSpaceTitle: "Vous n'avez plus d'espace de gestion",
+    noSpaceBody: "Ce compte n'est plus membre d'aucun espace de gestion. Si c'est une erreur, contactez la personne qui gère l'espace. Vous pouvez aussi ouvrir un espace à votre nom.",
+    noSpaceCreate: "Ouvrir mon propre espace",
+    switchFailed: "Le changement d'espace n'a pas abouti. Réessayez.",
+    currentSpace: "Espace actuel",
+    forbidden: "Votre rôle dans cet espace ne permet pas cette action.",
+    rateLimited: "Trop de demandes en peu de temps. Réessayez dans quelques minutes.",
+    readOnly: "Votre rôle dans cet espace permet de consulter, pas de modifier.",
+    deletionWrite: "Votre demande est notée sur votre compte, mais l'équipe n'a pas pu être prévenue automatiquement. Écrivez à {email} pour qu'elle soit traitée.",
+  },
 
   apiErrors: {
     session: "Votre session a expiré. Reconnectez-vous, puis réessayez.",
@@ -226,6 +241,8 @@ export const fr = {
     needLease: "Aucun bail en cours pour l'instant : un paiement se rattache à une location. Ajoutez un locataire depuis la fiche d'un bien.",
     needContactAction: "Créer un contact",
     needLeaseAction: "Voir mes biens",
+    readDegraded: "Une partie de vos données n'a pas pu être lue : ce qui s'affiche peut être incomplet. Rien n'a été perdu.",
+    readRetry: "Réessayer",
   },
 
   status: {
@@ -846,6 +863,10 @@ export const fr = {
     portalSample: "Sur un cabinet d'exemple, les invitations sont illustrées : aucun envoi ne part.",
     noneTitle: "Aucun bail en cours",
     noneBody: "Un bail naît d'une location : ouvrez un bien vacant et ajoutez son locataire, l'assistant prépare le bail avec lui.",
+    portalWithdraw: "Retirer l'accès",
+    portalWithdrawConfirm: "Retirer l'accès à l'espace locataire ? La personne ne pourra plus l'ouvrir ; une nouvelle invitation le rouvre.",
+    portalWithdrawn: "Accès à l'espace retiré. Une nouvelle invitation le rouvre.",
+    portalWithdrawFailed: "L'accès n'a pas pu être retiré. Réessayez dans un instant.",
   },
 
   bien: {

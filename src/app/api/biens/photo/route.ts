@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
 import { MEDIA_BUCKET } from "@/lib/gestion/media";
 import { refuseWhenLocked } from "@/lib/billing/gate";
 
@@ -30,6 +31,8 @@ const TYPES: Record<string, string> = {
 const PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
+  const refused = refuseCrossOrigin(req);
+  if (refused) return refused;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const identity = await getIdentity();

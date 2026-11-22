@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSession, authedClient } from "@/lib/supabase/server";
-import { getIdentity } from "@/lib/workspace";
+import { refuseWithout, withOrg } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import {
   SaltEdgeError,
   ensureCustomer,
@@ -18,20 +18,25 @@ import { reconcileUnmatched } from "@/lib/banking/reconcile";
  * so RLS decides row by row; there is no service key anywhere. Imports are
  * idempotent: accounts key on (org, provider, provider_account_id),
  * transactions on (bank_account_id, bank_tx_id).
+ *
+ * It writes, so it is a write like any other: this application's own pages,
+ * a workspace that is not locked, a member who may edit its finances (asked
+ * before the provider is called, not discovered at the first refused row),
+ * and a count of the runs.
  */
 export async function POST() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  const ctx = await withOrg("write");
+  if (ctx instanceof NextResponse) return ctx;
   if (!saltEdgeConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
-
-  const identity = await getIdentity();
-  const org = identity?.active;
-  if (!org) return NextResponse.json({ error: "no_workspace" }, { status: 403 });
+  const { g, org } = ctx;
+  const refused = await refuseWithout(ctx, "gestion.finance.edit");
+  if (refused) return refused;
+  const limited = await refuseOverRate(g, RATE.bankSync, org.id);
+  if (limited) return limited;
 
   try {
     const customerId = await ensureCustomer(`morada-ws-${org.id}`);
     const connections = await listConnections(customerId);
-    const g = authedClient(session.accessToken).schema("gestion");
     const nowIso = new Date().toISOString();
     let accountCount = 0;
     let txCount = 0;
@@ -83,7 +88,12 @@ export async function POST() {
       matched,
     });
   } catch (e) {
-    console.error("saltedge sync failed:", e instanceof SaltEdgeError ? `${e.code}: ${e.message}` : e);
-    return NextResponse.json({ error: "saltedge_error" }, { status: 502 });
+    if (e instanceof SaltEdgeError) {
+      console.error("saltedge sync failed:", `${e.code}: ${e.message}`);
+      // The class of the refusal, never its message; a provider that did not answer in time says so.
+      return NextResponse.json({ error: "saltedge_error", code: e.code }, { status: e.code === "timeout" ? 504 : 502 });
+    }
+    console.error("saltedge sync failed:", e instanceof Error ? e.name : "error");
+    return NextResponse.json({ error: "saltedge_error", code: "network" }, { status: 502 });
   }
 }

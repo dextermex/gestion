@@ -92,6 +92,27 @@ export default function InvitePanel({
     setBusy(null);
   };
 
+  // The space closes for the person: their account is no longer linked to the contact.
+  const withdraw = async (contactId: string) => {
+    setBusy(contactId);
+    setErrors((e) => ({ ...e, [contactId]: "" }));
+    try {
+      const res = await fetch(`/api/contacts/${contactId}/acces`, { method: "DELETE" });
+      if (res.ok) {
+        setConfirming(null);
+        router.refresh();
+      } else if (res.status === 401) {
+        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        return;
+      } else {
+        setErrors((e) => ({ ...e, [contactId]: labels.withdrawFailed }));
+      }
+    } catch {
+      setErrors((e) => ({ ...e, [contactId]: labels.withdrawFailed }));
+    }
+    setBusy(null);
+  };
+
   const copy = async (contactId: string, link: string) => {
     try {
       await navigator.clipboard.writeText(link);
@@ -143,6 +164,31 @@ export default function InvitePanel({
               <p role="alert" className="mt-2 text-xs font-semibold text-red-700">
                 {error}
               </p>
+            )}
+
+            {!sample && p.linked && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {confirming !== p.contactId ? (
+                  <button
+                    type="button"
+                    disabled={busy === p.contactId}
+                    onClick={() => setConfirming(p.contactId)}
+                    className="inline-flex min-h-10 items-center text-xs font-semibold text-red-700 hover:underline disabled:opacity-50"
+                  >
+                    {labels.withdraw}
+                  </button>
+                ) : (
+                  <span className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-semibold text-ink">{labels.withdrawConfirm}</span>
+                    <Button size="sm" variant="danger" loading={busy === p.contactId} onClick={() => withdraw(p.contactId)}>
+                      {labels.confirm}
+                    </Button>
+                    <button type="button" onClick={() => setConfirming(null)} className="inline-flex min-h-10 items-center font-semibold text-ink-soft hover:text-ink">
+                      {labels.cancel}
+                    </button>
+                  </span>
+                )}
+              </div>
             )}
 
             {!sample && !p.linked && (

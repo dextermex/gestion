@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 /**
  * The moves every flow is made of, written once. Each one drives the real
@@ -51,9 +51,31 @@ export async function signUp(page: Page, person: Person, next = "/app"): Promise
   await signIn(page, person.email, next);
 }
 
+/**
+ * The application accepts a request that changes something only from its own
+ * pages: a browser says so in the `Origin` header of every POST, PATCH and
+ * DELETE it sends. The specs also call routes directly (`page.request`),
+ * with the browser's cookies but outside any page, and such a call carries
+ * no `Origin` of its own. From here on the calls of this browser context
+ * state the origin a page of the application would state, so the real check
+ * stays on throughout; a header a spec sets itself wins.
+ */
+const SPOKEN_FOR = Symbol("same-origin requests");
+export function speakAsThePage(page: Page): void {
+  const request = page.context().request as APIRequestContext & { [SPOKEN_FOR]?: true };
+  if (request[SPOKEN_FOR]) return;
+  const origin = new URL(page.url()).origin;
+  for (const method of ["post", "patch", "put", "delete"] as const) {
+    const send = request[method].bind(request);
+    request[method] = (url, options) => send(url, { ...options, headers: { origin, ...options?.headers } });
+  }
+  request[SPOKEN_FOR] = true;
+}
+
 /** Sign in on the door, leaving whatever account the browser still holds. */
 export async function signIn(page: Page, email: string, next = "/app"): Promise<void> {
   await page.goto(`/connexion?next=${encodeURIComponent(next)}`);
+  speakAsThePage(page);
   await leaveSignedInAccountIfAny(page);
   await page.locator("#signup-email").fill(email);
   await page.locator("form button[type=submit]").click();
@@ -74,14 +96,18 @@ export async function leaveSignedInAccountIfAny(page: Page): Promise<void> {
 /**
  * An invited tenant's first visit: the invitation offers account creation on
  * the phone funnel with the invited address, never the retired email form.
- * The account is then created as above and signed in back to the invitation.
+ * The way back names the invitation's page, never its token (the link left
+ * it in a cookie only the server reads). The account is then created as
+ * above and signed in back to the invitation.
  */
 export async function createAccountFromInvitation(page: Page, person: Person, token: string): Promise<void> {
   const create = page.getByRole("link", { name: "Créer mon compte" });
   const href = (await create.getAttribute("href")) ?? "";
   expect(href).toContain("/inscription?");
   expect(new URL(href, "http://x").searchParams.get("email")).toBe(person.email);
-  await signUp(page, person, `/invitation/${token}`);
+  expect(new URL(href, "http://x").searchParams.get("next")).toBe("/invitation");
+  expect(href).not.toContain(token);
+  await signUp(page, person, "/invitation");
 }
 
 /** Sign out from the management shell, through its account menu (wizard screens have no shell: start from the dashboard). */

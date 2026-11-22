@@ -71,3 +71,13 @@ export function safeSignupNext(raw: string | null | undefined, role: SignupRole 
     return `${url.pathname}${url.search}`;
   } catch { return fallback; }
 }
+
+/**
+ * Whether this page was opened by the password-recovery link itself: its
+ * tokens with their type in the fragment (the default flow), or the code or
+ * token hash it is exchanged by. A session that merely exists is not one.
+ */
+export function arrivedFromRecoveryLink(url: URL): boolean {
+  const fragment = new URLSearchParams(url.hash.slice(1));
+  return fragment.get("type") === "recovery" || url.searchParams.get("type") === "recovery" || url.searchParams.has("code") || url.searchParams.has("token_hash");
+}

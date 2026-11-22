@@ -97,7 +97,7 @@ describe("every key of the dictionaries", () => {
         return !read && !prefixes.some((p) => leaf.startsWith(p));
       });
     expect(unread).toEqual([]);
-  });
+  }, 30_000); // It reads every source file of the app and the browser tests: slow under a full parallel run, never wrong.
 
   it("kept unread on purpose still exists, so the list says what is true", () => {
     const paths = new Set(leaves(fr).map(([path]) => path));

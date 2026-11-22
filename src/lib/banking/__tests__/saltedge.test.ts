@@ -26,6 +26,17 @@ describe("saltedge client", () => {
     vi.restoreAllMocks();
   });
 
+  it("gives every call a deadline, and names a provider that did not answer or could not be reached", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }))
+      .mockRejectedValueOnce(new TypeError("fetch failed: https://www.saltedge.com/api/v6/customers"));
+    await expect(registerCustomer("morada-ws-1")).rejects.toMatchObject({ code: "timeout", message: "the provider did not answer in time" });
+    // The class, never the cause's own text (it can carry the address called).
+    await expect(registerCustomer("morada-ws-1")).rejects.toMatchObject({ code: "network", message: "the provider could not be reached" });
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("is unconfigured without both environment variables", () => {
     expect(saltEdgeConfigured()).toBe(true);
     vi.stubEnv("SALTEDGE_SECRET", "");

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrgAndClient } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import { sendDocumentByMail } from "@/lib/delivery/outbox";
 import { getI18n } from "@/lib/i18n";
 import { dayOf } from "@/lib/clock";
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
   const { id } = await params;
+  // A file mailed from Morada's sender: counted per person and per workspace.
+  const limited = await refuseOverRate(ctx.g, RATE.mailDocument, ctx.org.id);
+  if (limited) return limited;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const result = await sendDocumentByMail(ctx, ctx.client, id, { again: body.again === true });
   if ("error" in result) {

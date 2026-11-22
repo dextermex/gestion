@@ -21,7 +21,9 @@ function database() {
     select: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: { id: "verified-user", first_name: "Alex", last_name: "Example" }, error: null }),
   };
-  return { from: vi.fn(() => query), query, auth: { getUser: vi.fn(async () => ({ data: { user: current }, error: null })) } };
+  // The confirmation e-mails are counted in the database, under the caller's token.
+  const rpc = vi.fn(async (): Promise<{ data: unknown; error: null }> => ({ data: true, error: null }));
+  return { from: vi.fn(() => query), query, rpc, schema: vi.fn(() => ({ rpc })), auth: { getUser: vi.fn(async () => ({ data: { user: current }, error: null })) } };
 }
 const details = { action: "details", firstName: "Alex", lastName: "Example", locale: "en", role: "landlord" };
 function request(body: unknown, origin = "https://app.morada.lu") {
@@ -118,10 +120,32 @@ describe("authenticated profile completion", () => {
     current.user_metadata.morada_signup.stage = "complete";
     expect(await (await POST(request({ action: "password", password: "long-enough-1" }))).json()).toEqual({ ok: true, stage: "complete" });
   });
-  it("does not save tailoring stage when email registration fails", async () => {
+  it("answers an address another account holds like any other, and saves no stage for it", async () => {
     vi.mocked(updateSignupUser).mockResolvedValueOnce({ error: { code: "email_exists" } });
     const response = await POST(request({ action: "email", email: "existing@example.test" }));
-    expect(await response.json()).toEqual({ error: "email_exists" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, emailPending: true });
     expect(updateSignupUser).toHaveBeenCalledTimes(1);
+    vi.mocked(updateSignupUser).mockClear();
+    vi.mocked(updateSignupUser).mockResolvedValueOnce({ error: { code: "over_email_send_rate_limit" } });
+    expect(await (await POST(request({ action: "email", email: "other@example.test" }))).json()).toEqual({ error: "rate_limited" });
+  });
+  it("sets the first password only: a password already set is changed through the reset link", async () => {
+    Object.assign(current, { email: "alex@example.test", email_confirmed_at: "2026-09-27" });
+    Object.assign(current.user_metadata.morada_signup, { password_set_at: "2026-09-27T10:00:00Z" });
+    const refused = await POST(request({ action: "password", password: "long-enough-2" }));
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: "password_set" });
+    expect(updateSignupUser).not.toHaveBeenCalled();
+  });
+  it("counts the confirmation e-mails it asks for, and stops over the limit before asking for another", async () => {
+    expect((await POST(request({ action: "email", email: "alex@example.com" }))).status).toBe(200);
+    expect(db.rpc).toHaveBeenCalledWith("rate_take", expect.objectContaining({ p_action: "mail.account", p_org: null, p_user_max: 6 }));
+    vi.mocked(updateSignupUser).mockClear();
+    db.rpc.mockResolvedValueOnce({ data: false, error: null });
+    const refused = await POST(request({ action: "email", email: "another@example.com" }));
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toMatchObject({ error: "rate_limited" });
+    expect(updateSignupUser).not.toHaveBeenCalled();
   });
 });

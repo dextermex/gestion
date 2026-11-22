@@ -47,7 +47,9 @@ test("the tenant is invited; the link is refused to the wrong account", async ({
   await page.goto(`/invitation/${token}`);
   // The page's own notice (the framework's route announcer is an alert too).
   await expect(page.getByRole("alert").filter({ hasText: tenant.email })).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`/invitation/${token}`));
+  // The invitation's page, at an address that no longer names the token (it waits in a cookie the server reads).
+  await expect(page).toHaveURL(/\/invitation$/);
+  expect(page.url()).not.toContain(token);
   await page.goto("/locataire");
   // The owner is no tenant: the tenant space has nothing for this account.
   await expect(page.getByText(houseName)).toHaveCount(0);

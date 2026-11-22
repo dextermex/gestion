@@ -5,6 +5,7 @@ import type { GestionReader } from "@/lib/demo/data-real";
 import type { OrgContext } from "@/lib/gestion/api";
 import { shareDocument } from "@/lib/gestion/documents";
 import { MEDIA_BUCKET } from "@/lib/gestion/media";
+import { RATE, withinRate } from "@/lib/gestion/rate-limit";
 import { getDict } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { mailConfigured, sendMail, type MailMessage } from "@/lib/mail";
@@ -138,6 +139,12 @@ export async function notifyTenantsOfMessage(ctx: OrgContext, input: { leaseId: 
     if (!settings.notifyTenant) return [];
     const recipients = await tenantRecipients(ctx, input.leaseId, settings.lang);
     if (recipients.length === 0) return [];
+    // The message is written whatever happens here; the e-mails that announce
+    // it are counted per person and per workspace, and past the limit none leaves.
+    if (mailConfigured() && !(await withinRate(ctx.g, RATE.mailMessage, ctx.org.id))) {
+      console.warn("tenant notification held back: over the hourly limit");
+      return [];
+    }
     const home = await homeOf(ctx, input.leaseId);
     const out: DeliveryOutcome[] = [];
     for (const r of recipients) {
@@ -269,6 +276,11 @@ export async function notifyManagerFromTenant(
     }
     const target = ((targets as Row[] | null) ?? [])[0];
     if (!target || target.enabled === false || !s(target.email).includes("@")) return null;
+    // The tenant's word is kept whatever happens here; the e-mails to the desk are counted on the tenant.
+    if (mailConfigured() && !(await withinRate(g, RATE.mailFromTenant, null))) {
+      console.warn("manager notification held back: over the hourly limit");
+      return null;
+    }
     const { data: parties } = await g.rpc("my_lease_parties");
     const me = ((parties as Row[] | null) ?? []).find((p) => s(p.lease_id) === lease.id && p.is_me === true);
     const lang = localeOf(target.lang, "fr");

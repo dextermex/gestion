@@ -3,6 +3,13 @@
  * cents. Returns null for anything that does not read as a positive amount —
  * money is integer cents everywhere, so the parse happens exactly once, here.
  */
+/**
+ * The largest amount a row can hold: money columns are 32-bit integers of
+ * cents (21 474 836,47 €). Anything above does not read as an amount here,
+ * so it is refused as a typing error instead of failing in the database.
+ */
+export const MAX_CENTS = 2_147_483_647;
+
 export function parseEuroInput(raw: string): number | null {
   const cleaned = raw.replace(/[\s\u00a0\u202f€]/g, "");
   if (cleaned === "") return null;
@@ -32,7 +39,7 @@ export function parseEuroInput(raw: string): number | null {
   }
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
   const cents = Math.round(parseFloat(normalized) * 100);
-  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+  return Number.isSafeInteger(cents) && cents > 0 && cents <= MAX_CENTS ? cents : null;
 }
 
 /** An amount typed as nothing or as zero ("", "0", "0,00"): no amount at all. */

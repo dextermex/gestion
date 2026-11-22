@@ -12,6 +12,8 @@ import { fr } from "@/lib/i18n/fr";
  * field or what happened.
  */
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+// A 401 is first answered by one renewal of the session in the browser; here it cannot be renewed.
+vi.mock("@/lib/supabase/browser", () => ({ renewSessionNow: async () => false }));
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let host: HTMLDivElement;

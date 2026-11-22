@@ -14,6 +14,7 @@ import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
 import ScrollHeader from "./ScrollHeader";
 import GettingStarted, { type Progress } from "./GettingStarted";
+import DegradedBanner from "./DegradedBanner";
 import { BillingBanner, Paywall, TrialChip, TrialPrompt, type ShellBilling } from "./BillingShell";
 import type { Dict } from "@/lib/i18n/fr";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
@@ -26,7 +27,6 @@ import { networkProblem, readApiProblem, type ApiProblem } from "@/lib/api-error
 import { isZeroAmount, parseEuroInput } from "@/lib/gestion/euros";
 import { todayISO } from "@/lib/clock";
 import { inSection } from "@/lib/nav-match";
-import { WORKSPACE_COOKIE } from "@/lib/workspace-cookie";
 
 /** Everything the shell needs from the active demo dataset, precomputed
  *  server-side in the layout — the client bundle never ships the datasets. */
@@ -41,6 +41,8 @@ export interface ShellData {
   /** "owner" hides the cabinet-only surfaces (AML) everywhere. */
   workspaceKind: string;
   orgShortName: string;
+  /** Part of the account's data could not be read: the screen may be incomplete. */
+  degraded?: boolean;
   userName: string;
   userEmail: string;
   badges: { review: number; unread: number };
@@ -322,7 +324,7 @@ export default function GestionShell({
         role={shell.tenant ? d.shell.roleOwner : null}
         currentId={shell.workspaceId ?? ""}
         others={shell.sampleCabinet ? [] : (shell.workspaces ?? [])}
-        label={d.shell.switchSpace}
+        labels={{ switch: d.shell.switchSpace, current: d.access.currentSpace, failed: d.access.switchFailed }}
       />
       <SidebarNav items={NAV} pathname={pathname} expanded={expanded} onNavigate={() => setMobileOpen(false)}
         onToggle={(href) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }))} />
@@ -478,6 +480,8 @@ export default function GestionShell({
             </div>
           )}
 
+          {shell.degraded && <DegradedBanner text={d.shell.readDegraded} retry={d.shell.readRetry} />}
+
           {shell.billing && <BillingBanner billing={shell.billing} d={d} locale={locale} />}
 
           {/* On a phone the page ends clear of the home indicator, and of the
@@ -532,12 +536,27 @@ export default function GestionShell({
 /**
  * The workspace on screen, at the head of the rail. An account that belongs
  * to several (its own and an agency's, say) opens another from here: the
- * choice is kept in a cookie the server checks against the account's
- * memberships, and the app starts again on that workspace's home, since no
- * record of one workspace exists in another.
+ * server keeps the choice (POST /api/espace/actif, only for a workspace the
+ * account may manage, checked again on every request), and the app starts
+ * again on that workspace's home, since no record of one workspace exists in
+ * another.
  */
-function WorkspaceBlock({ name, role, currentId, others, label }: { name: string; role: string | null; currentId: string; others: Array<{ id: string; name: string }>; label: string }) {
+function WorkspaceBlock({
+  name,
+  role,
+  currentId,
+  others,
+  labels,
+}: {
+  name: string;
+  role: string | null;
+  currentId: string;
+  others: Array<{ id: string; name: string }>;
+  labels: { switch: string; current: string; failed: string };
+}) {
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
   const body = (
     <>
@@ -549,11 +568,28 @@ function WorkspaceBlock({ name, role, currentId, others, label }: { name: string
     </>
   );
   if (others.length < 2) return <div className="crm-workspace">{body}</div>;
-  const pick = (id: string) => {
-    setOpen(false);
-    if (id === currentId) return;
-    document.cookie = `${WORKSPACE_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
-    window.location.assign("/app");
+  const pick = async (id: string) => {
+    if (id === currentId) {
+      setOpen(false);
+      return;
+    }
+    setBusy(true);
+    setFailed(false);
+    try {
+      const res = await fetch("/api/espace/actif", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId: id }) });
+      if (res.status === 401) {
+        window.location.assign("/connexion?next=/app");
+        return;
+      }
+      if (res.ok) {
+        window.location.assign("/app");
+        return;
+      }
+    } catch {
+      // Unreachable: said below, the workspace on screen stays.
+    }
+    setFailed(true);
+    setBusy(false);
   };
   return (
     <div className="relative" ref={ref}>
@@ -562,28 +598,39 @@ function WorkspaceBlock({ name, role, currentId, others, label }: { name: string
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="true"
         aria-expanded={open}
-        aria-label={`${label} · ${name}`}
+        aria-label={`${labels.switch} · ${name}`}
         className="crm-workspace crm-workspace-switch tactile w-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       >
         {body}
         <Icon name="chevron-down" size={15} className="shrink-0 text-ink-soft" />
       </button>
       {open && (
-        <ul aria-label={label} className="absolute inset-x-0 top-full z-40 -mt-3 rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg">
+        <ul aria-label={labels.switch} className="absolute inset-x-0 top-full z-40 -mt-3 rounded-2xl border border-sand-200 bg-white p-1.5 shadow-lg">
           {others.map((w) => (
             <li key={w.id}>
               <button
                 type="button"
-                onClick={() => pick(w.id)}
+                onClick={() => void pick(w.id)}
+                disabled={busy}
                 aria-current={w.id === currentId ? "true" : undefined}
-                className={"flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-medium hover:bg-sand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 " + (w.id === currentId ? "text-brand-800" : "text-ink")}
+                className={"flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-medium hover:bg-sand-50 disabled:opacity-60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 " + (w.id === currentId ? "text-brand-800" : "text-ink")}
               >
                 <span className="min-w-0 truncate">{w.name}</span>
-                {w.id === currentId && <Icon name="check" size={16} className="shrink-0 text-brand-600" />}
+                {w.id === currentId && (
+                  <span className="shrink-0 text-brand-600">
+                    <Icon name="check" size={16} />
+                    <span className="sr-only">{labels.current}</span>
+                  </span>
+                )}
               </button>
             </li>
           ))}
         </ul>
+      )}
+      {failed && (
+        <p role="alert" className="mt-1 px-1 text-xs leading-relaxed text-red-700">
+          {labels.failed}
+        </p>
       )}
     </div>
   );

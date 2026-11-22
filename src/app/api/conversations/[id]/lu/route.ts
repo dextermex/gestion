@@ -9,7 +9,7 @@ import { markConversationRead, statusOfFailure } from "@/lib/gestion/requests";
  * request's status.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await withOrg();
+  const ctx = await withOrg("act");
   if (ctx instanceof NextResponse) return ctx;
   const { id } = await params;
   // The moment of the last message on the screen: what arrived after it is not read yet.

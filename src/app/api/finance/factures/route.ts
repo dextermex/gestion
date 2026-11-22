@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { withOrgAndClient, dbError } from "@/lib/gestion/api";
+import { withOrgAndClient, dbError, refuseWithout } from "@/lib/gestion/api";
 import { parseBillInput } from "@/lib/gestion/bills";
 import { discardDocument, registerUploaded, storeDocument } from "@/lib/gestion/documents";
 import { todayISO } from "@/lib/clock";
@@ -20,6 +20,9 @@ export async function POST(req: NextRequest) {
   const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org, userId, client } = ctx;
+  // Before the piece is stored: a role that may not enter a bill is refused in words, with nothing left behind.
+  const refused = await refuseWithout(ctx, "gestion.finance.edit");
+  if (refused) return refused;
   const form = await req.formData().catch(() => null);
   if (!form) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const fields: Record<string, unknown> = {};

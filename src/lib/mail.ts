@@ -38,7 +38,8 @@ export function mailFrom(): string {
 
 /**
  * How long the mail service may take before the message is reported
- * unreachable: a send waits for it, and a person waits for the send.
+ * unreachable: a send waits for it, and a person waits for the send. Past
+ * it the e-mail is "unreachable", and the write it follows stands.
  */
 export const MAIL_TIMEOUT_MS = 8_000;
 
@@ -56,16 +57,20 @@ export async function sendMail(message: MailMessage, timeoutMs = MAIL_TIMEOUT_MS
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
-      console.error("mail rejected:", res.status, (await res.text()).slice(0, 300));
+      // The provider's own class of refusal (a status and its error name): never the message, which can quote the recipient.
+      const refusal = (await res.json().catch(() => null)) as { name?: unknown } | null;
+      console.error("mail rejected:", res.status, typeof refusal?.name === "string" ? refusal.name.slice(0, 80) : "");
       return { sent: false, reason: "rejected" };
     }
     const data = (await res.json().catch(() => ({}))) as { id?: string };
     return { sent: true, id: data.id ?? null };
   } catch (e) {
-    console.error("mail unreachable:", e);
+    // A deadline passed or the network failed: the kind of failure, not its text.
+    console.error("mail unreachable:", e instanceof Error ? e.name : "error");
     return { sent: false, reason: "unreachable" };
   }
 }
