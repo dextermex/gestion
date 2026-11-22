@@ -19,6 +19,7 @@ declare
   prop_a uuid; unit_a uuid; lease_a uuid; contact_a uuid; pay_a uuid;
   prop_b uuid; unit_b uuid; lease_b uuid; contact_b uuid; period_b uuid; conv_b uuid;
   free_prop uuid; free_unit uuid;
+  charge_b uuid; act_a uuid;
   n int; m int;
   ts timestamptz;
   missing text;
@@ -120,6 +121,46 @@ begin
       raise exception 'ACCEPTED: archiving a property with a tenancy in force';
     exception when check_violation then null; end;
 
+    -- 3b. An issued charge statement keeps what it said (0035): through the API
+    -- its figures, dates and lines no longer change, it is not deleted and it
+    -- does not go back to draft; only its status moves on.
+    insert into gestion.charge_periods (org_id, lease_id, year, regime, status, advances_billed_cents, actual_cents)
+      values (b, lease_b, 2030, 'advances', 'draft', 1000, 1500) returning id into charge_b;
+    insert into gestion.charge_lines (org_id, charge_period_id, source, label, category, lot_share_cents, tenant_share_cents)
+      values (b, charge_b, 'estimate', 'Eau', 'water', 1500, 1500);
+    perform set_config('request.jwt.claims', '{"role":"authenticated"}', true);
+    update gestion.charge_periods set status = 'issued', issued_on = current_date, due_on = current_date + 30 where id = charge_b;
+    begin
+      update gestion.charge_periods set actual_cents = 1 where id = charge_b;
+      raise exception 'ACCEPTED: an issued charge statement rewritten';
+    exception when insufficient_privilege then null; end;
+    begin
+      update gestion.charge_periods set status = 'draft' where id = charge_b;
+      raise exception 'ACCEPTED: an issued charge statement taken back to draft';
+    exception when insufficient_privilege then null; end;
+    begin
+      delete from gestion.charge_periods where id = charge_b;
+      raise exception 'ACCEPTED: an issued charge statement deleted';
+    exception when insufficient_privilege then null; end;
+    begin
+      insert into gestion.charge_lines (org_id, charge_period_id, source, label, category, lot_share_cents, tenant_share_cents)
+        values (b, charge_b, 'estimate', 'Chauffage', 'heating', 1, 1);
+      raise exception 'ACCEPTED: a line added to an issued charge statement';
+    exception when insufficient_privilege then null; end;
+    begin
+      update gestion.charge_lines set tenant_share_cents = 1 where charge_period_id = charge_b;
+      raise exception 'ACCEPTED: a line of an issued charge statement rewritten';
+    exception when insufficient_privilege then null; end;
+    update gestion.charge_periods set status = 'settled' where id = charge_b;
+    perform set_config('request.jwt.claims', '', true);
+
+    -- 3c. A line of the activity journal stays in its workspace (0035).
+    insert into gestion.activity (org_id, type, subject) values (a, 'note', 'isolation audit') returning id into act_a;
+    begin
+      update gestion.activity set org_id = b where id = act_a;
+      raise exception 'ACCEPTED: an activity line moved to another workspace';
+    exception when insufficient_privilege then null; end;
+
     raise exception 'isolation_audit_undo';
   exception when others then
     if sqlerrm <> 'isolation_audit_undo' then raise; end if;
@@ -148,5 +189,5 @@ begin
     raise exception 'the audit left its fixtures behind';
   end if;
 
-  raise notice 'isolation audit: cross-workspace writes refused, tenant clock, archive cascade, % link guards in place', n;
+  raise notice 'isolation audit: cross-workspace writes refused, tenant clock, archive cascade, issued statements kept, % link guards in place', n;
 end $$;

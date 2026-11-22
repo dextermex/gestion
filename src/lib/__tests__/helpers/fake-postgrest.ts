@@ -459,8 +459,10 @@ export class FakeDb {
         const orgIds = [...new Set(this.table("leases").filter((l) => this.tenantLease(l.id, uid)).map((l) => l.org_id))];
         const rows = orgIds.map((orgId) => {
           const a = this.table("agencies").find((x) => x.id === orgId) ?? { id: orgId, name: "" };
-          const m = this.table("crm_members").find((x) => x.agency_id === orgId && x.role === "owner" && x.status === "active");
-          return { org_id: orgId, name: a.name, email: (a.email as string | undefined) || m?.email || null, phone: (a.phone as string | undefined) || m?.phone || null };
+          // The contact the workspace declares (0035): the agency's, then the lessor's identity in the settings; never the owner's login.
+          const ws = this.table("workspace_settings").find((x) => x.org_id === orgId);
+          const declared = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
+          return { org_id: orgId, name: a.name, email: declared(a.email) ?? declared(ws?.email), phone: declared(a.phone) ?? declared(ws?.phone) };
         });
         return { data: rows, error: null };
       }

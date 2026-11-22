@@ -533,6 +533,22 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(demo.LEASES.map((l) => l.id).sort()).toEqual([rentalA.leaseId, rentalB.leaseId].sort());
   });
 
+  it("shows the tenant the contact the workspace declares, never the owner's own login", async () => {
+    // A private landlord's workspace: no agency address, an owner who signed in with a personal e-mail.
+    db.insertRow("agencies", { id: OTHER_ORG, name: "Zoé Thill" });
+    db.insertRow("crm_members", { agency_id: OTHER_ORG, user_id: "user-zoe", role: "owner", status: "active", email: "zoe.login@example.lu", phone: "+352 691 000 999" });
+    const { unitId: unitZ } = seedProperty(db, OTHER_ORG, "Maison Thill");
+    const owner = ctxFor(db, OTHER_ORG);
+    const rental = await letTo(owner, unitZ, [NORA]);
+    const inv = await createInvitation(owner, { leaseId: rental.leaseId, contactId: rental.contactIds[0] });
+    if ("error" in inv) throw new Error(inv.error);
+    expect(await acceptInvitation(db.tenantClient(nora), inv.token)).toMatchObject({ ok: true });
+    expect((await space(db, nora)).managers).toEqual([{ orgId: OTHER_ORG, name: "Zoé Thill", email: null, phone: null }]);
+    // Once the landlord states a contact in the settings, the tenant reads that one.
+    db.insertRow("workspace_settings", { org_id: OTHER_ORG, email: "location@thill.lu", phone: "+352 26 11 22 33" });
+    expect((await space(db, nora)).managers).toEqual([{ orgId: OTHER_ORG, name: "Zoé Thill", email: "location@thill.lu", phone: "+352 26 11 22 33" }]);
+  });
+
   it("writes the invitation e-mail in the cabinet's language with the link and the expiry", () => {
     const mail = invitationMail(fr, { ...inviteVars, link: invitationLink(BASE, "abc"), expiresOn: "3 octobre 2026" });
     expect(mail.subject).toBe("Votre logement vous attend sur Morada : Maison · Maison Weber");
