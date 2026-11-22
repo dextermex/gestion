@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withOrgAndClient, dbError } from "@/lib/gestion/api";
 import { generateDocument } from "@/lib/documents/generate";
 import { sealManifest } from "@/lib/documents/manifest";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Sealing an inventory: its items and photos, in a fixed order, hashed
@@ -31,7 +32,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { data: media, error: mErr } = await g.from("edl_media").select("id,item_id,sha256,captured_at").eq("org_id", org.id).in("item_id", itemRows.map((i) => s(i.id)));
   if (mErr) return dbError("inventory media lookup", mErr);
 
-  const completedAt = s(session.completed_at) ? s(session.completed_at).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const completedAt = s(session.completed_at) ? s(session.completed_at).slice(0, 10) : todayISO();
   const { sha256 } = sealManifest(
     { id, kind: s(session.kind), completedAt, keyHandoverAt: s(session.key_handover_at) ? s(session.key_handover_at).slice(0, 10) : null },
     itemRows.map((i) => ({ id: s(i.id), room: s(i.room), category: s(i.category), condition: s(i.condition), notes: s(i.notes) })),

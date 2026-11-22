@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { shrinkPhotos } from "@/lib/photo";
+import { PIECE_ACCEPT, pieceLine, preparePieces, sendPieces, type PieceOutcome } from "@/lib/portal/pieces";
+import { signInBeside } from "@/lib/gestion/threads";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
@@ -12,8 +13,14 @@ import { REQUEST_KINDS, TECHNICAL_CATEGORIES, type RequestKind } from "@/lib/por
  * A new request, in two steps: what it is about (a technical problem, a
  * document, a question, anything else), then the few details that let the
  * manager act. A technical problem lands as an intervention in its
- * category; photos travel with it. The request is written through the API
- * under the tenant's own session and the page then reads it back.
+ * category; photos travel with it, or a PDF where a document is what is
+ * asked for. The request is written through the API under the tenant's own
+ * session and the page then reads it back.
+ *
+ * A file that cannot go is said, by name and with its reason: at once when
+ * it is chosen (a type or a size the upload does not take), and after the
+ * request is sent when its upload failed. The request stands either way;
+ * the form then stays open to say which files are missing from it.
  *
  * A link elsewhere in the space may open the form already on its way
  * (`preset`): sending the insurance certificate, asking for a month's
@@ -28,11 +35,9 @@ export interface RequestPreset {
   /** The dialog's heading while the preset stands ("Envoyer mon attestation"). */
   heading: string;
   hint: string | null;
+  /** What the files of this request are, when the preset asks for one paper (the insurance certificate). */
+  purpose?: "insurance";
 }
-
-
-const MAX_FILES = 5;
-const MAX_BYTES = 8 * 1024 * 1024;
 
 export default function TenantRequests({
   labels,
@@ -40,6 +45,7 @@ export default function TenantRequests({
   sampleNote,
   initialOpen = false,
   preset = null,
+  tenancies = [],
 }: {
   labels: RequestLabels;
   /** The tenant has a tenancy in force: a request has somewhere to land. */
@@ -48,6 +54,12 @@ export default function TenantRequests({
   sampleNote: string | null;
   initialOpen?: boolean;
   preset?: RequestPreset | null;
+  /**
+   * The tenancies in force a request can be about, the current one first.
+   * With more than one (a second lot, a parking), the form asks which; the
+   * route takes it only if it is one of the account's own.
+   */
+  tenancies?: Array<{ id: string; label: string }>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(initialOpen);
@@ -56,10 +68,15 @@ export default function TenantRequests({
   const [guided, setGuided] = useState(preset !== null);
   const [category, setCategory] = useState<string>("heating");
   const [severity, setSeverity] = useState<"routine" | "priority" | "urgent">("routine");
+  const [leaseId, setLeaseId] = useState(tenancies[0]?.id ?? "");
   const [title, setTitle] = useState(preset?.title ?? "");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [state, setState] = useState<"idle" | "sending" | "uploading" | "failed" | "noLease" | "sample">("idle");
+  /** The chosen files that will not go, each with its reason. */
+  const [refused, setRefused] = useState<PieceOutcome[]>([]);
+  /** The request was written but some of its files were not: its id, and which. */
+  const [partial, setPartial] = useState<{ id: string; failed: PieceOutcome[] } | null>(null);
+  const [state, setState] = useState<"idle" | "sending" | "uploading" | "failed" | "noLease" | "sample" | "session">("idle");
 
   useEffect(() => {
     if (initialOpen) setOpen(true);
@@ -73,6 +90,8 @@ export default function TenantRequests({
     setTitle("");
     setDescription("");
     setFiles([]);
+    setRefused([]);
+    setPartial(null);
     setState("idle");
   };
   const close = () => {
@@ -92,10 +111,11 @@ export default function TenantRequests({
       const res = await fetch("/api/locataire/demandes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, category: kind === "technical" ? category : null, severity: kind === "technical" ? severity : "routine", title, description }),
+        body: JSON.stringify({ kind, category: kind === "technical" ? category : null, severity: kind === "technical" ? severity : "routine", title, description, leaseId: leaseId || undefined }),
       });
       if (res.status === 401) {
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
+        // The session ended: what was written stays in the form, and signing in again opens beside it.
+        setState("session");
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { error?: string; id?: string };
@@ -105,10 +125,15 @@ export default function TenantRequests({
       }
       if (files.length > 0) {
         setState("uploading");
-        const body = new FormData();
-        for (const f of files) body.append("files", f);
-        // Photos that fail to upload do not undo the request: it exists, the owner has it.
-        await fetch(`/api/locataire/demandes/${data.id}/pieces`, { method: "POST", body }).catch(() => null);
+        // A file that fails to upload does not undo the request: it exists, the owner has it. But it is said.
+        const sent = await sendPieces(data.id, files, guided ? (preset?.purpose ?? null) : null);
+        const failed = sent === "signed_out" ? files.map((f) => ({ name: f.name, ok: false, reason: "failed" as const })) : sent.filter((o) => !o.ok);
+        if (failed.length > 0) {
+          setPartial({ id: data.id, failed });
+          setState("idle");
+          router.refresh();
+          return;
+        }
       }
       setOpen(false);
       router.push(`/locataire/demandes/${data.id}`);
@@ -119,9 +144,18 @@ export default function TenantRequests({
   };
 
   const pickFiles = (list: FileList | null) => {
-    // Brought down to the upload size first: a phone's photograph is well over the limit as taken.
-    const chosen = Array.from(list ?? []).filter((f) => f.type.startsWith("image/")).slice(0, MAX_FILES);
-    void shrinkPhotos(chosen).then((ready) => setFiles(ready.filter((f) => f.size <= MAX_BYTES)));
+    // Photographs are brought down to the upload size first (a phone's is well over the limit as taken);
+    // what still cannot go is named with its reason, never dropped in silence.
+    void preparePieces(Array.from(list ?? [])).then((prepared) => {
+      setFiles(prepared.ready);
+      setRefused(prepared.refused);
+    });
+  };
+
+  const seeRequest = (id: string) => {
+    setOpen(false);
+    router.push(`/locataire/demandes/${id}`);
+    router.refresh();
   };
 
   if (!canCreate) return null;
@@ -130,7 +164,24 @@ export default function TenantRequests({
     <>
       <Button onClick={() => setOpen(true)}>{labels.open}</Button>
       <Modal open={open} onClose={close} title={kind ? (guided && preset ? preset.heading : labels.kinds[kind][0]) : labels.open} closeLabel={labels.close}>
-        {!kind ? (
+        {partial ? (
+          <div data-request-partial>
+            <p role="alert" className="text-sm font-semibold text-ink">
+              {labels.sentFilesFailed.replace("{failed}", String(partial.failed.length))}
+            </p>
+            <ul className="mt-2 space-y-1 text-sm text-red-700">
+              {partial.failed.map((o, i) => (
+                <li key={`${o.name}:${i}`}>{pieceLine(o, labels.pieces)}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-sm text-ink-soft">{labels.sentFilesRetry}</p>
+            <div className="mt-4 flex justify-end">
+              <Button type="button" onClick={() => seeRequest(partial.id)}>
+                {labels.seeRequest}
+              </Button>
+            </div>
+          </div>
+        ) : !kind ? (
           <div>
             <p className="mb-3 text-sm text-ink-soft">{labels.kind}</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -151,6 +202,17 @@ export default function TenantRequests({
         ) : (
           <form className="space-y-4" onSubmit={submit}>
             {guided && preset?.hint && <p className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm leading-relaxed text-ink">{preset.hint}</p>}
+            {tenancies.length > 1 && (
+              <Field label={labels.tenancy}>
+                <Select value={leaseId} onChange={(e) => setLeaseId(e.target.value)} data-request-tenancy>
+                  {tenancies.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
             {kind === "technical" && (
               <>
                 <Field label={labels.category}>
@@ -190,13 +252,20 @@ export default function TenantRequests({
               <label className="tactile inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-sand-200 bg-white px-3.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-300 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-600">
                 <Icon name="camera" size={18} className="shrink-0" />
                 {labels.photoPick}
-                <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => pickFiles(e.target.files)} />
+                <input type="file" accept={PIECE_ACCEPT} multiple className="sr-only" onChange={(e) => pickFiles(e.target.files)} />
               </label>
               <p className="mt-2 text-xs text-ink-soft">{labels.photosHint}</p>
               {files.length > 0 && (
                 <ul className="mt-2 flex flex-wrap gap-1.5" aria-live="polite">
                   {files.map((f) => (
                     <li key={f.name + f.size} className="max-w-full truncate rounded-full bg-sand-100 px-2.5 py-1 text-xs font-medium text-ink">{f.name}</li>
+                  ))}
+                </ul>
+              )}
+              {refused.length > 0 && (
+                <ul role="alert" className="mt-2 space-y-0.5 text-xs font-semibold text-red-700" data-pieces-refused>
+                  {refused.map((o, i) => (
+                    <li key={`${o.name}:${i}`}>{pieceLine(o, labels.pieces)}</li>
                   ))}
                 </ul>
               )}
@@ -210,6 +279,14 @@ export default function TenantRequests({
             {state === "noLease" && (
               <p role="alert" className="text-xs font-semibold text-red-700">
                 {labels.noLease}
+              </p>
+            )}
+            {state === "session" && (
+              <p role="alert" className="text-xs font-semibold text-red-700">
+                {labels.sessionEnded}{" "}
+                <a href={signInBeside(typeof window === "undefined" ? "/locataire/demandes" : window.location.pathname + window.location.search)} target="_blank" rel="noopener" className="inline-flex min-h-10 items-center text-brand-700 underline underline-offset-2" data-sign-in-again>
+                  {labels.signInAgain}
+                </a>
               </p>
             )}
             {state === "sample" && sampleNote && (

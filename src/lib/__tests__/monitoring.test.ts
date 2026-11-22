@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ErrorEvent } from "@sentry/nextjs";
 import { monitoringOptions, redact, scrub } from "@/lib/monitoring";
 
@@ -14,6 +14,13 @@ describe("redact", () => {
     expect(redact("https://app.morada.lu/connexion#access_token=eyJabc.def&refresh_token=xyz&type=signup"))
       .toBe("https://app.morada.lu/connexion#access_token=[redacted]&refresh_token=[redacted]&type=signup");
     expect(redact("https://app.morada.lu/invitation/x?code=abcd1234")).toBe("https://app.morada.lu/invitation/x?code=[redacted]");
+  });
+
+  it("blanks an invitation token carried encoded in a way back", () => {
+    const token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    expect(redact(`/connexion?next=%2Finvitation%2F${token}`)).toBe("/connexion?next=%2Finvitation%2F[token]");
+    expect(redact(`/inscription?next=%2finvitation%2f${token}&x=1`)).toBe("/inscription?next=%2finvitation%2f[token]&x=1");
+    expect(redact(`/auth?redirect=%252Finvitation%252F${token}`)).toBe("/auth?redirect=%252Finvitation%252F[token]");
   });
 
   it("leaves ordinary text alone", () => {
@@ -61,6 +68,24 @@ describe("scrub", () => {
     expect(out.breadcrumbs?.[0].data?.url).toBe("https://x.supabase.co/rest/v1/contacts?email=[email]");
     expect(out.breadcrumbs?.[1].data).toEqual({ from: "/app", to: "/app/biens" });
   });
+
+  it("redacts free text carried in contexts, extra and tags", () => {
+    const event = {
+      contexts: {
+        nextjs: { request_path: "/invitation/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" },
+        trace: { description: "load for anna.weber@example.lu" },
+      },
+      extra: { invite_url: "https://app.morada.lu/invitation/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", iban: "LU28 0019 4006 4475 0000" },
+      tags: { invited: "luc.weber@example.lu" },
+    } as unknown as ErrorEvent;
+
+    const out = scrub(event)!;
+    expect((out.contexts as Record<string, { request_path?: string }>).nextjs.request_path).toBe("/invitation/[token]");
+    expect((out.contexts as Record<string, { description?: string }>).trace.description).toBe("load for [email]");
+    expect((out.extra as Record<string, string>).invite_url).toBe("https://app.morada.lu/invitation/[token]");
+    expect((out.extra as Record<string, string>).iban).toBe("[iban]");
+    expect((out.tags as Record<string, string>).invited).toBe("[email]");
+  });
 });
 
 describe("monitoringOptions", () => {
@@ -70,5 +95,41 @@ describe("monitoringOptions", () => {
     expect(o.sendDefaultPii).toBe(false);
     expect(o.tracesSampleRate).toBe(0);
     expect(o.beforeSend).toBe(scrub);
+  });
+});
+
+describe("reportHandled", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    vi.doUnmock("@sentry/nextjs");
+  });
+
+  async function withDsn(dsn: string) {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", dsn);
+    const captureMessage = vi.fn();
+    vi.doMock("@sentry/nextjs", () => ({ captureMessage }));
+    const mod = await import("@/lib/monitoring");
+    return { ...mod, captureMessage };
+  }
+
+  it("sends nothing without a DSN", async () => {
+    const { reportHandled, monitoringOn, captureMessage } = await withDsn("");
+    expect(monitoringOn()).toBe(false);
+    reportHandled("gestion read (leases)", "57014");
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends where it happened and the backend's code, grouped by both, and nothing else", async () => {
+    const { reportHandled, monitoringOn, captureMessage } = await withDsn("https://key@o1.ingest.sentry.io/1");
+    expect(monitoringOn()).toBe(true);
+    reportHandled("gestion read (contacts) for anna.weber@example.lu", "PGRST116 drop table");
+    expect(captureMessage).toHaveBeenCalledTimes(1);
+    const [message, options] = captureMessage.mock.calls[0];
+    expect(message).toBe("gestion read (contacts) for [email]: PGRST116droptable");
+    expect(options).toMatchObject({ level: "error", fingerprint: ["handled", "gestion read (contacts) for [email]", "PGRST116droptable"] });
+    reportHandled("lease update", null);
+    expect(captureMessage.mock.calls[1][0]).toBe("lease update: unknown");
   });
 });

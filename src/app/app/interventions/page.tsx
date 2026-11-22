@@ -5,7 +5,9 @@ import { getDemo, isSampleData } from "@/lib/demo";
 import { formatDate, ticketSeverityMeta, ticketStatusMeta, workOrderStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
+import { isTicketClosed } from "@/lib/gestion/interventions";
 import { isIntervention } from "@/lib/portal/types";
+import { dayKey } from "@/lib/portal/format";
 
 /**
  * Interventions: the work of the workspace. Tickets raised at the desk,
@@ -29,8 +31,8 @@ export default async function InterventionsPage() {
   const workOrderMeta = workOrderStatusMeta(d);
   const artisans = demo.CONTACTS.filter((c) => c.roles.includes("artisan")).map((c) => ({ id: c.id, name: c.name }));
   const sampleNote = sample ? fmt(d.shell.sampleBanner, { cabinet: demo.ORG.shortName }) : null;
-  const sheetLabels = { ...d.interventions, close: d.common.close };
-  const open = TICKETS.filter((t) => !["done", "closed", "cancelled"].includes(t.status));
+  const sheetLabels = { ...d.interventions, close: d.common.close, datePlaceholder: d.loyers.datePlaceholder };
+  const open = TICKETS.filter((t) => !isTicketClosed(t.status));
   const urgent = open.filter((t) => t.severity === "urgent" || t.severity === "emergency");
   const pendingTenant = open.filter((t) => t.status === "pending_tenant");
   const rows = [...TICKETS].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -85,7 +87,7 @@ export default async function InterventionsPage() {
                       {t.ref} · {formatDate(t.createdAt, locale)}
                     </p>
                   </td>
-                  <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.interventions.colUnit}>{t.unitLabel || "—"}</td>
+                  <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.interventions.colUnit}>{t.unitLabel || d.common.none}</td>
                   <td className="px-3 py-3 text-right" data-label={d.interventions.colSeverity}>
                     <MetaBadge meta={severityMeta[t.severity]} />
                   </td>
@@ -101,7 +103,7 @@ export default async function InterventionsPage() {
                   </td>
                   <td className="px-4 py-3 text-right" data-actions>
                     <InterventionSheet
-                      ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, workOrder: t.workOrder }}
+                      ticket={{ id: t.id, ref: t.ref, title: t.title, unitLabel: t.unitLabel, closed: isTicketClosed(t.status), workOrder: t.workOrder, waiting: t.status === "pending_tenant", dueOn: t.slaDueAt ? dayKey(t.slaDueAt) : null }}
                       ticketMeta={statusMeta[t.status]}
                       workOrderMeta={t.workOrder ? workOrderMeta[t.workOrder.status] : null}
                       artisans={artisans}

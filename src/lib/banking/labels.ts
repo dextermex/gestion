@@ -16,7 +16,6 @@ export function connectLabels(d: Dict): ConnectLabels {
     requestInvalid: d.banque.connectRequestInvalid,
     signatureRequired: d.banque.connectSignatureRequired,
     failedWithCode: d.banque.connectFailedCode,
-    diagnostic: d.banque.connectDiagnostic,
     opening: d.banque.connectOpening,
     openTab: d.banque.connectOpenTab,
     close: d.common.close,

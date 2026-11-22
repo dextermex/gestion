@@ -4,7 +4,7 @@
  * days of Luxembourg, so a trial that ends late at night is not shown a day
  * early.
  */
-import { INTL_LOCALE, fmt, plural, type Locale } from "@/lib/i18n/config";
+import { NUMBER_LOCALE, fmt, plural, type Locale } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { RENT_BANDS, type Rhythm } from "@/domain/billing/pricing";
 
@@ -18,7 +18,7 @@ export function dayOf(unix: number): string {
 /** A price as the plans show it: whole euros when it is round ("5 €"), cents otherwise ("3,20 €"). */
 export function price(cents: number, locale: Locale): string {
   const whole = cents % 100 === 0;
-  return (cents / 100).toLocaleString(INTL_LOCALE[locale], { style: "currency", currency: "EUR", minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
+  return (cents / 100).toLocaleString(NUMBER_LOCALE[locale], { style: "currency", currency: "EUR", minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
 }
 
 type BillingCopy = Dict["billing"];
@@ -37,7 +37,7 @@ export const daysLeftLabel = (b: BillingCopy, locale: Locale, n: number) => plur
 
 /** A reduction as the price lines print it: "−10 %", with the locale's own spacing and a true minus sign. */
 export function pctOff(pct: number, locale: Locale): string {
-  return new Intl.NumberFormat(INTL_LOCALE[locale], { style: "percent" }).format(-pct / 100).replace("-", "\u2212");
+  return new Intl.NumberFormat(NUMBER_LOCALE[locale], { style: "percent" }).format(-pct / 100).replace("-", "\u2212");
 }
 
 /** A rent band as a price line reads it ("de 1 000 € à 1 499 €"), from the bands themselves. */

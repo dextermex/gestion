@@ -16,6 +16,8 @@ import * as reference from "./data";
 import { DOCUMENT_KINDS } from "@/lib/documents/kinds";
 import { availableLanguages, templateVersion } from "@/lib/documents/wording";
 import { summariseDocuments } from "@/lib/documents/summary";
+import { todayISO } from "@/lib/clock";
+import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
 
 export type Org = typeof reference.ORG;
 
@@ -45,7 +47,7 @@ export function orgFromWorkspace(input: {
 
 /** Today, in the ISO form the engines expect. */
 function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 export function buildEmptyData(org: Org): DemoData {
@@ -67,6 +69,11 @@ export function buildEmptyData(org: Org): DemoData {
     UNITS,
     LEASES,
     RENT_PERIODS: [],
+    ARCHIVED_PROPERTIES: [],
+    PAYMENTS: [],
+    LEASE_PARTIES: [],
+    LEASE_CREDITS: {},
+    DEGRADED: [],
     BANK_ACCOUNTS: [],
     IBAN_BINDINGS: [],
     BANK_TXS: [],
@@ -108,13 +115,12 @@ export function buildEmptyData(org: Org): DemoData {
     DOCUMENT_SUMMARY: summariseDocuments([], today),
 
     // The dataset's lookup helpers, closed over the empty collections above.
-    // A page can only obtain an id from a collection, so with nothing to
-    // iterate these are unreachable; the dynamic routes guard with notFound()
-    // before touching them, which is what a tampered URL hits.
-    contactById: (id: string) => CONTACTS.find((c) => c.id === id)!,
-    propertyById: (id: string) => PROPERTIES.find((p) => p.id === id)!,
-    unitById: (id: string) => UNITS.find((u) => u.id === id)!,
-    leaseById: (id: string) => LEASES.find((l) => l.id === id)!,
+    // They are total: an id nothing carries answers an empty record of the
+    // same shape, never `undefined`, so a screen prints an empty cell.
+    contactById: (id: string) => CONTACTS.find((c) => c.id === id) ?? missingContact(id),
+    propertyById: (id: string) => PROPERTIES.find((p) => p.id === id) ?? missingProperty(id),
+    unitById: (id: string) => UNITS.find((u) => u.id === id) ?? missingUnit(id),
+    leaseById: (id: string) => LEASES.find((l) => l.id === id) ?? missingLease(id),
     leaseTenantNames: () => [],
     leaseUnitLabel: () => "",
     openInvoicesForMatching: () => [],

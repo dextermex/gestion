@@ -9,16 +9,19 @@ import { fmt } from "@/lib/i18n/config";
 /**
  * États des lieux: every EDL session of the workspace, entry to exit. Each
  * row opens its lease sheet, where the EDL lives next to the notice and the
- * key handover — an EDL is a fact about a lease, never a floating record.
+ * key handover: an EDL is a fact about a lease, never a floating record. A
+ * session whose lease has no sheet to open (a tenancy the workspace no
+ * longer reads) is named without a link rather than linked to nothing.
  */
 export default async function EdlPage() {
   const { locale, d } = await getI18n();
-  const { EDLS, generatedFor } = await getDemo();
+  const { EDLS, LEASES, generatedFor } = await getDemo();
 
   if (EDLS.length === 0)
     return <EmptyState title={fmt(d.common.emptyTitle, { section: d.hubs.edl })} body={d.common.emptyBody} />;
 
   const statusMeta = edlStatusMeta(d);
+  const sheets = new Set(LEASES.map((l) => l.id));
   const KIND: Record<string, string> = {
     entry: d.baux.edlKindEntry,
     intermediate: d.baux.edlKindIntermediate,
@@ -48,12 +51,16 @@ export default async function EdlPage() {
               {rows.map((e) => (
                 <tr key={e.id} className="border-b border-sand-50 last:border-0 hover:bg-sand-50/50">
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/app/baux/${e.leaseId}?onglet=edl`}
-                      className="font-semibold text-ink hover:text-brand-700"
-                    >
-                      {e.unitLabel || "—"}
-                    </Link>
+                    {sheets.has(e.leaseId) ? (
+                      <Link
+                        href={`/app/baux/${e.leaseId}?onglet=edl`}
+                        className="font-semibold text-ink hover:text-brand-700"
+                      >
+                        {e.unitLabel || d.common.none}
+                      </Link>
+                    ) : (
+                      <span className="font-semibold text-ink">{e.unitLabel || d.common.none}</span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.edl.colKind}>{KIND[e.kind]}</td>
                   <td className="px-3 py-3 text-right text-xs tabular-nums text-ink" data-label={d.edl.colDate}>
@@ -61,10 +68,10 @@ export default async function EdlPage() {
                       ? formatDate(e.completedAt, locale)
                       : e.scheduledAt
                         ? fmt(d.baux.edlScheduled, { date: formatDate(e.scheduledAt, locale) })
-                        : "—"}
+                        : d.common.none}
                   </td>
                   <td className="px-3 py-3 text-right text-xs tabular-nums text-ink-soft" data-label={d.edl.colContent}>
-                    {e.itemsCount > 0 ? fmt(d.baux.edlItems, { items: e.itemsCount, photos: e.photosCount }) : "—"}
+                    {e.itemsCount > 0 ? fmt(d.baux.edlItems, { items: e.itemsCount, photos: e.photosCount }) : d.common.none}
                   </td>
                   <td className="px-4 py-3 text-right" data-label={d.edl.colStatus}>
                     <span className="inline-flex items-center gap-1.5 max-sm:flex-wrap max-sm:justify-end">

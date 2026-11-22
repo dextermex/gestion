@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge, Button, Field, Input, InlineError, Modal, PageHeader, Select, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import GlassHouse from "../GlassHouse";
+import DateField from "../DateField";
 import { amortize, investmentCashflow, repaidProgress } from "@/domain/investment";
 import { loanSchema, LUXEMBOURG_LENDERS, moneyInput, type FinanceProperty, type LoanDraft, type LoanRecord } from "@/lib/investment/loans";
 import { getAcquisitionDict } from "@/lib/i18n/investment-acquisitions";
@@ -12,6 +13,8 @@ import { getInvestmentCopy } from "@/lib/i18n/investment";
 import type { InvestmentCopy } from "@/lib/i18n/investment/fr";
 import type { Locale } from "@/lib/i18n/config";
 import { euros, formatDate, formatPct } from "@/lib/types";
+import { todayISO } from "@/lib/clock";
+import { ApiRefusal } from "@/lib/api-errors";
 
 type Props = { locale: Locale; records: LoanRecord[]; properties: FinanceProperty[]; readOnly?: boolean; onSave: (draft: LoanDraft, id?: string) => Promise<void> };
 const paymentOf = (r: LoanRecord) => amortize({ balanceCents: r.balanceCents, annualRatePct: r.annualRatePct, remainingMonths: r.remainingMonths }).monthlyPaymentCents;
@@ -72,7 +75,7 @@ function LoanEditor({loan, properties, locale, onClose, onSave}: {loan?: LoanRec
   const bankListId = useId();
   const discardCopy = getAcquisitionDict(locale);
   const [discard, setDiscard] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({propertyId: loan?.propertyId ?? properties[0]?.id ?? "", unitId: loan?.unitId ?? "", name: loan?.name ?? "", bankName: loan?.bankName ?? "", originalCents: loan ? String(loan.originalCents / 100) : "", balanceCents: loan ? String(loan.balanceCents / 100) : "", balanceDate: loan?.balanceDate ?? new Date().toISOString().slice(0, 10), annualRatePct: loan ? String(loan.annualRatePct) : "", rateType: loan?.rateType ?? "fixed", remainingMonths: loan ? String(loan.remainingMonths) : "", insuranceCents: loan ? String(loan.insuranceCents / 100) : "0", nextPaymentDate: loan?.nextPaymentDate ?? "", fixedUntil: loan?.fixedUntil ?? "", notes: loan?.notes ?? ""});
+  const [values, setValues] = useState<Record<string, string>>({propertyId: loan?.propertyId ?? properties[0]?.id ?? "", unitId: loan?.unitId ?? "", name: loan?.name ?? "", bankName: loan?.bankName ?? "", originalCents: loan ? String(loan.originalCents / 100) : "", balanceCents: loan ? String(loan.balanceCents / 100) : "", balanceDate: loan?.balanceDate ?? todayISO(), annualRatePct: loan ? String(loan.annualRatePct) : "", rateType: loan?.rateType ?? "fixed", remainingMonths: loan ? String(loan.remainingMonths) : "", insuranceCents: loan ? String(loan.insuranceCents / 100) : "0", nextPaymentDate: loan?.nextPaymentDate ?? "", fixedUntil: loan?.fixedUntil ?? "", notes: loan?.notes ?? ""});
   const initialValues = useRef(values).current;
   const requestClose = () => {if (busy) return; if (JSON.stringify(values) !== JSON.stringify(initialValues)) setDiscard(true); else onClose();};
   const set = (name: string, value: string) => setValues((v) => ({...v, [name]: value, ...(name === "propertyId" ? {unitId: ""} : {})}));
@@ -87,7 +90,8 @@ function LoanEditor({loan, properties, locale, onClose, onSave}: {loan?: LoanRec
     if (!result.success) {setError(t.invalid); if (step === 2) setStep(1); return;}
     if (step === 1) {setStep(2); return;}
     setBusy(true);
-    try {await onSave(result.data, loan?.id);} catch {setError(t.failed);} finally {setBusy(false);}
+    // A refusal that has a reason (a session, a role, a record changed elsewhere) is said as such.
+    try {await onSave(result.data, loan?.id);} catch (e) {setError(e instanceof ApiRefusal && e.problem.kind !== "generic" ? e.problem.message : t.failed);} finally {setBusy(false);}
   }
   const reviewed = parsed();
   return <Modal open onClose={requestClose} title={discard ? discardCopy.discardTitle : loan ? t.editLoan : t.addLoan} wide closeLabel={t.close}>
@@ -103,14 +107,14 @@ function LoanEditor({loan, properties, locale, onClose, onSave}: {loan?: LoanRec
       {step === 1 && <><p className="text-ink-soft">{t.paidHint}</p><div className="investment-fields">
         <MoneyEntry label={t.original} value={values.originalCents} onChange={(v) => set("originalCents", v)} required/>
         <MoneyEntry label={t.balance} value={values.balanceCents} onChange={(v) => set("balanceCents", v)} required/>
-        <Field label={t.balanceDate}><Input type="date" value={values.balanceDate} max={new Date().toISOString().slice(0,10)} onChange={(e) => set("balanceDate", e.target.value)} required/></Field>
+        <Field label={t.balanceDate}><DateField value={values.balanceDate} max={todayISO()} onChange={(v) => set("balanceDate", v)} placeholder={t.datePlaceholder}/></Field>
         <Field label={t.remaining}><Input type="number" inputMode="numeric" min={0} max={600} step={1} value={values.remainingMonths} onChange={(e) => set("remainingMonths", e.target.value)} required/></Field>
         <Field label={t.rate}><Input inputMode="decimal" value={values.annualRatePct} onChange={(e) => set("annualRatePct", e.target.value)} required/></Field>
         <Field label={t.rateType}><Select value={values.rateType} onChange={(e) => set("rateType", e.target.value)}><option value="fixed">{t.fixed}</option><option value="variable">{t.variable}</option></Select></Field>
       </div><p className="text-ink-soft">{t.rateHint}</p><details><summary>{t.optional}</summary><div className="investment-fields mt-4">
         <MoneyEntry label={t.insurance} value={values.insuranceCents} onChange={(v) => set("insuranceCents", v)}/>
-        <Field label={t.nextPayment}><Input type="date" value={values.nextPaymentDate} onChange={(e) => set("nextPaymentDate", e.target.value)}/></Field>
-        <Field label={t.fixedUntil}><Input type="date" value={values.fixedUntil} onChange={(e) => set("fixedUntil", e.target.value)}/></Field>
+        <Field label={t.nextPayment}><DateField value={values.nextPaymentDate} onChange={(v) => set("nextPaymentDate", v)} placeholder={t.datePlaceholder}/></Field>
+        <Field label={t.fixedUntil}><DateField value={values.fixedUntil} onChange={(v) => set("fixedUntil", v)} placeholder={t.datePlaceholder}/></Field>
         <Field label={t.notes}><Textarea value={values.notes} maxLength={4000} onChange={(e) => set("notes", e.target.value)}/></Field>
       </div></details></>}
       {step === 2 && reviewed.success && <div className="investment-review"><h3>{values.name}</h3><p>{properties.find((p) => p.id === values.propertyId)?.name} · {values.bankName}</p><dl><dt>{t.outstanding}</dt><dd>{euros(reviewed.data.balanceCents, locale)}</dd><dt>{t.payment}</dt><dd>{euros(amortize(reviewed.data).monthlyPaymentCents, locale)}</dd><dt>{t.remaining}</dt><dd>{values.remainingMonths}</dd><dt>{t.confirmedOn}</dt><dd>{formatDate(values.balanceDate, locale)}</dd></dl><p>{t.scheduleHint}</p></div>}

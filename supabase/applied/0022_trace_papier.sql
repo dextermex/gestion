@@ -198,12 +198,24 @@ create trigger audit_payments after insert or update or delete on gestion.paymen
 --    décident, et le chemin lui est passé en argument (dans la policy même,
 --    `name` désignerait la colonne homonyme de gestion.documents).
 create index if not exists documents_storage_path_idx on gestion.documents (storage_path);
+-- Corrigé avant application (audit du 19 novembre 2026) : la ligne doit être
+-- celle d'un bail dont l'appelant est locataire, et le chemin doit se trouver
+-- dans le dossier de l'espace qui porte la ligne. Une ligne écrite ailleurs
+-- avec le chemin d'autrui n'ouvre donc rien.
 create or replace function gestion.portal_document_readable(path text)
 returns boolean
 language sql stable security invoker
 set search_path = ''
 as $$
-  select exists (select 1 from gestion.documents d where d.storage_path = path)
+  select exists (
+    select 1
+      from gestion.documents d
+     where d.storage_path = path
+       and d.org_id = gestion.media_org(path)
+       and d.related_type = 'lease'
+       and d.related_id is not null
+       and gestion.portal_tenant_lease(d.related_id)
+  )
 $$;
 revoke all on function gestion.portal_document_readable(text) from public;
 grant execute on function gestion.portal_document_readable(text) to authenticated;

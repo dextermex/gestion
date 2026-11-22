@@ -13,7 +13,10 @@ import { formatDate as formatIso } from "@/lib/types";
  * letter on a date, the AR as received on a date (from which legal effect
  * runs), the justice-de-paix file as put together once that AR is in hand.
  * Every step is written and the page re-reads the ladder; a sample cabinet
- * plays the outcome and writes nothing.
+ * plays the outcome and writes nothing. Once a step is recorded its
+ * confirmation stays, and the control for what comes next (the AR of a
+ * mise en demeure just sent, say) appears under it as soon as the page has
+ * re-read the ladder, without a reload.
  */
 export type ArrearsStep = "friendly" | "formal" | "mise_en_demeure" | "justice_dossier";
 
@@ -31,6 +34,8 @@ export interface ArrearsLabels {
   justiceDone: string;
   stepDone: string;
   failed: string;
+  /** The base is behind the code (a migration not applied yet). */
+  outdated: string;
   already: string;
   needsAr: string;
   sampleConfirmed: string;
@@ -67,7 +72,17 @@ export default function ArrearsActions({
   const [date, setDate] = useState(todayISO);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  // Where the ladder stands, as the page last read it. A recorded step remembers the
+  // standing it was recorded on: its control is put away until the ladder has moved on.
+  const standing = `${next ?? ""}:${awaitingLetter?.id ?? ""}`;
+  const [done, setDone] = useState<{ message: string; standing: string } | null>(null);
+  const [seen, setSeen] = useState(standing);
+  if (seen !== standing) {
+    // The ladder moved on (the page re-read it): the next control starts from today, without the last one's error.
+    setSeen(standing);
+    setDate(todayISO);
+    setError(null);
+  }
   const formatDate = (iso: string) => formatIso(iso, locale);
 
   const call = async (url: string, method: string, body: Record<string, unknown>, onOk: string, onConflict: (code: string | undefined) => string) => {
@@ -76,27 +91,30 @@ export default function ArrearsActions({
     try {
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (res.status === 401) {
-        window.location.assign("/connexion?next=/app/loyers");
+        // Back to this month and this view after signing in, the row open (`ouvrir`).
+        const here = new URL(window.location.href);
+        here.searchParams.set("ouvrir", rentPeriodId);
+        window.location.assign(`/connexion?next=${encodeURIComponent(here.pathname + here.search)}`);
         return;
       }
       const payload = (await res.json().catch(() => ({}))) as { error?: string };
       if (res.ok) {
-        setDone(onOk);
+        setDone({ message: onOk, standing });
         router.refresh();
-      } else setError(res.status === 409 ? onConflict(payload.error) : labels.failed);
+      } else setError(res.status === 409 ? onConflict(payload.error) : payload.error === "schema_outdated" ? labels.outdated : labels.failed);
     } catch {
       setError(labels.failed);
     }
     setBusy(false);
   };
 
-  if (done) {
-    return (
-      <p role="status" className="mt-2.5 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-        {done}
-      </p>
-    );
-  }
+  const confirmation = done && (
+    <p role="status" className="mt-2.5 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+      {done.message}
+    </p>
+  );
+  // The step just recorded keeps its confirmation alone until the ladder has moved on.
+  if (done && done.standing === standing) return confirmation;
 
   const conflict = (code: string | undefined) => (code === "needs_ar" ? labels.needsAr : labels.already);
   const dateField = (label: string, min?: string) => (
@@ -106,7 +124,7 @@ export default function ArrearsActions({
     </label>
   );
   const sampleOnly = (message: string) => {
-    setDone(message);
+    setDone({ message, standing });
   };
 
   let content: React.ReactNode = null;
@@ -168,10 +186,11 @@ export default function ArrearsActions({
       </Button>
     );
   }
-  if (!content) return null;
+  if (!content) return confirmation || null;
 
   return (
     <div className="mt-2.5" data-arrears-actions={rentPeriodId}>
+      {confirmation && <div className="mb-3">{confirmation}</div>}
       {content}
       {error && (
         <p role="alert" className="mt-2 text-xs font-semibold text-red-700">

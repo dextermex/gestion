@@ -3,17 +3,19 @@ import { EmptyState, PageHeader } from "@/components/pro/ui";
 import { Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Row, Rows, Section } from "@/components/gestion/Hero";
 import MonthBars, { type MonthBar } from "@/components/gestion/MonthBars";
 import GlassHouse from "@/components/gestion/GlassHouse";
+import DegradedNote from "@/components/gestion/DegradedNote";
 import { Icon, type IconName } from "@/components/pro/icons";
 import { getDemo } from "@/lib/demo";
 import { getIdentity } from "@/lib/workspace";
 import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { settlementNotes } from "@/lib/i18n/engine";
 import { cpeExpiryDeadline, vacancyClock } from "@/domain/compliance/deadlines";
 import { computeSettlement } from "@/domain/deposits/settlement";
 import { monthlyCashflow } from "@/domain/finance/cashflow";
-import { addDays, addMonths, diffDays } from "@/domain/dates";
+import { addDays, diffDays } from "@/domain/dates";
+import { monthWindow } from "@/lib/months";
+import { isOverdue } from "@/lib/gestion/ledger";
 
 /**
  * Aujourd'hui: the command center. Every block is DERIVED — a row appears
@@ -52,7 +54,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   } = demo;
 
   const liveMonth = TODAY.slice(0, 7);
-  const chartMonths = [-4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  // The same months Loyers pages through: a chip of this screen always opens the month it shows.
+  const chartMonths = monthWindow(liveMonth);
   // The month on the screen: the one the address names when it is one of the bars and has begun, else this one.
   const pastMonths = chartMonths.filter((m) => m <= liveMonth);
   const shownMonth = params.mois && pastMonths.includes(params.mois) ? params.mois : liveMonth;
@@ -69,7 +72,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const expected = month.reduce((a, rp) => a + rp.totalCents, 0);
   const collected = month.reduce((a, rp) => a + rp.allocatedCents, 0);
   const paidCount = month.filter((rp) => rp.status === "paid").length;
-  const lateMonth = month.filter((rp) => (rp.status === "late" || rp.status === "partial") && rp.allocatedCents < rp.totalCents);
+  // Late is unpaid past its due date: a month part-paid before it falls due is not behind yet.
+  const lateMonth = month.filter((rp) => isOverdue(rp, TODAY));
   const lateCount = lateMonth.length;
   const lateMonthCents = lateMonth.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
 
@@ -80,14 +84,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const occupiedCount = lettable.filter((u) => occupied.has(u.id)).length;
 
   // ── Recommended actions: each row exists because its signal exists ──
-  const todo: Array<{ priority?: number; href: string; title: string; sub: string; amount?: string; badge: { label: string; color: string } }> = [];
+  const todo: Array<{ priority?: number; href: string; title: string; sub?: string; amount?: string; badge: { label: string; color: string } }> = [];
 
   const reviewQueue = BANK_TXS.filter((t) => t.status === "review");
   if (reviewQueue.length > 0) {
     todo.push({
       href: "/app/banque",
       title: fmt(d.dash.todoReview, { n: reviewQueue.length }),
-      sub: d.dash.todoReviewSub,
       badge: { label: d.dash.badgeBank, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -105,15 +108,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         unit: leaseUnitLabel(lagLease),
         amount: euros(lagLease.rentCents - (lagLease.previousRentCents ?? 0), locale),
       }),
-      sub: d.dash.todoLagSub,
       badge: { label: d.dash.badgeIndexation, color: "bg-sand-100 text-ink-soft" },
     });
   }
 
   // Oldest open arrears case, assessed by the legal ladder.
-  const lateOpen = RENT_PERIODS.filter(
-    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth && rp.allocatedCents < rp.totalCents,
-  ).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+  const lateOpen = RENT_PERIODS.filter((rp) => isOverdue(rp, TODAY) && rp.period <= liveMonth).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
   // This month's late rents are the head's own chip. What is still unpaid
   // from earlier months is a different fact, said once, here.
   const earlierOpen = lateOpen.filter((rp) => rp.period < shownMonth);
@@ -122,7 +122,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       priority: 1,
       href: "/app/loyers?vue=impayes",
       title: earlierOpen.length === 1 ? d.home.arrearsOne : fmt(d.home.arrearsMany, { n: earlierOpen.length }),
-      sub: d.home.arrearsSub,
       amount: eurosWhole(earlierOpen.reduce((sum, rp) => sum + rp.totalCents - rp.allocatedCents, 0), locale),
       badge: { label: d.dash.badgeArrears, color: "bg-red-100 text-red-700" },
     });
@@ -161,11 +160,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         priority: 2,
         href: "/app/garanties",
         title: fmt(d.dash.todoDeposit, { unit: labelOfLease(dep.leaseId), n: pending }),
-        sub: settlementNotes(d, locale, input, settlement)[0] ?? "",
         badge: { label: d.dash.badgeDeposit, color: "bg-sand-100 text-ink-soft" },
       });
       break;
     }
+  }
+
+  // A lease's term passing is not a departure: the tenancy carries on (prolonged
+  // by law) and its rent stays due. The owner is told, so a departure that is
+  // happening gets recorded, or the prolongation is known.
+  const termLease = LEASES.filter((l) => l.status === "active" && l.endDate && diffDays(TODAY, l.endDate) <= 60).sort((a, b) =>
+    (a.endDate ?? "") < (b.endDate ?? "") ? -1 : 1,
+  )[0];
+  if (termLease?.endDate) {
+    const passed = termLease.endDate < TODAY;
+    todo.push({
+      href: `/app/baux/${termLease.id}`,
+      title: fmt(passed ? d.dash.todoTermPassed : d.dash.todoTermSoon, { unit: leaseUnitLabel(termLease), date: formatDate(termLease.endDate, locale) }),
+      sub: d.dash.todoTermSub,
+      badge: { label: d.dash.badgeLease, color: "bg-sand-100 text-ink-soft" },
+    });
   }
 
   const consentAccount = BANK_ACCOUNTS.filter((b) => b.consentExpiresAt).sort((a, b) =>
@@ -175,7 +189,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     todo.push({
       href: "/app/banque",
       title: fmt(d.dash.todoConsent, { date: formatDate(consentAccount.consentExpiresAt, locale) }),
-      sub: d.dash.todoConsentSub,
       badge: { label: d.dash.badgeConnection, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -191,7 +204,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         date: formatDate(agProperty.nextAgDate, locale),
         deadline: formatDate(addDays(agProperty.nextAgDate, -15), locale),
       }),
-      sub: d.dash.todoAgSub,
       badge: { label: d.dash.badgeSyndic, color: "bg-sand-100 text-ink-soft" },
     });
   }
@@ -215,12 +227,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         amount: eurosWhole(t.amount, locale),
         atIso: t.bookedAt,
       })),
-    ...TICKETS.slice(-2).map((t) => ({
-      kind: "ticket",
-      label: fmt(d.dash.activityTicket, { ref: t.ref, title: t.title }),
-      sub: t.unitLabel,
-      atIso: t.createdAt,
-    })),
+    // The two latest requests by date (not by the order they were read in), each opening where it is handled:
+    // a tenant's request in Messages, an intervention in Interventions.
+    ...TICKETS.slice()
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+      .slice(0, 2)
+      .map((t) => ({
+        kind: "ticket",
+        label: fmt(d.dash.activityTicket, { ref: t.ref, title: t.title }),
+        sub: t.unitLabel,
+        atIso: t.createdAt,
+        href: t.source === "tenant" ? `/app/messages?demande=${encodeURIComponent(t.id)}` : "/app/interventions",
+      })),
     ...LEASES.filter((l) => l.noticeInfo).map((l) => ({
       kind: "lease",
       label: fmt(d.dash.activityNotice, { unit: leaseUnitLabel(l), tenant: leaseTenantNames(l)[0] ?? "" }),
@@ -288,6 +306,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="space-y-9">
+      {/* A read of this page failed (the shell says when the whole workspace could not be read). */}
+      <DegradedNote tables={demo.DEGRADED.filter((t) => t !== "hydration")} d={d} />
       {/* The month, in the one raised card of the page: what came in, of what, who is late, how full the lots are. */}
       <Hero
         title={d.nav.home}
@@ -309,7 +329,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             fraction={month.length === 0 ? 0 : paidCount / month.length}
             value={`${paidCount}/${month.length}`}
             label={d.home.ringLabel}
-            sub={lateCount > 0 ? fmt(d.home.ringOpen, { n: month.length - paidCount }) : d.home.ringAllPaid}
+            // "All collected" only when every rent of the month is paid; a rent not yet due is still to collect.
+            sub={month.length === 0 ? undefined : paidCount === month.length ? d.home.ringAllPaid : fmt(d.home.ringOpen, { n: month.length - paidCount })}
           />
         }
         actions={
@@ -325,11 +346,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           {fmt(d.home.collectedOf, { pct, expected: eurosWhole(expected, locale) })}
         </HeroChip>
         {lateCount > 0 && (
-          <HeroChip href="/app/loyers?vue=impayes" icon="alert" tone="late">
+          <HeroChip href={shownMonth === liveMonth ? "/app/loyers?vue=impayes" : `/app/loyers?mois=${shownMonth}&vue=impayes`} icon="alert" tone="late">
             {fmt(d.home.lateChip, { n: lateCount, amount: eurosWhole(lateMonthCents, locale) })}
           </HeroChip>
         )}
-        <HeroChip href="/app/biens?occupation=vacants" icon="key">
+        <HeroChip href="/app/biens" icon="key">
           {fmt(d.home.lotsChip, { let: occupiedCount, total: lettable.length })}
         </HeroChip>
       </Hero>
@@ -341,7 +362,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ) : (
             <Rows>
               {todo.map((t) => (
-                <Row key={t.title} href={t.href} icon={iconOf(t.href)} tone={t.priority === 1 ? "late" : "plain"} title={t.title} sub={t.badge.label} right={t.amount} rightTone="late" />
+                <Row key={t.title} href={t.href} icon={iconOf(t.href)} tone={t.priority === 1 ? "late" : "plain"} title={t.title} sub={t.sub ? `${t.badge.label} · ${t.sub}` : t.badge.label} right={t.amount} rightTone="late" />
               ))}
             </Rows>
           )}
@@ -357,7 +378,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ) : (
             <Rows>
               {activity.map((e) => (
-                <Row key={`${e.atIso}:${e.label}`} icon={activityIcon[e.kind] ?? "calendar"} title={e.label} sub={`${e.at} · ${e.sub}`} right={"amount" in e ? `+ ${e.amount}` : undefined} rightTone="in" />
+                <Row key={`${e.atIso}:${e.label}`} href={(e as { href?: string }).href} icon={activityIcon[e.kind] ?? "calendar"} title={e.label} sub={`${e.at} · ${e.sub}`} right={"amount" in e ? `+ ${e.amount}` : undefined} rightTone="in" />
               ))}
             </Rows>
           )}

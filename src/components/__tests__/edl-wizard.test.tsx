@@ -48,6 +48,7 @@ const render = async () => {
         leaseId="l-1"
         kind="exit"
         unitLabel="Apt 3B"
+        unitId="u-3b"
         propertyId="p-1"
         propertyName="Résidence Beaulieu"
         meters={[]}
@@ -70,6 +71,12 @@ const click = async (text: string | RegExp) => {
 };
 
 describe("the état des lieux on a phone", () => {
+  it("leads back to the lot inspected, which in a building is not the building's first page", async () => {
+    await render();
+    const back = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(back).toContain("/app/biens/p-1?onglet=location&lot=u-3b");
+  });
+
   it("offers the draft the device holds and picks the walk up where it stopped", async () => {
     await writeDraft("edl:l-1:exit", 1, {
       rooms: [{ key: "r7", name: "Cave", items: { paint: { condition: "poor", notes: "fissure au plafond" } } }],

@@ -1,7 +1,8 @@
 import "server-only";
 import { authedClient } from "@/lib/supabase/server";
 import { signMedia, signThumbnails } from "@/lib/gestion/media";
-import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
+import { addressParts, formatAddress, type PropertyAddress } from "@/lib/gestion/address";
+import { reportHandled } from "@/lib/monitoring";
 import type { OpenInvoice } from "@/domain/banking/matching";
 import type { DemoData } from "./index";
 import type {
@@ -29,6 +30,12 @@ import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/documents/kinds";
 import { templateVersion } from "@/lib/documents/wording";
 import type { ContactIdentity, DemoAuditEntry, DemoDelivery, DemoGenerated, DemoLessor, DemoSignatureEnvelope, DemoTemplate } from "./data";
 import type { EnvelopeStatus, SignatureLevel, SignerRole, SignerStatus } from "@/lib/signature/envelope";
+import { todayISO } from "@/lib/clock";
+import { missingContact, missingLease, missingProperty, missingUnit } from "./missing";
+import type { DemoArchivedProperty, DemoLeaseParty, DemoPayment } from "./data";
+import { effectiveLeaseStatus } from "@/lib/gestion/ledger";
+import { readRentChange } from "@/lib/gestion/lease";
+import { THREAD_PAGE, lastSpokenAt, mostRecent } from "@/lib/gestion/threads";
 
 /**
  * The real-account dataset: the same seam the demo flows through, hydrated
@@ -131,7 +138,7 @@ export async function buildRealDataFrom(
   signThumbs: (paths: string[]) => Promise<Map<string, string>> = async () => new Map(),
 ): Promise<DemoData> {
   const oid = org.id;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   // The history window: the ledger, the bank, the requests and the readings
   // are read from here on. Arrears older than that still owe and come
   // along by id; a sheet that looks at one tenancy reads its whole past.
@@ -156,23 +163,62 @@ export async function buildRealDataFrom(
     return query;
   };
 
-  // One filtered read per table. A failed read degrades to an empty
-  // collection (logged), never to sample data. Tables carrying
-  // `archived_at`: an archived row is gone from every screen, not only from
-  // the one that happens to filter it. The cap is a safety net, no longer
-  // the way a workspace is read.
-  const ARCHIVABLE = new Set(["properties", "units", "contacts"]);
+  // One filtered read per table, complete: a workspace's rows are read in
+  // pages until the count the database gives is reached, so a large
+  // portfolio is never cut at the server's page size (1 000 rows) without a
+  // word. A read that asks for its first rows only says so with `cap`. A
+  // failed read degrades to an empty collection, never to sample data, and
+  // is named in `DEGRADED` so the screens can say their figures are
+  // incomplete.
+  const PAGE = 1000;
+  const CEILING = 60000;
+  /** The newest-first registers keep a cap: what it cuts is the oldest, and the exact count is read beside it. */
   const CAP = 2000;
-  const q = async (table: string, select: string, apply?: (b: Narrow) => Narrow, cap = CAP): Promise<Row[]> => {
-    let base = g.from(table).select(select).eq("org_id", oid) as unknown as Narrow;
-    if (ARCHIVABLE.has(table)) base = base.is("archived_at", null);
-    const query = apply ? apply(base) : base;
-    const { data, error } = await query.limit(cap);
-    if (error) {
-      console.error(`gestion read failed (${table}):`, error.code, error.message);
+  const failed = new Set<string>();
+  /** A read that failed: named in DEGRADED for the screens, and reported by its code alone. */
+  const markFailed = (table: string, error: { code?: string; message?: string }) => {
+    failed.add(table);
+    reportHandled(`gestion read (${table})`, error.code);
+  };
+  /** The column that makes a table's order total, so pages never overlap. */
+  const TIEBREAK: Record<string, string> = { conversation_heads: "conversation_id", edl_session_counts: "session_id", generated_documents: "document_id", workspace_settings: "org_id", template_validations: "kind", lease_credit: "lease_id" };
+  const q = async (table: string, select: string, apply?: (b: Narrow) => Narrow, cap?: number, opts: { optional?: boolean } = {}): Promise<Row[]> => {
+    const fail = (error: { code?: string; message?: string }): Row[] => {
+      // A table or a column the base does not carry yet is a pending migration, said elsewhere.
+      const pending = error.code === "PGRST205" || error.code === "42P01" || error.code === "42703" || error.code === "PGRST204";
+      if (!(opts.optional && pending)) {
+        console.error(`gestion read failed (${table}):`, error.code, error.message);
+        if (!pending) markFailed(table, error);
+      }
       return [];
+    };
+    const build = (counted: boolean): Narrow => {
+      const base = (counted ? g.from(table).select(select, { count: "exact" }) : g.from(table).select(select)).eq("org_id", oid) as unknown as Narrow;
+      return apply ? apply(base) : base;
+    };
+    if (cap !== undefined) {
+      const { data, error } = await build(false).limit(cap);
+      return error ? fail(error) : ((data as unknown as Row[]) ?? []);
     }
-    return (data as unknown as Row[]) ?? [];
+    const first = await build(true).range(0, PAGE - 1);
+    if (first.error) return fail(first.error);
+    const head = (first.data as unknown as Row[]) ?? [];
+    const total = typeof first.count === "number" ? first.count : head.length;
+    if (head.length >= total) return head;
+    // More than one page: read again from the start in an order no two rows share.
+    const out: Row[] = [];
+    while (out.length < total && out.length < CEILING) {
+      const { data, error } = await build(false).order(TIEBREAK[table] ?? "id").range(out.length, out.length + PAGE - 1);
+      if (error) return fail(error);
+      const rows = (data as unknown as Row[]) ?? [];
+      if (rows.length === 0) break;
+      out.push(...rows);
+    }
+    if (out.length < total) {
+      console.error(`gestion read incomplete (${table}): ${out.length} of ${total} rows`);
+      failed.add(table);
+    }
+    return out;
   };
   /** One page of a register, newest first, with the count its footer shows. */
   const page = async (table: string, select: string, order: string, req: PageRequest, apply?: (b: Narrow) => Narrow): Promise<{ rows: Row[]; total: number }> => {
@@ -181,6 +227,7 @@ export async function buildRealDataFrom(
     const { data, error, count } = await (apply ? apply(base) : base).order(order, { ascending: false }).range(lo, hi);
     if (error) {
       console.error(`gestion page read failed (${table}):`, error.code, error.message);
+      markFailed(table, error);
       return { rows: [], total: 0 };
     }
     return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
@@ -191,6 +238,7 @@ export async function buildRealDataFrom(
     const { data, error, count } = await base.order("created_at", { ascending: false }).range(0, CAP - 1);
     if (error) {
       console.error("gestion documents summary read failed:", error.code, error.message);
+      markFailed("documents", error);
       return { rows: [], total: 0 };
     }
     return { rows: (data as unknown as Row[]) ?? [], total: count ?? 0 };
@@ -204,9 +252,9 @@ export async function buildRealDataFrom(
   };
 
   // ── A. The portfolio: read whole, it is what a cabinet manages. On a sheet, the one property. ──
-  const [propertyRows, unitRows, contactRows, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, settingsRows, validationRows, documentPage, documentFacts] = await Promise.all([
-    q("properties", "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url", (b) => (propertyScoped ? b.eq("id", propertyScoped) : b).order("created_at")),
-    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url", (b) => (propertyScoped ? b.eq("property_id", propertyScoped) : b).order("created_at")),
+  const [everyPropertyRow, everyUnitRow, everyContactRow, roleRows, accountRows, bindingRows, workflowRows, meterRows, conversationRows, headRows, settingsRows, validationRows, documentPage, documentFacts] = await Promise.all([
+    q("properties", "id,name,type,address,commune,cadastral_commune,cadastral_section,cadastral_number,construction_year,completion_date,energy_class,cpe_issued_on,is_copropriete,syndic_name,syndic_mandate_start,smoke_detectors_confirmed,photo_url,archived_at", (b) => (propertyScoped ? b.eq("id", propertyScoped) : b).order("created_at")),
+    q("units", "id,property_id,label,kind,floor,area_sqm,rooms,bedrooms,furnished,photo_url,archived_at", (b) => (propertyScoped ? b.eq("property_id", propertyScoped) : b).order("created_at")),
     // Read whole: the identity a contract names (0028) may be newer than the rest, and is simply absent until then.
     q("contacts", "*"),
     q("contact_roles", "contact_id,role,ended_on"),
@@ -223,6 +271,16 @@ export async function buildRealDataFrom(
     // The register at a glance: four light columns of every piece (capped), with the exact count beside them.
     scoped || shell ? Promise.resolve({ rows: [] as Row[], total: 0 }) : readDocumentFacts(),
   ]);
+  // Archiving takes a row off every screen, and what hangs off it with it: a
+  // lot is on screen only while its property is, whether or not its own row
+  // was archived alongside. The archived rows are still read, because
+  // history names them (an ended tenancy keeps its address, its lot and its
+  // people) and because an archived property can be brought back.
+  const propertyRows = everyPropertyRow.filter((p) => !p.archived_at);
+  const livePropertyIds = new Set(propertyRows.map((p) => s(p.id)));
+  const unitRows = everyUnitRow.filter((u) => !u.archived_at && livePropertyIds.has(s(u.property_id)));
+  const liveUnitIds = new Set(unitRows.map((u) => s(u.id)));
+  const contactRows = everyContactRow.filter((c) => !c.archived_at);
   const unitIds = unitRows.map((u) => s(u.id));
 
   // ── B. The tenancies in scope, and what hangs off them. ──
@@ -232,6 +290,7 @@ export async function buildRealDataFrom(
       ? await inChunks(unitIds, (ids) => q("leases", "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details", (b) => b.in("unit_id", ids)))
       : await q("leases", "id,unit_id,seq,lease_type,status,start_date,end_date,rent_cents,charges_cents,charges_regime,payment_day,rf_reference,furnished,furniture_supplement_cents,furniture_invoice_total_cents,colocation,capital_investi,last_adjustment_on,previous_rent_cents,indexation_clause,vat_regime,vat_option,details");
   const leaseIds = leaseRows.map((l) => s(l.id));
+  const endedLeaseIds = leaseRows.filter((l) => effectiveLeaseStatus(s(l.status), l.end_date ? day(l.end_date) : null, today) === "ended").map((l) => s(l.id));
   // On a tenancy's sheet, its lot and that lot's property; on a property's, the property and its lots.
   const sheetUnitIds = leaseScoped ? leaseRows.map((l) => s(l.unit_id)) : unitIds;
   const sheetPropertyIds = leaseScoped ? unitRows.filter((u) => sheetUnitIds.includes(s(u.id))).map((u) => s(u.property_id)) : propertyRows.map((p) => s(p.id));
@@ -254,15 +313,21 @@ export async function buildRealDataFrom(
   };
   const [partyRows, periodRows, statusRows, depositRows, edlRows, ticketRows, insuranceRows, inviteRows, arrearsRows, chargePeriodRows, readingRows, txRows, billRows, leaseLetterRows] = await Promise.all([
     // The shell keeps the parties: the pickers and the palette name a tenancy by its tenants.
-    shell ? q("lease_parties", "lease_id,contact_id,role,moved_out_on") : byLease("lease_parties", "lease_id,contact_id,role,moved_out_on", (b) => b),
+    shell ? q("lease_parties", "id,lease_id,contact_id,role,moved_in_on,moved_out_on") : byLease("lease_parties", "id,lease_id,contact_id,role,moved_in_on,moved_out_on", (b) => b),
     byLease("rent_periods", "id,lease_id,period,due_date,rent_cents,charges_cents,vat_cents,total_cents", (b) => b.gte("period", from), "period"),
     // Paid-ness from the view; an arrear older than the window is still an
     // arrear. The shell asks one thing of the ledger: whether a rent was
     // ever received (one period with money on it, read by id below).
+    // The shell also reads what ended tenancies still owe (a handful of rows
+    // at most): a former tenant who pays late must stay offered where a
+    // payment is recorded.
     shell
-      ? q("rent_period_status", "id,allocated_cents,status", (b) => b.in("status", ["paid", "partial", "partial_late"]), 1)
+      ? Promise.all([
+          q("rent_period_status", "id,allocated_cents,status", (b) => b.in("status", ["paid", "partial", "partial_late"]), 1),
+          inChunks(endedLeaseIds, (ids) => q("rent_period_status", "id,allocated_cents,status", (b) => b.in("lease_id", ids).in("status", ["late", "partial_late"]))),
+        ]).then(([probe, overdue]) => [...probe, ...overdue.filter((r) => !probe.some((p) => s(p.id) === s(r.id)))])
       : byLease("rent_period_status", "id,allocated_cents,status", (b) => b.or(`period.gte.${from},status.in.(late,partial_late)`)),
-    byLease("deposits", "id,lease_id,form,amount_cents,status,key_handover_on,decompte_issued_on,mise_en_demeure_ar_on,released_first_tranche_cents,released_balance_cents", (b) => b),
+    byLease("deposits", "id,lease_id,form,amount_cents,status,received_on,key_handover_on,decompte_issued_on,mise_en_demeure_ar_on,released_first_tranche_cents,released_balance_cents", (b) => b),
     byLease("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256", (b) => b),
     shell
       ? none()
@@ -282,10 +347,10 @@ export async function buildRealDataFrom(
         : q("meter_readings", "meter_id,read_on,value,source,tenant_ack_at,manager_ack_at", (b) => b.gte("read_on", from).order("read_on")),
     // The bank: the window, plus whatever still waits in the review queue, whenever it landed. The shell counts the queue.
     shell
-      ? q("bank_transactions", "id,booked_on,amount_cents,counterparty_name,counterparty_iban,remittance_info,end_to_end_id,match_status,match_tier,match_explain", (b) => b.eq("match_status", "review"), 5000)
+      ? q("bank_transactions", "id,booked_on,amount_cents,counterparty_name,counterparty_iban,remittance_info,end_to_end_id,match_status,match_tier,match_explain", (b) => b.eq("match_status", "review"))
       : scoped
         ? none()
-        : q("bank_transactions", "id,booked_on,amount_cents,counterparty_name,counterparty_iban,remittance_info,end_to_end_id,match_status,match_tier,match_explain", (b) => b.or(`booked_on.gte.${from},match_status.in.(review,unmatched)`).order("booked_on"), 5000),
+        : q("bank_transactions", "id,booked_on,amount_cents,counterparty_name,counterparty_iban,remittance_info,end_to_end_id,match_status,match_tier,match_explain", (b) => b.or(`booked_on.gte.${from},match_status.in.(review,unmatched)`).order("booked_on")),
     shell || leaseScoped
       ? none()
       : propertyScoped
@@ -298,11 +363,35 @@ export async function buildRealDataFrom(
       : q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.gte("created_at", fromStamp).order("created_at")),
   ]);
 
+  // The money received on a tenancy and not yet on a period (0032), and, on
+  // a tenancy's sheet, its payments one by one. Absent until the base carries
+  // them: the screens then show no credit and no list, never a wrong one.
+  const [creditRows, paymentRows] = await Promise.all([
+    shell
+      ? none()
+      : scoped
+        ? inChunks(leaseIds, (ids) => q("lease_credit", "lease_id,credit_cents", (b) => b.in("lease_id", ids), undefined, { optional: true }))
+        : q("lease_credit", "lease_id,credit_cents", undefined, undefined, { optional: true }),
+    leaseScoped
+      ? q("payments", "id,lease_id,received_on,amount_cents,bank_transaction_id,note,cancelled_at,created_at", (b) => b.eq("lease_id", leaseScoped).order("received_on", { ascending: false }), undefined, { optional: true })
+      : none(),
+  ]);
+  const paymentAllocationRows = await inChunks(paymentRows.map((p) => s(p.id)), (ids) => q("payment_allocations", "payment_id,amount_cents,reversed_at", (b) => b.in("payment_id", ids)));
+  // The payment each matched bank operation became, so the bank screen can
+  // open it and cancel it. Read whole (`*`): the cancellation column is newer.
+  const matchedTxIds = txRows.filter((t) => s(t.match_status) === "auto" || s(t.match_status) === "manual").map((t) => s(t.id));
+  const txPaymentRows = shell || scoped ? [] : await inChunks(matchedTxIds, (ids) => q("payments", "*", (b) => b.in("bank_transaction_id", ids)));
+  const paymentOfTx = new Map<string, Row>();
+  for (const p of txPaymentRows) if (!p.cancelled_at) paymentOfTx.set(s(p.bank_transaction_id), p);
+
   // ── C. What hangs off those rows: by id, in chunks. ──
   const ticketIds = ticketRows.map((t) => s(t.id));
   const periodIds = new Set(periodRows.map((rp) => s(rp.id)));
   const lateOutsideWindow = statusRows.map((st) => s(st.id)).filter((id) => !periodIds.has(id));
-  const newest = [...conversationRows].sort((a, b) => (s(a.last_message_at) || s(a.created_at)) < (s(b.last_message_at) || s(b.created_at)) ? 1 : -1)[0];
+  // The most recent conversation, by the rule the screen orders its list with (`byMostRecent`): the last message's own time.
+  const lastSentByConv = new Map(headRows.map((h) => [s(h.conversation_id), s(h.last_sent_at)]));
+  const spokeAt = (c: Row): string => lastSpokenAt({ lastSentAt: lastSentByConv.get(s(c.id)), lastMessageAt: c.last_message_at, createdAt: c.created_at });
+  const newest = mostRecent(conversationRows.map((c) => ({ id: s(c.id), lastMessageAt: spokeAt(c) })));
   // The thread read in full: the one asked for when it is the workspace's
   // (an unknown or foreign id falls back to the most recent, the policies
   // having answered nothing for it), the tenancy's own on its sheet, else
@@ -311,7 +400,7 @@ export async function buildRealDataFrom(
   const scopedConversationId =
     asked ??
     (scope.conversationId
-      ? (newest ? s(newest.id) : null)
+      ? (newest ? newest.id : null)
       : leaseScoped
         ? ((conversationRows.find((c) => s(c.scope_type) === "lease" && s(c.scope_id) === leaseScoped)?.id as string | undefined) ?? null)
         : null);
@@ -321,7 +410,10 @@ export async function buildRealDataFrom(
     inChunks(depositRows.map((d) => s(d.id)), (ids) => q("deposit_deductions", "id,deposit_id,kind,label,amount_cents,justified_at,justification_document_id,edl_item_id", (b) => b.in("deposit_id", ids))),
     inChunks(edlRows.map((e) => s(e.id)), (ids) => q("edl_session_counts", "session_id,items,photos", (b) => b.in("session_id", ids))),
     inChunks(lateOutsideWindow, (ids) => q("rent_periods", "id,lease_id,period,due_date,rent_cents,charges_cents,vat_cents,total_cents", (b) => b.in("id", ids))),
-    scopedConversationId ? q("messages", "*", (b) => b.eq("conversation_id", scopedConversationId).order("sent_at"), 5000) : Promise.resolve([] as Row[]),
+    // The conversation read in full: its newest messages (a long history is read from its end), in the order they were written.
+    scopedConversationId
+      ? q("messages", "*", (b) => b.eq("conversation_id", scopedConversationId).order("sent_at", { ascending: false }), THREAD_PAGE).then((rows) => rows.reverse())
+      : Promise.resolve([] as Row[]),
     scoped ? inChunks([...periodIds], (ids) => q("registered_letters", "id,template_key,related_type,related_id,recipient_contact_id,status,dispatched_on,ar_received_on", (b) => b.eq("related_type", "rent_period").in("related_id", ids))) : Promise.resolve([] as Row[]),
     // The pieces the screens name: a request's photos, and on a sheet the property's, its lots' and its tenancies' own.
     inChunks([...ticketIds, ...(scoped ? [...leaseIds, ...sheetUnitIds, ...sheetPropertyIds] : [])], (ids) => q("documents", "id,name,class,retention_class,retention_until,sealed,related_type,related_id,size_bytes,storage_path,sha256,created_at", (b) => b.in("related_id", ids))),
@@ -356,7 +448,10 @@ export async function buildRealDataFrom(
         const { data, error } = await b.order("created_at", { ascending: false }).limit(CAP);
         if (error) {
           if (error.code === "PGRST205" || error.code === "42P01") SIGNATURE_READY = false;
-          else console.error("gestion read failed (signature_envelopes):", error.code, error.message);
+          else {
+            console.error("gestion read failed (signature_envelopes):", error.code, error.message);
+            markFailed("signature_envelopes", error);
+          }
           return [];
         }
         return (data as unknown as Row[]) ?? [];
@@ -368,6 +463,13 @@ export async function buildRealDataFrom(
   );
   const letterRows = [...leaseLetterRows, ...periodLetterRows];
   const documentRows = scoped ? relatedDocRows : documentPage.rows;
+  // Which pieces of a tenancy its tenants read (0031), asked apart: a base without the column answers
+  // nothing here (logged) instead of emptying the register, and the sheet then offers no switch.
+  const sharedRows = await inChunks(
+    documentRows.filter((doc) => s(doc.related_type) === "lease").map((doc) => s(doc.id)),
+    (ids) => q("documents", "id,shared_with_tenant", (b) => b.in("id", ids)),
+  );
+  const sharedById = new Map(sharedRows.map((r) => [s(r.id), r.shared_with_tenant === true]));
   const allPeriodRows = [...periodRows, ...lateRows];
 
   const rolesByContact = new Map<string, DemoContact["roles"]>();
@@ -377,13 +479,16 @@ export async function buildRealDataFrom(
     list.push(s(r.role) as DemoContact["roles"][number]);
     rolesByContact.set(s(r.contact_id), list);
   }
-  const CONTACTS: DemoContact[] = contactRows.map((c) => ({
+  const toContact = (c: Row): DemoContact => ({
     id: s(c.id),
     kind: c.kind === "legal" ? "legal" : "natural",
     name:
       sOr(c.display_name, null) ??
       sOr(c.legal_name, null) ??
       [s(c.first_name), s(c.last_name)].filter(Boolean).join(" "),
+    firstName: s(c.first_name),
+    lastName: s(c.last_name),
+    legalName: s(c.legal_name),
     email: sOr(c.email, null),
     phone: sOr(c.phone, null),
     language: sOr(c.language, "fr") as string,
@@ -392,8 +497,13 @@ export async function buildRealDataFrom(
     bankHolderName: sOr(c.bank_holder_name, undefined),
     notes: sOr(c.notes, undefined),
     portalLinked: typeof c.user_id === "string" && c.user_id !== "",
+    createdAt: sOr(day(c.created_at), undefined),
+    source: sOr(c.source, undefined),
     identity: "civility" in c ? identityOf(c) : undefined,
-  }));
+  });
+  // Every contact the workspace ever had answers by id; only the live ones are listed.
+  const contactIndex = new Map(everyContactRow.map((c) => [s(c.id), toContact(c)]));
+  const CONTACTS: DemoContact[] = contactRows.map((c) => contactIndex.get(s(c.id))!);
   // The base carries the identity columns once 0028 is applied; with no contact yet, nothing is offered anyway.
   const IDENTITY_READY = contactRows.length === 0 || "civility" in contactRows[0];
   const contactByUser = new Map(contactRows.filter((c) => typeof c.user_id === "string" && c.user_id !== "").map((c) => [s(c.user_id), s(c.id)]));
@@ -407,14 +517,16 @@ export async function buildRealDataFrom(
   for (const u of unitRows) {
     unitsByProperty.set(s(u.property_id), (unitsByProperty.get(s(u.property_id)) ?? 0) + 1);
   }
-  const PROPERTIES: DemoProperty[] = propertyRows.map((p) => ({
+  const toProperty = (p: Row): DemoProperty => ({
     id: s(p.id),
     name: s(p.name),
     address: formatAddress(p.address as PropertyAddress | null),
+    addressParts: addressParts(p.address as PropertyAddress | null),
     commune: s(p.commune),
     cadastralRef: [s(p.cadastral_commune), s(p.cadastral_section), s(p.cadastral_number)]
       .filter(Boolean)
       .join(" / "),
+    cadastralParts: { commune: s(p.cadastral_commune), section: s(p.cadastral_section), number: s(p.cadastral_number) },
     type: s(p.type),
     constructionYear: n(p.construction_year),
     completionDate: day(p.completion_date),
@@ -429,8 +541,23 @@ export async function buildRealDataFrom(
     unitsCount: unitsByProperty.get(s(p.id)) ?? 0,
     photoUrl: signed.get(s(p.photo_url)) ?? null,
     photoThumbUrl: thumbs.get(s(p.photo_url)) ?? null,
-  }));
-  const UNITS: DemoUnit[] = unitRows.map((u) => ({
+  });
+  const propertyIndex = new Map(everyPropertyRow.map((p) => [s(p.id), toProperty(p)]));
+  const PROPERTIES: DemoProperty[] = propertyRows.map((p) => propertyIndex.get(s(p.id))!);
+  const unitsEverByProperty = new Map<string, number>();
+  for (const u of everyUnitRow) unitsEverByProperty.set(s(u.property_id), (unitsEverByProperty.get(s(u.property_id)) ?? 0) + 1);
+  const ARCHIVED_PROPERTIES: DemoArchivedProperty[] = everyPropertyRow
+    .filter((p) => Boolean(p.archived_at))
+    .map((p) => ({
+      id: s(p.id),
+      name: s(p.name),
+      address: formatAddress(p.address as PropertyAddress | null),
+      type: s(p.type),
+      archivedOn: day(p.archived_at),
+      unitsCount: unitsEverByProperty.get(s(p.id)) ?? 0,
+    }))
+    .sort((a, b) => (a.archivedOn < b.archivedOn ? 1 : -1));
+  const toUnit = (u: Row): DemoUnit => ({
     id: s(u.id),
     propertyId: s(u.property_id),
     label: s(u.label),
@@ -442,7 +569,9 @@ export async function buildRealDataFrom(
     furnished: b(u.furnished),
     photoUrl: signed.get(s(u.photo_url)) ?? null,
     photoThumbUrl: thumbs.get(s(u.photo_url)) ?? null,
-  }));
+  });
+  const unitIndex = new Map(everyUnitRow.map((u) => [s(u.id), toUnit(u)]));
+  const UNITS: DemoUnit[] = unitRows.map((u) => unitIndex.get(s(u.id))!);
 
   // ── Leases ──
   // A party who moved out has left a tenancy that goes on without them (a
@@ -455,21 +584,25 @@ export async function buildRealDataFrom(
     list.push(p);
     partiesByLease.set(s(p.lease_id), list);
   }
+  // A person dated out is on the tenancy until that day (a co-tenant leaving at the end of the month).
   const partyIds = (leaseId: string, ended: boolean, role: "tenant" | "guarantor"): string[] =>
     (partiesByLease.get(leaseId) ?? [])
       .filter((p) => (role === "guarantor") === (s(p.role) === "guarantor"))
-      .filter((p) => ended || !p.moved_out_on)
+      .filter((p) => ended || !p.moved_out_on || day(p.moved_out_on) > today)
       .map((p) => s(p.contact_id));
   const depositByLease = new Map<string, Row>();
   for (const d of depositRows) depositByLease.set(s(d.lease_id), d);
 
-  const LEASES: DemoLease[] = leaseRows.map((l) => {
+  // A dossier in preparation on a lot that left the screens leaves with it.
+  const LEASES: DemoLease[] = leaseRows.filter((l) => s(l.status) !== "draft" || liveUnitIds.has(s(l.unit_id))).map((l) => {
     const details = (l.details ?? {}) as Row;
     const dep = depositByLease.get(s(l.id));
     const rent = n(l.rent_cents);
-    const status = (["draft", "active", "notice", "ended"].includes(s(l.status))
-      ? s(l.status)
-      : "active") as DemoLease["status"];
+    const status = effectiveLeaseStatus(
+      (["draft", "active", "notice", "ended"].includes(s(l.status)) ? s(l.status) : "active") as DemoLease["status"],
+      l.end_date ? day(l.end_date) : null,
+      today,
+    );
     const ended = status === "ended";
     const depMonths =
       typeof details.depositMonths === "number"
@@ -509,12 +642,10 @@ export async function buildRealDataFrom(
       dossier: dossierOf(details),
       departure: departureOf(details),
       premises: typeof details.premises === "string" && details.premises.trim() ? details.premises.trim() : undefined,
+      rentChange: readRentChange(details) ?? undefined,
     };
   });
   const leaseIndex = new Map(LEASES.map((l) => [l.id, l]));
-  const unitIndex = new Map(UNITS.map((u) => [u.id, u]));
-  const propertyIndex = new Map(PROPERTIES.map((p) => [p.id, p]));
-  const contactIndex = new Map(CONTACTS.map((c) => [c.id, c]));
   const labelOfUnit = (unitId: string): string => {
     const u = unitIndex.get(unitId);
     if (!u) return "";
@@ -529,7 +660,11 @@ export async function buildRealDataFrom(
   // ── Rent periods: figures from the table, paid-ness from the view, which
   //    derives it from non-reversed allocations. Never a stored boolean. ──
   const statusById = new Map(statusRows.map((r) => [s(r.id), r]));
-  const RENT_PERIODS: DemoRentPeriod[] = allPeriodRows.map((rp) => {
+  // A row whose tenancy is not in the dataset (its read failed, or it is out
+  // of scope) is left out: every period, guarantee, inventory and décompte a
+  // screen iterates has a tenancy to name.
+  const ofKnownLease = (r: Row): boolean => leaseIndex.has(s(r.lease_id));
+  const RENT_PERIODS: DemoRentPeriod[] = allPeriodRows.filter(ofKnownLease).map((rp) => {
     const st = statusById.get(s(rp.id));
     const raw = st ? s(st.status) : "pending";
     return {
@@ -546,6 +681,33 @@ export async function buildRealDataFrom(
     };
   });
 
+  // ── Payments and credit: what was received, what of it sits on periods ──
+  const allocatedByPayment = new Map<string, number>();
+  for (const a of paymentAllocationRows) {
+    if (a.reversed_at) continue;
+    allocatedByPayment.set(s(a.payment_id), (allocatedByPayment.get(s(a.payment_id)) ?? 0) + n(a.amount_cents));
+  }
+  const PAYMENTS: DemoPayment[] = paymentRows.filter(ofKnownLease).map((p) => ({
+    id: s(p.id),
+    leaseId: s(p.lease_id),
+    receivedOn: day(p.received_on),
+    amountCents: n(p.amount_cents),
+    allocatedCents: p.cancelled_at ? 0 : (allocatedByPayment.get(s(p.id)) ?? 0),
+    fromBank: typeof p.bank_transaction_id === "string" && p.bank_transaction_id !== "",
+    cancelledOn: p.cancelled_at ? day(p.cancelled_at) : null,
+    note: sOr(p.note, null),
+  }));
+  const LEASE_PARTIES: DemoLeaseParty[] = partyRows.filter(ofKnownLease).map((p) => ({
+    id: s(p.id),
+    leaseId: s(p.lease_id),
+    contactId: s(p.contact_id),
+    role: (s(p.role) === "guarantor" ? "guarantor" : s(p.role) === "colocataire" ? "colocataire" : "tenant") as DemoLeaseParty["role"],
+    movedInOn: p.moved_in_on ? day(p.moved_in_on) : null,
+    movedOutOn: p.moved_out_on ? day(p.moved_out_on) : null,
+  }));
+  const LEASE_CREDITS: Record<string, number> = {};
+  for (const c of creditRows) if (leaseIndex.has(s(c.lease_id)) && n(c.credit_cents) > 0) LEASE_CREDITS[s(c.lease_id)] = n(c.credit_cents);
+
   // ── Deposits ──
   const deductionsByDeposit = new Map<string, Row[]>();
   for (const dd of deductionRows) {
@@ -554,12 +716,13 @@ export async function buildRealDataFrom(
     deductionsByDeposit.set(s(dd.deposit_id), list);
   }
   const documentNameById = new Map([...documentRows, ...relatedDocRows, ...justificationDocRows].map((doc) => [s(doc.id), s(doc.name)]));
-  const DEPOSITS: DemoDeposit[] = depositRows.map((d) => ({
+  const DEPOSITS: DemoDeposit[] = depositRows.filter(ofKnownLease).map((d) => ({
     id: s(d.id),
     leaseId: s(d.lease_id),
     form: s(d.form) as DemoDeposit["form"],
     amountCents: n(d.amount_cents),
     status: s(d.status) as DemoDeposit["status"],
+    receivedOn: d.received_on ? day(d.received_on) : null,
     keyHandoverOn: sOr(d.key_handover_on, undefined),
     decompteIssuedOn: d.decompte_issued_on ? day(d.decompte_issued_on) : null,
     miseEnDemeureArOn: d.mise_en_demeure_ar_on ? day(d.mise_en_demeure_ar_on) : null,
@@ -606,6 +769,8 @@ export async function buildRealDataFrom(
       : "unmatched") as DemoBankTx["status"],
     matchTier: sOr(t.match_tier, undefined),
     matchExplain: sOr(t.match_explain, undefined),
+    matchedLeaseId: sOr(paymentOfTx.get(s(t.id))?.lease_id, undefined),
+    paymentId: sOr(paymentOfTx.get(s(t.id))?.id, undefined),
   }));
   const IBAN_BINDINGS: DemoData["IBAN_BINDINGS"] = bindingRows.map((r) => ({
     payerIban: s(r.payer_iban),
@@ -624,6 +789,7 @@ export async function buildRealDataFrom(
     arReceivedOn: r.ar_received_on ? day(r.ar_received_on) : null,
   }));
   const ARREARS_ACTIONS: DemoData["ARREARS_ACTIONS"] = arrearsRows
+    .filter(ofKnownLease)
     .filter((r) => ["friendly", "formal", "mise_en_demeure", "justice_dossier"].includes(s(r.stage)))
     .map((r) => ({
       id: s(r.id),
@@ -637,7 +803,7 @@ export async function buildRealDataFrom(
   // ── EDLs ──
   // Items and photos counted by the database (0020), never by reading them.
   const countBySession = new Map(countRows.map((c) => [s(c.session_id), c]));
-  const EDLS: DemoEdl[] = edlRows.map((e) => ({
+  const EDLS: DemoEdl[] = edlRows.filter(ofKnownLease).map((e) => ({
     id: s(e.id),
     leaseId: s(e.lease_id),
     unitLabel: labelOfLease(s(e.lease_id)),
@@ -709,7 +875,7 @@ export async function buildRealDataFrom(
   // ── Charges: the décomptes and their lines ──
   const linesByPeriod = new Map<string, Row[]>();
   for (const l of chargeLineRows) linesByPeriod.set(s(l.charge_period_id), [...(linesByPeriod.get(s(l.charge_period_id)) ?? []), l]);
-  const CHARGE_PERIODS: DemoData["CHARGE_PERIODS"] = chargePeriodRows.map((cp) => ({
+  const CHARGE_PERIODS: DemoData["CHARGE_PERIODS"] = chargePeriodRows.filter(ofKnownLease).map((cp) => ({
     id: s(cp.id),
     leaseId: s(cp.lease_id),
     year: n(cp.year),
@@ -734,7 +900,7 @@ export async function buildRealDataFrom(
   }));
   const lastReadingByMeter = new Map<string, Row>();
   for (const r of readingRows) lastReadingByMeter.set(s(r.meter_id), r); // ordered by read_on: last wins
-  const METERS: DemoMeter[] = meterRows.map((m) => {
+  const METERS: DemoMeter[] = meterRows.filter((m) => livePropertyIds.has(s(m.property_id)) && (!m.unit_id || liveUnitIds.has(s(m.unit_id)))).map((m) => {
     const r = lastReadingByMeter.get(s(m.id));
     return {
       id: s(m.id),
@@ -809,7 +975,8 @@ export async function buildRealDataFrom(
     const senderName = (m: Row): string =>
       contactIndex.get(s(m.sender_contact_id))?.name ??
       contactIndex.get(contactByUser.get(s(m.sender_user_id)) ?? "")?.name ??
-      (s(m.sender_kind) === "manager" ? org.name : "Système");
+      // A message the product posts has no author: the screens name it in the reader's language.
+      (s(m.sender_kind) === "manager" ? org.name : "");
     // The other side of the desk: the tenants of the lease or request, the
     // contact, else whoever wrote first from outside the cabinet.
     const partyNames =
@@ -821,7 +988,7 @@ export async function buildRealDataFrom(
             ? [contactIndex.get(scopeId)?.name ?? ""].filter(Boolean)
             : [];
     const outsider = msgs.find((m) => s(m.sender_kind) !== "manager" && s(m.sender_kind) !== "system");
-    const lastAt = msgs.length > 0 ? s(msgs[msgs.length - 1].sent_at) : s(c.last_message_at) || s(c.created_at);
+    const lastAt = msgs.length > 0 ? s(msgs[msgs.length - 1].sent_at) : spokeAt(c);
     return {
       id: s(c.id),
       subject: s(c.subject),
@@ -869,6 +1036,8 @@ export async function buildRealDataFrom(
     hasFile: s(doc.storage_path) !== "",
     kind: kindByDocument.get(s(doc.id)) ?? null,
     sha256: s(doc.sha256) || null,
+    relatedType: s(doc.related_type) || null,
+    sharedWithTenant: sharedById.get(s(doc.id)) ?? null,
   }));
   const DOCUMENT_SUMMARY: DocumentSummary = summariseDocuments(
     documentFacts.rows.map((doc) => ({ klass: s(doc.class), sealed: b(doc.sealed), retentionUntil: doc.retention_until ? day(doc.retention_until) : null, createdAt: day(doc.created_at) })),
@@ -1037,9 +1206,14 @@ export async function buildRealDataFrom(
     IDENTITY_READY,
     SIGNATURE_READY,
     PROPERTIES,
+    ARCHIVED_PROPERTIES,
     UNITS,
     LEASES,
     RENT_PERIODS,
+    PAYMENTS,
+    LEASE_PARTIES,
+    LEASE_CREDITS,
+    DEGRADED: [...failed],
     BANK_ACCOUNTS,
     IBAN_BINDINGS,
     REGISTERED_LETTERS,
@@ -1068,10 +1242,12 @@ export async function buildRealDataFrom(
     envelopeFor: (leaseId: string) => SIGNATURE_ENVELOPES.find((e) => e.leaseId === leaseId) ?? null,
     AUDIT,
     DELIVERIES,
-    contactById: (id: string) => contactIndex.get(id)!,
-    propertyById: (id: string) => propertyIndex.get(id)!,
-    unitById: (id: string) => unitIndex.get(id)!,
-    leaseById: (id: string) => leaseIndex.get(id)!,
+    // Total lookups: an archived row answers itself (history keeps its
+    // names), an id nothing carries answers an empty record, never `undefined`.
+    contactById: (id: string) => contactIndex.get(id) ?? missingContact(id),
+    propertyById: (id: string) => propertyIndex.get(id) ?? missingProperty(id),
+    unitById: (id: string) => unitIndex.get(id) ?? missingUnit(id),
+    leaseById: (id: string) => leaseIndex.get(id) ?? missingLease(id),
     leaseTenantNames: (l: DemoLease) => l.tenantContactIds.map((id) => contactIndex.get(id)?.name ?? ""),
     leaseUnitLabel: (l: DemoLease) => labelOfUnit(l.unitId),
     openInvoicesForMatching: (): OpenInvoice[] =>

@@ -32,6 +32,8 @@ export interface TenantConversationView {
   messages: TenantChatMessage[];
   /** When the last message was written (ISO); empty before the first word. */
   lastAt: string;
+  /** What the other side wrote that this account has not read yet. */
+  unread: number;
   /** This tenancy's requests still open: where a photo from the conversation is filed. */
   openRequests: Array<{ id: string; title: string }>;
   /** The way to a new request while this tenancy is in force. */
@@ -214,6 +216,8 @@ export default function TenantMessages({
         <TenantChat
           key={active.id}
           leaseId={active.leaseId}
+          conversationId={active.id.startsWith("lease:") ? null : active.id}
+          unread={active.unread}
           title={managerName}
           subtitle={active.label}
           messages={active.messages}

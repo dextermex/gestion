@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/pro/ui";
+import { useApiProblems } from "./ApiErrors";
 
 /**
  * Runs /api/banking/sync and refreshes the page data. As a button it is the
@@ -23,6 +24,7 @@ export default function SyncBank({
   const [busy, setBusy] = useState(auto);
   const [error, setError] = useState<string | null>(null);
   const ran = useRef(false);
+  const problems = useApiProblems();
 
   const sync = async () => {
     setBusy(true);
@@ -38,16 +40,10 @@ export default function SyncBank({
         window.location.assign("/connexion?next=/app/banque");
         return;
       }
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(
-        body.error === "not_configured"
-          ? labels.notConfigured
-          : body.error === "schema_unexposed"
-            ? labels.schemaUnexposed
-            : labels.failed,
-      );
+      // The sync's own sentences for what it knows; the rest by its status (a subscription, a role).
+      setError((await problems.read(res, { fallback: labels.failed, codes: { not_configured: labels.notConfigured, schema_unexposed: labels.schemaUnexposed } })).message);
     } catch {
-      setError(labels.failed);
+      setError(problems.network({ fallback: labels.failed }).message);
     }
     setBusy(false);
   };

@@ -2,13 +2,15 @@ import Link from "next/link";
 import ArrearsActions, { type ArrearsLabels } from "@/components/gestion/ArrearsActions";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
 import { LegalNote } from "@/components/gestion/bits";
-import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Rows, Step, Steps } from "@/components/gestion/Hero";
+import DegradedNote from "@/components/gestion/DegradedNote";
+import { FoldRow, GroupHead, Hero, HeroAction, HeroChip, HeroRing, MonthSwitch, Money, Rows, Segments, Step, Steps } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
-import { euros, eurosWhole, formatDate, formatMonth, initials, rentStatusMeta } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatMonth, formatPct, initials, rentStatusMeta } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { assessArrears, type ArrearsStage } from "@/domain/arrears/ladder";
-import { addMonths } from "@/domain/dates";
+import { monthWindow } from "@/lib/months";
+import { isOverdue } from "@/lib/gestion/ledger";
 import { existingOf, generateLabels } from "@/lib/documents/labels";
 
 export default async function LoyersPage({
@@ -18,21 +20,24 @@ export default async function LoyersPage({
 }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
-  const { ARREARS_ACTIONS, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
+  const { ARREARS_ACTIONS, DEGRADED, ORG, REGISTERED_LETTERS, RENT_PERIODS, TODAY, generatedFor, leaseById, leaseTenantNames, leaseUnitLabel } = await getDemo();
   const sample = await isSampleData();
   const rentMeta = rentStatusMeta(d);
-  // The live month and its four neighbours, derived from today — the demo
-  // pins its date, a real account simply follows the calendar.
+  // The live month and its neighbours, derived from today (the demo pins its
+  // date, a real account simply follows the calendar): the same months
+  // Accueil pages through, so a month opened from there is the one shown.
   const liveMonth = TODAY.slice(0, 7);
-  const MONTHS = [-3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
+  const MONTHS = monthWindow(liveMonth);
   const month = MONTHS.includes(params.mois ?? "") ? params.mois! : liveMonth;
+  // The view lives in the address: everything, what is still to collect, what is paid.
   const view = params.vue === "impayes" || params.vue === "payes" ? params.vue : undefined;
 
   const monthRows = RENT_PERIODS.filter((rp) => rp.period === month);
   const expected = monthRows.reduce((a, r) => a + r.totalCents, 0);
   const collected = monthRows.reduce((a, r) => a + r.allocatedCents, 0);
   const open = expected - collected;
-  const isOpen = (rp: (typeof RENT_PERIODS)[number]) => (rp.status === "late" || rp.status === "partial") && rp.allocatedCents < rp.totalCents;
+  // Behind is what is unpaid past its due date: a month part-paid before it falls due is still to come, as the tenant reads it.
+  const isOpen = (rp: (typeof RENT_PERIODS)[number]) => isOverdue(rp, TODAY);
   // Late first, then what is partly paid, the oldest due date leading each.
   const byUrgency = (x: (typeof RENT_PERIODS)[number], y: (typeof RENT_PERIODS)[number]) =>
     x.status === y.status ? x.dueDate.localeCompare(y.dueDate) : x.status === "late" ? -1 : 1;
@@ -54,9 +59,7 @@ export default async function LoyersPage({
   // has been done is read from the rows (the steps recorded, the registered
   // letter and its AR date), never from a click.
   const letterById = new Map(REGISTERED_LETTERS.map((l) => [l.id, l]));
-  const arrearsCases = RENT_PERIODS.filter(
-    (rp) => (rp.status === "late" || rp.status === "partial") && rp.period <= liveMonth,
-  ).map((rp) => {
+  const arrearsCases = RENT_PERIODS.filter((rp) => isOverdue(rp, TODAY) && rp.period <= liveMonth).map((rp) => {
     const steps = ARREARS_ACTIONS.filter((a) => a.rentPeriodId === rp.id).sort((a, b) => a.executedOn.localeCompare(b.executedOn));
     const executed: Partial<Record<Exclude<ArrearsStage, "none">, string>> = {};
     for (const a of steps) executed[a.stage] = a.executedOn;
@@ -101,6 +104,7 @@ export default async function LoyersPage({
     justiceDone: d.loyers.arrearsJusticeDone,
     stepDone: d.loyers.arrearsStepDone,
     failed: d.loyers.arrearsFailed,
+    outdated: d.loyers.arrearsOutdated,
     already: d.loyers.arrearsAlready,
     needsAr: d.loyers.arrearsNeedsAr,
     sampleConfirmed: d.loyers.arrearsConfirmed,
@@ -110,18 +114,29 @@ export default async function LoyersPage({
   // The paper of a period: its notice, and its receipt once the ledger says
   // it is paid. Both come from the register, produced from the rows.
   const docLabels = generateLabels(d);
+  /** The address of a month in a view; the live month and the whole list are the bare address. */
+  const hrefFor = (m: string, v: typeof view) => {
+    const q = new URLSearchParams();
+    if (m !== liveMonth) q.set("mois", m);
+    if (v) q.set("vue", v);
+    const qs = q.toString();
+    return qs ? `/app/loyers?${qs}` : "/app/loyers";
+  };
   const backTo = `/app/loyers?mois=${month}${view ? `&vue=${view}` : ""}`;
 
   type Period = (typeof RENT_PERIODS)[number];
   const caseOf = new Map(arrearsCases.map((c) => [c.rp.id, c]));
   const openNow = monthRows.filter(isOpen).sort(byUrgency);
   const earlier = RENT_PERIODS.filter((rp) => isOpen(rp) && rp.period < month).sort((x, y) => y.period.localeCompare(x.period) || byUrgency(x, y));
-  const upcoming = monthRows.filter((rp) => rp.status === "pending" || rp.status === "upcoming");
+  const upcoming = monthRows.filter((rp) => rp.status === "pending" || rp.status === "upcoming" || (rp.status === "partial" && !isOverdue(rp, TODAY)));
   const paid = monthRows.filter((rp) => rp.status === "paid");
   const openCents = (rows: Period[]) => rows.reduce((a, rp) => a + rp.totalCents - rp.allocatedCents, 0);
   const lateTenants = new Set([...openNow, ...earlier].map((rp) => rp.leaseId)).size;
   const at = MONTHS.indexOf(month);
-  const hrefOf = (m: string) => (m === liveMonth ? "/app/loyers" : `/app/loyers?mois=${m}`);
+  // Changing month keeps the view on screen.
+  const hrefOf = (m: string) => hrefFor(m, view);
+  // What the view on screen lists; when that is nothing, the screen says so.
+  const listed = (view === "payes" ? 0 : openNow.length + earlier.length) + (view === "impayes" ? 0 : upcoming.length) + (view === "impayes" ? 0 : paid.length);
 
   /** The papers of a rent period: its notice, its receipt once paid, and the way to the lease. */
   const papers = (rp: Period) => (
@@ -239,6 +254,8 @@ export default async function LoyersPage({
 
   return (
     <div className="space-y-8">
+      {/* A read of this page failed (the shell says when the whole workspace could not be read). */}
+      <DegradedNote tables={DEGRADED.filter((t) => t !== "hydration")} d={d} />
       <Hero
         title={d.loyers.title}
         top={
@@ -256,7 +273,7 @@ export default async function LoyersPage({
           expected > 0 ? (
             <HeroRing
               fraction={collected / expected}
-              value={`${Math.round((collected / expected) * 100)} %`}
+              value={formatPct(Math.round((collected / expected) * 100), locale)}
               label={fmt(d.loyers.chipCollected, { amount: eurosWhole(collected, locale) })}
               sub={fmt(d.loyers.ofExpected, { expected: eurosWhole(expected, locale) })}
             />
@@ -271,15 +288,31 @@ export default async function LoyersPage({
         }
       >
         {lateTenants > 0 && (
-          <HeroChip href="#a-encaisser" icon="alert" tone="late">
+          <HeroChip href={view === "payes" ? `${hrefFor(month, "impayes")}#a-encaisser` : "#a-encaisser"} icon="alert" tone="late">
             {fmt(d.loyers.chipLate, { n: lateTenants })}
           </HeroChip>
         )}
       </Hero>
 
       <div className="mx-auto max-w-4xl">
-        {monthRows.length === 0 && earlier.length === 0 && <p className="px-1 text-sm text-ink-soft">{d.loyers.nothingDue}</p>}
-        {monthRows.length > 0 && openNow.length === 0 && upcoming.length === 0 && view !== "payes" && <p className="px-1 text-sm font-medium text-emerald-800">{d.loyers.allPaid}</p>}
+        {/* The view is said and can be left: a filter nobody can see is a list that looks wrong. */}
+        <div className="mb-6">
+          <Segments
+            label={d.loyers.tabsAria}
+            items={[
+              { href: hrefFor(month, undefined), label: d.loyers.tabAll, current: view === undefined },
+              { href: hrefFor(month, "impayes"), label: d.loyers.tabOpen, count: openNow.length + earlier.length, current: view === "impayes" },
+              { href: hrefFor(month, "payes"), label: d.loyers.tabPaid, count: paid.length, current: view === "payes" },
+            ]}
+          />
+        </div>
+        {monthRows.length === 0 && earlier.length === 0 ? (
+          <p className="px-1 text-sm text-ink-soft">{d.loyers.nothingDue}</p>
+        ) : monthRows.length > 0 && openNow.length === 0 && upcoming.length === 0 && view !== "payes" ? (
+          <p className="px-1 text-sm font-medium text-emerald-800">{d.loyers.allPaid}</p>
+        ) : listed === 0 ? (
+          <p className="px-1 text-sm text-ink-soft">{d.loyers.emptyBody}</p>
+        ) : null}
 
         {view !== "payes" && openNow.length > 0 && (
           <>

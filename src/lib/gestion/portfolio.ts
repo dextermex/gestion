@@ -1,7 +1,7 @@
 import type { DemoData } from "@/lib/demo";
 import type { DemoLease, DemoProperty, DemoRentPeriod, DemoUnit } from "@/lib/demo/data";
 import type { RentStatus } from "@/lib/types";
-import { nextDueOn } from "@/lib/gestion/ledger";
+import { departureDate, nextDueOn } from "@/lib/gestion/ledger";
 
 /**
  * The portfolio projection: one property-shaped view of the whole dataset.
@@ -129,7 +129,7 @@ export function buildPortfolio(demo: DemoData): PropertyCard[] {
     // ends before then owes nothing more, so it contributes no date.
     const due = lots
       .filter((l) => l.lease)
-      .map((l) => nextDueOn(demo.TODAY, l.lease!.paymentDay, l.lease!.startDate, l.lease!.endDate))
+      .map((l) => nextDueOn(demo.TODAY, l.lease!.paymentDay, l.lease!.startDate, departureDate(l.lease!)))
       .filter((d): d is string => d !== null)
       .sort();
 
@@ -164,7 +164,7 @@ export function lotCard(card: PropertyCard, unitId: string, today: string): Prop
       .map<UnitLine>((unit) => ({ unit, lease: null, tenantNames: [], drafts: [], monthlyCents: 0, period: null, status: null, vacant: true }))[0];
   if (!line) return null;
   const mix: Partial<Record<RentStatus, number>> = line.status ? { [line.status]: 1 } : {};
-  const nextDue = line.lease ? nextDueOn(today, line.lease.paymentDay, line.lease.startDate, line.lease.endDate) : null;
+  const nextDue = line.lease ? nextDueOn(today, line.lease.paymentDay, line.lease.startDate, departureDate(line.lease)) : null;
   return {
     ...card,
     lots: [line],

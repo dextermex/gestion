@@ -103,10 +103,18 @@ as $$
 declare
   v_org uuid;
   v_id uuid;
+  v_email text;
 begin
   select l.org_id into v_org from gestion.leases l where l.id = p_lease;
   if not found or not gestion.portal_tenant_lease(p_lease) then
     raise exception 'gestion: not a tenant of this lease';
+  end if;
+  -- Corrigé avant application (audit du 19 novembre 2026) : le destinataire
+  -- consigné est celui que l'espace désigne, jamais celui que l'appelant
+  -- annonce. p_recipient_email reste dans la signature et n'est plus lu.
+  select t.email into v_email from gestion.portal_notification_target(p_lease) t;
+  if v_email is null or v_email = '' then
+    raise exception 'gestion: no notification target';
   end if;
   if p_kind not in ('message', 'request') then
     raise exception 'gestion: invalid kind';
@@ -115,7 +123,7 @@ begin
     raise exception 'gestion: invalid status';
   end if;
   insert into gestion.deliveries (org_id, kind, lease_id, recipient_kind, recipient_email, lang, subject, body_text, status, provider, provider_message_id, created_by, sent_at)
-  values (v_org, p_kind, p_lease, 'manager', left(p_recipient_email, 320),
+  values (v_org, p_kind, p_lease, 'manager', left(v_email, 320),
           case when p_lang in ('fr', 'en', 'de', 'lu') then p_lang else 'fr' end,
           left(p_subject, 400), left(p_body, 20000), p_status, nullif(p_provider, ''), nullif(p_provider_message_id, ''), auth.uid(),
           case when p_status = 'sent' then now() else null end)

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fr } from "@/lib/i18n/fr";
 import type { OrgContext } from "@/lib/gestion/api";
 import { saveRentalDraft } from "@/lib/gestion/rental";
-import { closeLease } from "@/lib/gestion/lease";
 import { addDays, addMonths } from "@/domain/dates";
 import { createInvitation, invitationLink, invitationMail, revokeInvitation, sendInvitation } from "@/lib/portal/invitations";
 import { acceptInvitation, previewInvitation } from "@/lib/portal/accept";
@@ -12,7 +11,7 @@ import { attachmentFolder, inviteFor, inviteState, requestKindOf, requestState, 
 import { alertsFor, rentSituation } from "@/lib/portal/view";
 import type { TenantLease } from "@/lib/portal/tenant-space";
 import { FakeDb } from "./helpers/fake-postgrest";
-import { ORG, OTHER_ORG, ctxFor, dossier, hydrate, letTo, seedProperty, space } from "./helpers/tenancy";
+import { ORG, OTHER_ORG, ctxFor, departOn, dossier, hydrate, letTo, seedProperty, space } from "./helpers/tenancy";
 
 /**
  * The tenant portal, end to end, on one database.
@@ -201,14 +200,15 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(mine.requests[0].state).toBe("resolved");
 
     // ── The owner records the departure: the tenancy closes, history stays hers ──
-    const closed = await closeLease(ctx, rental.leaseId, { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today);
+    const closed = await departOn(db, ctx, rental.leaseId, lastDayOfMonth);
     if ("error" in closed) throw new Error(closed.error);
     demo = await hydrate(db);
     expect(demo.LEASES.find((l) => l.id === rental.leaseId)!.status).toBe("ended");
 
     mine = await space(db, anna);
     expect(mine.current).toBeNull();
-    expect(mine.payments).toBeNull();
+    // The former tenancy keeps its money picture: what is still owed on it is said, here nothing.
+    expect(mine.payments).toMatchObject({ outstandingCents: 0 });
     expect(mine.past.map((l) => [l.id, l.status, l.endDate])).toEqual([[rental.leaseId, "ended", lastDayOfMonth]]);
     expect(mine.past[0].periods.length).toBeGreaterThan(0);
     expect(mine.requests).toHaveLength(1);
@@ -349,7 +349,7 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(db.table("contacts").filter((c) => c.email === "anna.weber@example.lu")).toHaveLength(1);
 
     // She leaves, then comes back for another lot: same contact, same account, no second invitation.
-    const closed = await closeLease(ctx, rental.leaseId, { endDate: lastDayOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today);
+    const closed = await departOn(db, ctx, rental.leaseId, lastDayOfMonth);
     if ("error" in closed) throw new Error(closed.error);
     const { unitId: otherUnit } = seedProperty(db, ORG, "Studio Gare");
     const again = await letTo(ctx, otherUnit, [{ ...ANNA, email: "ANNA.weber@example.lu" }], "900");
@@ -533,6 +533,22 @@ describe("the tenant portal, from the invitation to the departure", () => {
     expect(demo.LEASES.map((l) => l.id).sort()).toEqual([rentalA.leaseId, rentalB.leaseId].sort());
   });
 
+  it("shows the tenant the contact the workspace declares, never the owner's own login", async () => {
+    // A private landlord's workspace: no agency address, an owner who signed in with a personal e-mail.
+    db.insertRow("agencies", { id: OTHER_ORG, name: "Zoé Thill" });
+    db.insertRow("crm_members", { agency_id: OTHER_ORG, user_id: "user-zoe", role: "owner", status: "active", email: "zoe.login@example.lu", phone: "+352 691 000 999" });
+    const { unitId: unitZ } = seedProperty(db, OTHER_ORG, "Maison Thill");
+    const owner = ctxFor(db, OTHER_ORG);
+    const rental = await letTo(owner, unitZ, [NORA]);
+    const inv = await createInvitation(owner, { leaseId: rental.leaseId, contactId: rental.contactIds[0] });
+    if ("error" in inv) throw new Error(inv.error);
+    expect(await acceptInvitation(db.tenantClient(nora), inv.token)).toMatchObject({ ok: true });
+    expect((await space(db, nora)).managers).toEqual([{ orgId: OTHER_ORG, name: "Zoé Thill", email: null, phone: null }]);
+    // Once the landlord states a contact in the settings, the tenant reads that one.
+    db.insertRow("workspace_settings", { org_id: OTHER_ORG, email: "location@thill.lu", phone: "+352 26 11 22 33" });
+    expect((await space(db, nora)).managers).toEqual([{ orgId: OTHER_ORG, name: "Zoé Thill", email: "location@thill.lu", phone: "+352 26 11 22 33" }]);
+  });
+
   it("writes the invitation e-mail in the cabinet's language with the link and the expiry", () => {
     const mail = invitationMail(fr, { ...inviteVars, link: invitationLink(BASE, "abc"), expiresOn: "3 octobre 2026" });
     expect(mail.subject).toBe("Votre logement vous attend sur Morada : Maison · Maison Weber");
@@ -574,7 +590,8 @@ describe("the portal's vocabulary", () => {
     expect(requestKindOf({ category: "administrative", description: "[document] attestation" })).toBe("document");
     expect(requestKindOf({ category: "administrative", description: "[question] charges" })).toBe("question");
     expect(requestKindOf({ category: "administrative", description: "no tag" })).toBe("other");
-    expect(["new", "triaged"].map(requestState)).toEqual(["sent", "sent"]);
+    // "Sent" only while nobody has touched it: a request qualified or handed to a tradesperson is in progress.
+    expect(["new", "triaged"].map(requestState)).toEqual(["sent", "in_progress"]);
     expect(["offered", "scheduled", "in_progress", "pending_tenant"].map(requestState)).toEqual(["in_progress", "in_progress", "in_progress", "in_progress"]);
     expect(["done", "closed", "cancelled"].map(requestState)).toEqual(["resolved", "resolved", "refused"]);
     expect(parseRequestInput({ kind: "spam", title: "x" })).toBeNull();
@@ -630,7 +647,7 @@ describe("the portal's vocabulary", () => {
       lastAdjustmentOn: null, previousRentCents: null,
       unit: { label: "Apt", floor: "", areaSqm: 0, rooms: 0, bedrooms: null },
       property: { name: "P", address: "", commune: "", energyClass: "", cpeIssuedOn: null, syndicName: null, smokeDetectorsConfirmed: false, photoPath: null, photoUrl: null },
-      parties: [], deposit: null, edls: [], insurances: [], documents: [], periods: [],
+      parties: [], deposit: null, edls: [], insurances: [], documents: [], periods: [], creditCents: 0,
     };
     const covered = { id: "i", kind: "liability", provider: "X", policyNumber: "1", expiresOn: "2027-01-01" };
     expect(alertsFor({ ...base, insurances: [covered] }, null, today)).toEqual([]);

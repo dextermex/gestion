@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg } from "@/lib/gestion/api";
-import { getDatasetId, getDemo, isSampleData } from "@/lib/demo";
+import { getDemo, isSampleData } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { renderLabels } from "@/lib/documents/generate";
@@ -9,14 +9,15 @@ import { csvDocument, csvEuros, safeFileName } from "@/lib/fiscal/csv";
 import { composeFiscalPack } from "@/lib/fiscal/pack-pdf";
 import { prepareOwnerYear } from "@/lib/fiscal/pack";
 import { lineLabel, sectionLabel } from "@/lib/fiscal/labels";
+import { answerNavigation } from "@/lib/http/navigation";
 
 /**
  * The exercise as files: the pack (PDF), the lines of the 190/210
  * statements (CSV, the accountant's import) and one property's form
  * fields (CSV, to copy over). Every figure comes from the same prepared
- * exercise as the screen. A download is a read: a sample cabinet gets
- * real files computed from its dataset, a real account reads under its
- * own token.
+ * exercise as the screen. A download is a read, for a signed-in member of
+ * a workspace: a sample cabinet gets real files computed from its dataset,
+ * a real account reads under its own token.
  */
 export const runtime = "nodejs";
 
@@ -27,11 +28,17 @@ function attachment(name: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
+/** The downloads are plain links: a person whose link has nothing to give is sent to a screen that says so, a script keeps the JSON error. */
 export async function GET(req: NextRequest) {
-  if ((await getDatasetId()) === "real") {
-    const ctx = await withOrg();
-    if (ctx instanceof NextResponse) return ctx;
-  }
+  return answerNavigation(req, await pack(req));
+}
+
+async function pack(req: NextRequest): Promise<Response> {
+  // A session and a workspace, whatever the dataset: a sample cabinet's files
+  // are fictitious, but producing one is work this server does on demand,
+  // and it does none for a stranger.
+  const ctx = await withOrg();
+  if (ctx instanceof NextResponse) return ctx;
   const params = req.nextUrl.searchParams;
   const ownerId = str(params.get("proprietaire"), 64);
   const taxYear = Number(params.get("exercice"));
@@ -46,7 +53,14 @@ export async function GET(req: NextRequest) {
 
   if (format === "pdf") {
     const model = composeFiscalPack(owner, { d, locale, cabinetName: data.ORG.name, today: data.TODAY, sample });
-    const bytes = await renderPdf(model, renderLabels(locale));
+    let bytes: Awaited<ReturnType<typeof renderPdf>>;
+    try {
+      bytes = await renderPdf(model, renderLabels(locale));
+    } catch (e) {
+      // The renderer's own failure, said as one: the kind of error, never the exercise's figures.
+      console.error("fiscal pack render failed:", e instanceof Error ? e.name : "error");
+      return NextResponse.json({ error: "render_failed" }, { status: 500 });
+    }
     const name = `${safeFileName(fmt(d.fiscalite.dlPack, { year, owner: owner.ownerName }))}.pdf`;
     return new NextResponse(new Uint8Array(bytes), { status: 200, headers: { "Content-Type": "application/pdf", "Content-Disposition": attachment(name), "Cache-Control": "private, no-store" } });
   }

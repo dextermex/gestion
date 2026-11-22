@@ -1,8 +1,10 @@
 import "server-only";
 import type { GestionReader } from "@/lib/demo/data-real";
+import { reportHandled } from "@/lib/monitoring";
 import { formatAddress, type PropertyAddress } from "@/lib/gestion/address";
-import { nextDueOn } from "@/lib/gestion/ledger";
+import { effectiveLeaseStatus, nextDueOn } from "@/lib/gestion/ledger";
 import { requestKindOf, requestState, ticketRef, type RequestKind, type RequestState } from "@/lib/portal/types";
+import { unreadIn } from "@/lib/portal/view";
 
 /**
  * Everything the tenant's space shows, read under the tenant's own token.
@@ -98,6 +100,8 @@ export interface TenantLease {
   insurances: Array<{ id: string; kind: string; provider: string; policyNumber: string; expiresOn: string | null }>;
   documents: TenantDocument[];
   periods: TenantPeriod[];
+  /** Money received on this tenancy that no period carries yet (its credit), in cents; 0 when none. */
+  creditCents: number;
 }
 
 export interface TenantMessage {
@@ -118,6 +122,10 @@ export interface TenantConversation {
   label: string;
   lastMessageAt: string;
   messages: TenantMessage[];
+  /** What the other side wrote that this account has not read: the database's count (0031), the same on every device. */
+  unread: number;
+  /** Up to when this account has read the conversation; empty before it ever opened it. */
+  readUntil: string;
 }
 
 /**
@@ -182,6 +190,8 @@ export interface TenantSpace {
   /** One conversation per tenancy, the current one first. */
   conversations: TenantConversation[];
   payments: TenantPayments | null;
+  /** Part of the space could not be read: the screens may be incomplete, and say so. */
+  degraded?: boolean;
 }
 
 /** The first name a greeting uses: the contact's, else the account's. */
@@ -191,14 +201,24 @@ function firstNameOf(parties: TenantParty[], fallback: string): string {
   return name.trim().split(/\s+/)[0] ?? "";
 }
 
+/** Where a tenant opens one of their pieces: a route that signs it for a minute at that moment. */
+export const tenantDocumentHref = (id: string): string => `/api/locataire/documents/${encodeURIComponent(id)}/fichier`;
+
 export async function buildTenantSpace(
   g: GestionReader,
   opts: { userId: string; email: string; displayName: string; today: string; sign: (paths: string[]) => Promise<Map<string, string>> },
 ): Promise<TenantSpace> {
+  // A read that fails is said on screen (and reported), never passed off as "nothing".
+  let degraded = false;
+  const failed = (what: string, code: string | undefined) => {
+    degraded = true;
+    reportHandled(`tenant read (${what})`, code);
+  };
   const rpc = async (name: string): Promise<Row[]> => {
     const { data, error } = await g.rpc(name);
     if (error) {
       console.error(`tenant read failed (${name}):`, error.code, error.message);
+      failed(name, error.code);
       return [];
     }
     return (data as Row[] | null) ?? [];
@@ -208,7 +228,20 @@ export async function buildTenantSpace(
   const rpcOptional = async (name: string): Promise<Row[]> => {
     const { data, error } = await g.rpc(name);
     if (error) {
-      if (error.code !== "PGRST202" && error.code !== "42883") console.error(`tenant read failed (${name}):`, error.code, error.message);
+      if (error.code !== "PGRST202" && error.code !== "42883") {
+        console.error(`tenant read failed (${name}):`, error.code, error.message);
+        failed(name, error.code);
+      }
+      return [];
+    }
+    return (data as Row[] | null) ?? [];
+  };
+  // The same, told apart: null when the base does not carry the function yet, so the caller can fall back.
+  const rpcIfThere = async (name: string): Promise<Row[] | null> => {
+    const { data, error } = await g.rpc(name);
+    if (error) {
+      if (error.code === "PGRST202" || error.code === "42883") return null;
+      console.error(`tenant read failed (${name}):`, error.code, error.message);
       return [];
     }
     return (data as Row[] | null) ?? [];
@@ -219,12 +252,16 @@ export async function buildTenantSpace(
     const { data, error } = await query.limit(2000);
     if (error) {
       console.error(`tenant read failed (${table}):`, error.code, error.message);
+      failed(table, error.code);
       return [];
     }
     return (data as unknown as Row[]) ?? [];
   };
 
-  const [homes, partyRows, managerRows, instructionRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers"), rpc("my_payment_instructions")]);
+  const [everyHome, partyRows, managerRows, instructionRows] = await Promise.all([rpc("my_home"), rpc("my_lease_parties"), rpc("my_managers"), rpc("my_payment_instructions")]);
+  // A dossier still in preparation is the owner's working copy: a tenant
+  // sees a tenancy from its activation, never a draft that names them.
+  const homes = everyHome.filter((h) => s(h.lease_status) !== "draft");
   const leaseIds = homes.map((h) => s(h.lease_id));
   if (leaseIds.length === 0) {
     return {
@@ -239,6 +276,7 @@ export async function buildTenantSpace(
       requests: [],
       conversations: [],
       payments: null,
+      degraded,
     };
   }
 
@@ -250,28 +288,38 @@ export async function buildTenantSpace(
     read("deposits", "id,lease_id,form,amount_cents,status,received_on,key_handover_on", (q) => q.in("lease_id", leaseIds)),
     read("edl_sessions", "id,lease_id,kind,status,scheduled_at,completed_at,key_handover_at,hash_manifest_sha256", (q) => q.in("lease_id", leaseIds)),
     read("insurance_policies", "id,lease_id,kind,provider,policy_number,expires_on", (q) => q.in("lease_id", leaseIds)),
-    read("tickets", "id,lease_id,category,severity,status,title,description,created_at,updated_at,closed_at", (q) => q.in("lease_id", leaseIds).order("created_at", { ascending: false })),
+    // The requests the tenant raised, and only those: an intervention the desk opened on the lot is the desk's own.
+    read("tickets", "id,lease_id,category,severity,status,title,description,created_at,updated_at,closed_at", (q) => q.in("lease_id", leaseIds).eq("source", "tenant").order("created_at", { ascending: false })),
   ]);
   // The documents and conversations the space shows are the leases' and the
   // requests' own: asked for by those ids, not "everything the policy lets
   // through" and sorted out in memory.
   const ticketIds = ticketRows.map((t) => s(t.id));
-  const [documentRows, conversationRows, visitRows] = await Promise.all([
+  const [documentRows, conversationRows, visitRows, creditRows, unreadRows] = await Promise.all([
     read("documents", "id,class,name,storage_path,related_type,related_id,created_at", (q) =>
       q.in("related_id", [...leaseIds, ...ticketIds]).order("created_at", { ascending: false }),
     ),
     read("conversations", "id,scope_type,scope_id", (q) => q.eq("scope_type", "lease").in("scope_id", leaseIds)),
     ticketIds.length > 0 ? rpcOptional("my_visits") : Promise.resolve([] as Row[]),
+    // The credit (0032): money received above what was due, by tenancy.
+    rpcOptional("my_lease_credit"),
+    // What this account has not read, counted by the database from its own read marks (0031).
+    rpcIfThere("my_unread_messages"),
   ]);
+  const creditByLease = new Map(creditRows.map((r) => [s(r.lease_id), n(r.credit_cents)]));
   const conversationIds = conversationRows.map((c) => s(c.id));
+  // The newest messages (a long history is read from its end), in the order they were written.
   const messageRows = conversationIds.length > 0
-    ? await read("messages", "*", (q) => q.in("conversation_id", conversationIds).order("sent_at"))
+    ? (await read("messages", "*", (q) => q.in("conversation_id", conversationIds).order("sent_at", { ascending: false }))).reverse()
     : [];
 
   // Signed links for the property photos and the documents the tenant may open.
   const paths = [...homes.map((h) => s(h.photo_url)), ...documentRows.map((d) => s(d.storage_path))].filter((p) => p !== "" && !p.startsWith("http"));
   const signed = await opts.sign(paths);
-  const urlOf = (path: string): string | null => (path.startsWith("http") ? path : signed.get(path) ?? null);
+  // Only ever a signed bucket URL. A value carrying a scheme (http...) is
+  // never passed through: a forged document row could otherwise render an
+  // attacker's external URL as an <img>/<a> (a beacon) in another tenant's view.
+  const urlOf = (path: string): string | null => (/^[a-z][a-z0-9+.-]*:/i.test(path) ? null : signed.get(path) ?? null);
 
   const partiesByLease = new Map<string, TenantParty[]>();
   for (const p of partyRows) {
@@ -285,7 +333,9 @@ export async function buildTenantSpace(
     klass: s(d.class),
     createdAt: day(d.created_at) ?? "",
     storagePath: s(d.storage_path),
-    url: urlOf(s(d.storage_path)),
+    // The object is readable (signed above), and the page links to the route that
+    // signs it for a minute when opened: no long-lived link sits in the page.
+    url: urlOf(s(d.storage_path)) ? tenantDocumentHref(s(d.id)) : null,
     relatedType: s(d.related_type),
     relatedId: s(d.related_id),
   }));
@@ -299,7 +349,8 @@ export async function buildTenantSpace(
       orgId: s(h.org_id),
       unitId: s(h.unit_id),
       propertyId: s(h.property_id),
-      status: s(h.lease_status),
+      // In force until its last day; the date decides until the nightly job has written it.
+      status: effectiveLeaseStatus(s(h.lease_status), day(h.end_date), opts.today),
       type: s(h.lease_type) === "commercial" ? "commercial" : "residential",
       startDate: day(h.start_date) ?? "",
       endDate: day(h.end_date),
@@ -352,6 +403,7 @@ export async function buildTenantSpace(
             status: s(rp.status),
           };
         }),
+      creditCents: Math.max(creditByLease.get(id) ?? 0, 0),
     };
   });
 
@@ -363,6 +415,8 @@ export async function buildTenantSpace(
   const current = live[0] ?? null;
   const others = live.filter((l) => l !== current);
   const past = leases.filter((l) => !isLive(l)).sort(byStart);
+  /** The tenancy every page shows: the one in force, else the latest former one. */
+  const shown = current ?? past[0] ?? null;
 
   const conversationByLease = new Map(conversationRows.map((c) => [s(c.scope_id), s(c.id)]));
   const anchorByTicket = new Map<string, string>();
@@ -372,17 +426,29 @@ export async function buildTenantSpace(
     senderKind: s(m.sender_kind),
     body: s(m.body),
     sentAt: s(m.sent_at),
-    mine: s(m.sender_user_id) === opts.userId,
+    // The tenant's own words: written as a tenant, by this account. What the same account wrote from the desk is the desk's.
+    mine: s(m.sender_kind) === "tenant" && s(m.sender_user_id) === opts.userId,
     ticketId: s(m.ticket_id) || null,
   });
   const labelOfLease = (id: string): string => {
     const l = leases.find((x) => x.id === id);
     return l ? [l.unit.label, l.property.name].filter(Boolean).join(" · ") : "";
   };
+  const unreadByConversation = new Map((unreadRows ?? []).map((r) => [s(r.conversation_id), r]));
   const conversations: TenantConversation[] = conversationRows
     .map((c) => {
       const msgs = messageRows.filter((m) => s(m.conversation_id) === s(c.id)).map(toMessage);
-      return { id: s(c.id), leaseId: s(c.scope_id), label: labelOfLease(s(c.scope_id)), lastMessageAt: msgs[msgs.length - 1]?.sentAt ?? "", messages: msgs };
+      const counted = unreadByConversation.get(s(c.id));
+      return {
+        id: s(c.id),
+        leaseId: s(c.scope_id),
+        label: labelOfLease(s(c.scope_id)),
+        lastMessageAt: msgs[msgs.length - 1]?.sentAt ?? "",
+        messages: msgs,
+        // Without the function (a base before 0031), what the other side wrote since the tenant's own last word.
+        unread: counted ? n(counted.unread) : unreadIn(msgs, ""),
+        readUntil: counted ? s(counted.read_until) : "",
+      };
     })
     .sort((a, b) => (a.leaseId === current?.id ? -1 : b.leaseId === current?.id ? 1 : a.lastMessageAt < b.lastMessageAt ? 1 : -1));
   // One visit per request: the latest planned one. Only the tenant's own tickets are kept,
@@ -428,18 +494,22 @@ export async function buildTenantSpace(
     others,
     past,
     managers: managerRows.map((m) => ({ orgId: s(m.org_id), name: s(m.name), email: s(m.email) || null, phone: s(m.phone) || null })),
+    // The account to pay and the money picture are those of the tenancy on
+    // screen, in force or not: a former tenant who still owes rent is shown
+    // the same balance the owner sees, and where to pay it.
     paymentInstructions: (() => {
-      const row = current ? instructionRows.find((r) => s(r.org_id) === current.orgId) : undefined;
+      const row = shown ? instructionRows.find((r) => s(r.org_id) === shown.orgId) : undefined;
       return row && s(row.iban) ? { legalName: s(row.legal_name), iban: s(row.iban), bic: s(row.bic) || null, holderName: s(row.holder_name) || s(row.legal_name) } : null;
     })(),
     requests,
     conversations,
-    payments: current ? paymentsOf(current, opts.today) : null,
+    payments: shown ? paymentsOf(shown, opts.today) : null,
+    degraded,
   };
 }
 
 /** The tenant's money picture, derived from the ledger rows and nothing else. */
-export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "startDate" | "endDate">, today: string): TenantPayments {
+export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "startDate" | "endDate"> & { status?: string }, today: string): TenantPayments {
   const month = today.slice(0, 7);
   const sorted = [...lease.periods].sort((a, b) => (a.period < b.period ? -1 : 1));
   const thisMonth = sorted.find((p) => p.period === month) ?? null;
@@ -449,7 +519,9 @@ export function paymentsOf(lease: Pick<TenantLease, "periods" | "paymentDay" | "
   // not behind.
   const outstandingCents = open.filter((p) => p.dueDate < today).reduce((a, p) => a + (p.totalCents - p.allocatedCents), 0);
   const upcoming = open.find((p) => p.dueDate >= today) ?? null;
-  const nextDue = upcoming ? upcoming.dueDate : nextDueOn(today, lease.paymentDay, lease.startDate, lease.endDate);
+  // A term passed with nobody leaving is not an end: only a recorded departure stops the rent.
+  const until = lease.status === undefined || lease.status === "notice" || lease.status === "ended" ? lease.endDate : null;
+  const nextDue = upcoming ? upcoming.dueDate : nextDueOn(today, lease.paymentDay, lease.startDate, until);
   const nextDueCents = upcoming ? upcoming.totalCents - upcoming.allocatedCents : sorted.length > 0 ? sorted[sorted.length - 1].totalCents : 0;
   return { thisMonth, nextDueOn: nextDue, nextDueCents, outstandingCents, history: [...sorted].reverse() };
 }

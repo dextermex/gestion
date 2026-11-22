@@ -10,16 +10,58 @@ import type { Dict } from "./fr";
 import { formatDate, formatPct } from "@/lib/types";
 import { getParamValue } from "@/domain/legal/params";
 import type { SettlementInput, SettlementResult } from "@/domain/deposits/settlement";
+import type { AdjustmentProposal } from "@/domain/indexation/engine";
 
-/** Lease-rule issue text by code, with template vars; falls back to the engine message. */
+/**
+ * Lease-rule issue text by code, with template vars. The engine's own note is
+ * English and internal: it is accepted here so callers can keep passing it,
+ * and it is never printed. A code the dictionaries do not know yet reads as a
+ * point to check, by its code, in the reader's language.
+ */
 export function leaseIssueText(
   d: Dict,
   code: string,
   vars: Record<string, string | number> = {},
-  fallback = "",
+  engineNote?: string,
 ): string {
+  void engineNote;
   const template = (d.legal.leaseIssue as Record<string, string>)[code];
-  return template ? fmt(template, vars) : fallback;
+  return template ? fmt(template, vars) : fmt(d.legal.leaseIssueUnknown, { code });
+}
+
+/** Why the indexation engine proposes nothing, as a stable code read from its structured result. */
+export type AdjustmentBlock = "too_soon" | "at_ceiling" | "none";
+
+export function adjustmentBlock(p: Pick<AdjustmentProposal, "allowed" | "nextAllowedDate" | "bindingConstraint">): AdjustmentBlock | null {
+  if (p.allowed) return null;
+  // The interval rule is the only refusal that names a next date; the ceiling is the only one that binds on it.
+  if (p.nextAllowedDate) return "too_soon";
+  return p.bindingConstraint === "ceiling" ? "at_ceiling" : "none";
+}
+
+/**
+ * The sentence for a refused residential adjustment, from the proposal's
+ * structure (next lawful date, binding cap) and the legal parameters in force
+ * on `onDate`: never from the engine's English `blockedReason`.
+ */
+export function adjustmentBlockedText(
+  d: Dict,
+  locale: Locale,
+  p: Pick<AdjustmentProposal, "allowed" | "nextAllowedDate" | "bindingConstraint">,
+  onDate: string,
+): string {
+  const block = adjustmentBlock(p);
+  if (!block) return "";
+  if (block === "too_soon") {
+    return fmt(d.legal.adjustmentBlocked.too_soon, {
+      months: getParamValue("residential.rent_adjustment_min_interval_months", onDate),
+      date: formatDate(p.nextAllowedDate ?? onDate, locale),
+    });
+  }
+  if (block === "at_ceiling") {
+    return fmt(d.legal.adjustmentBlocked.at_ceiling, { pct: getParamValue("residential.rent_ceiling_pct_of_capital", onDate) });
+  }
+  return d.legal.adjustmentBlocked.none;
 }
 
 /**

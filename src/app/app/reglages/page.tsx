@@ -155,6 +155,7 @@ export default async function ReglagesPage() {
                 civilityF: d.modify.civilityF,
                 civilityX: d.modify.civilityX,
                 fieldBirthDate: d.modify.birthDate,
+                datePlaceholder: d.loyers.datePlaceholder,
                 fieldBirthPlace: d.modify.birthPlace,
                 fieldNationality: d.modify.nationality,
                 nationalityHint: d.modify.nationalityHint,
@@ -168,6 +169,8 @@ export default async function ReglagesPage() {
             />
           </Panel>
 
+          {/* Contrats links straight to the templates. */}
+          <div id="modeles" className="scroll-mt-24">
           <Panel title={d.reglages.templatesTitle}>
             <p className="mb-3 text-sm leading-relaxed text-ink-soft">{d.reglages.templatesBody}</p>
             <TemplatesPanel
@@ -190,6 +193,7 @@ export default async function ReglagesPage() {
               }}
             />
           </Panel>
+          </div>
         </div>
 
         <div className="flex flex-col gap-5">

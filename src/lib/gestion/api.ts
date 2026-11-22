@@ -1,9 +1,11 @@
 import "server-only";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity, type Workspace } from "@/lib/workspace";
 import { refuseWhenLocked } from "@/lib/billing/gate";
+import { reportHandled } from "@/lib/monitoring";
 
 /**
  * The shared spine of every gestion write route: a signed-in session, an
@@ -20,12 +22,92 @@ export interface OrgContext {
 /**
  * What a handler does with the workspace. A "write" is refused (402
  * `subscription_required`) once the trial is over with nothing subscribed:
- * the records stay readable, nothing is deleted. A route that does not say
- * is a read, so a route added without it is never locked by mistake.
+ * the records stay readable, nothing is deleted. An "act" changes something
+ * that stays open after the trial (marking a conversation read, reading a
+ * signature's status back, subscribing). A route that does not say is a
+ * read, so a route added without it is never locked by mistake.
+ *
+ * A write and an act are accepted from this application's own pages only
+ * (see `originAllowed`); a read is refused only when it names another origin.
  */
-export type Access = "read" | "write";
+export type Access = "read" | "write" | "act";
+
+/* ---------------------------------------------------------------------------
+ * Same origin. The session is a cookie the browser attaches by itself, so a
+ * request that changes something must show it was sent by one of this
+ * application's own pages. A browser states the sending page's origin in the
+ * `Origin` header on every request that is not a plain GET or HEAD, and on
+ * every request to another origin: when the header is there it must be this
+ * application's own, and it may be missing only on a GET or a HEAD (an
+ * address typed, a link followed, a file opened).
+ * ------------------------------------------------------------------------- */
+
+/** The rule itself. `own` lists the origins this request was addressed to. */
+export function originAllowed(method: string, origin: string | null, own: readonly string[]): boolean {
+  if (origin === null || origin === "") {
+    const m = method.toUpperCase();
+    return m === "GET" || m === "HEAD";
+  }
+  return own.includes(origin);
+}
+
+/**
+ * The origins the request was addressed to: the host it named, under the
+ * scheme the platform says it arrived on, and its own address. The framework
+ * rewrites a loopback address to "localhost" in a request's URL, so the host
+ * header is what matches a browser on 127.0.0.1. Without a proxy in front
+ * (a local server) nothing states the scheme, and both are the same machine.
+ */
+function ownOrigins(h: Headers, url?: string): string[] {
+  const out = new Set<string>();
+  if (url) {
+    try {
+      out.add(new URL(url).origin);
+    } catch {
+      /* a relative address names no origin */
+    }
+  }
+  const forwardedProto = (h.get("x-forwarded-proto") ?? "").split(",")[0].trim().toLowerCase();
+  const schemes = forwardedProto === "http" || forwardedProto === "https" ? [forwardedProto] : ["http", "https"];
+  for (const name of ["host", "x-forwarded-host"]) {
+    const host = (h.get(name) ?? "").split(",")[0].trim().toLowerCase();
+    if (host === "") continue;
+    for (const scheme of schemes) out.add(`${scheme}://${host}`);
+  }
+  return [...out];
+}
+
+const crossOrigin = (): NextResponse => NextResponse.json({ error: "forbidden", reason: "origin" }, { status: 403 });
+
+/**
+ * For a route that authenticates by itself and holds the request: the 403
+ * to answer, or null when the request comes from this application.
+ */
+export function refuseCrossOrigin(req: Request): NextResponse | null {
+  return originAllowed(req.method, req.headers.get("origin"), ownOrigins(req.headers, req.url)) ? null : crossOrigin();
+}
+
+/**
+ * The same rule where the handler did not pass its request (`withOrg`,
+ * `withOrgAndClient`, `withTenant`): the headers are read from the request
+ * in progress, and what the handler does stands for the method, since a
+ * write or an act is never a GET.
+ */
+export async function refuseCrossOriginHere(changes: boolean): Promise<NextResponse | null> {
+  let h: Headers;
+  try {
+    h = await headers();
+  } catch {
+    // No request in progress: a unit test calling a route's spine directly.
+    // A deployed handler always has one, and is refused if it ever does not.
+    return process.env.NODE_ENV === "test" ? null : crossOrigin();
+  }
+  return originAllowed(changes ? "POST" : "GET", h.get("origin"), ownOrigins(h)) ? null : crossOrigin();
+}
 
 export async function withOrg(access: Access = "read"): Promise<OrgContext | NextResponse> {
+  const refused = await refuseCrossOriginHere(access !== "read");
+  if (refused) return refused;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const identity = await getIdentity();
@@ -40,6 +122,8 @@ export async function withOrg(access: Access = "read"): Promise<OrgContext | Nex
 
 /** The same spine, with the raw client alongside for the bucket (uploads, signed links). */
 export async function withOrgAndClient(access: Access = "read"): Promise<(OrgContext & { client: SupabaseClient }) | NextResponse> {
+  const refused = await refuseCrossOriginHere(access !== "read");
+  if (refused) return refused;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const identity = await getIdentity();
@@ -53,13 +137,65 @@ export async function withOrgAndClient(access: Access = "read"): Promise<(OrgCon
   return { g: client.schema("gestion"), org, userId: session.userId, client };
 }
 
+/**
+ * Whether the caller holds a permission in the workspace, asked of the
+ * database: `gestion.can` is the predicate behind every policy, so the
+ * answer here is the one a write would get. Fails closed.
+ */
+export async function can(ctx: Pick<OrgContext, "g" | "org">, permission: string): Promise<boolean> {
+  try {
+    const { data, error } = await ctx.g.rpc("can", { p_org: ctx.org.id, p_perm: permission });
+    if (error) console.error("permission check failed:", permission, error.code);
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+/** What a role may not do is refused before anything is attempted: the 403 to answer, or null. */
+export async function refuseWithout(ctx: Pick<OrgContext, "g" | "org">, permission: string): Promise<NextResponse | null> {
+  return (await can(ctx, permission)) ? null : NextResponse.json({ error: "forbidden", permission }, { status: 403 });
+}
+
+/**
+ * The request's JSON body as a plain object. No body, a body that is not
+ * JSON, a list, a bare value or `null` all read as an empty object: a
+ * handler looks its fields up without ever throwing on what was sent.
+ */
+export async function jsonBody(req: Request): Promise<Record<string, unknown>> {
+  const raw: unknown = await req.json().catch(() => null);
+  return raw !== null && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+}
+
+/** A well-formed record id: the only shape a path or a body may name a row by. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
+
+/** A real calendar day written "YYYY-MM-DD" (not the 31st of February), or null. */
+export function isoDay(v: unknown): string | null {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const [y, m, d] = v.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d ? v : null;
+}
+
 /** Uniform PostgREST error mapping, logging the detail server-side only. */
 export function dbError(context: string, error: { code?: string; message?: string } | null): NextResponse {
   const code = error?.code;
   if (code === "PGRST106") return NextResponse.json({ error: "schema_unexposed" }, { status: 503 });
-  // A table or view this build expects that the database does not have yet: the migration is pending.
-  if (code === "PGRST205" || code === "42P01") return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
+  // A table, view or column this build expects that the database does not have yet: the migration is pending.
+  if (code === "PGRST205" || code === "PGRST204" || code === "42P01" || code === "42703") {
+    console.error(`${context}: the database lacks what this build expects:`, code);
+    reportHandled(context, code);
+    return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
+  }
   if (code === "42501") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // What was sent cannot be a value of the column it was meant for (an id that
+  // is not one, a number past the column's range, a day that does not exist):
+  // the request is at fault, not the storage.
+  if (code === "22P02" || code === "22003" || code === "22007" || code === "22008") return NextResponse.json({ error: "invalid" }, { status: 400 });
   console.error(`${context} failed:`, code, error?.message);
+  // Handled here, so never seen by the monitoring of unhandled errors: reported by name and code.
+  reportHandled(context, code);
   return NextResponse.json({ error: "storage_failed" }, { status: 502 });
 }

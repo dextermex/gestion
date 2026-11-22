@@ -192,10 +192,16 @@ export function Avatar({ name, size = 32 }: { name: string; size?: number }) {
 
 /* ----------------------------- Async state UI ------------------------------ */
 
+/**
+ * A spinner is said only when it stands alone: `label`, in the reader's
+ * language, names what is loading. Beside words that already say it (a
+ * busy button, a "reading the file" line) it is decoration, hidden from
+ * assistive technology.
+ */
 export function Spinner({
   size = 20,
   className,
-  label = "Chargement",
+  label,
 }: {
   size?: number;
   className?: string;
@@ -208,25 +214,12 @@ export function Spinner({
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      aria-label={label}
+      {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true })}
     >
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.2" strokeWidth="4" />
       <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
     </svg>
   );
-}
-
-export function Loading({ label = "Chargement…" }: { label?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-ink-soft">
-      <Spinner size={28} />
-      <p className="text-sm">{label}</p>
-    </div>
-  );
-}
-
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={clsx("animate-pulse rounded-lg bg-sand-100", className)} />;
 }
 
 export function EmptyState({
@@ -248,36 +241,6 @@ export function EmptyState({
       <h3 className="font-display text-base font-bold text-ink">{title}</h3>
       {body && <p className="max-w-sm text-sm text-ink-soft">{body}</p>}
       {action && <div className="mt-3">{action}</div>}
-    </div>
-  );
-}
-
-export function ErrorState({
-  title = "Une erreur est survenue",
-  body,
-  retry,
-  retryLabel = "Réessayer",
-}: {
-  title?: string;
-  body?: string;
-  retry?: () => void;
-  retryLabel?: string;
-}) {
-  return (
-    <div
-      role="alert"
-      className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-accent-200 bg-accent-50 px-6 py-12 text-center"
-    >
-      <span className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-white text-accent-600 shadow-sm">
-        <Icon name="alert" size={22} />
-      </span>
-      <h3 className="font-display text-base font-bold text-ink">{title}</h3>
-      {body && <p className="max-w-md text-sm text-ink-soft">{body}</p>}
-      {retry && (
-        <Button variant="secondary" size="sm" className="mt-3" onClick={retry}>
-          {retryLabel}
-        </Button>
-      )}
     </div>
   );
 }
@@ -314,14 +277,15 @@ export function Modal({
   title,
   children,
   wide,
-  closeLabel = "Fermer",
+  closeLabel,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   wide?: boolean;
-  closeLabel?: string;
+  /** The close button's name, in the reader's language. */
+  closeLabel: string;
 }) {
   const reduced = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -505,36 +469,5 @@ function ModalLayer({
         {sheet && <div aria-hidden className="absolute inset-x-0 top-full h-[50vh] bg-white" />}
       </motion.div>
     </div>
-  );
-}
-
-/* ---------------------------------- Stats ---------------------------------- */
-
-export function StatCard({
-  label,
-  value,
-  hint,
-  icon,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  icon?: React.ComponentProps<typeof Icon>["name"];
-}) {
-  return (
-    <Card className="group p-4 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-brand-100 hover:shadow-md">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
-          <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">{value}</p>
-          {hint && <p className="mt-0.5 text-xs text-ink-soft">{hint}</p>}
-        </div>
-        {icon && (
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110 motion-reduce:group-hover:scale-100">
-            <Icon name={icon} size={18} />
-          </span>
-        )}
-      </div>
-    </Card>
   );
 }

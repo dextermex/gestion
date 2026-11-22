@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Modal, Textarea } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
-import { shrinkPhotos } from "@/lib/photo";
-import { SEEN_COOKIE, parseSeen, serializeSeen } from "@/lib/portal/seen";
+import PieceThumb from "@/components/gestion/PieceThumb";
+import { usePageRefresh, useTabVisible } from "@/lib/page-refresh";
+import { sendRefusal, sendingId, sendsOnEnter, signInBeside } from "@/lib/gestion/threads";
+import { PIECE_ACCEPT, pieceLine, preparePieces, sendPieces, type PieceLabels, type PieceOutcome } from "@/lib/portal/pieces";
 import { initials } from "@/lib/types";
 
 /**
@@ -25,13 +26,11 @@ import { initials } from "@/lib/types";
  * asks which open request the photo is about, files it there through the
  * request's own route, and leaves a line in the conversation saying so.
  *
- * Showing the conversation marks it seen on this browser (a cookie holding
- * the tenancy and the last message's time): what the space's navigation
- * counts as unread is what arrived after that.
+ * Showing the conversation marks it read, in the database, up to the last
+ * message on the screen: the account's own read mark, the same on every
+ * device. What the space's navigation counts as unread is what arrived
+ * after that. A conversation in a tab left in the background is not read.
  */
-
-const MAX_FILES = 5;
-const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
  * The conversation filling a phone's whole screen (the page's gutter is
@@ -68,6 +67,11 @@ export interface TenantChatLabels {
   send: string;
   sent: string;
   failed: string;
+  /** The session ended while the message was written: it is kept, and signing in again opens beside the page. */
+  sessionEnded: string;
+  signInAgain: string;
+  /** The space may not send this message: said, and the message kept. */
+  forbidden: string;
   view: string;
   requestBadge: string;
   newRequest: string;
@@ -79,12 +83,16 @@ export interface TenantChatLabels {
   photoMessage: string;
   photoChoose: string;
   photoFailed: string;
+  /** Why a file did not go, by name. */
+  pieces: PieceLabels;
   uploading: string;
   close: string;
 }
 
 export default function TenantChat({
   leaseId,
+  conversationId,
+  unread,
   title,
   subtitle,
   messages,
@@ -100,6 +108,10 @@ export default function TenantChat({
   backLabel,
 }: {
   leaseId: string;
+  /** The conversation's id; null while no word has been written to the tenancy. */
+  conversationId: string | null;
+  /** What the other side wrote that this account has not read yet, as the database counts it. */
+  unread: number;
   title: string;
   subtitle: string;
   messages: TenantChatMessage[];
@@ -120,30 +132,46 @@ export default function TenantChat({
   onBack: () => void;
   backLabel: string;
 }) {
-  const router = useRouter();
+  // The page is read again after a write, and asked for again if the router dropped the refresh.
+  const page = usePageRefresh(messages);
+  const visible = useTabVisible();
+  /** The last message the read mark was asked for: one request per conversation and last message. */
+  const markedFor = useRef("");
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed" | "sample">("idle");
+  /** Why the last send failed, when it says more than "try again". */
+  const [refusal, setRefusal] = useState<"session" | "forbidden" | null>(null);
+  /** The id the draft was last sent with, while it is not through: sent again, it is kept once. */
+  const pending = useRef<{ text: string; id: string | null } | undefined>(undefined);
   const bodyRef = useRef<HTMLDivElement>(null);
   const count = messages.length;
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoFor, setPhotoFor] = useState<string>(openRequests[0]?.id ?? "");
   const [photoState, setPhotoState] = useState<"idle" | "uploading" | "failed" | "sample">("idle");
+  /** The files that did not go, each with its reason: said by name, never dropped in silence. */
+  const [photoRefused, setPhotoRefused] = useState<PieceOutcome[]>([]);
 
-  // The conversation is on the screen (always on a laptop, on a phone once it has the screen):
-  // this browser has seen it up to its last message. The navigation's count follows on refresh.
+  // The conversation is on the screen (always on a laptop, on a phone once it has the screen)
+  // and the tab is the one being looked at: the account has read it up to its last message.
+  // The mark is written in the database; the navigation's count follows on refresh.
   useEffect(() => {
-    if (!lastAt) return;
+    if (!conversationId || !lastAt || unread === 0 || sampleNote || !visible) return;
     const wide = typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1024px)").matches;
     if (!phoneOpen && !wide) return;
-    const raw = document.cookie.split("; ").find((c) => c.startsWith(`${SEEN_COOKIE}=`))?.slice(SEEN_COOKIE.length + 1);
-    const seen = parseSeen(raw);
-    if ((seen[leaseId] ?? "") >= lastAt) return;
-    document.cookie = `${SEEN_COOKIE}=${serializeSeen({ ...seen, [leaseId]: lastAt })}; path=/; max-age=31536000; samesite=lax`;
-    router.refresh();
-  }, [lastAt, leaseId, phoneOpen, router]);
+    if (markedFor.current === lastAt) return;
+    markedFor.current = lastAt;
+    fetch("/api/locataire/messages/lu", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId, until: lastAt }) })
+      .then((res) => {
+        if (res.ok) page.refresh();
+        else markedFor.current = "";
+      })
+      .catch(() => {
+        markedFor.current = "";
+      });
+  }, [conversationId, lastAt, unread, phoneOpen, sampleNote, visible, page]);
 
   const sendPhotos = async (input: HTMLInputElement) => {
-    const chosen = Array.from(input.files ?? []).filter((f) => f.type.startsWith("image/")).slice(0, MAX_FILES);
+    const chosen = Array.from(input.files ?? []);
     input.value = "";
     const target = openRequests.find((r) => r.id === photoFor) ?? openRequests[0];
     if (chosen.length === 0 || !target) return;
@@ -152,28 +180,28 @@ export default function TenantChat({
       return;
     }
     setPhotoState("uploading");
+    setPhotoRefused([]);
     try {
-      const ready = (await shrinkPhotos(chosen)).filter((f) => f.size <= MAX_BYTES);
-      if (ready.length === 0) {
-        setPhotoState("failed");
-        return;
-      }
-      const body = new FormData();
-      for (const f of ready) body.append("files", f);
-      const res = await fetch(`/api/locataire/demandes/${encodeURIComponent(target.id)}/pieces`, { method: "POST", body });
-      if (res.status === 401) {
+      // Each file ready or refused by name; then one request per file, and what became of each.
+      const { ready, refused } = await preparePieces(chosen);
+      const sent = ready.length > 0 ? await sendPieces(target.id, ready) : [];
+      if (sent === "signed_out") {
         window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      if (!res.ok) {
+      const failed = [...refused, ...sent.filter((o) => !o.ok)];
+      const went = sent.filter((o) => o.ok).length;
+      setPhotoRefused(failed);
+      if (went === 0) {
         setPhotoState("failed");
         return;
       }
-      // The thread says what was filed and where; the photo itself sits on the request's card.
+      // The thread says what was filed and where; the file itself sits on the request's card.
       await fetch("/api/locataire/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: labels.photoMessage.replace("{title}", target.title), leaseId }) }).catch(() => null);
-      setPhotoState("idle");
-      setPhotoOpen(false);
-      router.refresh();
+      setPhotoState(failed.length > 0 ? "failed" : "idle");
+      // Everything went: the sheet closes. Otherwise it stays, saying which files did not go.
+      if (failed.length === 0) setPhotoOpen(false);
+      page.refresh();
     } catch {
       setPhotoState("failed");
     }
@@ -204,19 +232,21 @@ export default function TenantChat({
       return;
     }
     setState("sending");
+    setRefusal(null);
+    pending.current = sendingId(pending.current, body);
     try {
-      const res = await fetch("/api/locataire/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body, leaseId }) });
-      if (res.status === 401) {
-        window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
-        return;
-      }
+      const res = await fetch("/api/locataire/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body, leaseId, clientId: pending.current.id }) });
       if (!res.ok) {
+        // The draft stays whatever happened; a session that ended is said, with a way back in beside the page.
+        const why = sendRefusal(res.status);
+        setRefusal(why === "session" ? "session" : why === "forbidden" ? "forbidden" : null);
         setState("failed");
         return;
       }
+      pending.current = undefined;
       setDraft("");
       setState("sent");
-      router.refresh();
+      page.refresh();
     } catch {
       setState("failed");
     }
@@ -283,16 +313,7 @@ export default function TenantChat({
                         <ul className="mt-3 grid grid-cols-3 gap-2">
                           {request.attachments.map((a) => (
                             <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
-                              {a.url ? (
-                                <a href={a.url} target="_blank" rel="noreferrer" className="block">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
-                                </a>
-                              ) : (
-                                <p className="truncate p-2 text-[11px] text-ink-soft" title={a.name}>
-                                  {a.name}
-                                </p>
-                              )}
+                              <PieceThumb name={a.name} url={a.url} />
                             </li>
                           ))}
                         </ul>
@@ -344,6 +365,7 @@ export default function TenantChat({
               type="button"
               onClick={() => {
                 setPhotoState("idle");
+                setPhotoRefused([]);
                 setPhotoOpen(true);
               }}
               aria-label={labels.photo}
@@ -368,7 +390,7 @@ export default function TenantChat({
               if (state !== "idle" && state !== "sending") setState("idle");
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (sendsOnEnter(e)) {
                 e.preventDefault();
                 void send();
               }
@@ -386,7 +408,16 @@ export default function TenantChat({
             (state === "failed" ? "text-red-700" : state === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-emerald-800")
           }
         >
-          {state === "sent" ? labels.sent : state === "failed" ? labels.failed : state === "sample" ? sampleNote : ""}
+          {state === "sent" ? labels.sent : state === "failed" ? (refusal === "session" ? labels.sessionEnded : refusal === "forbidden" ? labels.forbidden : labels.failed) : state === "sample" ? sampleNote : ""}
+          {state === "failed" && refusal === "session" && (
+            <>
+              {" "}
+              {/* A tab of its own: this page, and the message on it, stay as they are. */}
+              <a href={signInBeside(typeof window === "undefined" ? "/locataire/messages" : window.location.pathname + window.location.search)} target="_blank" rel="noopener" className="inline-flex min-h-10 items-center text-brand-700 underline underline-offset-2" data-sign-in-again>
+                {labels.signInAgain}
+              </a>
+            </>
+          )}
         </p>
       </form>
 
@@ -420,11 +451,18 @@ export default function TenantChat({
               >
                 <Icon name="camera" size={18} className="shrink-0" />
                 {photoState === "uploading" ? labels.uploading : labels.photoChoose}
-                <input type="file" accept="image/*" multiple className="sr-only" disabled={photoState === "uploading"} onChange={(e) => void sendPhotos(e.currentTarget)} />
+                <input type="file" accept={PIECE_ACCEPT} multiple className="sr-only" disabled={photoState === "uploading"} onChange={(e) => void sendPhotos(e.currentTarget)} />
               </label>
-              <p role="status" className={"mt-2 min-h-4 text-xs font-semibold " + (photoState === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-red-700")}>
-                {photoState === "failed" ? labels.photoFailed : photoState === "sample" ? sampleNote : ""}
-              </p>
+              <div role="status" className={"mt-2 min-h-4 text-xs font-semibold " + (photoState === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-red-700")}>
+                {photoState === "sample" ? sampleNote : photoState === "failed" && photoRefused.length === 0 ? labels.photoFailed : ""}
+                {photoState === "failed" && photoRefused.length > 0 && (
+                  <ul className="space-y-0.5" data-pieces-refused>
+                    {photoRefused.map((o, i) => (
+                      <li key={`${o.name}:${i}`}>{pieceLine(o, labels.pieces)}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
         </Modal>

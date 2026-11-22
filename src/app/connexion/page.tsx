@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
+import { APP_SHORT_NAME } from "@/lib/constants";
+import { signupCopy } from "@/lib/i18n/signup";
 import SignupFunnel from "@/components/signup/SignupFunnel";
 import "../inscription/signup.css";
 import { redirect } from "next/navigation";
@@ -6,7 +9,12 @@ import { getLocale } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { getSession } from "@/lib/supabase/server";
 
-export const metadata = { title: "Morada · Sign in", robots: { index: false, follow: false } };
+/** The tab's name in the language the page is shown in: the `lang` of the link, else the person's. */
+export async function generateMetadata({ searchParams }: { searchParams: Promise<{ lang?: string }> }): Promise<Metadata> {
+  const { lang } = await searchParams;
+  const locale = LOCALES.includes(lang as Locale) ? (lang as Locale) : await getLocale();
+  return { title: `${APP_SHORT_NAME} · ${signupCopy[locale].login}`, robots: { index: false, follow: false } };
+}
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 

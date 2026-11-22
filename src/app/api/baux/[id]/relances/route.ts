@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { todayISO } from "@/lib/clock";
+import { tenantsOfRecord } from "@/domain/arrears/recipients";
 
 /**
  * One step of the arrears ladder, recorded on a rent period of the lease:
@@ -23,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const stage = str(body.stage, 24) as Stage;
   const rentPeriodId = str(body.rentPeriodId, 64);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const doneOn = isoDay(body.doneOn) ?? today;
   const arReceivedOn = isoDay(body.arReceivedOn);
   if (!STAGES.includes(stage) || !rentPeriodId) return NextResponse.json({ error: "invalid" }, { status: 400 });
@@ -40,10 +42,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (actions.some((a) => a.stage === stage)) return NextResponse.json({ error: "already" }, { status: 409 });
 
   let letterId: string | null = null;
+  // The step is claimed first (one per period and stage, 0032): two clicks write one.
+  const claim = async (): Promise<{ id: string } | NextResponse> => {
+    const { data: action, error: actionErr } = await g
+      .from("arrears_actions")
+      .insert({ org_id: org.id, lease_id: leaseId, rent_period_id: rentPeriodId, stage, executed_at: `${doneOn}T12:00:00Z`, confirmed_by: userId })
+      .select("id")
+      .single();
+    if (actionErr?.code === "23505") return NextResponse.json({ error: "already" }, { status: 409 });
+    if (actionErr || !action) return dbError("arrears action insert", actionErr);
+    return { id: String(action.id) };
+  };
   if (stage === "mise_en_demeure") {
-    // The recipient: the tenant of record, first named.
-    const { data: parties } = await g.from("lease_parties").select("contact_id,role,moved_out_on").eq("org_id", org.id).eq("lease_id", leaseId);
-    const tenant = ((parties ?? []) as Array<Record<string, unknown>>).find((p) => p.role === "tenant" && !p.moved_out_on);
+    // The recipients: every tenant of record of the month, a closed tenancy's included.
+    const { data: parties } = await g.from("lease_parties").select("id,contact_id,role,moved_in_on,moved_out_on").eq("org_id", org.id).eq("lease_id", leaseId);
+    const recipients = tenantsOfRecord((parties ?? []) as Array<Record<string, unknown>>, String(period.period).slice(0, 10));
     // What the letter says, kept with it: the open periods of the tenancy as
     // they stand today, the steps already taken, the amount. The document is
     // produced from this snapshot, now or later, never from rows that moved.
@@ -69,8 +82,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       friendlyOn: stepOn("friendly"),
       formalOn: stepOn("formal"),
       openPeriods,
+      recipientContactIds: recipients,
       dispatchedOn: doneOn,
     };
+    const claimed = await claim();
+    if (claimed instanceof NextResponse) return claimed;
     const content = JSON.stringify(snapshot);
     const { data: letter, error: letterErr } = await g
       .from("registered_letters")
@@ -79,7 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         template_key: "mise_en_demeure",
         related_type: "rent_period",
         related_id: rentPeriodId,
-        recipient_contact_id: tenant ? String(tenant.contact_id) : null,
+        recipient_contact_id: recipients[0] ?? null,
         content_sha256: createHash("sha256").update(content).digest("hex"),
         content: snapshot,
         status: arReceivedOn ? "ar_received" : "dispatched",
@@ -88,8 +104,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
       .select("id")
       .single();
-    if (letterErr || !letter) return dbError("registered letter insert", letterErr);
+    if (letterErr || !letter) {
+      // No letter, no step: the claim is taken back.
+      await g.from("arrears_actions").delete().eq("org_id", org.id).eq("id", claimed.id);
+      // A base without the letter's content column (0022) says it is behind, not that something failed.
+      if (letterErr?.code === "PGRST204" || letterErr?.code === "42703") return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
+      return dbError("registered letter insert", letterErr);
+    }
     letterId = String(letter.id);
+    const { error: linkErr } = await g.from("arrears_actions").update({ registered_letter_id: letterId }).eq("org_id", org.id).eq("id", claimed.id);
+    if (linkErr) return dbError("arrears action link", linkErr);
+    return NextResponse.json({ id: claimed.id, letterId });
   } else if (stage === "justice_dossier") {
     // The file needs the AR of the mise en demeure: the law's order, not ours.
     const med = actions.find((a) => a.stage === "mise_en_demeure");
@@ -99,19 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!letter?.ar_received_on) return NextResponse.json({ error: "needs_ar" }, { status: 409 });
   }
 
-  const { data: action, error: actionErr } = await g
-    .from("arrears_actions")
-    .insert({
-      org_id: org.id,
-      lease_id: leaseId,
-      rent_period_id: rentPeriodId,
-      stage,
-      executed_at: `${doneOn}T12:00:00Z`,
-      registered_letter_id: letterId,
-      confirmed_by: userId,
-    })
-    .select("id")
-    .single();
-  if (actionErr || !action) return dbError("arrears action insert", actionErr);
-  return NextResponse.json({ id: action.id, letterId });
+  const claimed = await claim();
+  if (claimed instanceof NextResponse) return claimed;
+  return NextResponse.json({ id: claimed.id, letterId });
 }

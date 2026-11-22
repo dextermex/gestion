@@ -73,7 +73,7 @@ export default async function AssurancesPage() {
                       <td className="px-3 py-3 text-right tabular-nums text-ink" data-wrap>
                         {ins.premiumCents > 0
                           ? fmt(d.assurances.perYear, { amount: euros(ins.premiumCents, locale) })
-                          : "—"}
+                          : d.common.none}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {ins.expiresOn && expiry ? (
@@ -82,7 +82,7 @@ export default async function AssurancesPage() {
                             <MetaBadge meta={statusMeta[expiry]} />
                           </span>
                         ) : (
-                          "—"
+                          d.common.none
                         )}
                       </td>
                     </tr>

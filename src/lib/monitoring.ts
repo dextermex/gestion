@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import type { ErrorEvent, EventHint } from "@sentry/nextjs";
 
 /**
@@ -16,16 +17,33 @@ export const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN ?? "";
 
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const IBAN = /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}\s?[A-Z0-9]{1,4}\b/g;
-const INVITATION = /\/invitation\/[A-Za-z0-9_-]{16,}/g;
+// The path itself, and the same path carried encoded in a `next=` value (once or twice).
+const INVITATION = /((?:\/|%2F|%252F)invitation(?:\/|%2F|%252F))[A-Za-z0-9_-]{16,}/gi;
 const TOKEN_QUERY = /([?&#](?:access_token|refresh_token|token|code)=)[^&#\s]+/gi;
 
 /** Free text with the identifying parts blanked. */
 export function redact(text: string): string {
   return text
-    .replace(INVITATION, "/invitation/[token]")
+    .replace(INVITATION, "$1[token]")
     .replace(TOKEN_QUERY, "$1[redacted]")
     .replace(EMAIL, "[email]")
     .replace(IBAN, "[iban]");
+}
+
+/**
+ * The same redaction walked over a nested structure's string values. Sentry
+ * carries free text not only in the message but in `event.contexts`,
+ * `event.extra` and `event.tags` (a route path with an invitation token, an
+ * e-mail in an extra, an IBAN in a tag): none of it should leave unredacted.
+ */
+function redactDeep<T>(value: T, depth = 0): T {
+  if (depth > 6 || value == null) return value;
+  if (typeof value === "string") return redact(value) as unknown as T;
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, depth + 1)) as unknown as T;
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, redactDeep(v, depth + 1)])) as T;
+  }
+  return value;
 }
 
 /** The event, stripped of everything that names a person, before it is sent. */
@@ -45,6 +63,10 @@ export function scrub(event: ErrorEvent, _hint?: EventHint): ErrorEvent | null {
   for (const ex of event.exception?.values ?? []) {
     if (ex.value) ex.value = redact(ex.value);
   }
+  // Free text also rides in contexts / extra / tags: redact their strings too.
+  if (event.contexts) event.contexts = redactDeep(event.contexts);
+  if (event.extra) event.extra = redactDeep(event.extra);
+  if (event.tags) event.tags = redactDeep(event.tags);
   event.breadcrumbs = (event.breadcrumbs ?? [])
     // Console lines can carry anything: they stay home. The rest (a route,
     // a request URL, a status) is kept with its strings redacted.
@@ -55,6 +77,26 @@ export function scrub(event: ErrorEvent, _hint?: EventHint): ErrorEvent | null {
       data: b.data ? Object.fromEntries(Object.entries(b.data).map(([k, v]) => [k, typeof v === "string" ? redact(v) : v])) : b.data,
     }));
   return event;
+}
+
+/** Whether failures are reported anywhere: a screen says "it was reported" only then. */
+export const monitoringOn = (): boolean => SENTRY_DSN !== "";
+
+/**
+ * A failure the code handled (a read that fell back, a write answered 502)
+ * reported all the same, as a message: where it happened and the code the
+ * backend gave, never a value, a row or a person. Grouped by both, so one
+ * broken table is one issue however many pages hit it. Inert without a DSN.
+ */
+export function reportHandled(context: string, code?: string | null): void {
+  if (!monitoringOn()) return;
+  const where = redact(context).slice(0, 120);
+  const what = (code ?? "unknown").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 32) || "unknown";
+  try {
+    Sentry.captureMessage(`${where}: ${what}`, { level: "error", fingerprint: ["handled", where, what] });
+  } catch {
+    /* monitoring never breaks the request it reports on */
+  }
 }
 
 /** The options every runtime initialises with. */

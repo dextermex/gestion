@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrgAndClient, dbError } from "@/lib/gestion/api";
+import { withOrgAndClient, dbError, jsonBody, refuseWithout } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import { connectedProvider } from "@/lib/signature/connect";
 import { isSignatureLevel, type SignerLocale } from "@/lib/signature/envelope";
 import { sendLeaseForSignature, type SignerForm } from "@/lib/signature/service";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Sends a dossier's contract to be signed: the lease, the tenants' level,
@@ -32,7 +34,7 @@ const signer = (v: unknown): SignerForm | null => {
 export async function POST(req: NextRequest) {
   const ctx = await withOrgAndClient("write");
   if (ctx instanceof NextResponse) return ctx;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const body = await jsonBody(req);
   const leaseId = str(body.leaseId, 64);
   const level = body.level;
   const tenants = Array.isArray(body.tenants) ? body.tenants.slice(0, 10).map(signer) : [];
@@ -40,7 +42,13 @@ export async function POST(req: NextRequest) {
   if (!UUID.test(leaseId) || !isSignatureLevel(level) || tenants.length === 0 || tenants.some((t) => !t) || !lessor) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
-  const today = new Date().toISOString().slice(0, 10);
+  // A sending is billed and reaches people by e-mail and SMS: the role is
+  // asked first, and the sendings are counted.
+  const refused = await refuseWithout(ctx, "gestion.leases.edit");
+  if (refused) return refused;
+  const limited = await refuseOverRate(ctx.g, RATE.signatureSend, ctx.org.id);
+  if (limited) return limited;
+  const today = todayISO();
   const result = await sendLeaseForSignature(ctx, ctx.client, connectedProvider(), { leaseId, level, tenants: tenants as SignerForm[], lessor }, today);
   if ("error" in result) {
     switch (result.error) {

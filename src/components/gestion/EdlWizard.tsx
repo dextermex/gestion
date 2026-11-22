@@ -12,6 +12,9 @@ import { shrinkPhotos } from "@/lib/photo";
 import { stepParser, useStepHistory } from "@/lib/wizard-history";
 import { Icon } from "@/components/pro/icons";
 import type { Dict } from "@/lib/i18n/fr";
+import { todayISO } from "@/lib/clock";
+import DateField from "@/components/gestion/DateField";
+import { networkProblem, readApiProblem, signInHref } from "@/lib/api-errors";
 
 /**
  * The état des lieux, walked rather than filled in.
@@ -61,6 +64,7 @@ export default function EdlWizard({
   leaseId,
   kind,
   unitLabel,
+  unitId,
   propertyId,
   propertyName,
   meters,
@@ -73,6 +77,8 @@ export default function EdlWizard({
   leaseId: string;
   kind: "entry" | "exit";
   unitLabel: string;
+  /** The lot inspected: "back to the property" lands on its tenancy, also in a building. */
+  unitId?: string;
   propertyId: string;
   propertyName: string;
   meters: MeterOption[];
@@ -87,6 +93,7 @@ export default function EdlWizard({
   const router = useRouter();
   const reduced = useReducedMotion();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const backToProperty = `/app/biens/${propertyId}?onglet=location${unitId ? `&lot=${unitId}` : ""}`;
 
   const [rooms, setRooms] = useState<RoomState[]>(() =>
     suggestedRooms.map((name) => ({ key: key(), name, items: {} })),
@@ -96,7 +103,7 @@ export default function EdlWizard({
   const [keysHandedOver, setKeysHandedOver] = useState(kind === "entry");
   const [observations, setObservations] = useState("");
   const [signed, setSigned] = useState(false);
-  const [completedAt, setCompletedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [completedAt, setCompletedAt] = useState(() => todayISO());
 
   // 0 = rooms, 1..n = one room each, n+1 = meters, n+2 = keys, n+3 = done
   const [step, setStep] = useState(0);
@@ -243,11 +250,13 @@ export default function EdlWizard({
         }),
       });
       if (res.status === 401) {
-        window.location.assign(`/connexion?next=/app/biens/etat-des-lieux?bail=${leaseId}`);
+        // The walk is kept on the device (the draft) and offered back after signing in. The return
+        // address is this page with its lease, encoded: unencoded, the lease became a parameter of the sign-in page.
+        window.location.assign(signInHref(window.location.pathname + window.location.search));
         return;
       }
       if (!res.ok) {
-        setError(d.edlWizard.saveFailed);
+        setError((await readApiProblem(res, d.apiErrors, { fallback: d.edlWizard.saveFailed })).message);
         setSaving(false);
         return;
       }
@@ -259,6 +268,10 @@ export default function EdlWizard({
       // that room and category. A failed upload is named, never dropped
       // silently, and the inventory stands without it.
       const failed: string[] = [];
+      // An answer without the inventory's id leaves the photographs nowhere to go: they are named as not sent.
+      if (!sessionId && photoCount > 0) {
+        for (const shots of Object.values(photos)) for (const { file } of shots) failed.push(file.name);
+      }
       if (sessionId && photoCount > 0) {
         setPhase("photos");
         for (const r of rooms) {
@@ -288,11 +301,11 @@ export default function EdlWizard({
           const sealed = (await sealRes.json().catch(() => ({}))) as { sha256?: string; report?: { documentId: string; name: string } | null };
           setSealResult({ sha256: String(sealed.sha256 ?? ""), report: sealed.report ?? null });
         } else setSealFailed(true);
-      }
+      } else if (!sessionId && signed && recordedItems.length > 0) setSealFailed(true);
       setPhase("idle");
       setStep(doneStep);
     } catch {
-      setError(d.edlWizard.saveFailed);
+      setError(networkProblem(d.apiErrors).message);
     }
     setPhase("idle");
     setSaving(false);
@@ -342,7 +355,7 @@ export default function EdlWizard({
       <div className="journey-topbar sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
         {step === 0 || step === doneStep ? (
           <Link
-            href={returnTo ?? `/app/biens/${propertyId}?onglet=location`}
+            href={returnTo ?? backToProperty}
             className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11"
           >
             <BackIcon />
@@ -551,7 +564,7 @@ export default function EdlWizard({
               {Heading}
               <StepCard>
                 <Field label={d.edlWizard.completedOn}>
-                  <Input type="date" value={completedAt} onChange={(e) => setCompletedAt(e.target.value)} />
+                  <DateField value={completedAt} onChange={setCompletedAt} placeholder={d.loyers.datePlaceholder} />
                 </Field>
                 <div className="mt-3">
                   <Field label={d.edlWizard.observations}>
@@ -668,7 +681,7 @@ export default function EdlWizard({
                 )}
                 <Button
                   variant={returnTo ? "secondary" : "primary"}
-                  onClick={() => router.push(`/app/biens/${propertyId}?onglet=location`)}
+                  onClick={() => router.push(backToProperty)}
                 >
                   {d.location.backToProperty}
                 </Button>

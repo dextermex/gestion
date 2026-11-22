@@ -52,7 +52,7 @@ function DialogForm() {
   const [title, setTitle] = useState("");
   // The inline handler every screen writes: a new function on each render.
   return (
-    <Modal open onClose={() => {}} title="Nouvelle demande">
+    <Modal open onClose={() => {}} title="Nouvelle demande" closeLabel="Fermer">
       <input aria-label="Titre" value={title} onChange={(e) => setTitle(e.target.value)} />
       <p data-testid="echo">{title}</p>
     </Modal>
@@ -93,7 +93,7 @@ describe("a field keeps the caret while the person types", () => {
     function Owner() {
       const [n, setN] = useState(0);
       return (
-        <Modal open onClose={() => { closed = n; }} title="t">
+        <Modal open onClose={() => { closed = n; }} title="t" closeLabel="Fermer">
           <input aria-label="f" value={String(n)} onChange={(e) => setN(Number(e.target.value) || 0)} />
         </Modal>
       );

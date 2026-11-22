@@ -6,6 +6,11 @@ import { Button, Field, Input, Modal, Select, Spinner } from "@/components/pro/u
 import type { Dict } from "@/lib/i18n/fr";
 import { fmt } from "@/lib/i18n/config";
 import { callForm } from "./call";
+import { ApiProblemNote } from "@/components/gestion/ApiErrors";
+import { apiProblem, networkProblem, type ApiProblem } from "@/lib/api-errors";
+import { invalidDayField } from "@/lib/forms";
+import { MAX_DOCUMENT_BYTES } from "@/lib/gestion/documents-rules";
+import { IN_REQUEST_MAX_BYTES, putInBucket } from "@/lib/gestion/upload-client";
 import DateField from "./DateField";
 import { HERO_ACTION, HERO_ACTION_LABEL, HERO_ROUND } from "./Hero";
 
@@ -105,13 +110,15 @@ function BillModal({
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [scan, setScan] = useState<ScanState>("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal in words (src/lib/api-errors.ts): which field, a piece too large, a session that ended.
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
 
   const [direction, setDirection] = useState<"income" | "expense">("expense");
   const [supplier, setSupplier] = useState("");
@@ -121,8 +128,10 @@ function BillModal({
   const [dueDate, setDueDate] = useState("");
   const [paid, setPaid] = useState(false);
   const [cashflow, setCashflow] = useState(true);
-  const [unitId, setUnitId] = useState(unitOptions[0]?.id ?? "");
-  const [category, setCategory] = useState("maintenance_repairs");
+  // No lot and no category are chosen for the person: a bill for a whole building sits on no lot,
+  // and the category is the fiscal bucket the tax pack reads, so it is picked, never assumed.
+  const [unitId, setUnitId] = useState("");
+  const [category, setCategory] = useState("");
   const [vat, setVat] = useState("17");
   const [amount, setAmount] = useState("");
 
@@ -132,10 +141,12 @@ function BillModal({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(inbox);
+      setCopyFailed(false);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard can be unavailable — the address stays selectable.
+      // The clipboard can be refused or absent: the address stays on screen, selectable, and the form says so.
+      setCopyFailed(true);
     }
   };
 
@@ -144,7 +155,7 @@ function BillModal({
   const ingest = (chosen: File | null, name: string) => {
     setFileName(name);
     setFile(chosen);
-    setError(null);
+    setProblem(null);
     if (!ocr) {
       setScan("done");
       return;
@@ -177,9 +188,26 @@ function BillModal({
     { id: "other_frais", label: d.finance.billCatOther },
   ];
 
+  /** The route names the field it refuses (`problem`): the form says which one. */
+  const fieldLabels: Record<string, string> = {
+    subject: d.finance.billSubject,
+    category: d.finance.billCategory,
+    vat: d.finance.billVat,
+    amount: d.finance.amountTotal,
+    date: d.finance.billDocDate,
+    unit: d.finance.billUnit,
+    supplier: d.finance.billSupplier,
+  };
+
   /** The bill, written; the books are re-read behind the dialog. */
-  const submit = async () => {
-    setError(null);
+  const submit = async (formEl: HTMLFormElement) => {
+    setProblem(null);
+    // A date typed that is not a day is corrected before anything is sent: it would otherwise be saved as no date.
+    const badDay = invalidDayField(formEl);
+    if (badDay) {
+      badDay.focus();
+      return;
+    }
     if (!writable) {
       setSubmitted(true);
       return;
@@ -187,7 +215,18 @@ function BillModal({
     setBusy(true);
     try {
       const form = new FormData();
-      if (file) form.set("file", file);
+      if (file && file.size > IN_REQUEST_MAX_BYTES) {
+        // Larger than a request carries: straight to the bucket first, then the bill names it.
+        const put = await putInBucket(file, "/app/finance");
+        if (!put) return;
+        if (!("path" in put)) {
+          setProblem(apiProblem(put.status, put.payload, d.apiErrors, { fallback: d.finance.billFailed, maxMb: MAX_DOCUMENT_BYTES / (1024 * 1024), codes: { unsupported_type: d.finance.billBadType } }));
+          setBusy(false);
+          return;
+        }
+        form.set("uploadedPath", put.path);
+        form.set("fileName", file.name);
+      } else if (file) form.set("file", file);
       form.set("direction", direction);
       form.set("supplierContactId", supplier);
       form.set("subject", subject);
@@ -200,14 +239,26 @@ function BillModal({
       form.set("category", category);
       form.set("vatRate", vat);
       form.set("amount", amount);
-      const res = await callForm("/api/finance/factures", form, "/app/finance");
+      // The form holds a piece and what was typed: a session that ended is said here, never a page change.
+      const res = await callForm("/api/finance/factures", form, null);
       if (!res) return;
       if (res.ok) {
         setSubmitted(true);
         router.refresh();
-      } else setError(res.status === 400 ? d.finance.billInvalid : res.status === 413 ? d.finance.billTooLarge : res.status === 415 ? d.finance.billBadType : d.finance.billFailed);
+      } else {
+        const refusal = apiProblem(res.status, res.payload, d.apiErrors, {
+          keepsInput: true,
+          returnTo: "/app/finance",
+          fallback: d.finance.billFailed,
+          fields: fieldLabels,
+          maxMb: MAX_DOCUMENT_BYTES / (1024 * 1024),
+          codes: { unsupported_type: d.finance.billBadType },
+        });
+        // A refusal that names no field keeps the form's own reminder of what to check.
+        setProblem(refusal.kind === "invalid" && !(refusal.field && fieldLabels[refusal.field]) ? { ...refusal, message: d.finance.billInvalid } : refusal);
+      }
     } catch {
-      setError(d.finance.billFailed);
+      setProblem(networkProblem(d.apiErrors));
     }
     setBusy(false);
   };
@@ -221,7 +272,7 @@ function BillModal({
         className="space-y-3.5"
         onSubmit={(e) => {
           e.preventDefault();
-          void submit();
+          void submit(e.currentTarget);
         }}
       >
         <div className="grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1" role="radiogroup">
@@ -262,6 +313,7 @@ function BillModal({
           </Field>
           <Field label={d.finance.billUnit}>
             <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+              <option value="">{d.finance.billUnitNone}</option>
               {unitOptions.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.label}
@@ -273,6 +325,28 @@ function BillModal({
         <Field label={d.finance.billDocDate}>
           <DateField value={docDate} onChange={setDocDate} placeholder={d.loyers.datePlaceholder} />
         </Field>
+        {/* The fiscal bucket and the VAT are part of the bill: in sight, so neither is saved on a default nobody saw. */}
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label={d.finance.billCategory}>
+            <Select value={category} onChange={(e) => setCategory(e.target.value)} required>
+              <option value="">{d.finance.billSupplierNone}</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={d.finance.billVat}>
+            <Select value={vat} onChange={(e) => setVat(e.target.value)}>
+              <option value="17">17 %</option>
+              <option value="14">14 %</option>
+              <option value="8">8 %</option>
+              <option value="3">3 %</option>
+              <option value="0">{d.finance.billVatExempt}</option>
+            </Select>
+          </Field>
+        </div>
 
         {/* The paper itself: one line to tap or drop on. */}
         <div
@@ -289,8 +363,9 @@ function BillModal({
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            const dropped = e.dataTransfer.files[0] ?? null;
-            ingest(dropped, dropped?.name ?? "facture.pdf");
+            // Only a file is a piece: a dragged link or a line of text chooses nothing.
+            const dropped = e.dataTransfer.files[0];
+            if (dropped) ingest(dropped, dropped.name);
           }}
           className={
             "flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border border-dashed px-4 py-2.5 transition-colors duration-150 " +
@@ -333,24 +408,6 @@ function BillModal({
               <Field label={d.finance.billDueDate}>
                 <DateField value={dueDate} onChange={setDueDate} placeholder={d.loyers.datePlaceholder} />
               </Field>
-              <Field label={d.finance.billCategory}>
-                <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label={d.finance.billVat}>
-                <Select value={vat} onChange={(e) => setVat(e.target.value)}>
-                  <option value="17">17 %</option>
-                  <option value="14">14 %</option>
-                  <option value="8">8 %</option>
-                  <option value="3">3 %</option>
-                  <option value="0">{d.finance.billVatExempt}</option>
-                </Select>
-              </Field>
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               <Toggle checked={paid} onChange={setPaid} label={d.finance.billPaid} />
@@ -358,10 +415,15 @@ function BillModal({
             </div>
             <div className="flex flex-wrap items-center gap-2 border-t border-sand-200 pt-3">
               <p className="text-xs font-semibold text-ink-soft">{d.finance.billForwardTitle}</p>
-              <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-800">{inbox}</code>
+              <code className="min-w-0 flex-1 select-all truncate rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-800">{inbox}</code>
               <button type="button" onClick={copy} className="tactile shrink-0 rounded-lg border border-sand-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 max-sm:min-h-10">
                 {copied ? d.finance.billCopied : d.finance.billCopy}
               </button>
+              {copyFailed && (
+                <p role="status" className="basis-full text-xs font-semibold text-amber-800">
+                  {d.finance.billCopyFailed}
+                </p>
+              )}
             </div>
           </div>
         </details>
@@ -371,11 +433,7 @@ function BillModal({
             {writable ? d.finance.billCreated : d.common.demoCreateNotice}
           </p>
         )}
-        {error && (
-          <p role="alert" className="text-xs font-semibold text-red-700">
-            {error}
-          </p>
-        )}
+        <ApiProblemNote problem={problem} className="text-xs font-semibold text-red-700" />
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>

@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/pro/ui";
 import { Segments } from "@/components/gestion/Hero";
 import ToolGrid, { type ToolGroup } from "@/components/gestion/ToolGrid";
+import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { plural } from "@/lib/i18n/config";
 
@@ -8,7 +9,8 @@ import { plural } from "@/lib/i18n/config";
  * Rapports: every report the books can already give, by family, each
  * opening the screen that produces it from the workspace's own rows. A
  * report that is not built yet is listed as such and leads nowhere; none
- * is promised by a card that opens an empty page.
+ * is promised by a card that opens an empty page. The tax pack is one of
+ * them: it is a link only where the account has a prepared exercise.
  */
 const GROUPS = ["financier", "loyers", "charges", "biens"] as const;
 type Group = (typeof GROUPS)[number];
@@ -16,6 +18,7 @@ type Group = (typeof GROUPS)[number];
 export default async function RapportsPage({ searchParams }: { searchParams: Promise<{ famille?: string }> }) {
   const params = await searchParams;
   const { locale, d } = await getI18n();
+  const { FISCAL_YEARS } = await getDemo();
   const r = d.reports;
   const count = (n: number) => plural(locale, n, r.countOne, r.countMany);
 
@@ -27,7 +30,8 @@ export default async function RapportsPage({ searchParams }: { searchParams: Pro
         { key: "yearResult", icon: "analytics", href: "/app/finance?vue=resultat", ...r.items.yearResult },
         { key: "cashflow", icon: "trending-up", href: "/app/finance", ...r.items.cashflow },
         { key: "bank", icon: "bank", href: "/app/banque", ...r.items.bank },
-        { key: "taxPack", icon: "contract", href: "/app/fiscalite", ...r.items.taxPack },
+        { key: "taxSummary", icon: "percent", href: "/app/fiscalite", ...r.items.taxSummary },
+        { key: "taxPack", icon: "contract", href: FISCAL_YEARS.length > 0 ? "/app/fiscalite?vue=detail" : undefined, ...r.items.taxPack },
         { key: "statement", icon: "documents", ...r.items.statement },
       ],
     },

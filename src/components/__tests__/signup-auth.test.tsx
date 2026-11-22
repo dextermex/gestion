@@ -6,7 +6,7 @@ import SignupFunnel from "@/components/signup/SignupFunnel";
 
 const auth = vi.hoisted(() => ({
   getUser: vi.fn(), signInWithOtp: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), linkIdentity: vi.fn(), signInWithOAuth: vi.fn(), signInWithPassword: vi.fn(),
-  resetPasswordForEmail: vi.fn(), updateUser: vi.fn(), resend: vi.fn(),
+  resetPasswordForEmail: vi.fn(), updateUser: vi.fn(), resend: vi.fn(), refreshSession: vi.fn(),
 }));
 vi.mock("@/lib/supabase/browser", () => ({ getSupabase: () => ({ auth }) }));
 vi.mock("next/image", () => ({ default: () => null }));
@@ -27,6 +27,7 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_PHONE_SIGNUP_ENABLED", "1");
   vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "test-site-key");
   auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+  auth.refreshSession.mockResolvedValue({ data: { session: null }, error: null });
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -56,6 +57,17 @@ it("fails closed without a security token, including programmatic submission", a
   await phone(); await submit();
   expect(auth.signInWithOtp).not.toHaveBeenCalled();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("security check");
+});
+it("notes the public site's placement tag on the account it creates", async () => {
+  auth.signInWithOtp.mockResolvedValue({ error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" placement="hero" />));
+  await phone(); await click("Solve test challenge");
+  await submit();
+  await act(async () => host.querySelector<HTMLButtonElement>(".signup-confirm-dialog .signup-primary")!.click());
+  expect(auth.signInWithOtp).toHaveBeenCalledWith({
+    phone: "+352621123456",
+    options: { captchaToken: "one-use-captcha", shouldCreateUser: true, data: { preferred_language: "en", morada_signup: { version: 1, stage: "role", ref: "hero" } } },
+  });
 });
 it("normalizes autofilled input, submits one OTP request, and cannot verify on a rejected code", async () => {
   let resolve!: (result: { error: null }) => void;
@@ -88,6 +100,22 @@ it("returning-phone login cannot silently create an account", async () => {
   await act(async () => root.render(<SignupFunnel locale="en" loginMode phoneLogin />));
   await phone(); await click("Solve test challenge"); await submit(); await click("Confirm and send code");
   expect(auth.signInWithOtp).toHaveBeenCalledWith({ phone: "+352621123456", options: { captchaToken: "one-use-captcha", shouldCreateUser: false } });
+});
+it("signing in by phone says the same for a number with an account and one without", async () => {
+  const outcome = async (answer: { error: { code: string; status: number } | null }) => {
+    auth.signInWithOtp.mockResolvedValue(answer);
+    await act(async () => root.render(<SignupFunnel locale="en" loginMode phoneLogin />));
+    await phone(); await click("Solve test challenge"); await submit(); await click("Confirm and send code");
+    const seen = { title: host.querySelector("h1")?.textContent, status: host.querySelector('[role="status"]')?.textContent, alert: host.querySelector('[role="alert"]')?.textContent ?? null };
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    return seen;
+  };
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const known = await outcome({ error: null });
+  const unknown = await outcome({ error: { code: "otp_disabled", status: 422 } });
+  expect(known).toEqual(unknown);
+  expect(known).toEqual({ title: "Check your messages", status: "If an account uses this number, a code has just been sent to it.", alert: null });
 });
 it("the design preview never reads or creates a real auth session", async () => {
   await act(async () => root.render(<SignupFunnel locale="en" preview />));
@@ -245,6 +273,7 @@ it("forgot password sends a recovery link back to this app and answers the same 
   expect(host.innerHTML).not.toContain("legacy=1");
 });
 it("the recovery link opens a new-password step, and an expired link says so", async () => {
+  window.history.replaceState(null, "", "/connexion?mode=reset#access_token=a&refresh_token=b&type=recovery");
   auth.getUser.mockResolvedValue({ data: { user: { id: "u1", email: "alex@example.test", user_metadata: {} } }, error: null });
   auth.updateUser.mockResolvedValue({ data: { user: null }, error: { code: "weak_password", status: 422 } });
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -263,6 +292,16 @@ it("the recovery link opens a new-password step, and an expired link says so", a
   await act(async () => root.render(<SignupFunnel locale="en" loginMode recovery />));
   expect(host.querySelector("h1")?.textContent).toBe("Welcome back");
   expect(host.querySelector('[role="alert"]')?.textContent).toBe("This reset link has expired. Request a new one.");
+});
+it("reset mode without the recovery link never offers a new password to a session that merely exists", async () => {
+  window.history.replaceState(null, "", "/connexion?mode=reset");
+  const complete = { id: "u1", email: "alex@example.test", email_confirmed_at: "2026-09-27", phone: "352621123456", phone_confirmed_at: "2026-09-27",
+    user_metadata: { first_name: "Alex", last_name: "Example", morada_signup: { version: 1, role: "landlord", stage: "complete", password_set_at: "2026-09-27" } } };
+  auth.getUser.mockResolvedValue({ data: { user: complete }, error: null });
+  await act(async () => root.render(<SignupFunnel locale="en" loginMode recovery />));
+  expect(host.querySelector("#reset-password")).toBeNull();
+  expect(host.querySelector("h1")?.textContent).toBe("You’re already at home.");
+  expect(auth.updateUser).not.toHaveBeenCalled();
 });
 it("an invitation's address is prefilled and survives the phone verification", async () => {
   auth.getUser.mockResolvedValue({ data: { user: { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", user_metadata: { morada_signup: { version: 1, stage: "email", role: "tenant" } } } }, error: null });
@@ -286,6 +325,8 @@ it("after the email the funnel asks for the emailed code, then a password, then 
   await submit();
   expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
   expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
+  // Every address gets the same page, with what a code that never comes may mean.
+  expect(host.textContent).toContain("This address may already belong to another account");
   auth.verifyOtp.mockResolvedValueOnce({ data: { user: null }, error: { code: "otp_expired", status: 403 } });
   vi.spyOn(console, "warn").mockImplementation(() => {});
   host.querySelector<HTMLInputElement>("#email-code")!.value = "111111";
@@ -294,8 +335,11 @@ it("after the email the funnel asks for the emailed code, then a password, then 
   expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
   auth.verifyOtp.mockResolvedValueOnce({ data: { user: {} }, error: null });
   host.querySelector<HTMLInputElement>("#email-code")!.value = "123456";
+  expect(auth.refreshSession).not.toHaveBeenCalled();
   await submit();
   expect(host.querySelector("h1")?.textContent).toBe("Create your password");
+  // The session is renewed once the address is confirmed: the token then carries it.
+  expect(auth.refreshSession).toHaveBeenCalledTimes(1);
   expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
   host.querySelector<HTMLInputElement>("#create-password")!.value = "long-enough-1";
   host.querySelector<HTMLInputElement>("#confirm-password")!.value = "long-enough-2";

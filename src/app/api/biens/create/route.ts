@@ -61,14 +61,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
 
+  // The wizard's own key for this creation: the same request sent again (a
+  // retry after a lost answer) finds the property it made, never a second one.
+  const requestKey = typeof body.requestKey === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(body.requestKey) ? body.requestKey : null;
+  const already = async (): Promise<NextResponse | null> => {
+    if (!requestKey) return null;
+    const { data: found, error } = await g.from("properties").select("id").eq("org_id", org.id).eq("request_key", requestKey).maybeSingle();
+    if (error || !found) return null;
+    const { data: lots } = await g.from("units").select("id,label").eq("org_id", org.id).eq("property_id", found.id).order("created_at");
+    return NextResponse.json({ id: found.id, units: (lots as Array<{ id: string; label: string }> | null) ?? [], replayed: true });
+  };
+  const replay = await already();
+  if (replay) return replay;
+
+  // Two lots of one property never share a name: the sheet, the rent and the papers tell them apart by it.
+  const supplied = Array.isArray(body.units) ? (body.units as UnitInput[]) : [];
+  const labels = supplied.map((u) => str(u.label, 60).toLocaleLowerCase("fr")).filter((l) => l !== "");
+  if (new Set(labels).size !== labels.length) return NextResponse.json({ error: "duplicate_lot" }, { status: 400 });
+
   const year = num(body.constructionYear, 2200);
   const energy = (ENERGY as readonly string[]).includes(String(body.energyClass))
     ? String(body.energyClass)
     : null;
 
-  const { data: property, error: propErr } = await g
-    .from("properties")
-    .insert({
+  const propertyRow: Record<string, unknown> = {
       org_id: org.id,
       name,
       type: shape.type,
@@ -81,9 +97,19 @@ export async function POST(req: NextRequest) {
       cadastral_section: str(body.cadastralSection, 20) || null,
       cadastral_number: str(body.cadastralNumber, 40) || null,
       syndic_name: str(body.syndicName, 120) || null,
-    })
-    .select("id")
-    .single();
+      ...(requestKey ? { request_key: requestKey } : {}),
+  };
+  let { data: property, error: propErr } = await g.from("properties").insert(propertyRow).select("id").single();
+  // A base without the key column (0032) creates without it.
+  if (propErr && (propErr.code === "PGRST204" || propErr.code === "42703") && requestKey) {
+    delete propertyRow.request_key;
+    ({ data: property, error: propErr } = await g.from("properties").insert(propertyRow).select("id").single());
+  }
+  // The same key twice at once: the other request made it.
+  if (propErr?.code === "23505") {
+    const raced = await already();
+    if (raced) return raced;
+  }
   // A database that predates 0026 refuses the parking type (a check violation): say the schema is behind, not that the input is wrong.
   if (propErr?.code === "23514" && shape.type === "parking") return NextResponse.json({ error: "schema_outdated" }, { status: 503 });
   if (propErr || !property) return dbError("property insert", propErr);
@@ -91,7 +117,6 @@ export async function POST(req: NextRequest) {
   // The lots. A single-home property gets exactly one, named after itself so
   // the sheet reads naturally before anyone renames it; a building gets what
   // the wizard collected, and may legitimately get none yet.
-  const supplied = Array.isArray(body.units) ? (body.units as UnitInput[]) : [];
   const rows = shape.unitKind
     ? [
         {
@@ -123,11 +148,16 @@ export async function POST(req: NextRequest) {
 
   let units: Array<{ id: string; label: string }> = [];
   if (rows.length > 0) {
+    // The lots go in one statement, all or none. None: the property just
+    // written is taken back (nothing hangs off it yet), so a house is never
+    // left without its lot and the wizard can simply try again.
     const { data, error: unitErr } = await g.from("units").insert(rows).select("id,label");
-    // The property exists; a failed lot insert must not lose it. The sheet
-    // will simply show no lots, and the owner can add them there.
-    if (unitErr) console.error("units insert failed:", unitErr.code, unitErr.message);
-    units = (data as Array<{ id: string; label: string }> | null) ?? [];
+    if (unitErr || !data) {
+      const { error: undoErr } = await g.from("properties").delete().eq("org_id", org.id).eq("id", property.id);
+      if (undoErr) console.error("property creation rollback failed:", undoErr.code, undoErr.message);
+      return dbError("units insert", unitErr);
+    }
+    units = data as Array<{ id: string; label: string }>;
   }
 
   return NextResponse.json({ id: property.id, units });

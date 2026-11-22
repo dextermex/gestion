@@ -182,6 +182,8 @@ test("the arrears ladder is recorded step by step; the AR carries legal effect a
   await li.getByRole("button", { name: "Confirmer la mise en demeure" }).click();
   expect((await med).ok(), "the mise en demeure is recorded").toBe(true);
   await expect(li.getByRole("status")).toContainText("Mise en demeure enregistrée");
+  // The page has re-read the ladder: the AR's field is there under the confirmation, without a reload.
+  await expect(li.getByRole("button", { name: "Enregistrer l'AR" })).toBeVisible();
   await page.reload();
   await unfold(li);
   await expect(li).toContainText("en attente de l'accusé de réception");

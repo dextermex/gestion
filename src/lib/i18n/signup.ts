@@ -67,8 +67,8 @@ const en: SignupCopy = {
   "properties": [
     "None just yet",
     "1 property",
-    "2–5 properties",
-    "6–10 properties",
+    "2 to 5 properties",
+    "6 to 10 properties",
     "11 or more properties"
   ],
   "challengeTitle": "What takes the most time?",
@@ -156,6 +156,9 @@ const en: SignupCopy = {
   "passwordMismatch": "The two passwords don’t match.",
   "emailUnconfirmed": "Confirm your email first, with the code or link we sent.",
   "passwordRequired": "Create your password first.",
+  "passwordAlreadySet": "This account already has a password. To change it, ask for a reset link from the sign-in page.",
+  "phoneCodeIfAccount": "If an account uses this number, a code has just been sent to it.",
+  "emailCodeOtherAccount": "No code after a few minutes? This address may already belong to another account: sign in with it, or choose another address.",
   "smsFailed": "We couldn’t send a text to this number. Check it, or try again in a few minutes.",
   "phoneUnavailable": "Phone sign-up is temporarily unavailable. Please try again later.",
   "noPhoneAccount": "No account uses this number yet. Create your account to get started.",
@@ -254,8 +257,8 @@ const de: SignupCopy = {
   "properties": [
     "Noch keine",
     "1 Immobilie",
-    "2–5 Immobilien",
-    "6–10 Immobilien",
+    "2 bis 5 Immobilien",
+    "6 bis 10 Immobilien",
     "11 oder mehr Immobilien"
   ],
   "challengeTitle": "Was möchten Sie\nvereinfachen?",
@@ -343,6 +346,9 @@ const de: SignupCopy = {
   "passwordMismatch": "Die beiden Passwörter stimmen nicht überein.",
   "emailUnconfirmed": "Bestätigen Sie zuerst Ihre E-Mail mit dem Code oder dem Link.",
   "passwordRequired": "Erstellen Sie zuerst Ihr Passwort.",
+  "passwordAlreadySet": "Dieses Konto hat bereits ein Passwort. Um es zu ändern, fordern Sie auf der Anmeldeseite einen Link zum Zurücksetzen an.",
+  "phoneCodeIfAccount": "Falls ein Konto diese Nummer verwendet, wurde soeben ein Code an sie gesendet.",
+  "emailCodeOtherAccount": "Nach einigen Minuten kein Code? Diese Adresse gehört möglicherweise bereits zu einem anderen Konto: Melden Sie sich damit an oder wählen Sie eine andere Adresse.",
   "smsFailed": "Wir konnten keine SMS an diese Nummer senden. Prüfen Sie sie oder versuchen Sie es in ein paar Minuten erneut.",
   "phoneUnavailable": "Die Registrierung per Telefon ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.",
   "noPhoneAccount": "Mit dieser Nummer ist noch kein Konto verbunden. Erstellen Sie Ihr Konto, um zu beginnen.",
@@ -441,8 +447,8 @@ const lu: SignupCopy = {
   "properties": [
     "Nach keng",
     "1 Immobilie",
-    "2–5 Immobilien",
-    "6–10 Immobilien",
+    "2 bis 5 Immobilien",
+    "6 bis 10 Immobilien",
     "11 Immobilien oder méi"
   ],
   "challengeTitle": "Wat wëllt Dir\nvereinfachen?",
@@ -530,6 +536,9 @@ const lu: SignupCopy = {
   "passwordMismatch": "Déi zwee Passwierder stëmmen net iwwereneen.",
   "emailUnconfirmed": "Confirméiert fir d’éischt Är E-Mail mam Code oder mam Link.",
   "passwordRequired": "Maacht fir d’éischt Äert Passwuert.",
+  "passwordAlreadySet": "Dëse Kont huet schonn e Passwuert. Fir et z’änneren, frot op der Umeldungssäit e Link fir et zréckzesetzen.",
+  "phoneCodeIfAccount": "Wann e Kont dës Nummer benotzt, gouf grad e Code drop geschéckt.",
+  "emailCodeOtherAccount": "No e puer Minutte nach ëmmer keen Code? Dës Adress gehéiert vläicht schonn zu engem anere Kont: Mellt Iech domat un, oder wielt eng aner Adress.",
   "smsFailed": "Mir konnten keng SMS un dës Nummer schécken. Kontrolléiert se oder probéiert et an e puer Minutten nach eng Kéier.",
   "phoneUnavailable": "D’Umeldung mam Telefon ass de Moment net disponibel. Probéiert et w.e.g. méi spéit nach eng Kéier.",
   "noPhoneAccount": "Mat dëser Nummer ass nach kee Kont verbonnen. Maacht Äre Kont fir unzefänken.",

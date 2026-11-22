@@ -10,8 +10,10 @@ import { createHash } from "node:crypto";
  * and counted, never guessed.
  *
  * Every operation gets a stable id so a statement imported twice lands once:
- * the bank's own reference when the export carries one, else a hash of the
- * line plus its rank among identical lines in the same file.
+ * a hash of the line (its date, amount, counterparty, IBAN, wording and the
+ * bank's reference when the export carries one) plus its rank among
+ * identical lines in the same file. A reference alone is never the id: many
+ * repeat from month to month.
  */
 
 export interface StatementRow {
@@ -20,7 +22,7 @@ export interface StatementRow {
   counterpartyName: string;
   counterpartyIban: string | null;
   remittanceInfo: string;
-  /** The bank's own reference for the operation, when the export has one. */
+  /** The bank's own reference for the operation, when the export has one (kept as the end-to-end id). */
   reference: string | null;
   /** Stable across re-imports of the same file (see above). */
   txId: string;
@@ -224,10 +226,13 @@ export function parseStatementCsv(text: string): StatementParse {
     const counterpartyIban = normaliseIban(cell(rec, "iban"));
     const remittanceInfo = cell(rec, "remittance");
     const reference = cell(rec, "reference") || null;
-    const fingerprint = [bookedOn, amountCents, counterpartyName, counterpartyIban ?? "", remittanceInfo].join("|");
+    // The reference is part of the line, never its identity on its own: a
+    // standing order's fixed reference, the SEPA default "NOTPROVIDED" or the
+    // lease's own RF repeat month after month.
+    const fingerprint = [bookedOn, amountCents, counterpartyName, counterpartyIban ?? "", remittanceInfo, reference ?? ""].join("|");
     const rank = (seen.get(fingerprint) ?? 0) + 1;
     seen.set(fingerprint, rank);
-    const txId = reference ?? `csv:${createHash("sha256").update(`${fingerprint}|${rank}`).digest("hex").slice(0, 32)}`;
+    const txId = `csv:${createHash("sha256").update(`${fingerprint}|${rank}`).digest("hex").slice(0, 32)}`;
     rows.push({ bookedOn, amountCents, counterpartyName, counterpartyIban, remittanceInfo, reference, txId });
   }
   return { rows, skipped, delimiter, columns };

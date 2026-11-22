@@ -8,10 +8,10 @@ import QuerySelect from "@/components/gestion/QuerySelect";
 import { FoldRow, GroupHead, Hero, HeroAction, HeroStat, MonthSwitch, Money, Row, Rows, Section, Segments } from "@/components/gestion/Hero";
 import { getDemo, isSampleData } from "@/lib/demo";
 import type { DemoData } from "@/lib/demo";
-import { euros, eurosWhole, formatDate, formatMonth } from "@/lib/types";
+import { euros, eurosWhole, formatDate, formatMonth, formatPct } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/config";
 import { getI18n } from "@/lib/i18n";
-import { INTL_LOCALE, fmt } from "@/lib/i18n/config";
+import { dateInWords, fmt } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { billState, type BillCategory } from "@/lib/gestion/bills";
 import { managementFeeVat } from "@/domain/fiscal/vat";
@@ -41,7 +41,8 @@ function sampleStatement(demo: DemoData) {
   const krierInvoice = 124_000; // boiler repair, owner charge
   const netToOwner = collected - fee.gross - krierInvoice;
   // Co-owner split through the SCI (60/40): exact to the cent.
-  const [faberShare, pierreShare] = splitExact(netToOwner, [60, 40]);
+  const sharesPct = [60, 40] as const;
+  const [faberShare, pierreShare] = splitExact(netToOwner, [...sharesPct]);
   return {
     collectedRows,
     fee,
@@ -49,6 +50,7 @@ function sampleStatement(demo: DemoData) {
     netToOwner,
     faberShare,
     pierreShare,
+    sharesPct,
     sci: contactById("c-sci-bealieu"),
     ownerA: contactById("c-faber"),
     ownerB: contactById("c-faber-p"),
@@ -133,11 +135,11 @@ function Books({ statement, demo, d, locale }: { statement: NonNullable<ReturnTy
                 </p>
                 <ul className="mt-2 space-y-1.5 text-sm">
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">{statement.ownerA.name} · 60 %</span>
+                    <span className="text-ink-soft">{statement.ownerA.name} · {formatPct(statement.sharesPct[0], locale)}</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(statement.faberShare, locale)}</span>
                   </li>
                   <li className="flex justify-between">
-                    <span className="text-ink-soft">{statement.ownerB.name} · 40 %</span>
+                    <span className="text-ink-soft">{statement.ownerB.name} · {formatPct(statement.sharesPct[1], locale)}</span>
                     <span className="font-semibold tabular-nums text-ink">{euros(statement.pierreShare, locale)}</span>
                   </li>
                 </ul>
@@ -238,13 +240,15 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const MONTHS = [-5, -4, -3, -2, -1, 0, 1].map((k) => addMonths(`${liveMonth}-01`, k).slice(0, 7));
   const past = MONTHS.filter((m) => m <= liveMonth);
   const month = params.mois && past.includes(params.mois) ? params.mois : liveMonth;
-  const period: Period = PERIODS.includes(params.periode as Period) ? (params.periode as Period) : "mois";
   const property = PROPERTIES.find((p) => p.id === params.bien) ?? null;
   const views: View[] = statement ? [...VIEWS] : VIEWS.filter((v) => v !== "comptabilite");
   const view: View = views.includes(params.vue as View) ? (params.vue as View) : "tresorerie";
+  // A stretch of months is Trésorerie's own reading. The other views list one month (Revenus) or the
+  // year (Charges, Résultat): there the head stays on the month, so it never totals what the lists do not show.
+  const period: Period = view === "tresorerie" && PERIODS.includes(params.periode as Period) ? (params.periode as Period) : "mois";
   const hrefFor = (next: { v?: View; m?: string; p?: Period; bien?: string | null }) => {
     const v = next.v ?? view;
-    const p = next.p ?? period;
+    const p = v === "tresorerie" ? (next.p ?? period) : "mois";
     const m = next.m ?? month;
     const b = next.bien === undefined ? (property?.id ?? null) : next.bien;
     const q = new URLSearchParams();
@@ -285,7 +289,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
 
   const bars: FlowBar[] = flows.map((x) => ({
     month: x.month,
-    label: flows.length > 7 ? new Date(`${x.month}-01T00:00:00`).toLocaleDateString(INTL_LOCALE[locale], { month: "short" }) : formatMonth(x.month, locale).split(" ")[0],
+    label: flows.length > 7 ? dateInWords(new Date(`${x.month}-01T00:00:00`), locale, { month: "short" }) : formatMonth(x.month, locale).split(" ")[0],
     inCents: x.inCents,
     outCents: x.outCents,
     future: x.month > liveMonth,
@@ -385,13 +389,16 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
             }))}
           />
         </div>
-        {view === "tresorerie" && (
+        {/* The property the books are read for is chosen, and seen, on every view of them. */}
+        {view !== "comptabilite" && (view === "tresorerie" || PROPERTIES.length > 1) && (
           <div className="flex flex-wrap items-center gap-2">
-            <QuerySelect
-              label={f.periodAria}
-              value={period}
-              options={PERIODS.map((p) => ({ value: p, label: p === "mois" ? f.periodMonth : p === "3m" ? f.period3 : p === "12m" ? f.period12 : f.periodYear, href: hrefFor({ p }) }))}
-            />
+            {view === "tresorerie" && (
+              <QuerySelect
+                label={f.periodAria}
+                value={period}
+                options={PERIODS.map((p) => ({ value: p, label: p === "mois" ? f.periodMonth : p === "3m" ? f.period3 : p === "12m" ? f.period12 : f.periodYear, href: hrefFor({ p }) }))}
+              />
+            )}
             {PROPERTIES.length > 1 && (
               <QuerySelect
                 label={f.propertyAria}

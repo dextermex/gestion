@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
 import { fmt } from "@/lib/i18n/config";
+import { useApiProblems } from "./ApiErrors";
 
 export interface ReviewCandidate {
   leaseId: string;
@@ -75,6 +76,15 @@ export function initialRowState(row: Pick<ReviewRow, "candidates" | "payerIban">
 }
 
 /**
+ * A row's state: what the manager did to it on this screen, or, for a row
+ * that arrived since the queue was drawn (a sync, an imported statement),
+ * where a row starts.
+ */
+export function rowStateOf(state: Record<string, RowState>, row: Pick<ReviewRow, "id" | "candidates" | "payerIban">): RowState {
+  return state[row.id] ?? initialRowState(row);
+}
+
+/**
  * The matching review queue, live: each row names the lease the operation
  * belongs to (the engine's suggestions first, every live lease after), says
  * whether to remember the payer's IBAN for that lease, and one keystroke
@@ -95,19 +105,20 @@ export function ReviewQueue({
 }) {
   const router = useRouter();
   const reduced = useReducedMotion();
+  const problems = useApiProblems();
   const [state, setState] = useState<Record<string, RowState>>(() => Object.fromEntries(rows.map((r) => [r.id, initialRowState(r)])));
-  const patch = (id: string, next: Partial<RowState>) => setState((v) => ({ ...v, [id]: { ...v[id], ...next } }));
+  const patch = (row: ReviewRow, next: Partial<RowState>) => setState((v) => ({ ...v, [row.id]: { ...rowStateOf(v, row), ...next } }));
   const labelOf = (leaseId: string) => leases.find((l) => l.id === leaseId)?.label ?? leaseId;
 
   const act = async (row: ReviewRow, action: "match" | "ignore" | "reopen") => {
-    const s = state[row.id];
+    const s = rowStateOf(state, row);
     if (action === "match" && !s.leaseId) return;
     if (!writable) {
       // The sample cabinet plays the outcome and writes nothing.
-      patch(row.id, { status: action === "reopen" ? "open" : action === "match" ? "matched" : "ignored", matchedLabel: labelOf(s.leaseId), bound: s.learn && row.payerIban !== null });
+      patch(row, { status: action === "reopen" ? "open" : action === "match" ? "matched" : "ignored", matchedLabel: labelOf(s.leaseId), bound: s.learn && row.payerIban !== null });
       return;
     }
-    patch(row.id, { status: "busy", error: null });
+    patch(row, { status: "busy", error: null });
     try {
       const res = await fetch(`/api/banque/operations/${encodeURIComponent(row.id)}`, {
         method: "PATCH",
@@ -120,13 +131,14 @@ export function ReviewQueue({
       }
       const body = (await res.json().catch(() => ({}))) as { error?: string; bound?: boolean };
       if (!res.ok) {
-        patch(row.id, { status: action === "reopen" ? "ignored" : "open", error: body.error === "already_matched" ? labels.already : labels.failed });
+        // The queue's own sentence for a row decided elsewhere; the rest by its status (a subscription, a role).
+        patch(row, { status: action === "reopen" ? "ignored" : "open", error: problems.of(res.status, body, { fallback: labels.failed, codes: { already_matched: labels.already } }).message });
         return;
       }
-      patch(row.id, { status: action === "reopen" ? "open" : action === "match" ? "matched" : "ignored", matchedLabel: labelOf(s.leaseId), bound: body.bound === true });
+      patch(row, { status: action === "reopen" ? "open" : action === "match" ? "matched" : "ignored", matchedLabel: labelOf(s.leaseId), bound: body.bound === true });
       router.refresh();
     } catch {
-      patch(row.id, { status: action === "reopen" ? "ignored" : "open", error: labels.failed });
+      patch(row, { status: action === "reopen" ? "ignored" : "open", error: problems.network({ fallback: labels.failed }).message });
     }
   };
 
@@ -134,7 +146,8 @@ export function ReviewQueue({
     <ul className="crm-review">
       <AnimatePresence initial={false}>
         {rows.map((t) => {
-          const s = state[t.id];
+          // The rows come from the server and can grow under the queue: a row it has not met starts fresh.
+          const s = rowStateOf(state, t);
           const busy = s.status === "busy";
           const others = leases.filter((l) => !t.candidates.some((c) => c.leaseId === l.id));
           return (
@@ -188,7 +201,7 @@ export function ReviewQueue({
                             settles it, whatever the options say. */}
                         <label className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
                           <span className="mb-2 block text-sm font-medium text-ink">{labels.assign}</span>
-                          <Select value={s.leaseId} onChange={(e) => patch(t.id, { leaseId: e.target.value })} disabled={busy} aria-label={labels.assign} className="min-w-0 max-w-full">
+                          <Select value={s.leaseId} onChange={(e) => patch(t, { leaseId: e.target.value })} disabled={busy} aria-label={labels.assign} className="min-w-0 max-w-full">
                             <option value="">{labels.pick}</option>
                             {t.candidates.length > 0 && (
                               <optgroup label={labels.suggested}>
@@ -222,7 +235,7 @@ export function ReviewQueue({
                     )}
                     {t.payerIban && leases.length > 0 && (
                       <label className="crm-review-bind">
-                        <input type="checkbox" checked={s.learn} onChange={(e) => patch(t.id, { learn: e.target.checked })} disabled={busy} />
+                        <input type="checkbox" checked={s.learn} onChange={(e) => patch(t, { learn: e.target.checked })} disabled={busy} />
                         <span>{fmt(labels.bind, { iban: t.payerIban })}</span>
                       </label>
                     )}

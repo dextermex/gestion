@@ -114,7 +114,8 @@ export default function BuildingSheet({
   return (
     <div>
       <div className="mb-3">
-        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/app/biens" className="inline-flex items-center gap-0.5 text-sm font-semibold text-brand-700 hover:underline max-sm:min-h-10">
+          <Icon name="chevron-left" size={16} />
           {d.biens.backToList}
         </Link>
       </div>
@@ -187,6 +188,7 @@ export default function BuildingSheet({
             colRent: d.bien.colRent,
             colStatus: d.bien.colStatus,
             open: d.bien.openLot,
+            none: d.common.none,
           }}
           action={
             <LotCreate

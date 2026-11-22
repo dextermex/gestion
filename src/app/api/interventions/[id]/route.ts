@@ -2,25 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { ownedDocument } from "@/lib/gestion/documents";
-import { nextWorkOrderStep, WORK_ORDER_ACTIONS, type WorkOrderAction } from "@/lib/gestion/interventions";
-import type { WorkOrderStatus } from "@/lib/types";
+import { nextWorkOrderStep, stepAlreadyTaken, ticketAfterStep, visitInstant, WORK_ORDER_ACTIONS, type WorkOrderAction } from "@/lib/gestion/interventions";
+import type { TicketStatus, WorkOrderStatus } from "@/lib/types";
 
 /**
  * One step of an intervention, on its work order: handed to an artisan,
  * scheduled, done, invoiced, paid; declined by the artisan; cancelled by
  * the desk. The transition table in `interventions.ts` is the only judge of
  * what is allowed from where the work order stands; the ticket the tenant
- * watches follows it, so the two never disagree.
+ * watches follows it, so the two never disagree. How it follows is
+ * `ticketAfterStep`: never backwards, never reopening a request that was
+ * resolved or refused (409 `request_closed`: it is reopened on purpose
+ * first), never moving the day it was closed.
+ *
+ * The work order and the ticket are two writes. If the second fails, the
+ * same closing step asked again finds the work order already there and
+ * brings the ticket along, so a half-applied step heals on a retry.
  */
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
-
-/** A day, or a day and time, as the timestamp the schedule keeps (mid-morning when only the day is known). */
-function timestampOf(raw: string): string | null {
-  if (ISO.test(raw)) return Number.isNaN(Date.parse(raw)) ? null : `${raw}T09:00:00Z`;
-  const t = Date.parse(raw);
-  return Number.isNaN(t) ? null : new Date(t).toISOString();
-}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await withOrg("write");
@@ -36,7 +35,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!wo) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const current = String(wo.status) as WorkOrderStatus;
   const step = nextWorkOrderStep(current, action);
-  if (!step) return NextResponse.json({ error: "refused", status: current }, { status: 409 });
+  const healing = !step && stepAlreadyTaken(current, action);
+  if (!step && !healing) return NextResponse.json({ error: "refused", status: current }, { status: 409 });
+
+  // The ticket as it stands: the step is judged against it before anything is written.
+  const { data: ticket, error: ticketReadErr } = await g.from("tickets").select("id,status,source,closed_at").eq("org_id", org.id).eq("id", wo.ticket_id).maybeSingle();
+  if (ticketReadErr) return dbError("ticket lookup", ticketReadErr);
+  if (!ticket) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const follow = ticketAfterStep(action, { status: String(ticket.status) as TicketStatus, source: String(ticket.source ?? "") });
+  if (follow === "request_closed") return NextResponse.json({ error: "request_closed", status: current }, { status: 409 });
+
+  const now = new Date().toISOString();
+  const followTicket = async () => {
+    const closure = follow.closure === "set" ? { closed_at: ticket.closed_at ?? now } : follow.closure === "clear" ? { closed_at: null } : {};
+    return g.from("tickets").update({ status: follow.status, updated_at: now, ...closure }).eq("org_id", org.id).eq("id", wo.ticket_id);
+  };
+  if (!step) {
+    const { error: healErr } = await followTicket();
+    if (healErr) return dbError("ticket follow-up", healErr);
+    return NextResponse.json({ ok: true, status: current, ticketStatus: follow.status });
+  }
 
   const patch: Record<string, unknown> = { status: step.status };
   if (action === "assign") {
@@ -49,7 +67,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.artisan_contact_id = artisanId;
   }
   if (action === "schedule") {
-    const at = timestampOf(str(body.scheduledAt, 32));
+    // The day, and the hour on Luxembourg's clock when the desk entered one: no hour is invented for a day alone.
+    const at = visitInstant(str(body.scheduledAt, 10), str(body.scheduledTime, 5) || null);
     if (!at) return NextResponse.json({ error: "invalid" }, { status: 400 });
     patch.scheduled_at = at;
   }
@@ -74,12 +93,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (error) return dbError("work order update", error);
   if (!data?.length) return NextResponse.json({ error: "changed" }, { status: 409 });
 
-  const now = new Date().toISOString();
-  const { error: ticketErr } = await g
-    .from("tickets")
-    .update({ status: step.ticketStatus, closed_at: step.closes ? now : null, updated_at: now })
-    .eq("org_id", org.id)
-    .eq("id", wo.ticket_id);
+  const { error: ticketErr } = await followTicket();
   if (ticketErr) return dbError("ticket follow-up", ticketErr);
-  return NextResponse.json({ ok: true, status: step.status, ticketStatus: step.ticketStatus });
+  return NextResponse.json({ ok: true, status: step.status, ticketStatus: follow.status });
 }

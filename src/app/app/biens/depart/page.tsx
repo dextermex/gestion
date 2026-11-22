@@ -3,6 +3,7 @@ import DepartureWizard, { type DepartureLease } from "@/components/gestion/Depar
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { METER_UNITS, euros, formatDate } from "@/lib/types";
+import { openingStep } from "@/lib/wizard-step";
 
 /**
  * Recording a departure. It opens on the step the departure already stands
@@ -10,6 +11,8 @@ import { METER_UNITS, euros, formatDate } from "@/lib/types";
  * with everything entered so far. A lease that has already ended sends the
  * owner to the history rather than letting them close it twice; a dossier
  * in preparation has no tenant to see off and goes back to the property.
+ * Opened without a tenancy, there is nothing to record: the properties are
+ * where a departure starts.
  */
 export default async function DepartPage({ searchParams }: { searchParams: Promise<{ bail?: string; etape?: string }> }) {
   const { bail, etape } = await searchParams;
@@ -17,7 +20,8 @@ export default async function DepartPage({ searchParams }: { searchParams: Promi
   const demo = await getDemo();
   const datasetId = await getDatasetId();
 
-  const lease = bail ? demo.LEASES.find((l) => l.id === bail) : undefined;
+  if (!bail) redirect("/app/biens");
+  const lease = demo.LEASES.find((l) => l.id === bail);
   if (!lease) notFound();
   const unit = demo.UNITS.find((u) => u.id === lease.unitId);
   const property = unit ? demo.PROPERTIES.find((p) => p.id === unit.propertyId) : undefined;
@@ -33,8 +37,8 @@ export default async function DepartPage({ searchParams }: { searchParams: Promi
   const exitEdl = demo.EDLS.some((e) => e.leaseId === lease.id && e.kind === "exit");
   const meters = demo.METERS.filter((m) => m.unitId === unit.id || (m.unitId === null && m.propertyId === property.id));
 
-  const requested = Number(etape);
-  const startStep = Number.isFinite(requested) && requested >= 1 ? Math.round(requested) : (lease.departure?.step ?? 1);
+  // On the account's own data each step is saved before the next opens: the address cannot run ahead of it.
+  const startStep = openingStep(Number(etape), lease.departure?.step ?? null, datasetId === "real");
 
   const payload: DepartureLease = {
     id: lease.id,
@@ -59,5 +63,5 @@ export default async function DepartPage({ searchParams }: { searchParams: Promi
     startStep,
   };
 
-  return <DepartureWizard d={d} lease={payload} real={datasetId === "real"} notice={d.common.demoCreateNotice} />;
+  return <DepartureWizard d={d} locale={locale} lease={payload} real={datasetId === "real"} notice={d.common.demoCreateNotice} />;
 }

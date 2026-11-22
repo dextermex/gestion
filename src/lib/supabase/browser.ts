@@ -9,8 +9,12 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL, STORAGE_KEY } from "./config";
  * what lets morada.lu and app.morada.lu share one sign-in; on any other host
  * the cookie stays host-scoped and the app simply works on its own.
  *
- * `flowType` is left at the library default, matching Morada exactly, so
- * password-recovery links keep behaving the way they do today.
+ * `flowType` is PKCE: a session delivered through the URL is bound to the
+ * code-verifier held by the browser that started the flow, so an attacker's
+ * `#access_token` planted in a `/connexion` URL cannot install a session
+ * (login CSRF / session fixation). Recovery and magic links keep working on
+ * the device that requested them; a link opened on another device must be
+ * re-requested, and any link in flight at this change must be reissued.
  */
 let client: SupabaseClient | null = null;
 
@@ -21,8 +25,10 @@ export function getSupabase(): SupabaseClient {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        flowType: "pkce",
         storageKey: STORAGE_KEY,
-        storage: createCookieStorage({ mirrorToLocalStorage: true }),
+        // The cookie alone: no second copy of the session in localStorage.
+        storage: createCookieStorage({ mirrorToLocalStorage: false }),
       },
     });
   }
@@ -31,11 +37,48 @@ export function getSupabase(): SupabaseClient {
 
 /**
  * Sign out here and everywhere: every session of this account is revoked
- * (this browser, morada.lu, other devices), and the shared cookie and its
- * localStorage mirror are cleared whatever the account system answered. The
- * next account to sign in on this browser starts from nothing of the
- * previous one.
+ * (this browser, morada.lu, other devices), and the shared cookie and any
+ * localStorage copy an earlier build left are cleared whatever the account
+ * system answered. The next account to sign in on this browser starts from
+ * nothing of the previous one.
  */
+/**
+ * Keeps the session alive while a space is open. Creating the client starts
+ * its own clock: the access token is renewed shortly before it expires and
+ * again whenever the tab comes back to the front, and each renewal is
+ * written to the shared cookie, which is what the server reads. Returns the
+ * function that stops listening.
+ */
+export function keepSessionFresh(): () => void {
+  const db = getSupabase();
+  // Reading the session renews it when it is at, or close to, its end.
+  const renew = () => {
+    if (document.visibilityState === "visible") void db.auth.getSession().catch(() => undefined);
+  };
+  renew();
+  window.addEventListener("online", renew);
+  window.addEventListener("pageshow", renew);
+  document.addEventListener("visibilitychange", renew);
+  return () => {
+    window.removeEventListener("online", renew);
+    window.removeEventListener("pageshow", renew);
+    document.removeEventListener("visibilitychange", renew);
+  };
+}
+
+/**
+ * One renewal, asked for on purpose: a call was answered "signed out" and is
+ * about to be tried once more. True when a session is in hand afterwards.
+ */
+export async function renewSessionNow(): Promise<boolean> {
+  try {
+    const { data, error } = await getSupabase().auth.refreshSession();
+    return !error && Boolean(data.session);
+  } catch {
+    return false;
+  }
+}
+
 export async function signOutEverywhere(): Promise<void> {
   const db = getSupabase();
   try {
@@ -48,5 +91,13 @@ export async function signOutEverywhere(): Promise<void> {
   } catch {
     // Unreachable account system: the local session still goes, below.
   }
-  createCookieStorage({ mirrorToLocalStorage: true }).removeItem(STORAGE_KEY);
+  createCookieStorage({ mirrorToLocalStorage: false }).removeItem(STORAGE_KEY);
+  // Wizard drafts (property, EDL) live in IndexedDB and are not keyed by
+  // account: clear them here so the next account on a shared device never
+  // resumes the previous one's draft (addresses, cadastre, photos).
+  try {
+    indexedDB?.deleteDatabase("morada-brouillons");
+  } catch {
+    // Best-effort: a private window or a blocked store leaves nothing to clear.
+  }
 }

@@ -181,6 +181,59 @@ describe("documents produced from the rows", () => {
     expect(forced.documentId).not.toBe(g.documentId);
     expect(db.table("documents")).toHaveLength(2);
     expect(db.table("generated_documents")).toHaveLength(2);
+    // What it says changed (the lessor's corrected name): asked again, a new version, not the stale one.
+    await ctx.g.from("workspace_settings").update({ legal_name: "Cabinet Test S.à r.l. (nouveau nom)" }).eq("org_id", ORG);
+    const corrected = generated(await generateDocument(ctx, storage.client, { kind: "rent_notice", sourceId: periodId, today }));
+    expect([corrected.existing, corrected.documentId === forced.documentId]).toEqual([false, false]);
+    // And asked once more with nothing changed: that one back.
+    expect(await generateDocument(ctx, storage.client, { kind: "rent_notice", sourceId: periodId, today })).toMatchObject({ documentId: corrected.documentId, existing: true });
+    // Made from an earlier version of the template: a new one from the version in force.
+    await ctx.g.from("generated_documents").update({ template_version: "0.9" }).eq("org_id", ORG).eq("document_id", corrected.documentId);
+    const current = generated(await generateDocument(ctx, storage.client, { kind: "rent_notice", sourceId: periodId, today }));
+    expect(current.existing).toBe(false);
+    expect(db.table("generated_documents").find((r) => r.document_id === current.documentId)!.template_version).toBe(templateVersion("rent_notice", "fr"));
+  });
+
+  it("leaves one piece when the same document is asked for twice at the same moment", async () => {
+    validateAll(db);
+    db.insertRow("workspace_settings", SETTINGS);
+    // The other request writes its piece between this one's look for an existing document and its own record.
+    const base = db.client();
+    let twin: string | null = null;
+    const racing = new Proxy(base, {
+      get(target, prop) {
+        if (prop === "from") {
+          return (table: string) => {
+            const q = (target as unknown as { from: (t: string) => Record<string, unknown> }).from(table);
+            if (table !== "generated_documents") return q;
+            return new Proxy(q, {
+              get(qt, qp) {
+                if (qp === "insert") {
+                  return (row: Row) => {
+                    if (!twin) {
+                      const doc = db.insertRow("documents", { org_id: ORG, class: "other", name: "Avis (autre requête).pdf", storage_path: `${ORG}/documents/twin.pdf`, sealed: true, related_type: "lease", related_id: leaseId, sha256: "f".repeat(64), size_bytes: 10 });
+                      twin = String(doc.id);
+                      db.insertRow("generated_documents", { ...row, document_id: twin, generated_at: new Date(Date.now() - 1000).toISOString() });
+                    }
+                    return (qt.insert as (r: Row) => unknown).call(qt, row);
+                  };
+                }
+                const v = qt[qp as string];
+                return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(qt) : v;
+              },
+            });
+          };
+        }
+        const v = (target as unknown as Record<string | symbol, unknown>)[prop];
+        return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+      },
+    });
+    const out = generated(await generateDocument({ ...ctx, g: racing as OrgContext["g"] }, storage.client, { kind: "rent_notice", sourceId: periodId, today }));
+    expect(out).toMatchObject({ documentId: twin, existing: true });
+    // This request's own piece is gone, row and file.
+    expect(db.table("documents").map((d) => d.id)).toEqual([twin]);
+    expect(db.table("generated_documents").map((r) => r.document_id)).toEqual([twin]);
+    expect(storage.files.size).toBe(0);
   });
 
   it("issues a receipt only for a period the allocations say is paid, listing what arrived and when", async () => {

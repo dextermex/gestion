@@ -129,3 +129,17 @@ describe("the tenant's bottom bar", () => {
     expect(sheet.textContent).toContain(t.navLease);
   });
 });
+
+describe("the tenant's account menu", () => {
+  it("reaches the documents and the help page, which the tabs of a wide screen do not name", async () => {
+    const { default: TenantAccountMenu } = await import("@/components/gestion/TenantAccountMenu");
+    await act(async () =>
+      root.render(
+        <TenantAccountMenu name="Lena Schmit" email="lena@example.invalid" signedIn labels={{ menu: "Mon compte", profile: "Mon profil", settings: "Paramètres", documents: "Documents", help: "Aide", signOut: "Déconnexion", sampleNotice: "" }} />,
+      ),
+    );
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
+    const items = [...host.querySelectorAll('a[role="menuitem"]')].map((a) => a.getAttribute("href"));
+    expect(items).toEqual(["/locataire/profil", "/locataire/parametres", "/locataire/documents", "/locataire/aide"]);
+  });
+});

@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OrgContext } from "@/lib/gestion/api";
-import { closeLease } from "@/lib/gestion/lease";
-import { addManagerMessage, createIntervention, markConversationRead, parseRequestStatus, setRequestStatus, statusOfFailure } from "@/lib/gestion/requests";
+import { addManagerMessage, createIntervention, markConversationRead, parseRequestStatus, setRequestFollowUp, setRequestStatus, statusOfFailure } from "@/lib/gestion/requests";
 import { addTenantMessage, attachTenantFiles, createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { leaseConversation } from "@/lib/portal/thread";
 import { REQUEST_STATUSES, attachmentFolder, isIntervention, isRequestOpen, leaseSubject, requestState, requestStatusOf, ticketStatusFor } from "@/lib/portal/types";
 import { addDays, addMonths } from "@/domain/dates";
 import { FakeDb } from "./helpers/fake-postgrest";
-import { ORG, OTHER_ORG, ctxFor, hydrate, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
+import { ORG, OTHER_ORG, ctxFor, departOn, hydrate, letTo, linkAccount, seedProperty, space } from "./helpers/tenancy";
 
 /**
  * One conversation per tenancy, with the tenant's requests inside it,
@@ -46,6 +45,52 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     db.insertRow("agencies", { id: ORG, name: "Cabinet Test", email: "bonjour@cabinet-test.lu", phone: "+352 26 00 00 00" });
     db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
     ({ propertyId, unitId } = seedProperty(db));
+  });
+
+  it("sets a request aside while the tenant is waited on, gives it a due day, and the lists read both", async () => {
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    await linkAccount(db, ctx, rental, anna);
+    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
+    const request = await createTenantRequest(db.tenantClient(anna), anna, lease, technical("Fuite", "Sous l'évier."));
+    if ("error" in request) throw new Error(request.error);
+    expect(await setRequestFollowUp(ctx, request.id, { waiting: true, dueOn: "2026-12-03" })).toEqual({ status: "pending_tenant", slaDueAt: "2026-12-03T12:00:00.000Z" });
+    let ticket = (await hydrate(db)).TICKETS.find((t) => t.id === request.id)!;
+    expect([ticket.status, ticket.slaDueAt?.slice(0, 10)]).toEqual(["pending_tenant", "2026-12-03"]);
+    // The tenant reads it as in progress.
+    expect((await space(db, anna)).requests.find((r) => r.id === request.id)?.state).toBe("in_progress");
+    expect(await setRequestFollowUp(ctx, request.id, { waiting: false, dueOn: null })).toEqual({ status: "in_progress", slaDueAt: null });
+    ticket = (await hydrate(db)).TICKETS.find((t) => t.id === request.id)!;
+    expect([ticket.status, ticket.slaDueAt]).toEqual(["in_progress", null]);
+    // Closed: not set aside; a day that is not one, and another workspace's request, are refused.
+    await setRequestStatus(ctx, request.id, "resolved");
+    expect(await setRequestFollowUp(ctx, request.id, { waiting: true })).toEqual({ error: "request_closed" });
+    expect(statusOfFailure("request_closed")).toBe(409);
+    expect(await setRequestFollowUp(ctx, request.id, { dueOn: "demain" })).toEqual({ error: "invalid" });
+    expect(await setRequestFollowUp(ctxFor(db, OTHER_ORG), request.id, { dueOn: "2026-12-03" })).toEqual({ error: "not_found" });
+    expect(await setRequestFollowUp(ctx, request.id, {})).toEqual({ error: "invalid" });
+  });
+
+  it("keeps a message once when the same draft is sent again with its id, on both sides, and nobody is told twice", async () => {
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    await linkAccount(db, ctx, rental, anna);
+    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
+    const tenant = db.tenantClient(anna);
+    const tenantId = "6f1d1c2e-4a55-4f4b-9d39-1b2f3c4d5e01";
+    const first = await addTenantMessage(tenant, anna, lease, "La porte du garage est bloquée.", tenantId);
+    const again = await addTenantMessage(tenant, anna, lease, "La porte du garage est bloquée.", tenantId);
+    expect([("id" in first) && first.id, ("id" in again) && again.id]).toEqual([tenantId, tenantId]);
+    const conversationId = String(db.table("conversations")[0].id);
+    const deskId = "6f1d1c2e-4a55-4f4b-9d39-1b2f3c4d5e02";
+    const reply = await addManagerMessage(ctx, { conversationId }, "Le technicien passe demain.", deskId);
+    const replyAgain = await addManagerMessage(ctx, { conversationId }, "Le technicien passe demain.", deskId);
+    expect([("id" in reply) && reply.id, ("id" in replyAgain) && replyAgain.id, ("mail" in replyAgain) && replyAgain.mail]).toEqual([deskId, deskId, "none"]);
+    expect(db.table("messages").map((m) => [m.id, m.sender_kind])).toEqual([
+      [tenantId, "tenant"],
+      [deskId, "manager"],
+    ]);
+    // An id that names someone else's message is not taken over.
+    expect(await addTenantMessage(tenant, anna, lease, "Autre chose.", deskId)).toEqual({ error: "forbidden" });
+    expect(db.table("messages")).toHaveLength(2);
   });
 
   it("runs the whole flow: chat, request with photos, replies, a second request, more chat, resolution, history", async () => {
@@ -130,7 +175,7 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     ]);
 
     // ── The first request is resolved; the second waits; the conversation reads the same on both sides ──
-    expect(await setRequestStatus(ctx, first.id, "resolved")).toEqual({ status: "resolved" });
+    expect(await setRequestStatus(ctx, first.id, "resolved")).toEqual({ status: "resolved", held: false });
     demo = await hydrate(db, ORG, { conversationId });
     expect(demo.TICKETS.map((t) => requestStatusOf(t.status))).toEqual(["resolved", "todo"]);
     mine = await space(db, anna);
@@ -163,18 +208,18 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
     expect(demo.CONVERSATIONS.find((c) => c.id === conversationId)!.messages).toHaveLength(7);
 
     // ── Reopened, refused, resolved again: one status, read two ways ──
-    expect(await setRequestStatus(ctx, second.id, "in_progress")).toEqual({ status: "in_progress" });
-    expect(await setRequestStatus(ctx, second.id, "refused")).toEqual({ status: "refused" });
+    expect(await setRequestStatus(ctx, second.id, "in_progress")).toEqual({ status: "in_progress", held: false });
+    expect(await setRequestStatus(ctx, second.id, "refused")).toEqual({ status: "refused", held: false });
     let row = db.table("tickets").find((t) => t.id === second.id)!;
     expect([row.status, row.closed_at !== null]).toEqual(["cancelled", true]);
     mine = await space(db, anna);
     expect(mine.requests.find((r) => r.id === second.id)!.state).toBe("refused");
-    expect(await setRequestStatus(ctx, second.id, "todo")).toEqual({ status: "todo" });
+    expect(await setRequestStatus(ctx, second.id, "todo")).toEqual({ status: "todo", held: false });
     row = db.table("tickets").find((t) => t.id === second.id)!;
     expect([row.status, row.closed_at]).toEqual(["new", null]);
 
     // ── The tenant leaves: the conversation and its requests stay theirs to read; nothing new can be asked ──
-    const closed = await closeLease(ctx, rental.leaseId, { endDate: endOfMonth, depositOutcome: "released", releasedCents: 0, keysReturned: true, decompteIssuedOn: null }, today);
+    const closed = await departOn(db, ctx, rental.leaseId, endOfMonth);
     if ("error" in closed) throw new Error(closed.error);
     mine = await space(db, anna);
     expect(mine.current).toBeNull();
@@ -332,9 +377,53 @@ describe("a tenancy's conversation, with the tenant's requests inside it", () =>
   });
 });
 
+describe("one status for a request, from Messages and from Interventions", () => {
+  it("keeps a request with an intervention under way in progress, dates its closure once, and reopens it where the work order stands", async () => {
+    const db = new FakeDb(today);
+    const ctx = ctxFor(db);
+    db.insertRow("agencies", { id: ORG, name: "Cabinet Test" });
+    db.insertRow("crm_members", { agency_id: ORG, user_id: "user-owner", role: "owner", status: "active", email: "owner@cabinet-test.lu" });
+    const { propertyId, unitId } = seedProperty(db);
+    const rental = await letTo(ctx, unitId, [ANNA]);
+    await linkAccount(db, ctx, rental, anna);
+    const lease = { id: rental.leaseId, orgId: ORG, unitId, propertyId, subject: "Maison · Maison Weber" };
+    const request = await createTenantRequest(db.tenantClient(anna), anna, lease, technical("Chaudière en panne", "Plus d'eau chaude."));
+    if ("error" in request) throw new Error(request.error);
+    const row = () => db.table("tickets").find((t) => t.id === request.id)!;
+    const tenantSees = async () => (await space(db, anna)).requests.find((r) => r.id === request.id)!.state;
+
+    // The desk opens an intervention and a visit is planned (the steps of the Interventions sheet, as rows).
+    const work = await createIntervention(ctx, request.id);
+    if ("error" in work) throw new Error(work.error);
+    db.table("work_orders").find((w) => w.id === work.id)!.status = "scheduled";
+    row().status = "scheduled";
+    expect(await tenantSees()).toBe("in_progress");
+
+    // "À traiter" chosen in Messages meanwhile: the request is not sent back, and the desk is told why.
+    expect(await setRequestStatus(ctx, request.id, "todo")).toEqual({ status: "in_progress", held: true });
+    expect([row().status, row().closed_at]).toEqual(["scheduled", null]);
+    expect(await tenantSees()).toBe("in_progress");
+
+    // Resolved in Messages: closed, dated once.
+    expect(await setRequestStatus(ctx, request.id, "resolved")).toEqual({ status: "resolved", held: false });
+    const closedAt = row().closed_at;
+    expect([row().status, typeof closedAt]).toEqual(["done", "string"]);
+    row().closed_at = "2026-01-05T10:00:00.000Z";
+    expect(await setRequestStatus(ctx, request.id, "resolved")).toEqual({ status: "resolved", held: false });
+    expect(row().closed_at).toBe("2026-01-05T10:00:00.000Z");
+    expect(await tenantSees()).toBe("resolved");
+
+    // The explicit reopening: open again, where its work order stands (a planned visit), the closure cleared.
+    expect(await setRequestStatus(ctx, request.id, "in_progress")).toEqual({ status: "in_progress", held: false });
+    expect([row().status, row().closed_at]).toEqual(["scheduled", null]);
+    expect(await tenantSees()).toBe("in_progress");
+  });
+});
+
 describe("the request vocabulary the desk and the tenant share", () => {
   it("folds the intervention statuses into four and picks one back", () => {
-    expect(["new", "triaged"].map(requestStatusOf)).toEqual(["todo", "todo"]);
+    // "To handle" only while nobody has touched it: once qualified or handed to a tradesperson, a request is in progress on every screen.
+    expect(["new", "triaged"].map(requestStatusOf)).toEqual(["todo", "in_progress"]);
     expect(["offered", "scheduled", "in_progress", "pending_tenant"].map(requestStatusOf)).toEqual(["in_progress", "in_progress", "in_progress", "in_progress"]);
     expect(["done", "closed"].map(requestStatusOf)).toEqual(["resolved", "resolved"]);
     expect(requestStatusOf("cancelled")).toBe("refused");

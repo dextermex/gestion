@@ -46,13 +46,35 @@ export function isValidRF(ref: string): boolean {
 /**
  * Scan free-text remittance info for an RF reference (checksum-validated) —
  * Luxembourg retail banking apps put everything in the unstructured line.
+ *
+ * The reference is looked for the way it is written before anything is glued
+ * together: as a word of its own ("RF18539007547034 loyer"), then as the
+ * printed groups of four ("RF18 5390 0754 7034"). Only then is the text
+ * compacted and scanned, for a reference stuck to its neighbours. Compacting
+ * first would run the reference into the next word, and one time in a
+ * hundred that longer string passes the checksum too: "RF… loyer" then read
+ * as another, valid, unknown reference, and the rent went to review.
  */
 export function extractRF(text: string): string | null {
-  const compact = text.toUpperCase().replace(/[\s.-]/g, "");
+  const upper = text.toUpperCase();
+  const tokens = upper.split(/[^0-9A-Z]+/).filter(Boolean);
+  // 1. A whole word.
+  for (const t of tokens) if (/^RF\d{2}[0-9A-Z]{1,21}$/.test(t) && isValidRF(t)) return t;
+  // 2. Groups of up to four after an "RFnn…" word: the longest run that validates.
+  for (let i = 0; i < tokens.length; i++) {
+    if (!/^RF\d{2}[0-9A-Z]{0,2}$/.test(tokens[i]) && !/^RF\d{2}[0-9A-Z]{0,21}$/.test(tokens[i])) continue;
+    const runs: string[] = [];
+    let joined = tokens[i];
+    for (let j = i + 1; j < tokens.length && tokens[j].length <= 4 && joined.length + tokens[j].length <= 25; j++) {
+      joined += tokens[j];
+      runs.push(joined);
+    }
+    for (const candidate of runs.reverse()) if (isValidRF(candidate)) return candidate;
+  }
+  // 3. Stuck to its neighbours: the compact text, longest candidates first.
+  const compact = upper.replace(/[\s.-]/g, "");
   const matches = compact.match(/RF\d{2}[0-9A-Z]{1,21}/g);
   if (!matches) return null;
-  // Longest candidates first — "RF18ABC" inside a longer run should not win
-  // over the full reference.
   for (const m of [...matches].sort((a, b) => b.length - a.length)) {
     for (let end = m.length; end >= 5; end--) {
       const candidate = m.slice(0, end);
@@ -60,6 +82,22 @@ export function extractRF(text: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * The references among `known` that a remittance text carries, whatever
+ * surrounds them: the text is compacted and each known reference is looked
+ * for as it is. A reference the workspace issued is found by what it is, not
+ * by a checksum over whatever the payer typed around it.
+ */
+export function findKnownRF(text: string, known: Iterable<string>): string[] {
+  const compact = text.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const out: string[] = [];
+  for (const ref of new Set(known)) {
+    const clean = ref.toUpperCase().replace(/[^0-9A-Z]/g, "");
+    if (clean.length >= 6 && compact.includes(clean)) out.push(clean);
+  }
+  return out;
 }
 
 /** Lease → permanent RF: org prefix + lease number, stable for the lease's life. */

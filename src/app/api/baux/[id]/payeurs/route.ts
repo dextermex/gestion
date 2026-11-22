@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withOrg, dbError } from "@/lib/gestion/api";
+import { ibanChecks } from "@/domain/banking/iban";
 
 /**
  * The accounts a rent is expected to arrive from.
@@ -11,7 +12,8 @@ import { withOrg, dbError } from "@/lib/gestion/api";
  */
 function normalizeIban(raw: unknown): string | null {
   const iban = String(raw ?? "").replace(/\s/g, "").toUpperCase();
-  return /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) ? iban : null;
+  // Shape and check digits: a mistyped account would be a binding that never matches.
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) && ibanChecks(iban) ? iban : null;
 }
 
 async function leaseOf(ctx: Awaited<ReturnType<typeof withOrg>>, id: string) {

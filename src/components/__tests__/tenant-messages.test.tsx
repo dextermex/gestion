@@ -20,8 +20,9 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push:
 const t = fr.tenant;
 const manager = "Cabinet Reuter";
 const labels = {
-  empty: t.threadEmpty, noneYet: t.msgNoneYet, write: t.threadWrite, send: t.threadSend, sent: t.threadSent, failed: t.threadFailed, view: t.msgView, requestBadge: fr.messages.requestBadge, newRequest: t.reqNew,
+  empty: t.threadEmpty, noneYet: t.msgNoneYet, write: t.threadWrite, send: t.threadSend, sent: t.threadSent, failed: t.threadFailed, sessionEnded: t.sessionEnded, signInAgain: t.signInAgain, forbidden: t.threadForbidden, view: t.msgView, requestBadge: fr.messages.requestBadge, newRequest: t.reqNew,
   photo: t.chatPhoto, photoTitle: t.chatPhotoTitle, photoPick: t.chatPhotoPick, photoNone: t.chatPhotoNone, photoMessage: t.chatPhotoMessage, photoChoose: t.photoPick, photoFailed: t.photoFailed, uploading: t.uploading, close: fr.common.close,
+  pieces: { badType: t.fileBadType, tooLarge: t.fileTooLarge, notSent: t.fileNotSent, closed: t.fileRequestClosed, tooMany: t.fileTooMany },
 };
 
 const conversations: TenantConversationView[] = [
@@ -37,6 +38,8 @@ const conversations: TenantConversationView[] = [
       { id: "m-2", mine: true, kind: "tenant", from: t.threadYou, body: "Volet roulant bloqué", dayLabel: "22/09/2026", timeLabel: "09:00", requestId: "r-1" },
     ],
     lastAt: "2026-09-22T09:00:00.000Z",
+    // The manager answered since: one message waits to be read.
+    unread: 1,
     openRequests: [{ id: "r-1", title: "Volet roulant bloqué" }],
     newRequestHref: "/locataire/demandes?nouvelle=1",
   },
@@ -49,6 +52,7 @@ const conversations: TenantConversationView[] = [
     previewIsRequest: false,
     messages: [],
     lastAt: "",
+    unread: 0,
     openRequests: [],
     newRequestHref: null,
   },
@@ -62,6 +66,8 @@ let root: Root;
 let scrolls: Array<[number, number]>;
 /** How each scroll was asked for: a phone's list jumps back into place, it does not glide. */
 let scrollKinds: string[];
+/** The read marks the screen asked the database to keep. */
+let marks: Array<Record<string, unknown>>;
 
 beforeEach(() => {
   host = document.createElement("div");
@@ -76,6 +82,11 @@ beforeEach(() => {
     scrollKinds.push(typeof a === "object" ? (a.behavior ?? "auto") : "auto");
   }) as unknown as typeof window.scrollTo;
   Object.defineProperty(window, "scrollY", { value: 240, configurable: true });
+  marks = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/locataire/messages/lu") marks.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
   window.history.replaceState(null, "", "/locataire/messages");
 });
 afterEach(async () => {
@@ -195,13 +206,27 @@ describe("the tenant's Messages on a phone", () => {
     expect(ways[1].getAttribute("aria-label")).toBe(t.reqNew);
   });
 
-  it("marks the conversation seen on this browser once it has the screen, and not before", async () => {
-    document.cookie = "morada_tenant_seen=; path=/; max-age=0";
+  it("marks the conversation read in the database once it has the screen, up to its last message, and not before", async () => {
     await render();
     // The list alone: nothing has been read yet.
-    expect(document.cookie).not.toContain("morada_tenant_seen=l-3b");
+    expect(marks).toEqual([]);
     await click(document.querySelector("#tenant-conversations li button"));
-    expect(decodeURIComponent(document.cookie)).toContain("morada_tenant_seen=l-3b=2026-09-22T09:00:00.000Z");
+    await settle();
+    // The account's own mark, by the conversation and the moment of the last message shown: no cookie, the same on every device.
+    expect(marks).toEqual([{ conversationId: "c-3b", until: "2026-09-22T09:00:00.000Z" }]);
+    expect(document.cookie).not.toContain("morada_tenant_seen");
+    // Once, however long the conversation stays on the screen.
+    await click(backButton());
+    await settle();
+    await click(document.querySelector("#tenant-conversations li button"));
+    await settle();
+    expect(marks).toHaveLength(1);
+  });
+
+  it("marks nothing when nothing waits to be read, or on a sample cabinet", async () => {
+    await render({ conversations: conversations.map((c) => ({ ...c, unread: 0 })), initialView: "chat", initialId: "c-3b" });
+    await settle();
+    expect(marks).toEqual([]);
   });
 
   it("files a photo on a request: the camera asks which open request it is about, and is not offered on an ended tenancy", async () => {
@@ -214,11 +239,69 @@ describe("the tenant's Messages on a phone", () => {
     const dialog = document.querySelector("[role=dialog]")!;
     expect(dialog.getAttribute("aria-label")).toBe(t.chatPhotoTitle);
     expect(Array.from(dialog.querySelectorAll("input[type=radio]")).map((r) => (r as HTMLInputElement).value)).toEqual(["r-1"]);
-    expect(dialog.querySelector("input[type=file]")?.getAttribute("accept")).toBe("image/*");
+    expect(dialog.querySelector("input[type=file]")?.getAttribute("accept")).toBe("image/*,application/pdf");
   });
 
   it("offers no camera where no request can be written", async () => {
     await render({ initialView: "chat", initialId: "lease:l-old" });
     expect(document.querySelector(`button[aria-label="${t.chatPhoto}"]`)).toBeNull();
+  });
+});
+
+describe("the tenant's message when the answer is not the expected one", () => {
+  let sends: Array<Record<string, unknown>>;
+  const answerSendsWith = (statuses: number[]) => {
+    sends = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/locataire/messages" && init?.method === "POST") {
+        sends.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        const status = statuses.shift() ?? 200;
+        return new Response(JSON.stringify(status === 200 ? { ok: true, id: "m-9" } : { error: "x" }), { status, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+  };
+  const field = () => document.getElementById("tenant-message-body") as HTMLTextAreaElement;
+  const type = async (text: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field(), text);
+      field().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const enter = async (composing = false) => {
+    await act(async () => {
+      field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, isComposing: composing }));
+    });
+    await settle();
+  };
+  const status = () => field().closest("form")!.querySelector("[role=status]");
+
+  it("keeps the draft when the session ended, offers to sign in again beside the page, and sends it once, with the same id, afterwards", async () => {
+    answerSendsWith([401, 200]);
+    await render({ initialView: "chat", initialId: "c-3b" });
+    await type("La chaudière fait du bruit.");
+    const before = window.location.href;
+    await enter();
+    expect(window.location.href).toBe(before);
+    expect(field().value).toBe("La chaudière fait du bruit.");
+    expect(status()?.textContent).toContain(t.sessionEnded);
+    const link = status()?.querySelector("a[data-sign-in-again]");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("href")).toBe(`/connexion?next=${encodeURIComponent("/locataire/messages")}`);
+    await enter();
+    expect(sends).toHaveLength(2);
+    expect(sends[1].clientId).toBe(sends[0].clientId);
+    expect(field().value).toBe("");
+  });
+
+  it("says when the space may not send the message, and does not send while a character is being composed", async () => {
+    answerSendsWith([403]);
+    await render({ initialView: "chat", initialId: "c-3b" });
+    await type("Bonjour");
+    await enter(true);
+    expect(sends).toEqual([]);
+    await enter();
+    expect(status()?.textContent).toBe(t.threadForbidden);
+    expect(field().value).toBe("Bonjour");
   });
 });

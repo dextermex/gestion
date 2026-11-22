@@ -111,7 +111,7 @@ export const HERO_ACTION = "group block w-16 rounded-2xl focus-visible:outline-2
 export const HERO_ACTION_LABEL = "mt-2 block text-center text-[13px] font-semibold text-ink-soft transition group-hover:text-ink";
 
 /** One of the screen's own actions: a round button with its word under it. A link, or one of the shell's creation sheets. */
-export function HeroAction({ href, create, icon, label }: { href?: string; create?: "lease" | "contact" | "payment" | "ticket" | "document"; icon: IconName; label: string }) {
+export function HeroAction({ href, create, icon, label }: { href?: string; create?: "lease" | "contact" | "payment" | "ticket"; icon: IconName; label: string }) {
   const body = (
     <>
       <span className={HERO_ROUND}><Icon name={icon} size={22} /></span>

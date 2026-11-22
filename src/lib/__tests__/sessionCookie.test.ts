@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createCookieStorage } from "@/lib/sessionCookie";
+import { SESSION_MAX_AGE, createCookieStorage, decodeSession, sessionCookieNames, sessionCookieParts, sharedCookieDomain } from "@/lib/sessionCookie";
 
 /**
  * A fake browser that enforces the two rules the real one enforces: a cookie
@@ -186,6 +186,46 @@ describe("sessionCookie", () => {
     createCookieStorage({ mirrorToLocalStorage: false }).setItem(KEY, '{"a":1}');
     expect(store.has(KEY)).toBe(false);
     expect(jar.size).toBe(1);
+  });
+
+  it("removes the copy an earlier build kept in localStorage the first time the session is written again", () => {
+    const store = fakeBrowser();
+    const value = bigSession();
+    createCookieStorage({ mirrorToLocalStorage: true }).setItem(KEY, value);
+    expect(store.get(KEY)).toBe(value);
+    const s = createCookieStorage({ mirrorToLocalStorage: false });
+    s.setItem(KEY, value);
+    expect(store.has(KEY)).toBe(false);
+    expect(s.getItem(KEY)).toBe(value); // the cookie alone is the record
+  });
+
+  it("lives sixty days past its last write, not a year", () => {
+    let written = "";
+    const doc = (globalThis as unknown as { document: { cookie: string } }).document;
+    Object.defineProperty(doc, "cookie", { get: () => "", set: (raw: string) => void (written = raw), configurable: true });
+    createCookieStorage({ mirrorToLocalStorage: false }).setItem(KEY, '{"a":1}');
+    expect(SESSION_MAX_AGE).toBe(60 * 24 * 60 * 60);
+    expect(written).toContain(`max-age=${SESSION_MAX_AGE};`);
+  });
+
+  it("gives the server the same names, pieces and scope the browser writes", () => {
+    expect(sharedCookieDomain("app.morada.lu")).toBe(".morada.lu");
+    expect(sharedCookieDomain("morada.lu")).toBe(".morada.lu");
+    expect(sharedCookieDomain("APP.MORADA.LU")).toBe(".morada.lu");
+    expect(sharedCookieDomain("notmorada.lu")).toBeNull();
+    expect(sharedCookieDomain("morada.lu.example.com")).toBeNull();
+    expect(sharedCookieDomain("localhost")).toBeNull();
+    expect(sessionCookieNames(KEY)).toEqual([KEY, ...Array.from({ length: 8 }, (_, i) => `${KEY}.${i}`)]);
+    const small = sessionCookieParts(KEY, '{"a":1}');
+    expect(small.map((p) => p.name)).toEqual([KEY]);
+    const value = bigSession();
+    const parts = sessionCookieParts(KEY, value);
+    expect(parts.map((p) => p.name)).toEqual(parts.map((_, i) => `${KEY}.${i}`));
+    expect(decodeSession(parts.map((p) => p.value).join(""))).toBe(value);
+    // What the helper returns is what the browser storage writes, cookie for cookie.
+    const s = createCookieStorage({ mirrorToLocalStorage: false });
+    s.setItem(KEY, value);
+    expect([...jar].map(([id, v]) => ({ name: id.split("@")[0], value: v }))).toEqual(parts);
   });
 
   it("treats a corrupted cookie as no session instead of throwing", () => {

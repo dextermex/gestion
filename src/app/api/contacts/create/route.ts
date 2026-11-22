@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg, dbError } from "@/lib/gestion/api";
+import { withOrg, dbError, refuseWithout, jsonBody } from "@/lib/gestion/api";
+import { todayISO } from "@/lib/clock";
 
 const ROLES = ["tenant", "owner", "guarantor", "artisan", "supplier", "syndic", "lead", "other"] as const;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Creates a contact with one dated role, under the caller's JWT. */
 export async function POST(req: NextRequest) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
+  const refused = await refuseWithout(ctx, "gestion.tenants.edit");
+  if (refused) return refused;
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const body = await jsonBody(req);
   const name = String(body.name ?? "").trim().slice(0, 120);
   const kind = body.kind === "legal" ? "legal" : "natural";
   // Lower-cased, like everywhere a contact is written: one spelling per address.
@@ -17,6 +21,8 @@ export async function POST(req: NextRequest) {
   const phone = String(body.phone ?? "").trim().slice(0, 40) || null;
   const role = (ROLES as readonly string[]).includes(String(body.role)) ? String(body.role) : "tenant";
   if (!name) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  // Mail is sent to this address: it is an address or it is empty.
+  if (email && !EMAIL.test(email)) return NextResponse.json({ error: "invalid", field: "email" }, { status: 400 });
 
   // display_name is a generated column (first + last, else legal_name):
   // a natural person's input splits on the last space so the generated
@@ -39,9 +45,14 @@ export async function POST(req: NextRequest) {
     org_id: org.id,
     contact_id: contact.id,
     role,
-    started_on: new Date().toISOString().slice(0, 10),
+    started_on: todayISO(),
   });
-  if (roleErr) console.error("contact role insert failed:", roleErr.code, roleErr.message);
+  if (roleErr) {
+    // A contact without its role appears in no list: it is taken back, and the failure is said.
+    const undone = await g.from("contacts").delete().eq("org_id", org.id).eq("id", contact.id);
+    if (undone.error) console.error("contact without a role could not be removed:", undone.error.code);
+    return dbError("contact role insert", roleErr);
+  }
 
   return NextResponse.json({ id: contact.id });
 }

@@ -120,7 +120,7 @@ test("indexation: capital declared, the letter sent, the AR back, the adjustment
   expect((await page.request.post(`/api/baux/${leaseId}/indexation`)).status()).toBe(409);
 });
 
-test("charges: a décompte entered, its blocked line at zero, issued and carried onto this month's rent", async ({ page }) => {
+test("charges: a décompte entered, its blocked line at zero, issued and carried onto the first rent due after it", async ({ page }) => {
   await signIn(page, owner.email);
   await page.goto("/app/charges");
   await expect(page.getByText("Aucun décompte pour l'instant.")).toBeVisible();
@@ -159,7 +159,12 @@ test("charges: a décompte entered, its blocked line at zero, issued and carried
   expect(ires.ok(), "the décompte is issued").toBe(true);
   const ibody = (await ires.json()) as { balanceCents: number; carriedTo: string | null };
   expect(ibody.balanceCents).toBe(600000 - created.advancesBilledCents);
-  expect(ibody.carriedTo, "the balance lands on this month's rent").toBe(today.slice(0, 7));
+  // The balance is never due before the décompte (issued today, due in 30 days): it lands on the
+  // first rent nobody paid that falls due on that day or later (payment day 1), its own month if none.
+  const decompteDue = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const nextRent = monthAfter(today);
+  const expectedMonth = (nextRent >= decompteDue ? nextRent : monthAfter(nextRent)).slice(0, 7);
+  expect(ibody.carriedTo, "the balance lands on the first rent due no earlier than the décompte").toBe(expectedMonth);
   await expect(item.getByRole("status")).toContainText("Décompte émis le");
   await page.reload();
   await expect(item).toContainText("Émis");

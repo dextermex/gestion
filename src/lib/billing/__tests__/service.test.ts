@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Stripe from "stripe";
 import { DAY } from "@/domain/billing/trial";
 import {
@@ -7,7 +7,7 @@ import {
 } from "@/lib/billing/service";
 import { lockedFor } from "@/lib/billing/gate";
 import { billingProvider, exemptOrgs } from "@/lib/billing/provider";
-import { signupChoice } from "@/lib/billing/view";
+import { confirmationShown, signupChoice } from "@/lib/billing/view";
 
 /**
  * The billing service against a recorded stand-in for Stripe: the real SDK,
@@ -102,7 +102,8 @@ describe("finding and creating the workspace's customer", () => {
     expect(create.form.get(`metadata[${META.org}]`)).toBe(ORG);
     expect(create.form.get(`metadata[${META.rhythm}]`)).toBe("year");
     expect(create.form.get("preferred_locales[0]")).toBe("de");
-    expect(create.idempotency).toBe(`morada-gestion-customer-${ORG}-u1`);
+    // The key names the workspace alone: two members arriving together make one customer.
+    expect(create.idempotency).toBe(`morada-gestion-customer-${ORG}`);
     expect(snapshot.customer).toMatchObject({ id: "cus_new", trialEnd: NOW + 30 * DAY, rhythm: "year", extended: false });
     expect(snapshot.subscription).toBeNull();
   });
@@ -359,14 +360,40 @@ describe("configuration and the write lock", () => {
   it("locks writes only after an unpaid trial, and opens on every doubt", async () => {
     const env = { STRIPE_SECRET_KEY: "sk_test_51abcdefghijklmnop" };
     const over = snapshot({ customer: { ...snapshot().customer, trialEnd: NOW - DAY } });
-    expect(await lockedFor(ORG, async () => over, env, NOW)).toBe(true);
-    expect(await lockedFor(ORG, async () => snapshot(), env, NOW)).toBe(false);
+    const still = async () => over;
+    expect(await lockedFor(ORG, async () => over, env, NOW, still)).toBe(true);
+    expect(await lockedFor(ORG, async () => snapshot(), env, NOW, still)).toBe(false);
     const paying = snapshot({ customer: over.customer, subscription: view({ status: "active" }) });
-    expect(await lockedFor(ORG, async () => paying, env, NOW)).toBe(false);
+    expect(await lockedFor(ORG, async () => paying, env, NOW, still)).toBe(false);
     expect(await lockedFor(ORG, async () => null, env, NOW)).toBe(false);
     expect(await lockedFor(ORG, async () => { throw new Error("stripe down"); }, env, NOW)).toBe(false);
     expect(await lockedFor(ORG, async () => over, {}, NOW)).toBe(false);
     expect(await lockedFor(ORG, async () => over, { ...env, BILLING_EXEMPT_ORGS: ORG }, NOW)).toBe(false);
+  });
+
+  it("confirms a cached lock with Stripe before refusing, so a payment made elsewhere opens at once", async () => {
+    const env = { STRIPE_SECRET_KEY: "sk_test_51abcdefghijklmnop" };
+    const over = snapshot({ customer: { ...snapshot().customer, trialEnd: NOW - DAY } });
+    const paid = snapshot({ customer: over.customer, subscription: view({ status: "active" }) });
+    let asked = 0;
+    const confirm = (answer: BillingSnapshot | null) => async () => { asked += 1; return answer; };
+    expect(await lockedFor(ORG, async () => over, env, NOW, confirm(paid))).toBe(false);
+    expect(await lockedFor(ORG, async () => over, env, NOW, confirm(over))).toBe(true);
+    // An open workspace is never asked twice.
+    asked = 0;
+    expect(await lockedFor(ORG, async () => snapshot(), env, NOW, confirm(over))).toBe(false);
+    expect(asked).toBe(0);
+    // Stripe silent on the second look: the lock it gave stands.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await lockedFor(ORG, async () => over, env, NOW, async () => { throw new Error("stripe down"); })).toBe(true);
+  });
+
+  it("says a subscription was confirmed only when one is on record, whatever the address says", () => {
+    const sub = view({ status: "trialing" });
+    expect(confirmationShown("1", { subscription: sub }, false)).toBe(true);
+    expect(confirmationShown("1", { subscription: null }, false)).toBe(false);
+    expect(confirmationShown(undefined, { subscription: sub }, false)).toBe(false);
+    expect(confirmationShown("1", { subscription: sub }, true)).toBe(false);
   });
 
   it("reads the rhythm picked at sign-up defensively, an older choice's plan name ignored", () => {

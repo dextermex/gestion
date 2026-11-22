@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Modal, Select } from "@/components/pro/ui";
 import type { Dict } from "@/lib/i18n/fr";
+import { ApiProblemNote } from "@/components/gestion/ApiErrors";
+import DateField from "@/components/gestion/DateField";
+import { networkProblem, readApiProblem, type ApiProblem } from "@/lib/api-errors";
+import { invalidDayField } from "@/lib/forms";
 
 const KINDS = ["building", "pno", "liability", "rent_guarantee", "pi", "other"] as const;
 
@@ -21,18 +25,30 @@ export default function AssuranceCreate({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal in words (src/lib/api-errors.ts), the form left as typed.
+  const [error, setError] = useState<ApiProblem | null>(null);
   const [done, setDone] = useState(false);
+  // The two days of the policy: the product's own date field hands back an ISO day, or nothing.
+  const [startsOn, setStartsOn] = useState("");
+  const [expiresOn, setExpiresOn] = useState("");
   useEffect(() => {
     if (open) {
       setSaving(false);
       setError(null);
       setDone(false);
+      setStartsOn("");
+      setExpiresOn("");
     }
   }, [open]);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // A date typed that is not a day is corrected before the policy is saved without it.
+    const badDay = invalidDayField(e.currentTarget);
+    if (badDay) {
+      badDay.focus();
+      return;
+    }
     if (!real) {
       setDone(true);
       return;
@@ -50,19 +66,19 @@ export default function AssuranceCreate({
           policyNumber: String(f.get("policyNumber") ?? ""),
           premium: String(f.get("premium") ?? ""),
           propertyId: String(f.get("propertyId") ?? ""),
-          startsOn: String(f.get("startsOn") ?? ""),
-          expiresOn: String(f.get("expiresOn") ?? ""),
+          startsOn,
+          expiresOn,
         }),
       });
       if (!res.ok) {
-        setError(d.shell.createFailed);
+        setError(await readApiProblem(res, d.apiErrors, { keepsInput: true, fallback: d.shell.createFailed }));
         setSaving(false);
         return;
       }
       setOpen(false);
       router.refresh();
     } catch {
-      setError(d.shell.createFailed);
+      setError(networkProblem(d.apiErrors));
       setSaving(false);
     }
   };
@@ -111,10 +127,10 @@ export default function AssuranceCreate({
               <Input name="premium" inputMode="decimal" placeholder="1 260,00" />
             </Field>
             <Field label={d.assurances.fieldStarts}>
-              <Input name="startsOn" type="date" />
+              <DateField value={startsOn} onChange={setStartsOn} placeholder={d.loyers.datePlaceholder} />
             </Field>
             <Field label={d.assurances.fieldExpires}>
-              <Input name="expiresOn" type="date" />
+              <DateField value={expiresOn} onChange={setExpiresOn} min={startsOn || undefined} placeholder={d.loyers.datePlaceholder} />
             </Field>
           </div>
 
@@ -123,11 +139,7 @@ export default function AssuranceCreate({
               {d.common.demoCreateNotice}
             </p>
           )}
-          {error && (
-            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-              {error}
-            </p>
-          )}
+          <ApiProblemNote problem={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               {d.common.cancel}

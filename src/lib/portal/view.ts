@@ -141,18 +141,24 @@ export function requestTimeline(r: Pick<TenantRequest, "kind" | "status" | "crea
 }
 
 /**
- * Messages the tenant has not read on this device. The database keeps no
- * read mark a tenant may set, so the line is drawn by what the tenant did:
- * their own last word in the conversation, or the moment this browser last
- * showed it (`seen`, by tenancy), whichever is later. Everything the other
- * side wrote after that counts.
+ * The rule of "unread" for a tenant, in one conversation: what the other
+ * side wrote after the tenant's read mark or after the tenant's own last
+ * word, whichever is later. The database counts by this rule
+ * (`gestion.my_unread_messages`, 0031) from the read mark it keeps per
+ * account, so every device agrees; this function is the same rule over the
+ * messages at hand, for a sample cabinet and for a base without the function.
  */
-export function unreadCount(conversations: readonly TenantConversation[], seen: Readonly<Record<string, string>>): number {
-  let total = 0;
-  for (const c of conversations) {
-    const mine = c.messages.filter((m) => m.mine).map((m) => m.sentAt).sort().pop() ?? "";
-    const mark = [mine, seen[c.leaseId] ?? ""].sort().pop() ?? "";
-    total += c.messages.filter((m) => !m.mine && m.sentAt > mark).length;
-  }
-  return total;
+export function unreadIn(messages: ReadonlyArray<{ mine: boolean; sentAt: string }>, readUntil: string): number {
+  const instant = (iso: string): number => {
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const own = messages.filter((m) => m.mine).reduce((latest, m) => Math.max(latest, instant(m.sentAt)), 0);
+  const mark = Math.max(own, readUntil ? instant(readUntil) : 0);
+  return messages.filter((m) => !m.mine && instant(m.sentAt) > mark).length;
+}
+
+/** Messages the tenant has not read, over every conversation: what the navigation's badge says. */
+export function unreadCount(conversations: ReadonlyArray<Pick<TenantConversation, "unread">>): number {
+  return conversations.reduce((total, c) => total + c.unread, 0);
 }

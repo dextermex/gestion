@@ -57,7 +57,7 @@ describe("trial reminder e-mails", () => {
     const { stripe, updates } = standIn(customers, { cus_card: [trialing("cus_card", created(5) + 30 * DAY)] });
     const sent: MailMessage[] = [];
     const run = await sendTrialReminders(stripe, NOW, { send: async (m) => { sent.push(m); return { sent: true, id: "m" }; }, dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu" });
-    expect(run).toEqual({ checked: 3, sent: 2, failed: 0 });
+    expect(run).toEqual({ checked: 3, sent: 2, failed: 0, deferred: 0 });
     expect(sent.map((m) => m.to).sort()).toEqual(["cus_card@example.lu", "cus_week@example.lu"]);
     const week = sent.find((m) => m.to === "cus_week@example.lu")!;
     expect(week.subject).toContain("Votre essai Morada Gestion se termine le");
@@ -71,8 +71,31 @@ describe("trial reminder e-mails", () => {
   it("does not record a reminder the mail service refused, so the next run tries again", async () => {
     const { stripe, updates } = standIn([customer("cus_week", ORG_A, NOW - 24 * DAY)], {});
     const run = await sendTrialReminders(stripe, NOW, { send: async () => ({ sent: false, reason: "not_configured" }), dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu" });
-    expect(run).toEqual({ checked: 1, sent: 0, failed: 1 });
+    expect(run).toEqual({ checked: 1, sent: 0, failed: 1, deferred: 0 });
     expect(updates).toHaveLength(0);
+  });
+
+  it("stops by itself when its time is up and counts what it leaves for the next run", async () => {
+    const customers = [customer("cus_a", ORG_A, NOW - 24 * DAY), customer("cus_b", ORG_B, NOW - 24 * DAY), customer("cus_c", ORG_C, NOW - 24 * DAY)];
+    const { stripe } = standIn(customers, {});
+    // Each look at the clock is twenty seconds later: with fifty seconds in all, the second workspace is the last one in time.
+    let at = 0;
+    const sent: MailMessage[] = [];
+    const run = await sendTrialReminders(stripe, NOW, { send: async (m) => { sent.push(m); return { sent: true, id: "m" }; }, dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu", budgetMs: 50_000, clock: () => (at += 20_000) });
+    expect(run).toEqual({ checked: 2, sent: 2, failed: 0, deferred: 1 });
+    expect(sent).toHaveLength(2);
+  });
+
+  it("takes the trials nearest their end first, so what waits for the next run is furthest from a reminder", async () => {
+    const created = (daysLeft: number) => NOW - (30 - daysLeft) * DAY + 3600;
+    // Listed far first: the run still begins with the trial that ends in two days.
+    const customers = [customer("cus_far", ORG_A, created(25)), customer("cus_near", ORG_B, created(2))];
+    const { stripe } = standIn(customers, {});
+    let at = 0;
+    const sent: MailMessage[] = [];
+    const run = await sendTrialReminders(stripe, NOW, { send: async (m) => { sent.push(m); return { sent: true, id: "m" }; }, dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu", budgetMs: 30_000, clock: () => (at += 20_000) });
+    expect(run).toEqual({ checked: 1, sent: 1, failed: 0, deferred: 1 });
+    expect(sent.map((m) => m.to)).toEqual(["cus_near@example.lu"]);
   });
 
   it("writes every reminder in all four languages, without em dashes or arrows", () => {

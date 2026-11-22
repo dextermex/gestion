@@ -3,16 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/pro/icons";
-import { shrinkPhotos } from "@/lib/photo";
+import { PIECE_ACCEPT, pieceLine, preparePieces, sendPieces, type PieceLabels, type PieceOutcome } from "@/lib/portal/pieces";
 
 /**
- * More photos for a request already sent: the same upload as the request
- * form's, to the same route, which stores each file in the lease's own
- * folder under the tenant's token and records it on the request. The
- * database's policy decides (their request, their tenancy in force).
+ * More files for a request already sent (photographs, or a PDF): the same
+ * upload as the request form's, to the same route, which stores each file
+ * in the lease's own folder under the tenant's token and records it on the
+ * request. The database's policy decides (their request, their tenancy in
+ * force). One file per request, and every file that did not go is named
+ * with its reason.
  */
-const MAX_FILES = 5;
-const MAX_BYTES = 8 * 1024 * 1024;
 
 export default function TenantAddPhotos({
   requestId,
@@ -21,7 +21,7 @@ export default function TenantAddPhotos({
   compact = false,
 }: {
   requestId: string;
-  labels: { add: string; uploading: string; added: string; failed: string };
+  labels: { add: string; uploading: string; added: string; failed: string; someFailed: string; pieces: PieceLabels };
   /** On a sample cabinet, the picker opens but nothing is written. */
   sampleNote: string | null;
   /** Beside the reply field: the camera alone, its label read out, the outcome under it. */
@@ -29,9 +29,12 @@ export default function TenantAddPhotos({
 }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "uploading" | "added" | "failed" | "sample">("idle");
+  /** What did not go, by name, and how many did. */
+  const [refused, setRefused] = useState<PieceOutcome[]>([]);
+  const [went, setWent] = useState(0);
 
   const pick = async (input: HTMLInputElement) => {
-    const chosen = Array.from(input.files ?? []).filter((f) => f.type.startsWith("image/")).slice(0, MAX_FILES);
+    const chosen = Array.from(input.files ?? []);
     input.value = "";
     if (chosen.length === 0) return;
     if (sampleNote) {
@@ -39,32 +42,40 @@ export default function TenantAddPhotos({
       return;
     }
     setState("uploading");
+    setRefused([]);
     try {
-      // Brought down to the upload size first: a phone's photograph is well over the limit as taken.
-      const ready = (await shrinkPhotos(chosen)).filter((f) => f.size <= MAX_BYTES);
-      if (ready.length === 0) {
-        setState("failed");
-        return;
-      }
-      const body = new FormData();
-      for (const f of ready) body.append("files", f);
-      const res = await fetch(`/api/locataire/demandes/${encodeURIComponent(requestId)}/pieces`, { method: "POST", body });
-      if (res.status === 401) {
+      // Photographs are brought down to upload size first; each file is then ready or refused by name.
+      const prepared = await preparePieces(chosen);
+      const sent = prepared.ready.length > 0 ? await sendPieces(requestId, prepared.ready) : [];
+      if (sent === "signed_out") {
         window.location.assign(`/connexion?next=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      if (!res.ok) {
-        setState("failed");
-        return;
-      }
-      setState("added");
-      router.refresh();
+      const failed = [...prepared.refused, ...sent.filter((o) => !o.ok)];
+      const ok = sent.filter((o) => o.ok).length;
+      setRefused(failed);
+      setWent(ok);
+      setState(failed.length > 0 ? "failed" : "added");
+      if (ok > 0) router.refresh();
     } catch {
       setState("failed");
     }
   };
 
-  const outcome = state === "added" ? labels.added : state === "failed" ? labels.failed : state === "sample" ? sampleNote : "";
+  // What is said under the control: all went, some did not (which, and why), or nothing went at all.
+  const lines = refused.map((o) => pieceLine(o, labels.pieces));
+  const outcome =
+    state === "added"
+      ? labels.added
+      : state === "sample"
+        ? sampleNote
+        : state === "failed"
+          ? lines.length === 0
+            ? labels.failed
+            : went > 0
+              ? [labels.someFailed.replace("{sent}", String(went)).replace("{failed}", String(lines.length)), ...lines].join(" ")
+              : lines.join(" ")
+          : "";
   const outcomeClass = state === "failed" ? "text-red-700" : state === "sample" ? "rounded-lg bg-amber-50 px-2 py-1 text-amber-900" : "text-emerald-800";
 
   if (compact) {
@@ -79,7 +90,7 @@ export default function TenantAddPhotos({
         >
           <Icon name="camera" size={20} className="shrink-0" />
           <span className="sr-only">{state === "uploading" ? labels.uploading : labels.add}</span>
-          <input type="file" accept="image/*" multiple className="sr-only" disabled={state === "uploading"} onChange={(e) => void pick(e.currentTarget)} />
+          <input type="file" accept={PIECE_ACCEPT} multiple className="sr-only" disabled={state === "uploading"} onChange={(e) => void pick(e.currentTarget)} />
         </label>
         <p role="status" className={"absolute left-0 top-full mt-1.5 w-max max-w-[70vw] text-xs font-semibold " + (outcome ? outcomeClass : "")}>
           {outcome}
@@ -98,7 +109,7 @@ export default function TenantAddPhotos({
       >
         <Icon name="camera" size={18} className="shrink-0" />
         {state === "uploading" ? labels.uploading : labels.add}
-        <input type="file" accept="image/*" multiple className="sr-only" disabled={state === "uploading"} onChange={(e) => void pick(e.currentTarget)} />
+        <input type="file" accept={PIECE_ACCEPT} multiple className="sr-only" disabled={state === "uploading"} onChange={(e) => void pick(e.currentTarget)} />
       </label>
       <p role="status" className={"min-h-4 text-right text-xs font-semibold " + outcomeClass}>
         {outcome}

@@ -3,34 +3,6 @@ import { Icon, type IconName } from "@/components/pro/icons";
 import { Badge, Card } from "@/components/pro/ui";
 import type { Meta } from "@/lib/types";
 
-/** KPI tile — tone drives the value colour (Morada gestion convention). */
-export function Kpi({
-  label,
-  value,
-  sub,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "default" | "good" | "bad";
-}) {
-  return (
-    <Card className="crm-kpi p-5">
-      <p className="text-sm font-medium text-ink-soft">{label}</p>
-      <p
-        className={
-          "mt-1 font-display text-2xl font-bold tracking-tight tabular-nums " +
-          (tone === "good" ? "text-emerald-700" : tone === "bad" ? "text-red-700" : "text-ink")
-        }
-      >
-        {value}
-      </p>
-      {sub && <p className="mt-0.5 text-xs text-ink-soft">{sub}</p>}
-    </Card>
-  );
-}
-
 export function MetaBadge({ meta }: { meta: Meta }) {
   return <Badge className={meta.color}>{meta.label}</Badge>;
 }
