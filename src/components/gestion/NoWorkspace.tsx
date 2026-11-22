@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button } from "@/components/pro/ui";
 import GestionLogo from "@/components/gestion/GestionLogo";
-import { signOutEverywhere } from "@/lib/supabase/browser";
 
 /**
  * Shown to an account that had a management space and no longer belongs to
@@ -37,6 +36,8 @@ export default function NoWorkspace({ email, labels }: { email: string; labels: 
 
   const signOut = async () => {
     setLeaving(true);
+    // The browser client is loaded when it is needed, not with the page every visit downloads.
+    const { signOutEverywhere } = await import("@/lib/supabase/browser");
     await signOutEverywhere();
     window.location.assign("/connexion");
   };

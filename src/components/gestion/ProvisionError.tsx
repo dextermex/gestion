@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button } from "@/components/pro/ui";
 import GestionLogo from "@/components/gestion/GestionLogo";
-import { signOutEverywhere } from "@/lib/supabase/browser";
 import type { Dict } from "@/lib/i18n/fr";
 import { TEAM_EMAIL } from "@/lib/constants";
 
@@ -28,6 +27,8 @@ export default function ProvisionError({ d, email, refused = false, title, body 
 
   const signOut = async () => {
     setLeaving(true);
+    // The browser client is loaded when it is needed, not with the page every visit downloads.
+    const { signOutEverywhere } = await import("@/lib/supabase/browser");
     await signOutEverywhere();
     window.location.assign("/connexion");
   };
