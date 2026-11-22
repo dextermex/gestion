@@ -529,3 +529,39 @@ production (objets constatés au catalogue le 19 novembre : `push_devices`,
 pas. Fonctions Edge déployées : `bank` (v6), `notify` (v8), `scan-receipt`
 (v5) ; `revenuecat` ne l'est pas.
 
+
+## Remise à niveau du 22 novembre 2026 · 0031 à 0034
+
+Même mandat que le 19 novembre, après la validation de la CI : les
+migrations 0001 à 0035 rejouées sur une base neuve, l'audit RLS
+(`e2e/db/rls-audit.sql`), l'audit d'isolement (`e2e/db/isolation-audit.sql`)
+et la suite de bout en bout (bailleur et locataire sur des comptes séparés,
+parcours de toutes les pages) au vert sur la branche
+`remediation/audit-2026-11`.
+
+Sauvegarde prise avant toute écriture : schéma `gestion_backup_20261122`,
+79 tables de `gestion` copiées ligne pour ligne (comptes de lignes vérifiés
+sur les paiements, les baux et les messages) et une table `_ddl` de 568
+définitions (fonctions, policies de `gestion` et de `storage.objects`,
+déclencheurs, vues, registre des migrations). Aucun droit pour `anon` ni
+`authenticated`, RLS active sans policy. À supprimer avec celle du
+19 novembre une fois la remise à niveau acceptée.
+
+Vérifié avant application : aucune étape de relance en double, aucune place
+en double sur un bail, aucun paiement en double sur une opération bancaire,
+aucun bail en cours sans locataire présent. Les écritures de l'application
+web en ligne et de l'iPhone passent les nouvelles règles (un bail se clôt
+avant que ses locataires sortent ; l'iPhone crée un bail en brouillon puis
+son locataire ; ses états des lieux sont rattachés à la séance, pas au bail).
+
+Appliquées dans cet ordre par l'outil de migration Supabase, chacune dans sa
+transaction : `gestion_0031_messaging_requests`, `gestion_0032_tenancy_money`,
+`gestion_0033_api_auth`, `gestion_0034_gardes` (93 gardes d'espace après
+coup). Le texte appliqué est celui de ce dépôt, sans ses lignes de
+commentaire. Tâche planifiée ajoutée : `gestion-end-due-leases` (00:05).
+
+En attente de l'accord du propriétaire : `0035_registres_portail.sql` (un
+décompte émis garde ce qu'il a dit, l'ancienne fonction d'invitation est
+retirée aux clients, une ligne d'activité reste dans son espace, le
+locataire lit le contact déclaré par l'espace). L'application n'en dépend
+pas.
