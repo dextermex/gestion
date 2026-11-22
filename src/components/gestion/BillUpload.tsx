@@ -10,6 +10,7 @@ import { ApiProblemNote } from "@/components/gestion/ApiErrors";
 import { apiProblem, networkProblem, type ApiProblem } from "@/lib/api-errors";
 import { invalidDayField } from "@/lib/forms";
 import { MAX_DOCUMENT_BYTES } from "@/lib/gestion/documents-rules";
+import { IN_REQUEST_MAX_BYTES, putInBucket } from "@/lib/gestion/upload-client";
 import DateField from "./DateField";
 import { HERO_ACTION, HERO_ACTION_LABEL, HERO_ROUND } from "./Hero";
 
@@ -214,7 +215,18 @@ function BillModal({
     setBusy(true);
     try {
       const form = new FormData();
-      if (file) form.set("file", file);
+      if (file && file.size > IN_REQUEST_MAX_BYTES) {
+        // Larger than a request carries: straight to the bucket first, then the bill names it.
+        const put = await putInBucket(file, "/app/finance");
+        if (!put) return;
+        if (!("path" in put)) {
+          setProblem(apiProblem(put.status, put.payload, d.apiErrors, { fallback: d.finance.billFailed, maxMb: MAX_DOCUMENT_BYTES / (1024 * 1024), codes: { unsupported_type: d.finance.billBadType } }));
+          setBusy(false);
+          return;
+        }
+        form.set("uploadedPath", put.path);
+        form.set("fileName", file.name);
+      } else if (file) form.set("file", file);
       form.set("direction", direction);
       form.set("supplierContactId", supplier);
       form.set("subject", subject);

@@ -1,14 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Modal } from "@/components/pro/ui";
+import { useRouter } from "next/navigation";
+import { Button, Modal, Select } from "@/components/pro/ui";
 import { Icon } from "@/components/pro/icons";
+import { callJson } from "./call";
 
 /**
  * The register's rows, and the sheet one opens: everything a row does not
  * say (retention clock, fingerprint, origin) waits behind the row, so the
  * list stays a list. The name opens the file; the row opens the sheet.
- * Presentation only: labels and dates arrive formatted.
+ * Labels and dates arrive formatted. A piece of a tenancy says whether its
+ * tenants read it in their space, and the desk can share it or take it back
+ * from the sheet (`PATCH /api/documents/[id]/partage`). A piece the desk
+ * filed itself, unsealed, can be put on another shelf or taken out of the
+ * register from its sheet (`/api/documents/[id]`); the route refuses what a
+ * work order, a retention or a bill stands on.
  */
 export interface DocumentRow {
   id: string;
@@ -27,6 +34,12 @@ export interface DocumentRow {
   /** The first characters of the fingerprint, what a row shows of a sealed piece. */
   shortSha: string | null;
   fileHref: string | null;
+  /** A piece of a tenancy: whether its tenants read it; null when it is not a tenancy's, or the base does not say. */
+  shared: boolean | null;
+  /** The class as stored, for the shelf select. */
+  klass: string;
+  /** Filed by the desk and unsealed: its class can change and it can be taken out. */
+  editable: boolean;
 }
 
 export interface ListLabels {
@@ -49,10 +62,83 @@ export interface ListLabels {
   sealedNote: string;
   /** Said of a row with nothing behind it; null on a sample cabinet, whose rows are references. */
   noFile: string | null;
+  sharedNote: string;
+  notSharedNote: string;
+  shareNow: string;
+  shareWithdraw: string;
+  shareFailed: string;
+  save: string;
+  remove: string;
+  removeConfirm: string;
+  removeInUse: string;
+  editFailed: string;
 }
 
-export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; labels: ListLabels }) {
+export default function DocumentList({
+  rows,
+  labels,
+  writable = false,
+  classes = [],
+}: {
+  rows: DocumentRow[];
+  labels: ListLabels;
+  /** The switches of the sheet (share, shelf, removal) are offered; off on a sample cabinet. */
+  writable?: boolean;
+  /** The shelves a piece may be put on. */
+  classes?: Array<{ value: string; label: string }>;
+}) {
+  const router = useRouter();
   const [open, setOpen] = useState<DocumentRow | null>(null);
+  /** What the sheet changed, until the page is read again. */
+  const [sharedNow, setSharedNow] = useState<Record<string, boolean>>({});
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const sharedOf = (r: DocumentRow): boolean | null => (r.id in sharedNow ? sharedNow[r.id] : r.shared);
+  const [klass, setKlass] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const show = (r: DocumentRow | null) => {
+    setOpen(r);
+    setKlass(r?.klass ?? "");
+    setConfirming(false);
+    setShareError(null);
+    setEditError(null);
+  };
+
+  const housekeeping = async (r: DocumentRow, method: "PATCH" | "DELETE") => {
+    setEditError(null);
+    setEditing(true);
+    try {
+      const res = await callJson(`/api/documents/${encodeURIComponent(r.id)}`, method, method === "PATCH" ? { class: klass } : undefined, "/app/documents");
+      if (!res) return;
+      if (res.ok) {
+        if (method === "DELETE") show(null);
+        router.refresh();
+      } else setEditError(res.status === 409 ? labels.removeInUse : labels.editFailed);
+    } catch {
+      setEditError(labels.editFailed);
+    }
+    setEditing(false);
+    setConfirming(false);
+  };
+
+  const share = async (r: DocumentRow, next: boolean) => {
+    setShareError(null);
+    setSharing(true);
+    try {
+      const res = await callJson(`/api/documents/${encodeURIComponent(r.id)}/partage`, "PATCH", { shared: next }, "/app/documents");
+      if (!res) return;
+      if (res.ok) {
+        setSharedNow((m) => ({ ...m, [r.id]: res.payload.shared === true }));
+        router.refresh();
+      } else setShareError(labels.shareFailed);
+    } catch {
+      setShareError(labels.shareFailed);
+    }
+    setSharing(false);
+  };
   const subtitle = (r: DocumentRow) => [r.kindLabel, r.relatedLabel, !r.hasFile && labels.noFile ? labels.noFile : null].filter(Boolean).join(" · ");
 
   return (
@@ -70,7 +156,7 @@ export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; la
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="crm-doc-row border-b border-sand-100 last:border-0" onClick={() => setOpen(r)} data-document-row={r.id}>
+              <tr key={r.id} className="crm-doc-row border-b border-sand-100 last:border-0" onClick={() => show(r)} data-document-row={r.id}>
                 <td className="px-4 py-3">
                   <div className="crm-doc-cell">
                     <span className={"crm-doc-icon" + (r.sealed ? " is-sealed" : "")} aria-hidden>
@@ -112,7 +198,7 @@ export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; la
                     aria-label={`${labels.details} : ${r.name}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setOpen(r);
+                      show(r);
                     }}
                   >
                     <Icon name="chevron-right" size={16} />
@@ -124,7 +210,9 @@ export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; la
         </table>
       </div>
 
-      <Modal open={open !== null} onClose={() => setOpen(null)} title={open?.name ?? ""} closeLabel={labels.close}>
+      <Modal
+        open={open !== null}
+        onClose={() => show(null)} title={open?.name ?? ""} closeLabel={labels.close}>
         {open && (
           <div className="crm-doc-sheet">
             <div className="crm-doc-sheet-head">
@@ -162,6 +250,56 @@ export default function DocumentList({ rows, labels }: { rows: DocumentRow[]; la
               )}
             </dl>
             {open.sealed && <p className="crm-doc-sheet-note">{labels.sealedNote}</p>}
+            {sharedOf(open) !== null && (
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2" data-document-shared={sharedOf(open) ? "yes" : "no"}>
+                <p className="text-sm text-ink-soft">{sharedOf(open) ? labels.sharedNote : labels.notSharedNote}</p>
+                {writable && (
+                  <Button size="sm" variant="secondary" loading={sharing} onClick={() => void share(open, !sharedOf(open))}>
+                    {sharedOf(open) ? labels.shareWithdraw : labels.shareNow}
+                  </Button>
+                )}
+                {shareError && (
+                  <p role="alert" className="w-full text-xs font-semibold text-red-700">
+                    {shareError}
+                  </p>
+                )}
+              </div>
+            )}
+            {writable && open.editable && (
+              <div className="mt-4 flex flex-wrap items-end gap-2" data-document-housekeeping>
+                {classes.length > 0 && (
+                  <>
+                    <label className="min-w-0 flex-1 text-sm">
+                      <span className="mb-1 block font-semibold text-ink-soft">{labels.klass}</span>
+                      <Select value={klass} onChange={(e) => setKlass(e.target.value)} disabled={editing}>
+                        {classes.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                    <Button size="sm" variant="secondary" loading={editing && !confirming} disabled={klass === open.klass} onClick={() => void housekeeping(open, "PATCH")}>
+                      {labels.save}
+                    </Button>
+                  </>
+                )}
+                {confirming ? (
+                  <Button size="sm" variant="danger" loading={editing} onClick={() => void housekeeping(open, "DELETE")}>
+                    {labels.removeConfirm}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} disabled={editing}>
+                    {labels.remove}
+                  </Button>
+                )}
+                {editError && (
+                  <p role="alert" className="w-full text-xs font-semibold text-red-700">
+                    {editError}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="crm-doc-sheet-actions">
               {open.hasFile && open.fileHref ? (
                 <a href={open.fileHref} className="ui-button inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 max-sm:min-h-11">

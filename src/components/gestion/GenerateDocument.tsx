@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/pro/ui";
 import type { DocumentKind } from "@/lib/documents/kinds";
@@ -12,8 +13,11 @@ import { useApiProblems } from "./ApiErrors";
  * One document of the workspace, from one record: the control that asks
  * the register for it (or a new version of it) and, once it exists, opens
  * it through its signed address. Every refusal is said in the person's
- * language, from the code the route answered. A sample cabinet plays the
- * outcome and produces nothing.
+ * language, from the code the route answered; a refusal that is settled in
+ * Réglages (a template to validate, the lessor's identity) links there. A
+ * piece mailed once is not mailed again by a second click: the control says
+ * to whom and when it went and offers to send it again. A sample cabinet
+ * plays the outcome and produces nothing.
  */
 export interface GenerateLabels {
   produce: string;
@@ -41,6 +45,10 @@ export interface GenerateLabels {
   sendRecorded: string;
   sendNoRecipient: string;
   sendFailed: string;
+  sendNotRecorded: string;
+  sendAlready: string;
+  sendAgain: string;
+  openSettings: string;
 }
 
 export interface ExistingDocument {
@@ -78,6 +86,10 @@ export default function GenerateDocument({
   const [fresh, setFresh] = useState<ExistingDocument | null>(null);
   const [sending, setSending] = useState(false);
   const problems = useApiProblems();
+  /** Where a refusal is settled, when it is settled in Réglages. */
+  const [fixIn, setFixIn] = useState<string | null>(null);
+  /** The piece already left: the next send is asked for again on purpose. */
+  const [sentBefore, setSentBefore] = useState(false);
   const doc = fresh ?? existing;
 
   // The piece, mailed to the tenants of its lease with the file attached:
@@ -86,22 +98,31 @@ export default function GenerateDocument({
     if (!doc) return;
     setError(null);
     setNote(null);
+    setFixIn(null);
     if (!writable) {
       setNote(sampleNote ?? "");
       return;
     }
     setSending(true);
     try {
-      const res = await callJson(`/api/documents/${encodeURIComponent(doc.documentId)}/envoyer`, "POST", {}, backTo);
+      const res = await callJson(`/api/documents/${encodeURIComponent(doc.documentId)}/envoyer`, "POST", { again: sentBefore }, backTo);
       if (!res) return;
       if (res.ok) {
-        const deliveries = Array.isArray(res.payload.deliveries) ? (res.payload.deliveries as Array<{ email: string; status: string }>) : [];
+        const deliveries = Array.isArray(res.payload.deliveries) ? (res.payload.deliveries as Array<{ email: string; status: string; id?: string | null }>) : [];
         const sent = deliveries.filter((x) => x.status === "sent").map((x) => x.email);
-        const recorded = deliveries.filter((x) => x.status === "not_configured").map((x) => x.email);
+        // "Recorded" only where the outbox holds the line: a line that could not be written is said as such.
+        const recorded = deliveries.filter((x) => x.status === "not_configured" && x.id).map((x) => x.email);
+        const unrecorded = deliveries.filter((x) => x.status === "not_configured" && !x.id).map((x) => x.email);
         const failed = deliveries.filter((x) => x.status === "rejected" || x.status === "unreachable");
+        if (unrecorded.length > 0) setError(labels.sendNotRecorded.replace("{email}", unrecorded.join(", ")));
         if (failed.length > 0 && sent.length === 0 && recorded.length === 0) setError(labels.sendFailed);
         else setNote([sent.length > 0 ? labels.sentTo.replace("{email}", sent.join(", ")) : "", recorded.length > 0 ? labels.sendRecorded.replace("{email}", recorded.join(", ")) : ""].filter(Boolean).join(" "));
+        setSentBefore(false);
         router.refresh();
+      } else if (res.status === 409 && res.payload.error === "already_sent") {
+        const emails = Array.isArray(res.payload.emails) ? (res.payload.emails as string[]).join(", ") : "";
+        setNote(labels.sendAlready.replace("{email}", emails).replace("{date}", String(res.payload.sentOn ?? "")));
+        setSentBefore(true);
       } else setError(res.payload.error === "no_recipient" ? labels.sendNoRecipient : problems.of(res.status, res.payload, { fallback: labels.sendFailed }).message);
     } catch {
       setError(labels.sendFailed);
@@ -111,6 +132,7 @@ export default function GenerateDocument({
 
   const explain = (status: number, payload: Record<string, unknown>): string => {
     const code = String(payload.error ?? "");
+    if (code === "template_not_validated" || code === "no_template" || code === "settings_incomplete") setFixIn("/app/reglages");
     if (code === "template_not_validated" || code === "no_template") return labels.errTemplate;
     if (code === "settings_incomplete") {
       const names: Record<string, string> = { legalName: labels.errFieldName, address: labels.errFieldAddress, payment: labels.errFieldPayment };
@@ -129,6 +151,7 @@ export default function GenerateDocument({
   const produce = async (force: boolean) => {
     setError(null);
     setNote(null);
+    setFixIn(null);
     if (!writable) {
       setNote(sampleNote ?? "");
       return;
@@ -162,7 +185,7 @@ export default function GenerateDocument({
           </a>
           {doc.producedLabel && <span className="text-[11px] text-ink-soft">{doc.producedLabel}</span>}
           <Button size="sm" variant="ghost" loading={sending} onClick={send} data-doc-send={doc.documentId}>
-            {labels.send}
+            {sentBefore ? labels.sendAgain : labels.send}
           </Button>
           <Button size="sm" variant="ghost" loading={busy} onClick={() => produce(true)}>
             {labels.produceAgain}
@@ -182,6 +205,11 @@ export default function GenerateDocument({
         <span role="alert" className="text-[11px] font-semibold text-red-700">
           {error}
         </span>
+      )}
+      {error && fixIn && (
+        <Link href={fixIn} className="inline-flex min-h-9 items-center text-[11px] font-semibold text-brand-700 hover:underline">
+          {labels.openSettings}
+        </Link>
       )}
     </div>
   );

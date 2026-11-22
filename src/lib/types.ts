@@ -9,6 +9,7 @@
  */
 
 import type { Dict } from "@/lib/i18n/fr";
+import { LUX_TIME_ZONE } from "@/lib/clock";
 import { INTL_LOCALE, NUMBER_LOCALE, dateInWords, type Locale } from "@/lib/i18n/config";
 import type { InviteState, RequestState, RequestStatus } from "@/lib/portal/types";
 
@@ -303,9 +304,12 @@ export function formatDate(iso: string | null | undefined, locale: Locale = "fr"
 /** A moment of the journal: the day and the minute, in the reader's language. */
 export function formatDateTime(iso: string | null | undefined, locale: Locale = "fr"): string {
   if (!iso) return "—";
-  const d = new Date(iso);
+  // An instant is read on Luxembourg's clock, whatever clock the server keeps;
+  // a timestamp that names no zone (the sample cabinets') is read as written.
+  const zoned = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  const d = new Date(zoned ? iso : `${iso.slice(0, 19)}Z`);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(INTL_LOCALE[locale], { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(INTL_LOCALE[locale], { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: zoned ? LUX_TIME_ZONE : "UTC" });
 }
 
 export function formatMonth(isoMonth: string, locale: Locale = "fr"): string {

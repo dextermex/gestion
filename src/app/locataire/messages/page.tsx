@@ -3,7 +3,9 @@ import TenantEmpty from "@/components/gestion/TenantEmpty";
 import TenantMessages, { type TenantConversationView } from "@/components/gestion/TenantMessages";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
-import { INTL_LOCALE, type Locale, fmt } from "@/lib/i18n/config";
+import { fmt } from "@/lib/i18n/config";
+import { dayKey, timeOfDay, whenShort } from "@/lib/portal/format";
+import { tenantPieceLabels } from "@/lib/portal/labels";
 import { getTenantView } from "@/lib/portal/space";
 import type { TenantMessage } from "@/lib/portal/tenant-space";
 import { formatDate, requestStateMeta } from "@/lib/types";
@@ -14,18 +16,9 @@ import { formatDate, requestStateMeta } from "@/lib/types";
  * from the tenant's own space, so they are theirs by construction. The
  * address may name one: a request (`?demande=`) opens its conversation at
  * its card, a tenancy (`?bail=`) its conversation; otherwise the current
- * tenancy's is the one open on a laptop, and a phone shows the list.
+ * tenancy's is the one open on a laptop, and a phone shows the list. Every
+ * hour is printed on Luxembourg's clock, the same line the desk reads.
  */
-
-function timeOf(iso: string, locale: Locale): string {
-  return new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" });
-}
-
-/** For the list: the time today, the day otherwise. */
-function whenLabel(iso: string, locale: Locale, today: string): string {
-  if (iso.length <= 10) return formatDate(iso, locale);
-  return iso.slice(0, 10) === today ? timeOf(iso, locale) : new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "short" });
-}
 
 export default async function TenantMessagesPage({ searchParams }: { searchParams: Promise<{ bail?: string; demande?: string }> }) {
   const params = await searchParams;
@@ -64,8 +57,8 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
       kind: m.senderKind,
       from: m.mine ? d.tenant.threadYou : m.senderKind === "manager" ? managerName : m.senderKind === "system" ? "" : d.tenant.threadOther,
       body: m.body,
-      dayLabel: formatDate(m.sentAt.slice(0, 10), locale),
-      timeLabel: timeOf(m.sentAt, locale),
+      dayLabel: formatDate(dayKey(m.sentAt), locale),
+      timeLabel: timeOfDay(m.sentAt, locale),
       requestId: m.ticketId,
     }));
   const openRequestsOf = (leaseId: string) => space.requests.filter((r) => r.leaseId === leaseId && (r.state === "sent" || r.state === "in_progress")).map((r) => ({ id: r.id, title: r.title }));
@@ -82,11 +75,12 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
         id: c.id,
         leaseId: c.leaseId,
         label: c.label || homeOf(c.leaseId),
-        lastLabel: last ? whenLabel(last.sentAt, locale, space.today) : "",
+        lastLabel: last ? whenShort(last.sentAt, locale, space.today) : "",
         preview: request ? request.title : (last?.body ?? ""),
         previewIsRequest: request !== null,
         messages: toMessages(c.messages),
         lastAt: last?.sentAt ?? "",
+        unread: c.unread,
         openRequests: openRequestsOf(c.leaseId),
         newRequestHref: newRequestHrefOf(c.leaseId),
       };
@@ -96,7 +90,7 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
   // starts it.
   for (const leaseId of [lease.id, ...(params.bail && leases.some((l) => l.id === params.bail) ? [params.bail] : [])]) {
     if (conversations.some((c) => c.leaseId === leaseId)) continue;
-    conversations.push({ id: `lease:${leaseId}`, leaseId, label: homeOf(leaseId), lastLabel: "", preview: "", previewIsRequest: false, messages: [], lastAt: "", openRequests: openRequestsOf(leaseId), newRequestHref: newRequestHrefOf(leaseId) });
+    conversations.push({ id: `lease:${leaseId}`, leaseId, label: homeOf(leaseId), lastLabel: "", preview: "", previewIsRequest: false, messages: [], lastAt: "", unread: 0, openRequests: openRequestsOf(leaseId), newRequestHref: newRequestHrefOf(leaseId) });
   }
 
   const byRequest = params.demande ? conversations.find((c) => c.messages.some((m) => m.requestId === params.demande)) : undefined;
@@ -124,6 +118,9 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
         send: d.tenant.threadSend,
         sent: d.tenant.threadSent,
         failed: d.tenant.threadFailed,
+        sessionEnded: d.tenant.sessionEnded,
+        signInAgain: d.tenant.signInAgain,
+        forbidden: d.tenant.threadForbidden,
         view: d.tenant.msgView,
         requestBadge: d.messages.requestBadge,
         newRequest: d.tenant.reqNew,
@@ -134,6 +131,7 @@ export default async function TenantMessagesPage({ searchParams }: { searchParam
         photoMessage: d.tenant.chatPhotoMessage,
         photoChoose: d.tenant.photoPick,
         photoFailed: d.tenant.photoFailed,
+        pieces: tenantPieceLabels(d),
         uploading: d.tenant.uploading,
         close: d.common.close,
       }}

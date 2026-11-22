@@ -295,7 +295,8 @@ export default function PropertyWizard({
    * yet, and the last screen says so.
    */
   const sendPhotos = async (propertyId: string) => {
-    const ordered = coverKey ? [...photos].sort((a, b) => (a.key === coverKey ? -1 : b.key === coverKey ? 1 : 0)) : photos;
+    // A property has one photograph and each upload replaces the last: only the one chosen as cover is sent.
+    const ordered = (coverKey ? photos.filter((p) => p.key === coverKey) : photos).slice(0, 1);
     try {
       for (const photo of ordered) {
         const body = new FormData();

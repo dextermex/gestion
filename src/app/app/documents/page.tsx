@@ -79,7 +79,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   const filter: DocumentFilter = { classes: group ? DOCUMENT_GROUPS[group] : undefined, words, purgeSoon: purge };
   const data = await getDemo({ documents: pageRequest(params), documentFilter: filter });
   const sample = await isSampleData();
-  const { ORG, PROPERTIES, TODAY, DOCUMENT_SUMMARY: summary } = data;
+  const { ORG, PROPERTIES, LEASES, ENDED_LEASES, TODAY, DOCUMENT_SUMMARY: summary, leaseUnitLabel, leaseTenantNames } = data;
   const documents = sample ? filterDocuments(data.DOCUMENTS, filter, TODAY) : data.DOCUMENTS;
   const paging = sample ? { page: 1, pages: 1, total: documents.length } : data.PAGING.documents;
   const cls = classLabels(d);
@@ -113,6 +113,10 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
     sha256: doc.sha256 ?? null,
     shortSha: doc.sha256 ? shortSha(doc.sha256) : null,
     fileHref: doc.hasFile ? `/api/documents/${encodeURIComponent(doc.id)}/fichier` : null,
+    shared: doc.relatedType === "lease" && typeof doc.sharedWithTenant === "boolean" ? doc.sharedWithTenant : null,
+    klass: doc.klass,
+    // A piece the desk filed itself: neither sealed nor produced by the application.
+    editable: !doc.sealed && !doc.kind,
   }));
 
   const shelves = DOCUMENT_GROUP_KEYS.filter((g) => summary.byGroup[g] > 0);
@@ -133,6 +137,11 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
     <DocumentUpload
       classes={Object.keys(cls).map((value) => ({ value, label: cls[value] }))}
       properties={PROPERTIES.map((p) => ({ id: p.id, label: p.name }))}
+      // A piece of a tenancy, running or ended: its tenants keep reading what the desk shares with them.
+      leases={[
+        ...LEASES.filter((l) => l.status !== "draft").map((l) => ({ id: l.id, label: [leaseUnitLabel(l), leaseTenantNames(l).filter(Boolean).join(", ")].filter(Boolean).join(" · ") })),
+        ...ENDED_LEASES.map((l) => ({ id: l.id, label: [l.label, l.tenant].filter(Boolean).join(" · ") })),
+      ]}
       writable={!sample}
       sampleNote={sample ? fmt(d.shell.sampleBanner, { cabinet: ORG.shortName }) : null}
       labels={{ ...d.documents, close: d.common.close }}
@@ -247,6 +256,8 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                   <>
                     <DocumentList
                       rows={rows}
+                      writable={!sample}
+                      classes={Object.keys(cls).map((value) => ({ value, label: cls[value] }))}
                       labels={{
                         colDoc: d.documents.colDoc,
                         colClass: d.documents.colClass,
@@ -266,6 +277,16 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                         sealed: d.documents.sealedAria,
                         sealedNote: d.documents.sealedNote,
                         noFile: sample ? null : d.documents.noFile,
+                        sharedNote: d.documents.sharedNote,
+                        notSharedNote: d.documents.notSharedNote,
+                        shareNow: d.documents.shareNow,
+                        shareWithdraw: d.documents.shareWithdraw,
+                        shareFailed: d.documents.shareFailed,
+                        save: d.common.save,
+                        remove: d.common.delete,
+                        removeConfirm: d.documents.removeConfirm,
+                        removeInUse: d.documents.removeInUse,
+                        editFailed: d.documents.editFailed,
                       }}
                     />
                     <div className="crm-doc-foot">

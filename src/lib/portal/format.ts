@@ -1,19 +1,61 @@
+import { LUX_TIME_ZONE, dayOf } from "@/lib/clock";
+import { visitHasHour } from "@/lib/gestion/interventions";
 import { INTL_LOCALE, type Locale } from "@/lib/i18n/config";
 import { formatDate } from "@/lib/types";
+
+/**
+ * A stored moment and the clock it is read on: Luxembourg's for an instant
+ * (a timestamp that names its zone, the way the database answers), the one
+ * it was written on for a wall-clock timestamp (the sample cabinets', which
+ * name no zone). Null when the text is not a moment.
+ */
+function clockOf(iso: string): { moment: Date; timeZone: string } | null {
+  const zoned = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  const moment = new Date(zoned ? iso : `${iso.slice(0, 19)}Z`);
+  if (Number.isNaN(moment.getTime())) return null;
+  return { moment, timeZone: zoned ? LUX_TIME_ZONE : "UTC" };
+}
+
+/**
+ * The hour of a message, "14:05", on Luxembourg's clock whatever clock the
+ * server or the browser keeps: both print the same line.
+ */
+export function timeOfDay(iso: string, locale: Locale): string {
+  const at = clockOf(iso);
+  return at ? at.moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone: at.timeZone }) : "";
+}
+
+/** The Luxembourg calendar day a moment falls on, "YYYY-MM-DD": the day a conversation files it under. */
+export function dayKey(iso: string): string {
+  if (iso.length <= 10) return iso;
+  const at = clockOf(iso);
+  if (!at) return iso.slice(0, 10);
+  return at.timeZone === "UTC" ? iso.slice(0, 10) : dayOf(at.moment);
+}
+
+/** For a list of conversations: the hour when the moment is today (Luxembourg's today), the day otherwise. */
+export function whenShort(iso: string, locale: Locale, today: string): string {
+  if (iso.length <= 10) return formatDate(iso, locale);
+  const at = clockOf(iso);
+  if (!at) return "";
+  if (dayKey(iso) === today) return timeOfDay(iso, locale);
+  return at.moment.toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "short", timeZone: at.timeZone });
+}
 
 /**
  * A planned visit's day and hour as the tenant reads them: on Luxembourg's
  * clock, whatever clock the server keeps. A timestamp that names no zone
  * (the sample cabinets') is already wall-clock time and is read as written.
+ * The hour is given only when the desk entered one: a visit planned for a
+ * day alone has none, and none is printed.
  */
 export function visitWhen(iso: string, locale: Locale): { date: string; time: string } {
-  const zoned = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
-  const moment = new Date(zoned ? iso : `${iso.slice(0, 19)}Z`);
-  if (Number.isNaN(moment.getTime())) return { date: formatDate(iso.slice(0, 10), locale), time: "" };
-  const timeZone = zoned ? "Europe/Luxembourg" : "UTC";
+  const at = clockOf(iso);
+  if (!at) return { date: formatDate(iso.slice(0, 10), locale), time: "" };
+  const { moment, timeZone } = at;
   return {
     date: moment.toLocaleDateString(INTL_LOCALE[locale], { weekday: "short", day: "numeric", month: "short", timeZone }),
-    time: moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone }),
+    time: visitHasHour(iso) ? moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone }) : "",
   };
 }
 
@@ -46,10 +88,9 @@ export function momentShort(iso: string, locale: Locale): { date: string; time: 
     if (Number.isNaN(day.getTime())) return { date: iso, time: "" };
     return { date: day.toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }), time: "" };
   }
-  const zoned = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
-  const moment = new Date(zoned ? iso : `${iso.slice(0, 19)}Z`);
-  if (Number.isNaN(moment.getTime())) return { date: iso.slice(0, 10), time: "" };
-  const timeZone = zoned ? "Europe/Luxembourg" : "UTC";
+  const at = clockOf(iso);
+  if (!at) return { date: iso.slice(0, 10), time: "" };
+  const { moment, timeZone } = at;
   return {
     date: moment.toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "long", timeZone }),
     time: moment.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit", timeZone }),

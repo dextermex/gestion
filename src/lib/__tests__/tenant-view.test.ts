@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { visitWhen } from "@/lib/portal/format";
-import { SEEN_COOKIE, parseSeen, serializeSeen } from "@/lib/portal/seen";
 import type { TenantConversation, TenantLease, TenantPayments, TenantPeriod, TenantRequest } from "@/lib/portal/tenant-space";
 import { paymentsOf } from "@/lib/portal/tenant-space";
-import { rentDue, requestTimeline, todoFor, unreadCount, upcomingFor } from "@/lib/portal/view";
+import { rentDue, requestTimeline, todoFor, unreadCount, unreadIn, upcomingFor } from "@/lib/portal/view";
 
 /**
  * What the tenant's screens say, derived from the rows and nothing else:
@@ -114,31 +113,27 @@ describe("a request's path", () => {
 });
 
 describe("unread messages", () => {
-  const conversation = (messages: Array<[string, boolean]>): TenantConversation => ({
-    id: "c-1", leaseId: "l-1", label: "", lastMessageAt: messages[messages.length - 1]?.[0] ?? "",
-    messages: messages.map(([sentAt, mine], i) => ({ id: `m-${i}`, senderKind: mine ? "tenant" : "manager", body: "", sentAt, mine, ticketId: null })),
-  });
-  const thread = conversation([["2026-08-19T08:15:00", true], ["2026-08-19T09:05:00", false], ["2026-08-21T16:40:00", false]]);
+  const messages = (rows: Array<[string, boolean]>): TenantConversation["messages"] =>
+    rows.map(([sentAt, mine], i) => ({ id: `m-${i}`, senderKind: mine ? "tenant" : "manager", body: "", sentAt, mine, ticketId: null }));
+  const thread = messages([["2026-08-19T08:15:00", true], ["2026-08-19T09:05:00", false], ["2026-08-21T16:40:00", false]]);
 
   it("counts what the other side wrote after the tenant's own last word", () => {
-    expect(unreadCount([thread], {})).toBe(2);
-    expect(unreadCount([conversation([["2026-08-19T09:05:00", false], ["2026-08-19T10:00:00", true]])], {})).toBe(0);
+    expect(unreadIn(thread, "")).toBe(2);
+    expect(unreadIn(messages([["2026-08-19T09:05:00", false], ["2026-08-19T10:00:00", true]]), "")).toBe(0);
   });
 
-  it("counts from the moment this browser last showed the conversation, when that is later", () => {
-    expect(unreadCount([thread], { "l-1": "2026-08-19T12:00:00" })).toBe(1);
-    expect(unreadCount([thread], { "l-1": "2026-08-21T16:40:00" })).toBe(0);
-    // A mark for another tenancy changes nothing here.
-    expect(unreadCount([thread], { "l-2": "2026-08-22T00:00:00" })).toBe(2);
+  it("counts from the account's read mark, when that is later", () => {
+    expect(unreadIn(thread, "2026-08-19T12:00:00")).toBe(1);
+    expect(unreadIn(thread, "2026-08-21T16:40:00")).toBe(0);
+    // A mark older than the tenant's own last word changes nothing: answering is having read.
+    expect(unreadIn(thread, "2026-08-18T00:00:00")).toBe(2);
+    // The same instant written two ways is the same instant.
+    expect(unreadIn(messages([["2026-08-21T14:40:00.000Z", false]]), "2026-08-21T16:40:00+02:00")).toBe(0);
   });
 
-  it("keeps the seen marks in a cookie that survives a round trip and drops anything malformed", () => {
-    const seen = { "l-1": "2026-08-21T16:40:00", "0b2d6c1e-7c1a-4a55-9d5e-1f2a3b4c5d6e": "2026-08-21T16:40:00.123456+00:00" };
-    expect(parseSeen(serializeSeen(seen))).toEqual(seen);
-    expect(parseSeen("l-1=not-a-date|<script>=2026-08-21T16:40:00|l-2=2026-08-21T16:40:00")).toEqual({ "l-2": "2026-08-21T16:40:00" });
-    expect(parseSeen(undefined)).toEqual({});
-    expect(parseSeen("%E0%A4%A")).toEqual({});
-    expect(SEEN_COOKIE).toBe("morada_tenant_seen");
+  it("adds up the conversations for the navigation's badge", () => {
+    expect(unreadCount([{ unread: 2 }, { unread: 0 }, { unread: 1 }])).toBe(3);
+    expect(unreadCount([])).toBe(0);
   });
 });
 

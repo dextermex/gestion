@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import GestionLogo from "@/components/gestion/GestionLogo";
 import KeepFresh from "@/components/KeepFresh";
@@ -8,11 +7,12 @@ import ScrollHeader from "@/components/gestion/ScrollHeader";
 import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
 import TenantTabs from "@/components/gestion/TenantTabs";
+import UnreadWatch from "@/components/gestion/UnreadWatch";
 import { TenantBecomeOwner, TenantSampleBanner } from "@/components/gestion/TenantChrome";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { SEEN_COOKIE, parseSeen } from "@/lib/portal/seen";
+import { latestMoment, unreadSignature } from "@/lib/gestion/threads";
 import { getTenantView } from "@/lib/portal/space";
 import { todoFor, unreadCount } from "@/lib/portal/view";
 import { getSession } from "@/lib/supabase/server";
@@ -45,8 +45,9 @@ export default async function TenantLayout({ children }: { children: React.React
   const { space, sample, canManage } = view;
   const sampleCabinet = sample ? (await getDemo()).ORG.shortName : null;
 
-  // What the other side wrote since this browser last showed the conversation (or since the tenant's own last word).
-  const unread = unreadCount(space.conversations, parseSeen((await cookies()).get(SEEN_COOKIE)?.value));
+  // What the other side wrote that this account has not read: the database's count, the same on every device.
+  const unread = unreadCount(space.conversations);
+  const lastMessageAt = latestMoment(space.conversations.map((c) => c.lastMessageAt));
   const unreadBadge = unread > 0 ? { count: unread, label: fmt(d.tenant.unreadAria, { n: unread }) } : undefined;
   // A paper the tenant still owes (the insurance certificate) is said where the documents are.
   const toSend = space.current ? todoFor(space.current, space.payments, space.today).filter((a) => a.kind === "insurance_missing").length : 0;
@@ -139,6 +140,8 @@ export default async function TenantLayout({ children }: { children: React.React
           ],
         }}
       />
+      {/* The count stays current without a reload: a light read now and then, the page read again when it differs. */}
+      {!sample && session && <UnreadWatch endpoint="/api/locataire/messages" signature={unreadSignature(unread, lastMessageAt)} fastOn="/locataire/messages" />}
     </div>
   );
 }

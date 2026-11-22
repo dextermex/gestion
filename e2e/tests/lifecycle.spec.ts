@@ -173,6 +173,11 @@ test("the owner reads the chat, answers, tracks the request and opens an interve
   await page.keyboard.press("Escape");
   await page.goto("/app/interventions");
   await expect(page.getByText(requestTitle)).toBeVisible();
+  // Where a message or a request is shown, the row opens it: the lease's Messages tab, and Accueil's activity.
+  await page.goto(`/app/baux/${leaseId}?onglet=messages`);
+  await expect(page.locator("a[data-thread-link]").first()).toHaveAttribute("href", /\/app\/messages\?fil=/);
+  await page.goto("/app");
+  await expect(page.locator(`a[href="/app/messages?demande=${requestId}"]`).first()).toBeVisible();
   await signOutFromShell(page);
 });
 

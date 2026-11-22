@@ -206,6 +206,10 @@ export class FakeDb {
   readonly absentColumns = new Map<string, Set<string>>();
   /** Tables whose every query fails as an unreachable base does (a timeout, a dropped connection). */
   readonly failing = new Set<string>();
+  /** Functions the base does not carry yet: calling one fails as PostgREST says (PGRST202). */
+  readonly absentFunctions = new Set<string>();
+  /** A base before 0031: a tenant files photographs only, on their own request. */
+  photosOnly = false;
   private leaseSeq = 0;
 
   constructor(public today: string) {}
@@ -246,8 +250,9 @@ export class FakeDb {
     const stays = this.table("lease_parties").some((lp) => lp.lease_id === leaseId && TENANT_ROLES.has(String(lp.role)) && lp.moved_out_on == null);
     return stays ? null : { code: "23514", message: "gestion: a tenancy in force keeps a tenant" };
   }
+  /** 0031: a request is the tenant's when it sits on one of their leases and they raised it. */
   tenantTicket(ticketId: unknown, userId: string): boolean {
-    return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && this.tenantLease(t.lease_id, userId));
+    return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && t.source === "tenant" && this.tenantLease(t.lease_id, userId));
   }
   /** The tenancy's conversation, or a request's own thread from before 0019. */
   private tenantConversation(conversationId: unknown, userId: string): boolean {
@@ -273,17 +278,21 @@ export class FakeDb {
         return row.lease_id != null && this.tenantLease(row.lease_id, userId);
       case "payment_allocations":
         return this.table("rent_periods").some((rp) => rp.id === row.rent_period_id && this.tenantLease(rp.lease_id, userId));
+      // 0031: the pieces of the lease the cabinet shares, and those of the tenant's own requests.
       case "documents":
         return (
-          (row.related_type === "lease" && row.related_id != null && this.tenantLease(row.related_id, userId)) ||
+          (row.related_type === "lease" && row.related_id != null && row.shared_with_tenant === true && this.tenantLease(row.related_id, userId)) ||
           (row.related_type === "ticket" && row.related_id != null && this.tenantTicket(row.related_id, userId))
         );
       case "tickets":
-        return row.lease_id != null && this.tenantLease(row.lease_id, userId);
+        return row.lease_id != null && row.source === "tenant" && this.tenantLease(row.lease_id, userId);
       case "conversations":
         return this.tenantScope(row, userId);
       case "messages":
         return this.tenantConversation(row.conversation_id, userId);
+      // 0031: each account reads its own read marks, and writes none directly.
+      case "message_reads":
+        return row.user_id === userId;
       default:
         return false; // leases, units, properties, contacts, payments, bank tables, invites: nothing
     }
@@ -295,9 +304,15 @@ export class FakeDb {
       case "tickets":
         return row.lease_id != null && row.source === "tenant" && this.tenantLiveLease(row.lease_id, userId);
       case "documents":
+        // 0031: a photograph, the insurance certificate or another paper, in the lease's own folder of its workspace.
         return (
-          row.related_type === "ticket" && row.related_id != null && row.class === "photo" && row.uploaded_by === userId &&
-          this.table("tickets").some((t) => t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId))
+          row.related_type === "ticket" && row.related_id != null && row.uploaded_by === userId &&
+          (this.photosOnly ? row.class === "photo" : ["photo", "insurance", "other"].includes(String(row.class))) &&
+          this.table("tickets").some(
+            (t) =>
+              t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId) &&
+              (this.photosOnly || (t.org_id === row.org_id && String(row.storage_path ?? "").startsWith(`${row.org_id}/tickets/${t.lease_id}/`))),
+          )
         );
       case "conversations":
         return row.scope_type === "lease" && row.scope_id != null && this.tenantLease(row.scope_id, userId);
@@ -328,7 +343,45 @@ export class FakeDb {
     }
     const raise = (message: string): Result => ({ data: null, error: { code: "P0001", message } });
     const uid = principal.kind === "tenant" ? principal.userId : null;
+    if (this.absentFunctions.has(name)) return { data: null, error: { code: "PGRST202", message: `Could not find the function gestion.${name} in the schema cache` } };
     switch (name) {
+      // 0031: the tenant's read mark, bounded by the last message written, never moving back.
+      case "mark_conversation_read": {
+        const denied: Result = { data: null, error: { code: "42501", message: "gestion: conversation not found" } };
+        if (!uid) return denied;
+        const cv = this.table("conversations").find((c) => c.id === args.p_conversation && c.scope_type === "lease" && c.scope_id != null && this.tenantLease(c.scope_id, uid));
+        if (!cv) return denied;
+        const times = this.table("messages").filter((m) => m.conversation_id === cv.id).map((m) => String(m.sent_at)).sort((a, b) => Date.parse(a) - Date.parse(b));
+        const last = times[times.length - 1];
+        if (!last) return { data: null, error: null };
+        const asked = typeof args.p_until === "string" && args.p_until ? args.p_until : last;
+        let mark = Date.parse(asked) < Date.parse(last) ? asked : last;
+        const rows = this.table("message_reads");
+        const row = rows.find((r) => r.conversation_id === cv.id && r.user_id === uid);
+        if (row) {
+          if (Date.parse(String(row.read_until)) > Date.parse(mark)) mark = String(row.read_until);
+          row.read_until = mark;
+        } else rows.push({ conversation_id: cv.id, user_id: uid, org_id: cv.org_id, read_until: mark });
+        return { data: mark, error: null };
+      }
+      // 0031: what the signed-in tenant has not read, conversation by conversation.
+      case "my_unread_messages": {
+        if (!uid) return { data: [], error: null };
+        const at = (v: unknown): number => (typeof v === "string" && v ? Date.parse(v) : -Infinity);
+        return {
+          data: this.table("conversations")
+            .filter((c) => c.scope_type === "lease" && c.scope_id != null && this.tenantLease(c.scope_id, uid))
+            .map((c) => {
+              const own = this.table("messages").filter((m) => m.conversation_id === c.id);
+              const mineOf = (m: Row) => m.sender_kind === "tenant" && m.sender_user_id === uid;
+              const read = this.table("message_reads").find((r) => r.conversation_id === c.id && r.user_id === uid);
+              const mark = Math.max(at(read?.read_until), ...own.filter(mineOf).map((m) => at(m.sent_at)));
+              const last = own.map((m) => String(m.sent_at)).sort((a, b) => Date.parse(a) - Date.parse(b)).pop() ?? null;
+              return { conversation_id: c.id, lease_id: c.scope_id, unread: own.filter((m) => !mineOf(m) && at(m.sent_at) > mark).length, last_sent_at: last, read_until: read?.read_until ?? null };
+            }),
+          error: null,
+        };
+      }
       case "my_home": {
         if (!uid) return { data: [], error: null };
         const rows = this.table("leases")
@@ -543,6 +596,10 @@ export class FakeDb {
 
   /** The unique indexes, checked on every insert and update. */
   uniqueConflictOf(table: string, row: Row): DbError | null {
+    // Every table's primary key: an id given twice collides, as in SQL.
+    if (row.id !== undefined && row.id !== null && this.table(table).some((r) => r !== row && r.id === row.id)) {
+      return { code: "23505", message: `duplicate key value violates unique constraint "${table}_pkey"` };
+    }
     for (const key of UNIQUE[table] ?? []) {
       // As in SQL, a key with a null part never collides.
       if (key.some((k) => row[k] === null || row[k] === undefined)) continue;
@@ -1047,6 +1104,10 @@ class FakeQuery implements PromiseLike<Result> {
   }
   lte(key: string, value: unknown): this {
     this.filters.push((r) => String(r[key]) <= String(value));
+    return this;
+  }
+  lt(key: string, value: unknown): this {
+    this.filters.push((r) => String(r[key]) < String(value));
     return this;
   }
   neq(key: string, value: unknown): this {

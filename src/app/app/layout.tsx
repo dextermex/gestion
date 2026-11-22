@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import GestionShell from "@/components/gestion/Shell";
+import UnreadWatch from "@/components/gestion/UnreadWatch";
 import ProvisionError from "@/components/gestion/ProvisionError";
 import { ApiErrorsProvider } from "@/components/gestion/ApiErrors";
 import { getI18n } from "@/lib/i18n";
@@ -13,6 +14,7 @@ import { billedRents, portfolioLots } from "@/domain/billing/pricing";
 import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
 import { quickLeaseOptions } from "@/lib/gestion/quick-lease";
 import { paymentLeases } from "@/lib/gestion/ledger";
+import { latestMoment, unreadSignature } from "@/lib/gestion/threads";
 
 export const metadata: Metadata = {
   title: "Morada Gestion",
@@ -83,6 +85,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // On sample data the header names the sample cabinet, not the real agency:
   // the two must never be mistaken for each other on the same screen.
   const sampleCabinet = datasetId === "real" ? null : demo.ORG.shortName;
+  // The Messages badge, and its signature: what waits to be read and when the last message was written.
+  const unreadMessages = demo.CONVERSATIONS.reduce((a, c) => a + c.unread, 0);
+  const lastMessageAt = latestMoment(demo.CONVERSATIONS.filter((c) => c.messages.length > 0).map((c) => c.lastMessageAt));
 
   // The quick "Bail" sheet joins a lot that can be let to a recorded tenant: nothing else is offered.
   const quickLease = quickLeaseOptions(demo);
@@ -102,7 +107,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     userEmail: identity.email,
     badges: {
       review: demo.BANK_TXS.filter((t) => t.status === "review").length,
-      unread: demo.CONVERSATIONS.reduce((a, c) => a + c.unread, 0),
+      unread: unreadMessages,
     },
     unitOptions: demo.UNITS.map((u) => ({
       id: u.id,
@@ -139,11 +144,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <GestionShell locale={locale} dict={d} shell={shellData}>
-      {/* The workspace could not be read at all: an empty screen is said to be a failed read. Loyers and Accueil say their own partial failures. */}
-      <DegradedNote tables={demo.DEGRADED.includes("hydration") ? demo.DEGRADED : []} d={d} />
-      {/* Every form of the space reads what a refusal means from here (src/lib/api-errors.ts). */}
-      <ApiErrorsProvider copy={d.apiErrors}>{children}</ApiErrorsProvider>
-    </GestionShell>
+    <>
+      <GestionShell locale={locale} dict={d} shell={shellData}>
+        {/* The workspace could not be read at all: an empty screen is said to be a failed read. Loyers and Accueil say their own partial failures. */}
+        <DegradedNote tables={demo.DEGRADED.includes("hydration") ? demo.DEGRADED : []} d={d} />
+        {/* Every form of the space reads what a refusal means from here (src/lib/api-errors.ts). */}
+        <ApiErrorsProvider copy={d.apiErrors}>{children}</ApiErrorsProvider>
+      </GestionShell>
+      {/* The badge stays current without a reload: a light read now and then, the page read again when it differs. */}
+      {datasetId === "real" && session && <UnreadWatch endpoint="/api/conversations" signature={unreadSignature(unreadMessages, lastMessageAt)} fastOn="/app/messages" />}
+    </>
   );
 }

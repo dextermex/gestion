@@ -37,6 +37,10 @@ export function generateLabels(d: Dict): GenerateLabels {
     sendRecorded: d.documents.sendRecorded,
     sendNoRecipient: d.documents.sendNoRecipient,
     sendFailed: d.documents.sendFailed,
+    sendNotRecorded: d.documents.sendNotRecorded,
+    sendAlready: d.documents.sendAlready,
+    sendAgain: d.documents.sendAgain,
+    openSettings: d.documents.openSettings,
   };
 }
 

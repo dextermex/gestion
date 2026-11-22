@@ -1,5 +1,11 @@
 import type { Dict } from "@/lib/i18n/fr";
+import type { PieceLabels } from "@/lib/portal/pieces";
 import type { RequestKind, TECHNICAL_CATEGORIES } from "@/lib/portal/types";
+
+/** Why a file a tenant chose did not go, by name: the sentences the three upload controls share. */
+export function tenantPieceLabels(d: Dict): PieceLabels {
+  return { badType: d.tenant.fileBadType, tooLarge: d.tenant.fileTooLarge, notSent: d.tenant.fileNotSent, closed: d.tenant.fileRequestClosed, tooMany: d.tenant.fileTooMany };
+}
 
 /** The strings the new-request form needs, picked on the server and handed to the client. */
 export function requestLabels(d: Dict) {
@@ -27,6 +33,7 @@ export function requestLabels(d: Dict) {
     urgency: d.tenant.formUrgency,
     urgencies: { routine: d.tenant.urgRoutine, priority: d.tenant.urgPriority, urgent: d.tenant.urgUrgent },
     urgencyHint: d.tenant.urgencyHint,
+    tenancy: d.tenant.formTenancy,
     title: d.tenant.formTitle,
     titleHint: d.tenant.formTitleHint,
     description: d.tenant.formDesc,
@@ -38,7 +45,13 @@ export function requestLabels(d: Dict) {
     sending: d.tenant.sending,
     uploading: d.tenant.uploading,
     sent: d.tenant.reqSent,
+    sentFilesFailed: d.tenant.reqSentFilesFailed,
+    sentFilesRetry: d.tenant.reqSentFilesRetry,
+    seeRequest: d.tenant.reqSeeIt,
+    pieces: tenantPieceLabels(d),
     failed: d.tenant.reqFailed,
+    sessionEnded: d.tenant.reqSessionEnded,
+    signInAgain: d.tenant.signInAgain,
     noLease: d.tenant.reqNoLease,
     back: d.common.back,
     cancel: d.common.cancel,

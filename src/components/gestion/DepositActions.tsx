@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button, Input, Select } from "@/components/pro/ui";
 import { fmt, type Locale } from "@/lib/i18n/config";
 import { euros, formatDate as formatIso, type DepositStatus } from "@/lib/types";
-import { callForm, callJson } from "./call";
+import { uploadPiece } from "@/lib/gestion/upload-client";
+import { callJson } from "./call";
 import { refusalLine, useApiProblems } from "./ApiErrors";
 import DateField from "./DateField";
 
@@ -166,6 +167,7 @@ export function DepositLineActions({
     }
     setBusy(true);
     setError(null);
+    let storedPiece: string | null = null;
     try {
       // The piece first, into the register, hanging off this line; then the line, justified by it.
       if (method === "PATCH") {
@@ -174,23 +176,21 @@ export function DepositLineActions({
           setBusy(false);
           return;
         }
-        const form = new FormData();
-        form.set("file", file);
-        form.set("class", "invoice");
-        form.set("name", ref.trim() || file.name);
-        form.set("relatedType", "deposit_deduction");
-        form.set("relatedId", lineId);
-        const stored = await callForm("/api/documents", form, BACK);
+        // In the request when it can carry the file, straight to the bucket otherwise.
+        const stored = await uploadPiece(file, { class: "invoice", name: ref.trim() || file.name, relatedType: "deposit_deduction", relatedId: lineId }, BACK);
         if (!stored) return;
         if (!stored.ok) {
           setError(stored.status === 415 ? labels.actJustifyBadFile : refusalLine(problems, stored, labels.actFailed));
           setBusy(false);
           return;
         }
+        storedPiece = String(stored.payload.id);
         body = { ...body, documentId: stored.payload.id };
       }
       const res = await callJson(base, method, body, BACK);
       if (!res) return;
+      // A refused line takes back the piece filed for it, rather than leave it with nothing that names it.
+      if (!res.ok && storedPiece) await fetch(`/api/documents/${encodeURIComponent(storedPiece)}`, { method: "DELETE" }).catch(() => null);
       if (res.ok) {
         setNote(done);
         router.refresh();

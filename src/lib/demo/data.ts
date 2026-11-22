@@ -1367,6 +1367,10 @@ export interface DemoDocument {
   createdAt: string;
   /** A file sits behind the row; a reference registered without one has nothing to hand over. */
   hasFile: boolean;
+  /** What the piece hangs off ("lease", "property"…), when the register says. */
+  relatedType?: string | null;
+  /** A piece of a tenancy: whether its tenants read it in their space; null when unknown or not a tenancy's. */
+  sharedWithTenant?: boolean | null;
 }
 
 export const DOCUMENTS: DemoDocument[] = [
