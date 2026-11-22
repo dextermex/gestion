@@ -193,10 +193,12 @@ export async function createCustomer(stripe: Stripe, input: NewCustomer): Promis
     },
   };
   try {
-    // One customer however many of this user's requests arrive together.
-    return await stripe.customers.create(params, { idempotencyKey: `morada-gestion-customer-${input.orgId}-${input.userId}` });
+    // One customer per workspace, however many requests arrive together and
+    // whichever of its members they come from: the key names the workspace alone.
+    return await stripe.customers.create(params, { idempotencyKey: `morada-gestion-customer-${input.orgId}` });
   } catch (error) {
-    // The same key with other parameters (a language switched meanwhile): the first one exists.
+    // The same key with other parameters (another member, a language switched
+    // meanwhile): the first one exists, and is the workspace's.
     const existing = await findCustomer(stripe, input.orgId, input.email);
     if (existing) return existing;
     throw error;

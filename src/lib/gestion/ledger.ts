@@ -11,12 +11,19 @@ import { addMonths } from "@/domain/dates";
 /**
  * The months a live lease's ledger must hold, as YYYY-MM-01: from the start
  * month (capped a year back) through next month, never past the lease's end.
+ * `trackFrom` is the month the owner chose to track rent from: a tenancy that
+ * already ran when it was recorded opens no month before it, so nothing the
+ * owner never asked Morada to follow reads as unpaid.
  */
-export function ledgerMonths(startDate: string, endDate: string | null, today: string): string[] {
+export function ledgerMonths(startDate: string, endDate: string | null, today: string, trackFrom: string | null = null): string[] {
   const liveMonth = `${today.slice(0, 7)}-01`;
   const floor = addMonths(liveMonth, -11);
   const startMonth = `${startDate.slice(0, 7)}-01`;
   let m = startMonth < floor ? floor : startMonth;
+  if (trackFrom && /^\d{4}-\d{2}/.test(trackFrom)) {
+    const from = `${trackFrom.slice(0, 7)}-01`;
+    if (from > m) m = from;
+  }
   let end = addMonths(liveMonth, 1);
   if (endDate) {
     const endMonth = `${endDate.slice(0, 7)}-01`;
@@ -54,4 +61,41 @@ export function nextDueOn(today: string, paymentDay: number, startDate?: string,
     if (due >= today) return endDate && due > endDate ? null : due;
   }
   return null;
+}
+
+/**
+ * Whether a tenancy is still in force today. A departure recorded ahead puts
+ * the lease on notice until its date and it is over from that day on: the
+ * nightly `gestion.end_due_leases()` writes `ended` on the row, and until it
+ * has run the date itself decides, so no screen waits for the job. The term
+ * a lease was signed for is not a departure: a lease whose term has passed
+ * with nobody leaving carries on (prolonged by law), its rent still due.
+ */
+export function effectiveLeaseStatus<S extends string>(status: S, endDate: string | null, today: string): S | "ended" {
+  return status === "notice" && endDate !== null && endDate !== "" && endDate <= today ? "ended" : status;
+}
+
+/** The day a tenancy stops being owed: its departure date when one is recorded (notice), never its contractual term. */
+export function departureDate(lease: { status: string; endDate: string | null }): string | null {
+  return lease.status === "notice" || lease.status === "ended" ? lease.endDate : null;
+}
+
+/** Whether something of a period is still to pay and its due date is behind us. */
+export function isOverdue(period: { status: string; dueDate: string; totalCents: number; allocatedCents: number }, today: string): boolean {
+  return period.status !== "written_off" && period.allocatedCents < period.totalCents && period.dueDate < today;
+}
+
+/**
+ * The tenancies a payment can be recorded on: those in force, and those that
+ * ended with something still owed. A dossier in preparation is not one (it
+ * has no period for the money to land on), and an ended tenancy that owes
+ * nothing has nothing to receive.
+ */
+export function paymentLeases<L extends { id: string; status: string }>(demo: {
+  LEASES: L[];
+  RENT_PERIODS: Array<{ leaseId: string; status: string; dueDate: string; totalCents: number; allocatedCents: number }>;
+  TODAY: string;
+}): L[] {
+  const owing = new Set(demo.RENT_PERIODS.filter((rp) => isOverdue(rp, demo.TODAY)).map((rp) => rp.leaseId));
+  return demo.LEASES.filter((l) => l.status === "active" || l.status === "notice" || (l.status === "ended" && owing.has(l.id)));
 }

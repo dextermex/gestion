@@ -1,5 +1,6 @@
 import "server-only";
 import type { GestionReader } from "@/lib/demo/data-real";
+import { latestMoment } from "@/lib/gestion/threads";
 
 /**
  * One conversation per tenancy, on both sides of the portal. The tenant's
@@ -58,8 +59,18 @@ export async function leaseConversation(
  */
 export async function appendMessage(
   g: GestionReader,
-  input: { orgId: string; conversationId: string; senderKind: "manager" | "tenant"; senderUserId: string; body: string; ticketId?: string | null; touch: boolean },
-): Promise<{ id: string; sentAt: string } | { error: ThreadFailure }> {
+  input: {
+    orgId: string;
+    conversationId: string;
+    senderKind: "manager" | "tenant";
+    senderUserId: string;
+    body: string;
+    ticketId?: string | null;
+    touch: boolean;
+    /** The id the writing screen chose: sent again (a retry, an answer that never came), the message is kept once. */
+    clientId?: string | null;
+  },
+): Promise<{ id: string; sentAt: string; repeated?: boolean } | { error: ThreadFailure }> {
   const now = new Date().toISOString();
   // The anchor column (0019) is named only when a ticket is anchored, so a
   // plain message still goes through on a database that lacks it.
@@ -72,8 +83,54 @@ export async function appendMessage(
     sent_at: now,
   };
   if (input.ticketId) row.ticket_id = input.ticketId;
+  if (input.clientId) row.id = input.clientId;
   const { data, error } = await g.from("messages").insert(row).select("id").single();
+  if (error?.code === "23505" && input.clientId) {
+    // Already written by an earlier send of the same draft: that one stands, nothing is written twice.
+    const { data: kept } = await g.from("messages").select("id,sent_at,conversation_id,sender_user_id").eq("id", input.clientId).maybeSingle();
+    const k = (kept as Row | null) ?? null;
+    if (k && String(k.conversation_id) === input.conversationId && String(k.sender_user_id) === input.senderUserId) {
+      return { id: String(k.id), sentAt: String(k.sent_at ?? now), repeated: true };
+    }
+    return { error: "forbidden" };
+  }
   if (error || !data) return failure(error, `${input.senderKind} message insert`);
   if (input.touch) await g.from("conversations").update({ last_message_at: now }).eq("id", input.conversationId);
   return { id: String((data as Row).id), sentAt: now };
+}
+
+/**
+ * The tenant read a conversation up to a moment (the last message their
+ * screen shows). The database decides: the conversation must be one of the
+ * caller's tenancies, and the mark never passes the last message written
+ * nor moves back (`gestion.mark_conversation_read`, 0031).
+ */
+export async function markTenantRead(
+  g: Pick<GestionReader, "rpc">,
+  conversationId: string,
+  until: string | null,
+): Promise<{ readUntil: string | null } | { error: ThreadFailure | "schema_outdated" }> {
+  const { data, error } = await g.rpc("mark_conversation_read", { p_conversation: conversationId, p_until: until });
+  if (error) {
+    // The function arrives with 0031: until then nothing is marked, and nothing is broken.
+    if (error.code === "PGRST202" || error.code === "42883") return { error: "schema_outdated" };
+    return failure(error, "tenant read mark");
+  }
+  return { readUntil: typeof data === "string" ? data : null };
+}
+
+/**
+ * What the tenant has not read, and when anything was last written, over
+ * their conversations: one light read, for the navigation's count and for
+ * the space asking now and then whether something arrived. Null when the
+ * base does not carry the function yet.
+ */
+export async function tenantUnread(g: Pick<GestionReader, "rpc">): Promise<{ unread: number; latest: string } | null> {
+  const { data, error } = await g.rpc("my_unread_messages");
+  if (error) {
+    if (error.code !== "PGRST202" && error.code !== "42883") console.error("tenant unread read failed:", error.code, error.message);
+    return null;
+  }
+  const rows = (data as Row[] | null) ?? [];
+  return { unread: rows.reduce((total, r) => total + (Number(r.unread) || 0), 0), latest: latestMoment(rows.map((r) => (typeof r.last_sent_at === "string" ? r.last_sent_at : ""))) };
 }

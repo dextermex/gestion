@@ -22,7 +22,7 @@
  *
  * The app must have been built and started against the same project
  * (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY at build time).
- * The browser step needs `playwright` installed; it is skipped otherwise.
+ * The browser step needs `@playwright/test` and its Chromium; it is skipped otherwise.
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -81,10 +81,10 @@ const send = async (method, path, body) => {
 const post = (path, body) => send("POST", path, body);
 const patch = (path, body) => send("PATCH", path, body);
 
-/** A real browser with the same session, when playwright is installed. */
+/** A real browser with the same session, when the declared `@playwright/test` and its Chromium are there. */
 const withBrowser = async (label, run) => {
   try {
-    const { chromium } = await import("playwright");
+    const { chromium } = await import("@playwright/test");
     const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM || undefined });
     const ctx = await browser.newContext();
     const url = new URL(BASE);

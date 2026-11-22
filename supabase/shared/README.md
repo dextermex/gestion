@@ -37,13 +37,15 @@ est l'unique original.
 | Fichier | État (selon l'en-tête / le commit d'origine) | Objet |
 |---|---|---|
 | `20261002120000_notifications_mobile.sql` | **Appliquée** le 2026-10-02 (hébergé, instruction par instruction) | `push_devices`, `notification_prefs`, `notifications` + fonctions `notify_*`, déclencheurs sur `messages`/`payments`/`tickets`/`portal_invites`/`work_orders`, tick `pg_cron`. Dépend de `vault`, `pg_net`, `pg_cron`. |
-| `20261010120000_referrals_mobile.sql` | Datée 2026-10-10 (vérifier en prod) | `referral_codes`, `referral_uses` + RPC `referral_code()` / `redeem_referral()`. |
+| `20261010120000_referrals_mobile.sql` | **Appliquée** (constatée au catalogue le 2026-11-19 : `referral_codes`, `referral_uses`) | `referral_codes`, `referral_uses` + RPC `referral_code()` / `redeem_referral()`. |
 | `20261011120000_security_tenant_isolation.sql` | **Appliquée** le 2026-10-11 (hébergé, instruction par instruction) | **Correctif d'isolation inter-locataires de l'audit du 11 oct.** : `portal_tenant_lease`/`portal_owner_property` liés à l'organisation, inserts portail liés à l'org, déclencheurs `guard_link_org`, `agencies` restreint à `is_public`, gardes des tables héritées `g_*`, durcissement des notifications. **Ne pas ré-appliquer** : c'est ce que l'audit mené dans ce dépôt (même date) avait re-dérivé en doublon. |
 | `20261119120000_billing_status.sql` | **NON appliquée** (2026-11-19) | `gestion.billing_status` : un seul statut d'abonnement pour les deux surfaces (Stripe côté web, Apple/RevenueCat côté app). Écrite par les webhooks (service role) ; lue par les deux surfaces. **À finir de câbler côté web dans ce dépôt** (le webhook Stripe l'écrit, la porte de facturation la lit). |
 
-État de production à confirmer (je ne peux pas interroger la base ici) : les
-en-têtes disent ce qui précède ; une vérification via le MCP Supabase ou par le
-propriétaire tranche `referrals` et confirme le reste.
+État de production constaté au catalogue le 2026-11-19 : les trois migrations
+d'octobre sont appliquées, `billing_status` ne l'est pas ; `bank` (v6), `notify`
+(v8) et `scan-receipt` (v5) sont déployées, `revenuecat` ne l'est pas. Les
+sections 1, 2 et 7 de la migration d'isolement sont reprises, à l'identique,
+dans `supabase/applied/0030_integrite.sql`, que la CI rejoue.
 
 ## Edge Functions (`functions/`)
 

@@ -27,6 +27,12 @@ export async function POST(req: NextRequest) {
   const { data: property, error: findErr } = await g.from("properties").select("id").eq("org_id", org.id).eq("id", propertyId).is("archived_at", null).maybeSingle();
   if (findErr) return dbError("property lookup", findErr);
   if (!property) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  // Two lots of one property never share a name: the sheet, the rent and the papers tell them apart by it.
+  const { data: siblings, error: siblingsErr } = await g.from("units").select("label").eq("org_id", org.id).eq("property_id", propertyId).is("archived_at", null);
+  if (siblingsErr) return dbError("lot names lookup", siblingsErr);
+  if (((siblings as Array<{ label: string }> | null) ?? []).some((u) => String(u.label).trim().toLocaleLowerCase("fr") === label.toLocaleLowerCase("fr"))) {
+    return NextResponse.json({ error: "duplicate_lot" }, { status: 409 });
+  }
 
   const bedrooms = num(body.bedrooms, 100);
   const { data, error } = await g

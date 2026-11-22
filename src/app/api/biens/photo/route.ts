@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
 import { MEDIA_BUCKET } from "@/lib/gestion/media";
 import { refuseWhenLocked } from "@/lib/billing/gate";
 
@@ -13,6 +14,12 @@ import { refuseWhenLocked } from "@/lib/billing/gate";
  * the object path starts with the workspace id, and a member of another
  * cabinet is refused by the storage policy, not by this code. Nothing is
  * stored until the upload has actually succeeded.
+ *
+ * A property, and a lot, has one photograph: a new one replaces it, and the
+ * file it replaces is removed from the bucket rather than left where
+ * nothing points at it. A file whose record could not be written goes too.
+ * Four megabytes at most: a request to the application carries no more
+ * (the screens bring a photograph down to a fraction of that first).
  */
 
 const TYPES: Record<string, string> = {
@@ -21,9 +28,11 @@ const TYPES: Record<string, string> = {
   "image/webp": "webp",
   "image/avif": "avif",
 };
-const MAX_BYTES = 10 * 1024 * 1024;
+const PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
+  const refused = refuseCrossOrigin(req);
+  if (refused) return refused;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const identity = await getIdentity();
@@ -42,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
   const ext = TYPES[file.type];
   if (!ext) return NextResponse.json({ error: "unsupported_type" }, { status: 415 });
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: "too_large" }, { status: 413 });
+  if (file.size > PHOTO_MAX_BYTES) return NextResponse.json({ error: "too_large" }, { status: 413 });
 
   const client = authedClient(session.accessToken);
 
@@ -51,21 +60,23 @@ export async function POST(req: NextRequest) {
   const { data: property, error: findErr } = await client
     .schema("gestion")
     .from("properties")
-    .select("id")
+    .select("id,photo_url")
     .eq("org_id", org.id)
     .eq("id", propertyId)
     .maybeSingle();
   if (findErr || !property) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  let replaced = String(property.photo_url ?? "");
   if (unitId) {
     const { data: unit, error: unitErr } = await client
       .schema("gestion")
       .from("units")
-      .select("id")
+      .select("id,photo_url")
       .eq("org_id", org.id)
       .eq("property_id", propertyId)
       .eq("id", unitId)
       .maybeSingle();
     if (unitErr || !unit) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    replaced = String(unit.photo_url ?? "");
   }
 
   const path = `${org.id}/${propertyId}/${randomUUID()}.${ext}`;
@@ -81,9 +92,14 @@ export async function POST(req: NextRequest) {
     ? await client.schema("gestion").from("units").update({ photo_url: path }).eq("org_id", org.id).eq("id", unitId)
     : await client.schema("gestion").from("properties").update({ photo_url: path }).eq("org_id", org.id).eq("id", propertyId);
   if (setErr) {
-    // The object is orphaned rather than silently half-applied; say so.
+    // Nothing points at the new file: it goes, and the old photograph stays as it was.
     console.error("photo_url update failed:", setErr.code, setErr.message);
+    await client.storage.from(MEDIA_BUCKET).remove([path]).catch(() => null);
     return NextResponse.json({ error: "storage_failed" }, { status: 502 });
+  }
+  // The photograph it replaces, when it was a file of this workspace's bucket (not an outside address).
+  if (replaced && replaced !== path && replaced.startsWith(`${org.id}/`)) {
+    await client.storage.from(MEDIA_BUCKET).remove([replaced]).catch(() => null);
   }
 
   return NextResponse.json({ path });

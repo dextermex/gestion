@@ -56,10 +56,17 @@ export function requestKindOf(ticket: { category: string; description: string | 
   return (tag as RequestKind | undefined) ?? "other";
 }
 
-/** The four states a tenant follows, over the intervention system's nine. */
+/**
+ * The four states a tenant follows, over the intervention system's nine.
+ * This is the one reading of a request's status: the tenant's badge, the
+ * desk's Messages and the tracking view all fold through it. A request is
+ * "sent" only while nobody has touched it; once it is qualified, handed to
+ * a tradesperson, planned or under way it is in progress, whichever screen
+ * moved it.
+ */
 export type RequestState = "sent" | "in_progress" | "resolved" | "refused";
 export function requestState(status: string): RequestState {
-  if (status === "new" || status === "triaged") return "sent";
+  if (status === "new") return "sent";
   if (status === "done" || status === "closed") return "resolved";
   if (status === "cancelled") return "refused";
   return "in_progress";

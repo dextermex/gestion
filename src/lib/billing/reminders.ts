@@ -7,7 +7,7 @@ import type { Dict } from "@/lib/i18n/fr";
 import { escapeHtml, type MailMessage, type MailResult } from "@/lib/mail";
 import { euros, formatDate } from "@/lib/types";
 import { dayOf, periodName } from "./format";
-import { APP, META, factsOf, snapshotOf, type BillingSnapshot } from "./service";
+import { APP, META, customerFacts, factsOf, snapshotOf, type BillingSnapshot } from "./service";
 
 /**
  * The trial's e-mails, sent once a day by the cron route: a week before the
@@ -58,9 +58,16 @@ export interface ReminderDeps {
   dict: (locale: Locale) => Dict;
   /** The app's own address, links are built on it. */
   appUrl: string;
+  /** How long one run may take; the platform cuts a function at sixty seconds. */
+  budgetMs?: number;
+  /** The time, for tests. */
+  clock?: () => number;
 }
 
-export interface ReminderRun { checked: number; sent: number; failed: number }
+export interface ReminderRun { checked: number; sent: number; failed: number; /** Left for the next run: the time this one may take was up. */ deferred: number }
+
+/** The daily run answers within the platform's minute: past this, what is left waits for tomorrow's run. */
+export const REMINDER_BUDGET_MS = 45_000;
 
 const localeOf = (raw: string): Locale => ((LOCALES as readonly string[]).includes(raw) ? (raw as Locale) : "fr");
 
@@ -75,8 +82,18 @@ export async function sendTrialReminders(stripe: Stripe, now: number, deps: Remi
     const held = byOrg.get(org);
     if (!held || customer.created < held.created) byOrg.set(org, customer);
   }
-  const run: ReminderRun = { checked: 0, sent: 0, failed: 0 };
-  for (const customer of byOrg.values()) {
+  const run: ReminderRun = { checked: 0, sent: 0, failed: 0, deferred: 0 };
+  const clock = deps.clock ?? Date.now;
+  const startedAt = clock();
+  // The trials nearest their end first: when the run's time is up, what waits
+  // for tomorrow is what is furthest from any reminder.
+  const queue = [...byOrg.values()].sort((a, b) => Math.abs(customerFacts(a).trialEnd - now) - Math.abs(customerFacts(b).trialEnd - now));
+  for (const customer of queue) {
+    // A run cut by the platform says nothing of what it left: this one stops by itself and counts it.
+    if (clock() - startedAt > (deps.budgetMs ?? REMINDER_BUDGET_MS)) {
+      run.deferred = byOrg.size - run.checked;
+      break;
+    }
     run.checked += 1;
     if (!customer.email) continue;
     try {
@@ -87,7 +104,10 @@ export async function sendTrialReminders(stripe: Stripe, now: number, deps: Remi
       const mail = reminderMail(due, snapshot, deps.dict(locale), locale, `${deps.appUrl}/app/abonnement`, now);
       const result = await deps.send({ to: customer.email, ...mail });
       if (!result.sent) { run.failed += 1; continue; }
-      await stripe.customers.update(customer.id, { metadata: { [META.reminders]: [...snapshot.customer.reminders, due].join(",") } });
+      // The note that this reminder went out is what stops tomorrow's run from
+      // sending it again: when it does not land the first time, it is tried once more.
+      const noted = { metadata: { [META.reminders]: [...snapshot.customer.reminders, due].join(",") } };
+      await stripe.customers.update(customer.id, noted).catch(() => stripe.customers.update(customer.id, noted));
       run.sent += 1;
     } catch (error) {
       run.failed += 1;

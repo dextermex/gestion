@@ -134,6 +134,7 @@ export default async function ComptePage() {
             restore: a.deleteRestore,
             failed: a.deleteFailed,
             sampleNote,
+            writeToTeam: fmt(d.access.deletionWrite, { email: TEAM_EMAIL }),
           }}
         />
       </Panel>

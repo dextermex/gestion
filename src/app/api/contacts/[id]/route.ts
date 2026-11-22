@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg, dbError } from "@/lib/gestion/api";
+import { withOrg, dbError, isUuid, isoDay, refuseWithout } from "@/lib/gestion/api";
 import { isCivility, isLegalForm } from "@/lib/documents/contract-parties";
+import { validIban } from "@/lib/documents/settings-rules";
+import { todayISO } from "@/lib/clock";
 
 /** A contact's identity and reach. `display_name` is a generated column, so
  *  the parts go in and the label comes back out on its own.
@@ -14,7 +16,7 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim
 /** One printed line of a contract: no control characters, no line breaks. */
 const line = (v: unknown, max: number): string => (typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "");
 const has = (b: Record<string, unknown>, k: string) => Object.prototype.hasOwnProperty.call(b, k);
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** The columns migration 0028 adds: their absence is the base being behind, not the request being wrong. */
 const IDENTITY_COLUMNS = /civility|birth_date|birth_place|legal_form|representative_name|representative_role/;
 
@@ -23,18 +25,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const refused = await refuseWithout(ctx, "gestion.tenants.edit");
+  if (refused) return refused;
+  const raw = (await req.json().catch(() => null)) as unknown;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const body = raw as Record<string, unknown>;
 
   const patch: Record<string, unknown> = {};
   if (has(body, "firstName")) patch.first_name = str(body.firstName, 80) || null;
   if (has(body, "lastName")) patch.last_name = str(body.lastName, 80) || null;
   if (has(body, "legalName")) patch.legal_name = str(body.legalName, 160) || null;
-  if (has(body, "email")) patch.email = str(body.email, 160).toLowerCase() || null;
+  if (has(body, "email")) {
+    // Mail is sent to this address: it is an address or it is empty, never half of one.
+    const email = str(body.email, 160).toLowerCase();
+    if (email && !EMAIL.test(email)) return NextResponse.json({ error: "invalid", field: "email" }, { status: 400 });
+    patch.email = email || null;
+  }
   if (has(body, "phone")) patch.phone = str(body.phone, 40) || null;
   if (has(body, "language") && ["fr", "en", "de", "lu"].includes(str(body.language, 2))) {
     patch.language = str(body.language, 2);
   }
-  if (has(body, "iban")) patch.iban = str(body.iban, 40).replace(/\s/g, "").toUpperCase() || null;
+  if (has(body, "iban")) {
+    // The matching engine binds payments to this account: the checksum is checked, as for the lessor's own.
+    const iban = str(body.iban, 40).replace(/\s/g, "").toUpperCase();
+    if (!validIban(iban)) return NextResponse.json({ error: "invalid", field: "iban" }, { status: 400 });
+    patch.iban = iban || null;
+  }
   if (has(body, "bankHolderName")) patch.bank_holder_name = str(body.bankHolderName, 120) || null;
   if (has(body, "notes")) patch.notes = str(body.notes, 2000) || null;
 
@@ -50,7 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (has(body, "birthDate")) {
     const v = line(body.birthDate, 10);
-    if (v && (!ISO.test(v) || v <= "1900-01-01" || v > new Date().toISOString().slice(0, 10))) return NextResponse.json({ error: "invalid", field: "birthDate" }, { status: 400 });
+    if (v && (!isoDay(v) || v <= "1900-01-01" || v > todayISO())) return NextResponse.json({ error: "invalid", field: "birthDate" }, { status: 400 });
     patch.birth_date = v || null;
   }
   if (has(body, "birthPlace")) patch.birth_place = line(body.birthPlace, 120) || null;

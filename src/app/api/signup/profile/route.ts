@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { refuseCrossOrigin } from "@/lib/gestion/api";
+import { RATE, refuseOverRate } from "@/lib/gestion/rate-limit";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { updateSignupUser } from "@/lib/signup/update-user";
 import { emailConfirmed, profileInput } from "@/lib/signup/model";
 
 export async function POST(request: NextRequest) {
-  if (request.headers.get("origin") !== request.nextUrl.origin) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const refused = refuseCrossOrigin(request);
+  if (refused) return refused;
   const input = profileInput.safeParse(await request.json().catch(() => null));
   if (!input.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const session = await getSession();
@@ -43,10 +44,17 @@ export async function POST(request: NextRequest) {
       const email = body.email.toLowerCase();
       const already = emailConfirmed(user) && user.email === email;
       if (!already && user.new_email !== email) {
+        // The account system mails a confirmation to the address typed: counted on the person.
+        const limited = await refuseOverRate(db.schema("gestion"), RATE.mailAccount, null);
+        if (limited) return limited;
         const changed = await updateSignupUser(session.accessToken, { email });
         if (changed.error) {
           const code = changed.error.code;
-          return NextResponse.json({ error: code === "email_exists" || code === "user_already_exists" ? "email_exists" : code === "over_email_send_rate_limit" || code === "over_request_rate_limit" ? "rate_limited" : "save_failed" }, { status: 400 });
+          // An address another account holds is answered like any other: a code is
+          // awaited, none comes, and the screen says what that may mean. Whether an
+          // account exists for an address is not said here (nor at sign-in or reset).
+          if (code === "email_exists" || code === "user_already_exists") return NextResponse.json({ ok: true, emailPending: true });
+          return NextResponse.json({ error: code === "over_email_send_rate_limit" || code === "over_request_rate_limit" ? "rate_limited" : "save_failed" }, { status: 400 });
         }
       }
       // An address confirmed through a linked Google/Apple identity skips the code.
@@ -67,6 +75,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "password") {
+      // The first password only. Changing one goes through the reset link the
+      // account's address receives, never through a session alone.
+      if (prior.password_set_at) return NextResponse.json({ error: "password_set" }, { status: 409 });
       // Tenants have no tailoring questions; accounts finished before
       // passwords existed stay finished.
       const finished = prior.stage === "complete" || prior.role === "tenant";

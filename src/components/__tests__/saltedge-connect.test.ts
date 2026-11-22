@@ -9,7 +9,7 @@ const labels: ConnectLabels = {
   requestInvalid: "request invalid",
   signatureRequired: "signature required",
   failedWithCode: "could not start ({code})",
-  diagnostic: "diagnostic",
+  close: "close",
 };
 
 describe("explainConnectFailure", () => {
@@ -29,7 +29,7 @@ describe("explainConnectFailure", () => {
   });
 
   it("uses the plain failure when a screen gives no wording for the class", () => {
-    const bare: ConnectLabels = { notConfigured: "not configured", failed: "could not start" };
+    const bare: ConnectLabels = { notConfigured: "not configured", failed: "could not start", close: "close" };
     expect(explainConnectFailure("WrongSecret", bare)).toBe("could not start");
   });
 });

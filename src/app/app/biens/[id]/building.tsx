@@ -114,19 +114,20 @@ export default function BuildingSheet({
   return (
     <div>
       <div className="mb-3">
-        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/app/biens" className="inline-flex items-center gap-0.5 text-sm font-semibold text-brand-700 hover:underline max-sm:min-h-10">
+          <Icon name="chevron-left" size={16} />
           {d.biens.backToList}
         </Link>
       </div>
 
       {/* On a phone: the facts first, one full-width Modifier, the figures, then the photograph as a wide strip when there is one. */}
       <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
-        <div className={"relative aspect-[4/3] w-full overflow-hidden rounded-2xl max-sm:order-2 max-sm:aspect-[16/9]" + (p.photoUrl ? "" : " max-sm:hidden")}>
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl max-sm:aspect-[16/9]" data-cover>
           <PropertyPhoto url={p.photoUrl} kind="building" alt={fmt(d.biens.photoAlt, { property: p.name })} rounded="rounded-2xl" />
           {p.photoUrl && <PhotoViewer url={p.photoUrl} title={p.name} label={d.bien.viewPhotos} closeLabel={d.common.close} />}
         </div>
-        <div className="min-w-0 max-sm:order-1 max-sm:flex max-sm:flex-col">
-          <Badge className="bg-brand-100 text-brand-800 max-sm:order-1 max-sm:self-start">
+        <div className="min-w-0 max-sm:flex max-sm:flex-col">
+          <Badge className="bg-brand-100 text-brand-800 max-sm:self-start">
             <Icon name="properties" size={12} />
             {d.bien.badgeBuilding}
           </Badge>
@@ -187,6 +188,7 @@ export default function BuildingSheet({
             colRent: d.bien.colRent,
             colStatus: d.bien.colStatus,
             open: d.bien.openLot,
+            none: d.common.none,
           }}
           action={
             <LotCreate

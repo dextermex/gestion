@@ -34,7 +34,8 @@ export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "n
  */
 export type SignupStage = "role" | "email" | "email_code" | "password" | "tailor" | "complete";
 
-type SignupMeta = { version?: number; stage?: SignupStage; role?: SignupRole; password_set_at?: string };
+/** `ref` is the public site's placement tag the account arrived with (`/inscription?ref=`), when it carried one. */
+type SignupMeta = { version?: number; stage?: SignupStage; role?: SignupRole; password_set_at?: string; ref?: string };
 
 export const signupMeta = (user: Pick<User, "user_metadata">): SignupMeta | null => user.user_metadata?.morada_signup ?? null;
 export const emailConfirmed = (user: Pick<User, "email" | "email_confirmed_at" | "new_email">) => !!user.email && !!user.email_confirmed_at && !user.new_email;
@@ -69,4 +70,14 @@ export function safeSignupNext(raw: string | null | undefined, role: SignupRole 
     if (role === "tenant" && /^\/app(\/|$)/.test(url.pathname)) return fallback;
     return `${url.pathname}${url.search}`;
   } catch { return fallback; }
+}
+
+/**
+ * Whether this page was opened by the password-recovery link itself: its
+ * tokens with their type in the fragment (the default flow), or the code or
+ * token hash it is exchanged by. A session that merely exists is not one.
+ */
+export function arrivedFromRecoveryLink(url: URL): boolean {
+  const fragment = new URLSearchParams(url.hash.slice(1));
+  return fragment.get("type") === "recovery" || url.searchParams.get("type") === "recovery" || url.searchParams.has("code") || url.searchParams.has("token_hash");
 }

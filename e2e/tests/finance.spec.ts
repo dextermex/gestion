@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHouse, daysFromNow, foldGettingStarted, letLot, mail, signIn, signUp } from "./helpers";
+import { createHouse, daysFromNow, foldGettingStarted, letLot, mail, signIn, signUp, unfold } from "./helpers";
 
 /**
  * The register and the books, on the real database. A piece is uploaded
@@ -19,6 +19,8 @@ const owner = { first: "Claire", last: "Hoffmann", email: mail("owner") };
 const tenant = { first: "Tom", last: "Reuter", email: mail("tenant") };
 const houseName = `Maison Reuter ${Date.now().toString(36)}`;
 const today = new Date().toISOString().slice(0, 10);
+/** A day as the product's date field reads it: day, month, year. */
+const frDay = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 /** A file the bucket takes: a minimal PDF, the same bytes every time so the read-back can be compared. */
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n");
 const pdf = (name: string) => ({ name, mimeType: "application/pdf", buffer: PDF });
@@ -119,15 +121,21 @@ test("finance: a bill with its invoice enters the books, is due, is marked paid,
   const dialog = page.getByRole("dialog");
   await dialog.locator("#bill-file").setInputFiles(pdf("facture-chaudiere.pdf"));
   await expect(dialog).toContainText("facture-chaudiere.pdf");
+  // What every bill needs first; what an accountant asks for waits under "Plus de détails".
+  await dialog.getByLabel("Montant").fill("1240");
   await dialog.getByLabel("Objet").fill("Entretien chaudière");
-  await dialog.getByLabel("N° de document").fill("F-2026-118");
-  await dialog.getByLabel("Date du document").fill(today);
-  await dialog.getByLabel("Échéance").fill(daysFromNow(30));
+  // No lot and no category are chosen for the owner: a bill sits on the lot they pick, in the bucket they pick.
+  await expect(dialog.getByLabel("Bien / lot")).toHaveValue("");
+  await dialog.getByLabel("Bien / lot").selectOption({ index: 1 });
+  await dialog.getByLabel("Date du document").fill(frDay(today));
+  await expect(dialog.getByLabel("Catégorie")).toHaveValue("");
   await dialog.getByLabel("Catégorie").selectOption("maintenance_repairs");
   await dialog.getByLabel("TVA").selectOption("17");
-  await dialog.getByLabel("Montant").fill("1240");
+  await dialog.getByText("Plus de détails").click();
+  await dialog.getByLabel("N° de document").fill("F-2026-118");
+  await dialog.getByLabel("Échéance").fill(frDay(daysFromNow(30)));
   const created = page.waitForResponse((r) => r.url().endsWith("/api/finance/factures") && r.request().method() === "POST");
-  await dialog.getByRole("button", { name: "Créer l'écriture" }).click();
+  await dialog.getByRole("button", { name: "Enregistrer la facture" }).click();
   const res = await created;
   expect(res.status(), "the bill is written").toBe(201);
   const bill = (await res.json()) as { id: string; documentId: string | null; amountCents: number; vatCents: number };
@@ -139,6 +147,8 @@ test("finance: a bill with its invoice enters the books, is due, is marked paid,
   await expect(dialog).toBeHidden();
 
   const row = page.locator(`[data-bill="${bill.id}"]`);
+  // A bill is a row; its details, its piece and its one action wait inside.
+  await unfold(row);
   await expect(row).toContainText("Entretien chaudière");
   await expect(row).toContainText("F-2026-118");
   await expect(row).toContainText(houseName);

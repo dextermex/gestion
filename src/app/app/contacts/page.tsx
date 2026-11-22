@@ -75,9 +75,9 @@ export default async function ContactsPage({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{c.name}</p>
                   <p className="truncate text-xs text-ink-soft">
-                    {c.email ?? c.phone ?? "—"}
+                    {c.email ?? c.phone ?? d.common.none}
                     {c.residency === "non_resident" &&
-                      ` · ${fmt(d.contacts.nonResident, { country: c.country ?? "—" })}`}
+                      ` · ${fmt(d.contacts.nonResident, { country: c.country ?? d.common.none })}`}
                     {c.notes && ` · ${c.notes}`}
                   </p>
                 </div>

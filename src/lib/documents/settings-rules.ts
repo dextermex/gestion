@@ -1,5 +1,6 @@
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { isCivility, isLegalForm } from "./contract-parties";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The lessor's identity and payment instructions as the settings screen
@@ -78,7 +79,7 @@ export function parseSettingsInput(body: Record<string, unknown>): LessorSetting
   const documentLang = str(body.documentLang, 2) || "fr";
   if (!(LOCALES as readonly string[]).includes(documentLang)) return { problem: "documentLang" };
   const lessorBirthDate = str(body.lessorBirthDate, 10);
-  if (lessorBirthDate && (!/^\d{4}-\d{2}-\d{2}$/.test(lessorBirthDate) || lessorBirthDate <= "1900-01-01" || lessorBirthDate > new Date().toISOString().slice(0, 10))) return { problem: "birthDate" };
+  if (lessorBirthDate && (!/^\d{4}-\d{2}-\d{2}$/.test(lessorBirthDate) || lessorBirthDate <= "1900-01-01" || lessorBirthDate > todayISO())) return { problem: "birthDate" };
   const kind = str(body.lessorKind, 20);
   const civility = str(body.lessorCivility, 8);
   const legalForm = str(body.lessorLegalForm, 20);

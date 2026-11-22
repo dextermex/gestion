@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { todayISO } from "@/lib/clock";
 
 /** Workflow milestones, not a determination of contractual ownership. */
 export const acquisitionStages = [
@@ -48,7 +49,7 @@ export const acquisitionSchema = z.object({
   notes: z.string().trim().max(10000).default(""),
 }).strict().superRefine((record, ctx) => {
   // Actual events cannot be scheduled. Their corresponding planned dates remain independent.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   for (const field of acquisitionActualDateFields) {
     const value = record[field];
     if (value && calendarDate.safeParse(value).success && value > today) {

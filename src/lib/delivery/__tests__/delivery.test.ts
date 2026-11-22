@@ -11,7 +11,7 @@ import { documentMail, excerptOf, messageMail, requestMail, tenantMessageMail } 
 import { sendDocumentByMail } from "@/lib/delivery/outbox";
 import { generateDocument, type Generated } from "@/lib/documents/generate";
 import { templateVersion } from "@/lib/documents/wording";
-import { sendMail } from "@/lib/mail";
+import { MAIL_TIMEOUT_MS, sendMail } from "@/lib/mail";
 import { FakeDb, type Row } from "@/lib/__tests__/helpers/fake-postgrest";
 
 /**
@@ -139,6 +139,13 @@ describe("the sender", () => {
     expect(await sendMail({ to: "a@example.lu", subject: "s", text: "t", html: "" })).toEqual({ sent: false, reason: "rejected" });
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("down"));
     expect(await sendMail({ to: "a@example.lu", subject: "s", text: "t", html: "" })).toEqual({ sent: false, reason: "unreachable" });
+    // A service that does not answer is given up on in bounded time: the send waits for it, and a person for the send.
+    const hang = vi.spyOn(globalThis, "fetch").mockImplementationOnce(
+      (_url, init) => new Promise((_resolve, reject) => (init?.signal as AbortSignal).addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")))),
+    );
+    expect(await sendMail({ to: "a@example.lu", subject: "s", text: "t", html: "" }, 50)).toEqual({ sent: false, reason: "unreachable" });
+    expect((hang.mock.calls[0][1]?.signal as AbortSignal).aborted).toBe(true);
+    expect(MAIL_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
   });
 });
 
@@ -170,6 +177,8 @@ describe("the outbox on one database", () => {
   it("tells the tenant of the desk's word, in the tenant's language, and records it; not once the workspace turned it off", async () => {
     const r = await addManagerMessage(ctx, { leaseId }, "Bonjour Anna, la chaudière est réparée.");
     expect("error" in r).toBe(false);
+    // No mail key on this deployment: the word is in the tenant's space, and the desk is told the e-mail did not leave.
+    expect(r).toMatchObject({ mail: "not_sent" });
     expect(deliveries()).toHaveLength(1);
     expect(deliveries()[0]).toMatchObject({ org_id: ORG, kind: "message", lease_id: leaseId, recipient_kind: "tenant", recipient_contact_id: contactId, recipient_email: ANNA.email, lang: "de", status: "not_configured", provider: null, created_by: "user-1", sent_at: null });
     expect(String(deliveries()[0].subject)).toBe("Neue Nachricht von Cabinet Test: Maison · Maison Weber");
@@ -180,7 +189,7 @@ describe("the outbox on one database", () => {
     expect(deliveries()).toHaveLength(2);
     // Off: the word still goes through, nobody is mailed.
     db.insertRow("workspace_settings", { ...SETTINGS, notify_tenant_messages: false });
-    expect("error" in (await addManagerMessage(ctx, { leaseId }, "Un troisième."))).toBe(false);
+    expect(await addManagerMessage(ctx, { leaseId }, "Un troisième.")).toMatchObject({ mail: "none" });
     expect(deliveries()).toHaveLength(2);
   });
 
@@ -242,12 +251,17 @@ describe("the outbox on one database", () => {
     const sentRow = deliveries().filter((x) => x.kind === "document")[1];
     expect(sentRow).toMatchObject({ status: "sent", provider: "resend", provider_message_id: "msg_2" });
     expect(sentRow.sent_at).toBeTruthy();
+    // Once it left, a second click does not send it again: it says to whom and when, and sends only when asked again.
+    const twice = await sendDocumentByMail(ctx, storage.client, g.documentId);
+    expect(twice).toMatchObject({ error: "already_sent", emails: [ANNA.email] });
+    expect("sentAt" in twice && twice.sentAt).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     // Refused: an id that is nobody's, a piece of the property rather than the lease, a tenant without an address.
     expect(await sendDocumentByMail(ctx, storage.client, "not-a-document")).toEqual({ error: "not_found" });
     const other = db.insertRow("documents", { org_id: ORG, class: "other", name: "x.pdf", storage_path: `${ORG}/documents/x.pdf`, related_type: "property", related_id: propertyId });
     expect(await sendDocumentByMail(ctx, storage.client, String(other.id))).toEqual({ error: "not_found" });
     await ctx.g.from("contacts").update({ email: "" }).eq("org_id", ORG).eq("id", contactId);
-    expect(await sendDocumentByMail(ctx, storage.client, g.documentId)).toEqual({ error: "no_recipient" });
+    expect(await sendDocumentByMail(ctx, storage.client, g.documentId, { again: true })).toEqual({ error: "no_recipient" });
     expect(deliveries().filter((x) => x.kind === "document")).toHaveLength(2);
   });
 });

@@ -1,6 +1,6 @@
 import type { ExistingDocument, GenerateLabels } from "@/components/gestion/GenerateDocument";
 import type { DemoGenerated } from "@/lib/demo/data";
-import { INTL_LOCALE, fmt, type Locale } from "@/lib/i18n/config";
+import { NUMBER_LOCALE, fmt, type Locale } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/fr";
 import { formatDate } from "@/lib/types";
 import type { MissingLabels } from "./missing";
@@ -37,6 +37,10 @@ export function generateLabels(d: Dict): GenerateLabels {
     sendRecorded: d.documents.sendRecorded,
     sendNoRecipient: d.documents.sendNoRecipient,
     sendFailed: d.documents.sendFailed,
+    sendNotRecorded: d.documents.sendNotRecorded,
+    sendAlready: d.documents.sendAlready,
+    sendAgain: d.documents.sendAgain,
+    openSettings: d.documents.openSettings,
   };
 }
 
@@ -67,6 +71,6 @@ export function shortSha(sha256: string | null | undefined): string {
 export function sizeLabel(kb: number, locale: Locale): string {
   const units = locale === "fr" || locale === "lu" ? (["Ko", "Mo"] as const) : (["KB", "MB"] as const);
   return kb >= 1024
-    ? `${(kb / 1024).toLocaleString(INTL_LOCALE[locale], { maximumFractionDigits: 1 })} ${units[1]}`
-    : `${kb.toLocaleString(INTL_LOCALE[locale])} ${units[0]}`;
+    ? `${(kb / 1024).toLocaleString(NUMBER_LOCALE[locale], { maximumFractionDigits: 1 })} ${units[1]}`
+    : `${kb.toLocaleString(NUMBER_LOCALE[locale])} ${units[0]}`;
 }

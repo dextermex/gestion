@@ -125,7 +125,7 @@ export default async function WorkflowsPage() {
                     </td>
                     <td className="px-3 py-3 text-xs text-ink-soft" data-label={d.workflows.colUnit}>{t.unitLabel}</td>
                     <td className="px-3 py-3 text-right text-xs tabular-nums text-ink-soft" data-label={d.workflows.colSla}>
-                      {t.slaDueAt ? formatDate(t.slaDueAt, locale) : "—"}
+                      {t.slaDueAt ? formatDate(t.slaDueAt, locale) : d.common.none}
                     </td>
                     <td className="px-3 py-3 text-right" data-label={d.workflows.colSeverity}>
                       <MetaBadge meta={severityMeta[t.severity]} />

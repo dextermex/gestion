@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Dict } from "@/lib/i18n/fr";
-import { MORADA_URL } from "@/lib/constants";
+import { TEAM_EMAIL } from "@/lib/constants";
+import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
 
 /**
  * The new-account journey (the immocloud "getting started" card): a floating
- * checklist with progress, one row per setup step, each linking into the
- * matching module.
+ * checklist with progress, one row per setup step, each leading to the place
+ * where the step is done: the settings form, the property wizard, the
+ * creation sheet of a contact or a lease, the bank, the rents. A step
+ * already done links to the list it filled.
  *
  * What is done is read from the account's own rows: a property exists, a
  * contact exists, a lease is running, a bank account is connected, a rent
@@ -52,7 +55,7 @@ function save(s: Stored) {
   }
 }
 
-export default function GettingStarted({ d, progress }: { d: Dict; progress: Progress }) {
+export default function GettingStarted({ d, progress, kind }: { d: Dict; progress: Progress; /** "owner" for a landlord's own space: the first step is worded for a landlord, not a cabinet. */ kind: string }) {
   const [state, setState] = useState<Stored | null>(null);
   const reduced = useReducedMotion();
 
@@ -63,11 +66,12 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
   if (!state || state.hidden) return null;
 
   // Every step but the profile is a fact the database attests.
-  const steps: Array<{ id: string; href: string; title: string; sub: string; attested: boolean | null }> = [
-    { id: "profile", href: "/app/conformite", title: d.onboarding.stepProfile, sub: d.onboarding.stepProfileSub, attested: null },
+  // `create` names the shell's creation sheet a step opens while it is still to do; once done, the row links to the list.
+  const steps: Array<{ id: string; href: string; create?: "contact" | "lease"; title: string; sub: string; attested: boolean | null }> = [
+    { id: "profile", href: "/app/reglages", title: kind === "owner" ? d.onboarding.stepProfileOwner : d.onboarding.stepProfile, sub: d.onboarding.stepProfileSub, attested: null },
     { id: "property", href: "/app/biens/nouveau", title: d.onboarding.stepProperty, sub: d.onboarding.stepPropertySub, attested: progress.property },
-    { id: "contact", href: "/app/contacts", title: d.onboarding.stepContact, sub: d.onboarding.stepContactSub, attested: progress.contact },
-    { id: "lease", href: "/app/baux", title: d.onboarding.stepLease, sub: d.onboarding.stepLeaseSub, attested: progress.lease },
+    { id: "contact", href: "/app/contacts", create: "contact", title: d.onboarding.stepContact, sub: d.onboarding.stepContactSub, attested: progress.contact },
+    { id: "lease", href: "/app/baux", create: "lease", title: d.onboarding.stepLease, sub: d.onboarding.stepLeaseSub, attested: progress.lease },
     { id: "bank", href: "/app/banque", title: d.onboarding.stepBank, sub: d.onboarding.stepBankSub, attested: progress.bank },
     { id: "rent", href: "/app/loyers", title: d.onboarding.stepRent, sub: d.onboarding.stepRentSub, attested: progress.rent },
   ];
@@ -166,17 +170,24 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
                         </svg>
                       </span>
                     </button>
-                    <Link href={s.href} className="group min-w-0 flex-1">
-                      <p
-                        className={
-                          "truncate text-sm font-semibold group-hover:text-brand-700 " +
-                          (done ? "text-ink-soft line-through decoration-sand-300" : "text-ink")
-                        }
-                      >
-                        {s.title}
-                      </p>
-                      {!done && <p className="truncate text-xs text-ink-soft">{s.sub}</p>}
-                    </Link>
+                    {s.create && !done ? (
+                      <button type="button" onClick={() => window.dispatchEvent(new CustomEvent(CREATE_EVENT, { detail: s.create }))} className="group min-w-0 flex-1 text-left">
+                        <span className="block truncate text-sm font-semibold text-ink group-hover:text-brand-700">{s.title}</span>
+                        <span className="block truncate text-xs text-ink-soft">{s.sub}</span>
+                      </button>
+                    ) : (
+                      <Link href={s.href} className="group min-w-0 flex-1">
+                        <p
+                          className={
+                            "truncate text-sm font-semibold group-hover:text-brand-700 " +
+                            (done ? "text-ink-soft line-through decoration-sand-300" : "text-ink")
+                          }
+                        >
+                          {s.title}
+                        </p>
+                        {!done && <p className="truncate text-xs text-ink-soft">{s.sub}</p>}
+                      </Link>
+                    )}
                     <svg
                       className="h-4 w-4 shrink-0 text-ink-soft"
                       fill="none"
@@ -193,7 +204,8 @@ export default function GettingStarted({ d, progress }: { d: Dict; progress: Pro
             </ul>
 
             <div className="flex items-center justify-between border-t border-sand-100 px-4 py-2.5">
-              <a href={MORADA_URL} className="text-xs font-semibold text-brand-700 hover:underline">
+              {/* The team's address: there is no help centre to send anyone to. */}
+              <a href={`mailto:${TEAM_EMAIL}`} className="inline-flex min-h-9 items-center text-xs font-semibold text-brand-700 hover:underline">
                 {d.onboarding.help}
               </a>
               <button

@@ -65,7 +65,7 @@ function account(): DemoData {
     BILLS: [
       { id: "bill-1", direction: "expense", supplierContactId: "c-artisan", supplierName: "Jos Kirsch", propertyId: "prop-1", unitId: "unit-1", unitLabel: "Maison · Maison Schmit", category: "maintenance_repairs", subject: "Chaudière", docNo: "K-1", docDate: today, dueOn: null, paidOn: null, cashflow: true, vatRatePct: 17, amountCents: 124000, vatCents: 18017, documentId: "doc-3", hasDocument: true, createdAt: today },
     ],
-    PROPERTIES: [{ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", commune: "Luxembourg", cadastralRef: "", type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }],
+    PROPERTIES: [{ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", addressParts: { street: "rue du Test", number: "1", postalCode: "", city: "", country: "LU" }, commune: "Luxembourg", cadastralRef: "", cadastralParts: { commune: "", section: "", number: "" }, type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }],
     UNITS: [{ id: "unit-1", propertyId: "prop-1", label: "Maison", kind: "dwelling", floor: "", areaSqm: 120, rooms: 4, furnished: false, photoUrl: null }],
     TICKETS: [
       {
@@ -74,13 +74,13 @@ function account(): DemoData {
       },
     ],
     leaseById: (id: string) => [lease].find((l) => l.id === id)!,
-    propertyById: () => ({ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", commune: "Luxembourg", cadastralRef: "", type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }),
+    propertyById: () => ({ id: "prop-1", name: "Maison Schmit", address: "1, rue du Test", addressParts: { street: "rue du Test", number: "1", postalCode: "", city: "", country: "LU" }, commune: "Luxembourg", cadastralRef: "", cadastralParts: { commune: "", section: "", number: "" }, type: "house", constructionYear: 2015, completionDate: "", energyClass: "", cpeIssuedOn: "", isCopropriete: false, smokeDetectorsConfirmed: false, ownerContactIds: [], ownershipNote: "", unitsCount: 1, photoUrl: null }),
     leaseTenantNames: () => ["Lena Schmit"],
     leaseUnitLabel: () => "Maison · Maison Schmit",
   };
 }
 
-vi.mock("@/lib/demo", () => ({ getDemo: async () => account(), isSampleData: async () => false }));
+vi.mock("@/lib/demo", () => ({ getDemo: async () => account(), isSampleData: async () => false, getDatasetId: async () => "real", sampleDataEnabled: () => false }));
 vi.mock("@/lib/i18n", () => ({ getI18n: async () => ({ locale: "fr", d: fr }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => "/app" }));
 
@@ -106,9 +106,11 @@ describe("operations screens on a real account", () => {
   });
   it("Finance lists the bill with its piece and the way to mark it paid, and offers the intake", async () => {
     const { default: Page } = await import("@/app/app/finance/page");
-    const html = text(renderToString(await Page()));
+    const html = text(renderToString(await Page({ searchParams: Promise.resolve({}) })));
     expect(html).toContain('data-bill="bill-1"');
-    expect(html).toContain("Jos Kirsch · Chaudière");
+    // The row names the supplier, then says the bill's state and its subject.
+    expect(html).toContain("Jos Kirsch");
+    expect(html).toContain("Chaudière");
     expect(html).toContain("/api/documents/doc-3/fichier");
     expect(html).toContain('data-bill-paid="bill-1"');
     expect(html).toContain("data-bill-add");
@@ -123,6 +125,11 @@ describe("operations screens on a real account", () => {
     expect(html).toContain(fr.documents.noFile);
     expect(html).toContain(fr.documents.add);
     expect(html).not.toContain("data-pagination");
+  });
+  it("A property's technique tab opens when its energy certificate has no issue date", async () => {
+    const { default: Page } = await import("@/app/app/biens/[id]/page");
+    const html = text(renderToString(await Page({ params: Promise.resolve({ id: "prop-1" }), searchParams: Promise.resolve({ onglet: "technique" }) })));
+    expect(html).toContain(fr.bien.cadastreTitle);
   });
   it("Interventions opens the ticket's sheet", async () => {
     const { default: Page } = await import("@/app/app/interventions/page");

@@ -6,6 +6,7 @@ import { signMedia } from "@/lib/gestion/media";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
 import { buildTenantSpace, type TenantSpace } from "@/lib/portal/tenant-space";
+import { todayISO } from "@/lib/clock";
 
 /**
  * What the tenant pages render, resolved once per request.
@@ -33,7 +34,7 @@ export const getTenantView = cache(async (): Promise<TenantView> => {
     userId: session.userId,
     email: session.email,
     displayName: identity?.displayName ?? session.email.split("@")[0],
-    today: new Date().toISOString().slice(0, 10),
+    today: todayISO(),
     sign: (paths) => signMedia(client, paths),
   });
   return { kind: "real", space, sample: false, canManage: (identity?.workspaces.length ?? 0) > 0 };

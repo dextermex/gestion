@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 /**
  * The moves every flow is made of, written once. Each one drives the real
@@ -17,6 +17,8 @@ export function mail(who: string): string {
 
 export const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
 export const daysFromNow = (n: number): string => isoDate(new Date(Date.now() + n * 86_400_000));
+/** An ISO day as the product's own date field takes it: day, month, year. */
+export const frDay = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
 export interface Person {
   first: string;
@@ -49,9 +51,31 @@ export async function signUp(page: Page, person: Person, next = "/app"): Promise
   await signIn(page, person.email, next);
 }
 
+/**
+ * The application accepts a request that changes something only from its own
+ * pages: a browser says so in the `Origin` header of every POST, PATCH and
+ * DELETE it sends. The specs also call routes directly (`page.request`),
+ * with the browser's cookies but outside any page, and such a call carries
+ * no `Origin` of its own. From here on the calls of this browser context
+ * state the origin a page of the application would state, so the real check
+ * stays on throughout; a header a spec sets itself wins.
+ */
+const SPOKEN_FOR = Symbol("same-origin requests");
+export function speakAsThePage(page: Page): void {
+  const request = page.context().request as APIRequestContext & { [SPOKEN_FOR]?: true };
+  if (request[SPOKEN_FOR]) return;
+  const origin = new URL(page.url()).origin;
+  for (const method of ["post", "patch", "put", "delete"] as const) {
+    const send = request[method].bind(request);
+    request[method] = (url, options) => send(url, { ...options, headers: { origin, ...options?.headers } });
+  }
+  request[SPOKEN_FOR] = true;
+}
+
 /** Sign in on the door, leaving whatever account the browser still holds. */
 export async function signIn(page: Page, email: string, next = "/app"): Promise<void> {
   await page.goto(`/connexion?next=${encodeURIComponent(next)}`);
+  speakAsThePage(page);
   await leaveSignedInAccountIfAny(page);
   await page.locator("#signup-email").fill(email);
   await page.locator("form button[type=submit]").click();
@@ -72,14 +96,18 @@ export async function leaveSignedInAccountIfAny(page: Page): Promise<void> {
 /**
  * An invited tenant's first visit: the invitation offers account creation on
  * the phone funnel with the invited address, never the retired email form.
- * The account is then created as above and signed in back to the invitation.
+ * The way back names the invitation's page, never its token (the link left
+ * it in a cookie only the server reads). The account is then created as
+ * above and signed in back to the invitation.
  */
 export async function createAccountFromInvitation(page: Page, person: Person, token: string): Promise<void> {
   const create = page.getByRole("link", { name: "Créer mon compte" });
   const href = (await create.getAttribute("href")) ?? "";
   expect(href).toContain("/inscription?");
   expect(new URL(href, "http://x").searchParams.get("email")).toBe(person.email);
-  await signUp(page, person, `/invitation/${token}`);
+  expect(new URL(href, "http://x").searchParams.get("next")).toBe("/invitation");
+  expect(href).not.toContain(token);
+  await signUp(page, person, "/invitation");
 }
 
 /** Sign out from the management shell, through its account menu (wizard screens have no shell: start from the dashboard). */
@@ -178,8 +206,13 @@ export async function letLot(page: Page, unitId: string, tenant: Person, rent = 
   await page.getByLabel("Nom", { exact: true }).first().fill(tenant.last);
   await page.getByLabel("E-mail").first().fill(tenant.email);
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // tenant → lease
-  // A tenancy that began earlier opens its past months in the ledger: the arrears flows start from one.
-  if (startDate) await page.getByLabel("Début du bail").fill(startDate);
+  // A tenancy that began before this month is followed from the current month unless the
+  // owner says otherwise. The arrears flows start from one followed since its first day:
+  // its past months open in the ledger.
+  if (startDate) {
+    await page.getByLabel("Début du bail").fill(frDay(startDate));
+    if (startDate.slice(0, 7) < isoDate(new Date()).slice(0, 7)) await page.getByLabel("Suivre les loyers à partir de").selectOption("start");
+  }
   await page.getByRole("button", { name: "Suivant", exact: true }).click(); // lease → rent
   await page.getByLabel("Loyer hors charges").fill(rent);
   await page.getByLabel("Charges mensuelles").fill("150");
@@ -209,6 +242,20 @@ export async function leaseIdOf(page: Page, propertyId: string): Promise<string>
  * it with its own button; so does the flow, once per browser (the choice is
  * remembered), before reaching for anything at the bottom of a page.
  */
+/**
+ * A row that keeps its tools folded until it is opened (a rent on Loyers,
+ * its reminder ladder and its papers inside): open every fold around or
+ * under the element, so what is inside can be read and used.
+ */
+export async function unfold(target: Locator): Promise<void> {
+  await target.first().evaluate((el) => {
+    for (let d = el.closest("details"); d; d = d.parentElement ? d.parentElement.closest("details") : null) d.open = true;
+    el.querySelectorAll("details").forEach((d) => {
+      d.open = true;
+    });
+  });
+}
+
 export async function foldGettingStarted(page: Page): Promise<void> {
   const card = page.getByRole("region", { name: "Bien démarrer avec Morada Gestion" });
   const fold = card.getByRole("button", { name: "Réduire", exact: true });

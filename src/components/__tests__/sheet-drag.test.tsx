@@ -47,7 +47,7 @@ async function openSheet(): Promise<{ closed: () => number; header: HTMLElement 
   let closes = 0;
   await act(async () =>
     root.render(
-      <Modal open onClose={() => (closes += 1)} title="Plus">
+      <Modal open onClose={() => (closes += 1)} title="Plus" closeLabel="Fermer">
         <p>Demandes</p>
       </Modal>,
     ),

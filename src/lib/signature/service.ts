@@ -192,8 +192,19 @@ export async function sendLeaseForSignature(ctx: OrgContext, storage: SupabaseCl
   }
 
   const sentAt = new Date().toISOString();
-  const { error: upErr } = await g.from("signature_envelopes").update({ status: "ongoing", provider_request_id: sent.requestId, sent_at: sentAt, last_synced_at: sentAt }).eq("org_id", org.id).eq("id", envelopeId);
-  if (upErr) return { error: "storage_failed", context: "sending update", detail: upErr };
+  const record = () => g.from("signature_envelopes").update({ status: "ongoing", provider_request_id: sent.requestId, sent_at: sentAt, last_synced_at: sentAt }).eq("org_id", org.id).eq("id", envelopeId);
+  let { error: upErr } = await record();
+  // The request is already out at the provider: the record is tried once more before giving up.
+  if (upErr) ({ error: upErr } = await record());
+  if (upErr) {
+    // No row names the request, so nothing here could follow or cancel it
+    // later: it is withdrawn at the provider now, and the sending is marked
+    // failed so the lease is free for a new one.
+    const withdrawn = await provider.client.cancel(sent.requestId);
+    if (isProviderError(withdrawn)) console.error("signature request left at the provider after its record failed:", withdrawn.error);
+    await g.from("signature_envelopes").update({ status: "failed", failure: "record_failed" }).eq("org_id", org.id).eq("id", envelopeId);
+    return { error: "storage_failed", context: "sending update", detail: upErr };
+  }
   const byPosition = new Map(((insertedSigners ?? []) as Row[]).map((r) => [Number(r.position), s(r.id)]));
   for (let i = 0; i < sent.signerIds.length; i++) {
     const id = byPosition.get(i + 1);
@@ -342,7 +353,7 @@ async function sealSigned(ctx: OrgContext, storage: SupabaseClient, client: Sign
 
   const stored = await storeBytes(ctx, storage, { bytes: pdf, mime: "application/pdf", klass: "lease", name: `${baseName} · ${words.signed}.pdf`, relatedType: "lease", relatedId: leaseId, sealed: true });
   if ("error" in stored) return null;
-  const storedTrail = await storeBytes(ctx, storage, { bytes: trail, mime: "application/pdf", klass: "lease", name: `${words.trail} · ${baseName}.pdf`, relatedType: "lease", relatedId: leaseId, sealed: true });
+  const storedTrail = await storeBytes(ctx, storage, { bytes: trail, mime: "application/pdf", klass: "lease", name: `${words.trail} · ${baseName}.pdf`, relatedType: "lease", relatedId: leaseId, sealed: true, shared: false });
   if (!("error" in storedTrail)) {
     for (const r of signers) await g.from("signature_signers").update({ audit_document_id: storedTrail.id }).eq("org_id", org.id).eq("id", s(r.id));
   }

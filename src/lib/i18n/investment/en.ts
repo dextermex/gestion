@@ -1,6 +1,7 @@
 import type { InvestmentCopy } from "./fr";
 
 export const investmentEn = {
+  datePlaceholder: "dd/mm/yyyy",
   allocationNeeded: "This unit shares a building mortgage. Use the whole-property projection until the financing has been allocated between units.", unitScopeHint: "Projection for the selected unit and mortgages linked directly to it. Deposits and tenant service charges are excluded.",
   loans: "Mortgages", acquisitions: "Purchase projects", simulator: "Plan a purchase",
   loansHint: "Your repayments, outstanding balances and income after property costs.",

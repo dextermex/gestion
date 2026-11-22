@@ -2,7 +2,10 @@ import "server-only";
 import type { OrgContext } from "@/lib/gestion/api";
 import { leaseOfConversation, notifyTenantsOfMessage } from "@/lib/delivery/outbox";
 import { appendMessage, leaseConversation } from "@/lib/portal/thread";
-import { REQUEST_STATUSES, leaseSubject, ticketStatusFor, type RequestStatus } from "@/lib/portal/types";
+import { REQUEST_STATUSES, leaseSubject, requestStatusOf, type RequestStatus } from "@/lib/portal/types";
+import { dueInstant, ticketForRequestStatus, ticketForWaiting } from "@/lib/gestion/interventions";
+import type { TicketStatus, WorkOrderStatus } from "@/lib/types";
+import { THREAD_PAGE, latestMoment, type ThreadMessage } from "@/lib/gestion/threads";
 
 /**
  * The desk's side of a tenant request: the same ticket row the tenant
@@ -12,7 +15,16 @@ import { REQUEST_STATUSES, leaseSubject, ticketStatusFor, type RequestStatus } f
  * database; an id from another workspace is simply not found.
  */
 
-export type RequestWriteFailure = "invalid" | "not_found" | "forbidden" | "storage_failed";
+export type RequestWriteFailure = "invalid" | "not_found" | "forbidden" | "storage_failed" | "request_closed";
+
+/**
+ * What became of the e-mail that tells the tenants a message waits in their
+ * space: it left for at least one of them, it was due and left for none (no
+ * mail key on the deployment, an address refused), or none was due (the
+ * workspace switched it off, nobody to write to). The message itself is in
+ * the tenant's space either way; the desk is told when the mail did not go.
+ */
+export type MailNotice = "sent" | "not_sent" | "none";
 
 type Row = Record<string, unknown>;
 type Db = OrgContext["g"];
@@ -31,33 +43,87 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim
 
 /** The request, if it is the workspace's. */
 async function ownTicket(g: Db, orgId: string, ticketId: string): Promise<{ ticket: Row | null } | { error: RequestWriteFailure }> {
-  const { data, error } = await g.from("tickets").select("id,title,status,lease_id").eq("org_id", orgId).eq("id", ticketId).maybeSingle();
+  const { data, error } = await g.from("tickets").select("id,title,status,lease_id,closed_at").eq("org_id", orgId).eq("id", ticketId).maybeSingle();
   if (error) return failure(error, "request lookup");
   return { ticket: (data as Row | null) ?? null };
 }
 
 /**
- * The owner's status on a request. The four statuses map onto the
- * intervention system's own; resolving or refusing also dates the closure,
- * reopening clears it.
+ * The owner's status on a request, from Messages. What it writes on the
+ * ticket is decided with the ticket's work order in view
+ * (`ticketForRequestStatus`), the same rules the Interventions steps follow:
+ * resolving or refusing dates the closure once; choosing an open status on
+ * a closed request is the explicit reopening; and a request whose
+ * intervention is under way stays in progress, whatever was asked (`held`).
+ * The answer is the status the request now has, read back from the row.
  */
 export async function setRequestStatus(
   ctx: OrgContext,
   ticketId: string,
   status: RequestStatus,
-): Promise<{ status: RequestStatus } | { error: RequestWriteFailure }> {
+): Promise<{ status: RequestStatus; held: boolean } | { error: RequestWriteFailure }> {
   const found = await ownTicket(ctx.g, ctx.org.id, ticketId);
   if ("error" in found) return found;
   if (!found.ticket) return { error: "not_found" };
+  const { data: orders, error: orderErr } = await ctx.g.from("work_orders").select("id,status,created_at").eq("org_id", ctx.org.id).eq("ticket_id", ticketId).order("created_at").limit(1);
+  if (orderErr) return failure(orderErr, "work order lookup");
+  const workOrder = ((orders as Row[] | null) ?? [])[0];
+  const next = ticketForRequestStatus(status, { status: String(found.ticket.status) as TicketStatus, workOrder: workOrder ? (String(workOrder.status) as WorkOrderStatus) : null });
   const now = new Date().toISOString();
-  const closed = status === "resolved" || status === "refused";
-  const { error } = await ctx.g
+  const closure = next.closure === "set" ? { closed_at: found.ticket.closed_at ?? now } : next.closure === "clear" ? { closed_at: null } : {};
+  const { data, error } = await ctx.g
     .from("tickets")
-    .update({ status: ticketStatusFor(status), updated_at: now, closed_at: closed ? now : null })
+    .update({ status: next.status, updated_at: now, ...closure })
     .eq("org_id", ctx.org.id)
-    .eq("id", ticketId);
+    .eq("id", ticketId)
+    .select("id");
   if (error) return failure(error, "request status update");
-  return { status };
+  // Nothing was written: the policies let this member read the request, not change it.
+  if (((data as unknown[] | null) ?? []).length === 0) return { error: "forbidden" };
+  return { status: requestStatusOf(next.status), held: next.held };
+}
+
+/**
+ * The desk's follow-up on a request, beside its status: set aside while
+ * waiting on the tenant (and taken up again), and the day it is to be
+ * handled by. Both are the ticket's own columns (`status = pending_tenant`,
+ * `sla_due_at`), which the Interventions counter and the lists read. The
+ * answer is what the ticket now says.
+ */
+export async function setRequestFollowUp(
+  ctx: OrgContext,
+  ticketId: string,
+  input: { waiting?: boolean; dueOn?: string | null },
+): Promise<{ status: TicketStatus; slaDueAt: string | null } | { error: RequestWriteFailure }> {
+  if (input.waiting === undefined && input.dueOn === undefined) return { error: "invalid" };
+  const { data: found, error: readErr } = await ctx.g.from("tickets").select("id,status,sla_due_at").eq("org_id", ctx.org.id).eq("id", ticketId).maybeSingle();
+  if (readErr) return failure(readErr, "request lookup");
+  const ticket = (found as Row | null) ?? null;
+  if (!ticket) return { error: "not_found" };
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {};
+  if (input.waiting !== undefined) {
+    const { data: orders, error: orderErr } = await ctx.g.from("work_orders").select("status,created_at").eq("org_id", ctx.org.id).eq("ticket_id", ticketId).order("created_at").limit(1);
+    if (orderErr) return failure(orderErr, "work order lookup");
+    const workOrder = ((orders as Row[] | null) ?? [])[0];
+    const next = ticketForWaiting(input.waiting, { status: String(ticket.status) as TicketStatus, workOrder: workOrder ? (String(workOrder.status) as WorkOrderStatus) : null });
+    if (next === "request_closed") return { error: "request_closed" };
+    if (next !== "unchanged") patch.status = next;
+  }
+  if (input.dueOn !== undefined) {
+    const due = dueInstant(input.dueOn);
+    if (due === "invalid") return { error: "invalid" };
+    patch.sla_due_at = due;
+  }
+  if (Object.keys(patch).length > 0) {
+    const { data, error } = await ctx.g.from("tickets").update({ ...patch, updated_at: now }).eq("org_id", ctx.org.id).eq("id", ticketId).select("id");
+    if (error) return failure(error, "request follow-up update");
+    if (((data as unknown[] | null) ?? []).length === 0) return { error: "forbidden" };
+  }
+  return {
+    status: (patch.status as TicketStatus | undefined) ?? (String(ticket.status) as TicketStatus),
+    slaDueAt: patch.sla_due_at !== undefined ? (patch.sla_due_at as string | null) : ticket.sla_due_at ? String(ticket.sla_due_at) : null,
+  };
 }
 
 /** "Apt 3B · Résidence Beaulieu" for a lease of the workspace, or nothing if it cannot be read. */
@@ -95,7 +161,9 @@ export async function addManagerMessage(
   ctx: OrgContext,
   target: { ticketId: string } | { conversationId: string } | { leaseId: string },
   body: unknown,
-): Promise<{ id: string; conversationId: string } | { error: RequestWriteFailure }> {
+  /** The id the desk's screen chose for this message (see `appendMessage`). */
+  clientId: string | null = null,
+): Promise<{ id: string; conversationId: string; mail: MailNotice } | { error: RequestWriteFailure }> {
   const text = str(body, 4000);
   if (!text) return { error: "invalid" };
 
@@ -127,27 +195,107 @@ export async function addManagerMessage(
     leaseId = await leaseOfConversation(ctx, conversationId);
   }
 
-  const sent = await appendMessage(ctx.g, { orgId: ctx.org.id, conversationId, senderKind: "manager", senderUserId: ctx.userId, body: text, touch: true });
+  const sent = await appendMessage(ctx.g, { orgId: ctx.org.id, conversationId, senderKind: "manager", senderUserId: ctx.userId, body: text, touch: true, clientId });
   if ("error" in sent) return sent;
+  // The same send again: the word stands as written the first time, and nobody is told twice.
+  if (sent.repeated) return { id: sent.id, conversationId, mail: "none" };
   // A reply on a request also counts as activity on it.
   if ("ticketId" in target) await ctx.g.from("tickets").update({ updated_at: sent.sentAt }).eq("org_id", ctx.org.id).eq("id", target.ticketId);
   // The tenants are told by e-mail when the workspace wants it; the word stands whatever becomes of the mail.
-  if (leaseId) await notifyTenantsOfMessage(ctx, { leaseId, text });
-  return { id: sent.id, conversationId };
+  const outcomes = leaseId ? await notifyTenantsOfMessage(ctx, { leaseId, text }) : [];
+  const mail: MailNotice = outcomes.length === 0 ? "none" : outcomes.some((o) => o.status === "sent") ? "sent" : "not_sent";
+  return { id: sent.id, conversationId, mail };
 }
 
-/** Opening a conversation at the desk: what the other side wrote is now read. Unrelated to any request's status. */
-export async function markConversationRead(ctx: OrgContext, conversationId: string): Promise<{ marked: number } | { error: RequestWriteFailure }> {
-  const { data, error } = await ctx.g
+const SENDER_KINDS: readonly ThreadMessage["kind"][] = ["tenant", "manager", "owner", "artisan", "system"];
+
+/**
+ * One conversation of the workspace, read for the screen: its newest
+ * messages in the order they were written, each under the name the list
+ * shows (the contact's, else the workspace's for the desk). `before` asks
+ * for the page that precedes a moment; `earlier` says whether one exists.
+ * The same rows, names and order the page's own loader gives the
+ * conversation it opens on.
+ */
+export async function readConversation(
+  ctx: OrgContext,
+  conversationId: string,
+  opts: { before?: string | null; limit?: number } = {},
+): Promise<{ messages: ThreadMessage[]; earlier: boolean } | { error: RequestWriteFailure }> {
+  const { g, org } = ctx;
+  const { data: found, error: findErr } = await g.from("conversations").select("id").eq("org_id", org.id).eq("id", conversationId).maybeSingle();
+  if (findErr) return failure(findErr, "conversation lookup");
+  if (!found) return { error: "not_found" };
+
+  const limit = Math.max(1, Math.min(opts.limit ?? THREAD_PAGE, THREAD_PAGE));
+  let query = g.from("messages").select("id,sender_kind,sender_contact_id,sender_user_id,body,sent_at,ticket_id").eq("org_id", org.id).eq("conversation_id", conversationId);
+  if (opts.before) query = query.lt("sent_at", opts.before);
+  // One more than the page: its presence says there is an earlier page.
+  const { data, error } = await query.order("sent_at", { ascending: false }).limit(limit + 1);
+  if (error) return failure(error, "conversation read");
+  const rows = ((data as Row[] | null) ?? []).slice();
+  const earlier = rows.length > limit;
+  const page = rows.slice(0, limit).reverse();
+
+  const ids = (key: string): string[] => [...new Set(page.map((m) => (typeof m[key] === "string" ? (m[key] as string) : "")).filter(Boolean))];
+  const contactIds = ids("sender_contact_id");
+  const userIds = ids("sender_user_id");
+  const CONTACT = "id,display_name,legal_name,first_name,last_name,user_id";
+  const [byId, byUser] = await Promise.all([
+    contactIds.length > 0 ? g.from("contacts").select(CONTACT).eq("org_id", org.id).is("archived_at", null).in("id", contactIds) : Promise.resolve({ data: [] as Row[], error: null }),
+    userIds.length > 0 ? g.from("contacts").select(CONTACT).eq("org_id", org.id).is("archived_at", null).in("user_id", userIds) : Promise.resolve({ data: [] as Row[], error: null }),
+  ]);
+  if (byId.error) console.error("conversation sender lookup failed:", byId.error.code, byId.error.message);
+  if (byUser.error) console.error("conversation sender lookup failed:", byUser.error.code, byUser.error.message);
+  const nameOf = (c: Row): string => String(c.display_name || c.legal_name || [c.first_name, c.last_name].filter(Boolean).join(" ") || "");
+  const nameById = new Map(((byId.data as Row[] | null) ?? []).map((c) => [String(c.id), nameOf(c)]));
+  const nameByUser = new Map(((byUser.data as Row[] | null) ?? []).map((c) => [String(c.user_id), nameOf(c)]));
+
+  return {
+    earlier,
+    messages: page.map((m) => {
+      const kind = (SENDER_KINDS as readonly string[]).includes(String(m.sender_kind)) ? (String(m.sender_kind) as ThreadMessage["kind"]) : "system";
+      const from = nameById.get(String(m.sender_contact_id ?? "")) || nameByUser.get(String(m.sender_user_id ?? "")) || (m.sender_kind === "manager" ? org.name : "Système");
+      return { id: String(m.id), from, kind, body: String(m.body ?? ""), at: String(m.sent_at ?? ""), ticketId: m.ticket_id ? String(m.ticket_id) : null };
+    }),
+  };
+}
+
+/**
+ * A conversation is on the desk's screen: what the other side wrote is now
+ * read, for every member and on every device (the mark is on the messages).
+ * `until` is the moment of the last message the screen shows: one that
+ * arrived since stays unread until it is shown too. Unrelated to any
+ * request's status.
+ */
+export async function markConversationRead(ctx: OrgContext, conversationId: string, until: string | null = null): Promise<{ marked: number } | { error: RequestWriteFailure }> {
+  let query = ctx.g
     .from("messages")
     .update({ read_at: new Date().toISOString() })
     .eq("org_id", ctx.org.id)
     .eq("conversation_id", conversationId)
     .is("read_at", null)
-    .in("sender_kind", ["tenant", "owner", "artisan", "system"])
-    .select("id");
+    .in("sender_kind", ["tenant", "owner", "artisan", "system"]);
+  if (until) query = query.lte("sent_at", until);
+  const { data, error } = await query.select("id");
   if (error) return failure(error, "conversation read mark");
   return { marked: ((data as unknown[] | null) ?? []).length };
+}
+
+/**
+ * What waits to be read at the desk and when anything was last written,
+ * over the workspace's conversations: the heads view, three columns. The
+ * figures the shell's badge and the list are drawn from. Null when the read
+ * fails: the caller then says nothing rather than something wrong.
+ */
+export async function deskUnread(ctx: OrgContext): Promise<{ unread: number; latest: string } | null> {
+  const { data, error } = await ctx.g.from("conversation_heads").select("conversation_id,unread,last_sent_at").eq("org_id", ctx.org.id).limit(2000);
+  if (error) {
+    console.error("conversation heads read failed:", error.code, error.message);
+    return null;
+  }
+  const rows = (data as Row[] | null) ?? [];
+  return { unread: rows.reduce((total, r) => total + (Number(r.unread) || 0), 0), latest: latestMoment(rows.map((r) => (typeof r.last_sent_at === "string" ? r.last_sent_at : ""))) };
 }
 
 /**
@@ -172,5 +320,5 @@ export async function createIntervention(ctx: OrgContext, ticketId: string): Pro
 
 /** The HTTP status a write failure answers with. */
 export function statusOfFailure(error: RequestWriteFailure): number {
-  return error === "invalid" ? 400 : error === "not_found" ? 404 : error === "forbidden" ? 403 : 502;
+  return error === "invalid" ? 400 : error === "not_found" ? 404 : error === "forbidden" ? 403 : error === "request_closed" ? 409 : 502;
 }

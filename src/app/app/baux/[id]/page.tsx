@@ -1,10 +1,14 @@
 import Link from "next/link";
-import { ContactLink } from "@/components/gestion/ContactLink";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/pro/ui";
+import { Icon } from "@/components/pro/icons";
 import { LegalNote, MetaBadge, Panel } from "@/components/gestion/bits";
 import InvitePanel from "@/components/gestion/InvitePanel";
 import GenerateDocument from "@/components/gestion/GenerateDocument";
+import PaymentsPanel from "@/components/gestion/PaymentsPanel";
+import LeaseParties from "@/components/gestion/LeaseParties";
+import PeriodAdjust from "@/components/gestion/PeriodAdjust";
+import { monthShare, prorate } from "@/domain/lease/prorata";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { inviteLabels, partyInvitations } from "@/lib/portal/owner";
 import {
@@ -14,7 +18,7 @@ import {
   euros,
   formatDate,
   formatMonth,
-  initials,
+  formatPct,
   inviteStateMeta,
   leaseStatusMeta,
   leaseTypeMeta,
@@ -62,7 +66,11 @@ export default async function BailDetailPage({
     EDLS,
     INVITES,
     LEASES,
+    CONTACTS,
+    LEASE_CREDITS,
+    LEASE_PARTIES,
     ORG,
+    PAYMENTS,
     RENT_PERIODS,
     TICKETS,
     TODAY,
@@ -83,6 +91,7 @@ export default async function BailDetailPage({
   const unitShort = unitLabel.split(" · ")[0];
 
   const deposit = DEPOSITS.find((x) => x.leaseId === l.id);
+  const credit = LEASE_CREDITS[l.id] ?? 0;
   const periods = RENT_PERIODS.filter((rp) => rp.leaseId === l.id).slice(-12).reverse();
   const edls = EDLS.filter((e) => e.leaseId === l.id);
   const docs = DOCUMENTS.filter((doc) => doc.relatedLabel !== "" && unitLabel.includes(doc.relatedLabel));
@@ -96,6 +105,15 @@ export default async function BailDetailPage({
       (c.scopeType === "ticket" && c.scopeId !== null && requestIds.has(c.scopeId)) ||
       (c.scopeId === null && unitShort.length >= 3 && c.scopeLabel.includes(unitShort)),
   );
+
+  // "Ouvrir la messagerie" opens this tenancy's own conversation: the one it has, or the one the desk's
+  // first word will create (Messages offers that for a running lease); otherwise the inbox.
+  const ownThread = threads.find((c) => c.scopeType === "lease" && c.scopeId === l.id);
+  const messagesHref = ownThread
+    ? `/app/messages?fil=${encodeURIComponent(ownThread.id)}`
+    : l.status === "active" || l.status === "notice"
+      ? `/app/messages?fil=${encodeURIComponent(`lease:${l.id}`)}`
+      : "/app/messages";
 
   const rentMeta = rentStatusMeta(d);
   const depositForms = depositFormLabels(d);
@@ -140,7 +158,7 @@ export default async function BailDetailPage({
       l.type === "residential" ? "residential.deposit_max_months" : "commercial.deposit_max_months",
       TODAY,
     ),
-    date: l.endDate ? formatDate(l.endDate, locale) : "—",
+    date: l.endDate ? formatDate(l.endDate, locale) : d.common.none,
   };
 
   const capital =
@@ -218,7 +236,8 @@ export default async function BailDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/app/baux" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/app/baux" className="inline-flex items-center gap-0.5 text-sm font-semibold text-brand-700 hover:underline max-sm:min-h-10">
+          <Icon name="chevron-left" size={16} />
           {d.baux.backToList}
         </Link>
       </div>
@@ -260,7 +279,7 @@ export default async function BailDetailPage({
         <Card className="p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.baux.kpiVat}</p>
           <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-ink">
-            {vatLine.vatRatePct > 0 ? `${vatLine.vatRatePct} %` : d.baux.vatExempt}
+            {vatLine.vatRatePct > 0 ? formatPct(vatLine.vatRatePct, locale) : d.baux.vatExempt}
           </p>
           <p className="mt-0.5 truncate text-xs text-ink-soft" title={vatLine.exemptionMention ?? undefined}>
             {vatLine.vatRatePct > 0
@@ -317,16 +336,80 @@ export default async function BailDetailPage({
               </Link>
             }
           >
+            {l.rentChange && (
+              <p className="mb-3 rounded-xl bg-sky-50 px-3.5 py-2.5 text-sm text-sky-900" data-rent-change>
+                {fmt(d.baux.rentChangeLine, { rent: euros(l.rentChange.rentCents, locale), charges: euros(l.rentChange.chargesCents, locale), month: formatMonth(l.rentChange.from.slice(0, 7), locale) })}
+              </p>
+            )}
             <ul className="divide-y divide-sand-100">
-              {periods.map((rp) => (
-                <li key={rp.id} className="flex items-center gap-3 py-2.5 text-sm">
-                  <p className="min-w-0 flex-1 text-ink">{formatMonth(rp.period, locale)}</p>
-                  <p className="tabular-nums text-ink">{euros(rp.totalCents, locale)}</p>
-                  <MetaBadge meta={rentMeta[rp.status]} />
-                </li>
-              ))}
+              {periods.map((rp) => {
+                // A month nothing was paid on can be set by hand; the first and last month of the tenancy, to their days.
+                const share = monthShare(rp.period, l.startDate, l.endDate);
+                const adjustable = !sample && rp.allocatedCents === 0 && rp.status !== "written_off" && rp.status !== "paid";
+                return (
+                  <li key={rp.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm" data-period={rp.id}>
+                    <p className="min-w-0 flex-1 text-ink">{formatMonth(rp.period, locale)}</p>
+                    <p className="tabular-nums text-ink">{euros(rp.totalCents, locale)}</p>
+                    <MetaBadge meta={rentMeta[rp.status]} />
+                    {adjustable && (
+                      <PeriodAdjust
+                        leaseId={l.id}
+                        periodId={rp.id}
+                        rent={(rp.rentCents / 100).toFixed(2).replace(".", ",")}
+                        charges={(rp.chargesCents / 100).toFixed(2).replace(".", ",")}
+                        prorata={share ? fmt(d.baux.periodProrata, { days: share.days, total: share.daysInMonth, amount: euros(prorate(rp.rentCents, share) + prorate(rp.chargesCents, share) + rp.vatCents, locale) }) : null}
+                        labels={{
+                          adjust: d.baux.periodAdjust,
+                          rent: d.location.rent,
+                          charges: d.location.charges,
+                          reason: d.baux.periodReason,
+                          save: d.baux.periodSave,
+                          cancel: d.common.cancel,
+                          failed: d.baux.periodAdjustFailed,
+                          paid: d.baux.periodPaid,
+                          already: d.baux.periodAlready,
+                          invalid: d.baux.periodInvalid,
+                        }}
+                      />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </Panel>
+          {/* What was received, payment by payment: the one place a mistake is corrected. */}
+          <section id="paiements" className="min-w-0 scroll-mt-24">
+          <Panel title={d.baux.paymentsTitle}>
+            {credit > 0 && (
+              <p className="mb-3 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900" data-lease-credit>
+                {fmt(d.baux.creditLine, { amount: euros(credit, locale) })}
+              </p>
+            )}
+            <PaymentsPanel
+              real={!sample}
+              rows={PAYMENTS.filter((p) => p.leaseId === l.id).map((p) => ({
+                id: p.id,
+                date: formatDate(p.receivedOn, locale),
+                amount: euros(p.amountCents, locale),
+                origin: p.fromBank ? d.baux.paymentFromBank : d.baux.paymentManual,
+                credit: !p.cancelledOn && p.amountCents > p.allocatedCents ? fmt(d.baux.paymentUnallocated, { amount: euros(p.amountCents - p.allocatedCents, locale) }) : null,
+                cancelled: p.cancelledOn ? fmt(d.baux.paymentCancelledOn, { date: formatDate(p.cancelledOn, locale) }) : null,
+                note: p.note,
+              }))}
+              labels={{
+                empty: d.baux.paymentsEmpty,
+                cancel: d.baux.paymentCancel,
+                cancelTitle: d.baux.paymentCancelTitle,
+                cancelBody: d.baux.paymentCancelBody,
+                cancelReason: d.baux.paymentCancelReason,
+                cancelDo: d.baux.paymentCancelDo,
+                cancelKeep: d.baux.paymentCancelKeep,
+                cancelFailed: d.baux.paymentCancelFailed,
+                receiptIssued: d.baux.paymentReceiptIssued,
+              }}
+            />
+          </Panel>
+          </section>
         </div>
       )}
 
@@ -428,32 +511,59 @@ export default async function BailDetailPage({
             )}
 
             <Panel title={d.baux.partiesTitle}>
-              <ul className="divide-y divide-sand-100">
-                {l.tenantContactIds.map((cid) => {
-                  const c = contactById(cid);
-                  return (
-                    <li key={cid} className="flex items-center gap-3 py-2.5">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
-                        {initials(c.name)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/app/contacts/${c.id}`}
-                          className="block truncate text-sm font-semibold text-ink hover:text-brand-700"
-                        >
-                          {c.name}
-                        </Link>
-                        <p className="truncate text-xs text-ink-soft">
-                          <ContactLink email={c.email} phone={c.phone} none="" />
-                        </p>
-                      </div>
-                      <Badge className="bg-sky-100 text-sky-800">
-                        {l.colocation ? d.baux.partyColoc : d.baux.partyTenant}
-                      </Badge>
-                    </li>
-                  );
-                })}
-              </ul>
+              {/* Everyone on the tenancy, dated; while it runs, people join and leave here, and access to the space is taken back. */}
+              <LeaseParties
+                leaseId={l.id}
+                writable={!sample}
+                live={l.status === "active" || l.status === "notice"}
+                today={TODAY}
+                rows={LEASE_PARTIES.filter((p) => p.leaseId === l.id)
+                  .sort((a, b) => Number(a.role === "guarantor") - Number(b.role === "guarantor") || String(a.movedInOn ?? "").localeCompare(String(b.movedInOn ?? "")))
+                  .map((p) => {
+                    const c = contactById(p.contactId);
+                    const left = p.movedOutOn !== null && p.movedOutOn <= TODAY;
+                    return {
+                      id: p.id,
+                      contactId: c.id,
+                      name: c.name,
+                      href: `/app/contacts/${c.id}`,
+                      email: c.email,
+                      phone: c.phone,
+                      roleLabel: p.role === "guarantor" ? d.baux.partyGuarantor : l.colocation ? d.baux.partyColoc : d.baux.partyTenant,
+                      datesLabel: p.movedOutOn
+                        ? fmt(d.baux.partyBetween, { from: p.movedInOn ? formatDate(p.movedInOn, locale) : formatDate(l.startDate, locale), to: formatDate(p.movedOutOn, locale) })
+                        : fmt(d.baux.partySince, { date: formatDate(p.movedInOn ?? l.startDate, locale) }),
+                      present: !left && p.movedOutOn === null,
+                      portalLinked: c.portalLinked === true,
+                    };
+                  })}
+                candidates={CONTACTS.filter((c) => !LEASE_PARTIES.some((p) => p.leaseId === l.id && p.contactId === c.id && p.movedOutOn === null))
+                  .map((c) => ({ id: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name }))
+                  .sort((a, b) => a.label.localeCompare(b.label))}
+                labels={{
+                  linked: d.baux.partyLinked,
+                  moveOut: d.baux.partyMoveOut,
+                  moveOutOn: d.baux.partyMoveOutOn,
+                  moveOutDo: d.baux.partyMoveOutDo,
+                  keep: d.baux.partyKeep,
+                  lastTenant: d.baux.partyLastTenant,
+                  failed: d.baux.partyFailed,
+                  access: d.baux.partyAccess,
+                  accessBody: d.baux.partyAccessBody,
+                  accessDo: d.baux.partyAccessDo,
+                  add: d.baux.partyAdd,
+                  addContact: d.baux.partyAddContact,
+                  addRole: d.baux.partyAddRole,
+                  roleTenant: d.baux.partyTenant,
+                  roleGuarantor: d.baux.partyGuarantor,
+                  addOn: d.baux.partyAddOn,
+                  addDo: d.baux.partyAddDo,
+                  pick: d.baux.partyPick,
+                  already: d.baux.partyAlready,
+                  invalid: d.baux.partyInvalid,
+                  noCandidate: d.baux.partyNoCandidate,
+                }}
+              />
               <p className="mt-3 text-xs text-ink-soft">
                 {property.name} · {property.address} · {fmt(d.baux.cadastralRef, { ref: property.cadastralRef })}
               </p>
@@ -692,7 +802,7 @@ export default async function BailDetailPage({
                         ? fmt(d.baux.edlDone, { date: formatDate(e.completedAt, locale) })
                         : e.scheduledAt
                           ? fmt(d.baux.edlScheduled, { date: formatDate(e.scheduledAt, locale) })
-                          : "—"}
+                          : d.common.none}
                       {e.itemsCount > 0 &&
                         ` · ${fmt(d.baux.edlItems, { items: e.itemsCount, photos: e.photosCount })}`}
                     </p>
@@ -753,7 +863,7 @@ export default async function BailDetailPage({
           <Panel
             title={d.baux.tabMessages}
             action={
-              <Link href="/app/messages" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+              <Link href={messagesHref} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
                 {d.baux.msgsOpen}
               </Link>
             }
@@ -765,22 +875,27 @@ export default async function BailDetailPage({
                 {threads.map((c) => {
                   const last = c.messages[c.messages.length - 1];
                   return (
-                    <li key={c.id} className="py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <Link href={`/app/messages?fil=${encodeURIComponent(c.id)}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-ink hover:text-brand-700">
-                          {c.subject}
-                        </Link>
-                        {c.unread > 0 && (
-                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
-                            {c.unread}
+                    <li key={c.id}>
+                      {/* The whole row opens the conversation: the subject and the last word shown under it. */}
+                      <Link
+                        href={`/app/messages?fil=${encodeURIComponent(c.id)}`}
+                        className="group -mx-2 block rounded-xl px-2 py-3 transition hover:bg-sand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                        data-thread-link={c.id}
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink group-hover:text-brand-700">{c.subject}</span>
+                          {c.unread > 0 && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-600 px-1.5 text-[10px] font-bold tabular-nums text-white">
+                              {c.unread}
+                            </span>
+                          )}
+                        </span>
+                        {last && (
+                          <span className="mt-0.5 block truncate text-xs text-ink-soft">
+                            {fmt(d.baux.lastMessage, { from: last.kind === "system" ? d.messages.systemSender : last.from, body: last.body })}
                           </span>
                         )}
-                      </div>
-                      {last && (
-                        <p className="mt-0.5 truncate text-xs text-ink-soft">
-                          {last.from} : {last.body}
-                        </p>
-                      )}
+                      </Link>
                     </li>
                   );
                 })}

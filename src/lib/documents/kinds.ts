@@ -49,4 +49,14 @@ export const KIND_CLASS: Record<DocumentKind, DocumentClass> = {
   edl_report: "edl",
 };
 
+/**
+ * The pieces a tenant reads in their space as soon as they are produced:
+ * everything written for them, except a formal reminder and a mise en
+ * demeure, which reach them when the desk sends them (by e-mail from the
+ * application, which then shares the piece, or by its own means).
+ */
+export function sharedOnceProduced(kind: DocumentKind): boolean {
+  return kind !== "arrears_formal" && kind !== "arrears_mise_en_demeure";
+}
+
 export const isDocumentKind = (v: unknown): v is DocumentKind => typeof v === "string" && (DOCUMENT_KINDS as readonly string[]).includes(v);

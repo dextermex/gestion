@@ -4,7 +4,7 @@ import { authedClient, getSession } from "@/lib/supabase/server";
 import { getIdentity } from "@/lib/workspace";
 import { initials } from "@/lib/types";
 import { getI18n } from "@/lib/i18n";
-import { PRO_URL } from "@/lib/constants";
+import { TEAM_EMAIL } from "@/lib/constants";
 
 interface MemberRow {
   key: string;
@@ -16,9 +16,11 @@ interface MemberRow {
 
 /**
  * Utilisateurs & accès: who can open this workspace. Membership lives in
- * the shared Morada tables (crm_members) — one identity across the whole
- * ecosystem — so invitations and role changes happen in Morada Pro, and
- * this screen reads the same rows RLS lets the caller see.
+ * the shared Morada tables (crm_members), one identity across the whole
+ * ecosystem, and this screen reads the rows RLS lets the caller see. Member
+ * management is not built here yet: until it is, the team adds a member or
+ * changes a role on request, and the screen says so with the address to
+ * write to. No link leaves for a screen that does not exist.
  */
 export default async function UtilisateursPage() {
   const { d } = await getI18n();
@@ -94,12 +96,12 @@ export default async function UtilisateursPage() {
 
         <Card className="mt-5 border-dashed bg-sand-50/50 p-4">
           <p className="text-xs leading-relaxed text-ink-soft">
-            {d.utilisateurs.manageInPro}{" "}
+            {d.utilisateurs.manageByTeam}{" "}
             <a
-              href={PRO_URL}
+              href={`mailto:${TEAM_EMAIL}`}
               className="font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:inline-flex max-sm:min-h-10 max-sm:items-center"
             >
-              {d.utilisateurs.openPro}
+              {TEAM_EMAIL}
             </a>
           </p>
         </Card>

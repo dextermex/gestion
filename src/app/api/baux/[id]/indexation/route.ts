@@ -4,12 +4,14 @@ import { repriceOpenPeriods } from "@/lib/gestion/lease";
 import { adjustmentLetterState, type AdjustmentLetter } from "@/lib/gestion/indexation";
 import { computeCapitalInvesti, proposeResidentialAdjustment } from "@/domain/indexation/engine";
 import type { CapitalComponent } from "@/domain/indexation/engine";
+import { todayISO } from "@/lib/clock";
 
 /**
  * Applying a rent adjustment.
  *
  * The engine decides whether one is lawful and how large it may be; this
- * route re-runs it server-side and applies its answer. A client cannot talk
+ * route re-runs it server-side and applies its answer, never more than the
+ * registered letter announced. A client cannot talk
  * Morada into a number the engine did not produce — the amount in the request
  * is ignored entirely, and a proposal the engine refuses is refused here with
  * the reason it gave.
@@ -28,11 +30,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id } = await params;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const { data: lease, error: findErr } = await g
     .from("leases")
-    .select("id,status,lease_type,rent_cents,charges_cents,start_date,last_adjustment_on,capital_investi")
+    .select("id,status,lease_type,rent_cents,charges_cents,start_date,last_adjustment_on,capital_investi,details")
     .eq("org_id", org.id)
     .eq("id", id)
     .maybeSingle();
@@ -66,13 +68,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "no_increase_available" }, { status: 409 });
   }
 
-  const { data: letterRows, error: lettersErr } = await g
-    .from("registered_letters")
-    .select("id,status,dispatched_on,ar_received_on")
-    .eq("org_id", org.id)
-    .eq("template_key", "rent_adjustment")
-    .eq("related_type", "lease")
-    .eq("related_id", id);
+  // The letters, with what each announced (its snapshot, 0022); a base without the column reads them without it.
+  const readLetters = (columns: string) =>
+    g.from("registered_letters").select(columns).eq("org_id", org.id).eq("template_key", "rent_adjustment").eq("related_type", "lease").eq("related_id", id);
+  let { data: letterRows, error: lettersErr } = await readLetters("id,status,dispatched_on,ar_received_on,content");
+  if (lettersErr?.code === "PGRST204" || lettersErr?.code === "42703") ({ data: letterRows, error: lettersErr } = await readLetters("id,status,dispatched_on,ar_received_on"));
   if (lettersErr) return dbError("adjustment letters read", lettersErr);
   const letters: AdjustmentLetter[] = ((letterRows as Array<Record<string, unknown>> | null) ?? []).map((r) => ({
     id: String(r.id),
@@ -84,12 +84,24 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (state.kind === "none") return NextResponse.json({ error: "needs_letter" }, { status: 409 });
   if (state.kind === "awaiting_ar") return NextResponse.json({ error: "needs_ar", letterId: state.letter.id }, { status: 409 });
   const effective = state.effectiveFrom;
+  // The rent applied is the one the tenant was notified, never more: today's
+  // computation when it is lower (the ceiling moved since), the letter's
+  // amount otherwise.
+  const sent = ((letterRows as unknown as Array<Record<string, unknown>> | null) ?? []).find((r) => String(r.id) === state.letter.id);
+  const announced = Number((sent?.content as Record<string, unknown> | null | undefined)?.proposedRentCents);
+  const newRentCents = Number.isSafeInteger(announced) && announced > 0 ? Math.min(proposal.proposedMonthlyRent, announced) : proposal.proposedMonthlyRent;
+  if (newRentCents <= (lease.rent_cents as number)) return NextResponse.json({ error: "no_increase_available" }, { status: 409 });
+  // A rent typed ahead of its month gives way to the adjustment.
+  const details = { ...((lease.details as Record<string, unknown> | null) ?? {}) };
+  const hadChange = "rentChange" in details;
+  delete details.rentChange;
   const { data, error } = await g
     .from("leases")
     .update({
-      rent_cents: proposal.proposedMonthlyRent,
+      rent_cents: newRentCents,
       previous_rent_cents: lease.rent_cents,
       last_adjustment_on: effective.slice(0, 10),
+      ...(hadChange ? { details } : {}),
     })
     .eq("org_id", org.id)
     .eq("id", id)
@@ -100,14 +112,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const repriced = await repriceOpenPeriods(
     ctx,
     id,
-    proposal.proposedMonthlyRent,
+    newRentCents,
     lease.charges_cents as number,
     effective,
   );
   return NextResponse.json({
     ok: true,
     previousRentCents: lease.rent_cents,
-    newRentCents: proposal.proposedMonthlyRent,
+    newRentCents,
     bindingConstraint: proposal.bindingConstraint,
     effectiveFrom: effective.slice(0, 10),
     repriced,

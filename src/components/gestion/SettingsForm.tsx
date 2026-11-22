@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { Button, Field, Input, Select } from "@/components/pro/ui";
 import type { DemoLessor } from "@/lib/demo/data";
 import { callJson } from "./call";
+import DateField from "./DateField";
+import { ApiProblemNote, useApiProblems } from "./ApiErrors";
+import type { ApiProblem } from "@/lib/api-errors";
+import { invalidDayField } from "@/lib/forms";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The lessor's identity and the account tenants pay into, as the documents
@@ -48,6 +53,8 @@ export interface SettingsLabels {
   civilityF: string;
   civilityX: string;
   fieldBirthDate: string;
+  /** How a day is typed: day, month, year. */
+  datePlaceholder: string;
   fieldBirthPlace: string;
   fieldNationality: string;
   nationalityHint: string;
@@ -103,31 +110,41 @@ export default function SettingsForm({
   });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal in words (src/lib/api-errors.ts): the field at fault, a feature the base does not carry yet, a session that ended.
+  const problems = useApiProblems();
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const save = async (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
+    setProblem(null);
     setNote(null);
+    // A birth date typed that is not a day is corrected before the form is saved without it.
+    const badDay = invalidDayField(e.currentTarget);
+    if (badDay) {
+      badDay.focus();
+      return;
+    }
     if (!writable) {
       setNote(sampleNote ?? "");
       return;
     }
     setBusy(true);
     try {
-      const res = await callJson("/api/reglages", "PATCH", form, BACK);
+      // The form is long: a session that ended is said here and signed in again beside it, nothing typed is lost.
+      const res = await callJson("/api/reglages", "PATCH", form, null);
       if (!res) return;
       if (res.ok) {
         setNote(res.payload.identity === "pending" ? labels.identityPending : labels.saved);
         router.refresh();
       } else {
-        const problem = String(res.payload.problem ?? "");
         const known: Record<string, string> = { legalName: labels.invalidName, iban: labels.invalidIban, bic: labels.invalidBic, email: labels.invalidEmail, birthDate: labels.invalidBirthDate };
-        setError(known[problem] ?? labels.failed);
+        const refusal = problems.of(res.status, res.payload, { keepsInput: true, returnTo: BACK, fallback: labels.failed });
+        // The route names the field (`problem`): the form's own sentence for it says what is expected.
+        setProblem(refusal.field && known[refusal.field] ? { ...refusal, message: known[refusal.field] } : refusal);
       }
     } catch {
-      setError(labels.failed);
+      setProblem(problems.network({ fallback: labels.failed }));
     }
     setBusy(false);
   };
@@ -213,7 +230,7 @@ export default function SettingsForm({
                 </Select>
               </Field>
               <Field label={labels.fieldBirthDate}>
-                <Input type="date" value={form.lessorBirthDate} onChange={set("lessorBirthDate")} disabled={busy} />
+                <DateField value={form.lessorBirthDate} max={todayISO()} onChange={(day) => setForm((f) => ({ ...f, lessorBirthDate: day }))} placeholder={labels.datePlaceholder} disabled={busy} />
               </Field>
               <Field label={labels.fieldBirthPlace}>
                 <Input value={form.lessorBirthPlace} maxLength={120} onChange={set("lessorBirthPlace")} disabled={busy} />
@@ -278,11 +295,7 @@ export default function SettingsForm({
             {note}
           </p>
         )}
-        {error && (
-          <p role="alert" className="text-xs font-semibold text-red-700">
-            {error}
-          </p>
-        )}
+        <ApiProblemNote problem={problem} className="text-xs font-semibold text-red-700" />
       </div>
     </form>
   );

@@ -10,6 +10,8 @@ import { useMounted } from "@/lib/hooks";
 import { METER_UNITS } from "@/lib/types";
 import type { MeterKind } from "@/lib/types";
 import type { Dict } from "@/lib/i18n/fr";
+import { ApiProblemNote } from "@/components/gestion/ApiErrors";
+import { networkProblem, readApiProblem, type ApiProblem } from "@/lib/api-errors";
 
 /**
  * "Create meter" as a right-hand sheet (the immocloud pattern): general
@@ -63,7 +65,8 @@ function MeterSheet({
   const [secondary, setSecondary] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal in words (src/lib/api-errors.ts), the sheet left as typed.
+  const [error, setError] = useState<ApiProblem | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const mounted = useMounted();
   // It came in from the right, so a pull to the right takes it back out: it
@@ -103,14 +106,14 @@ function MeterSheet({
         }),
       });
       if (!res.ok) {
-        setError(d.shell.createFailed);
+        setError(await readApiProblem(res, d.apiErrors, { keepsInput: true, fallback: d.shell.createFailed }));
         setSaving(false);
         return;
       }
       onClose();
       router.refresh();
     } catch {
-      setError(d.shell.createFailed);
+      setError(networkProblem(d.apiErrors));
       setSaving(false);
     }
   };
@@ -300,11 +303,7 @@ function MeterSheet({
                   {d.common.demoCreateNotice}
                 </p>
               )}
-              {error && (
-                <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                  {error}
-                </p>
-              )}
+              <ApiProblemNote problem={error} />
             </form>
 
             <div className="flex justify-end gap-2 border-t border-sand-100 px-5 pb-[max(1rem,var(--safe-bottom))] pt-4">

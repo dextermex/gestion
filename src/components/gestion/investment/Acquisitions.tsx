@@ -13,6 +13,8 @@ import {
   parseAcquisitionEuro, sortAcquisitions, type AcquisitionDateField, type AcquisitionDraft,
   type AcquisitionRecord, type AcquisitionStage,
 } from "@/lib/investment/acquisition";
+import { todayISO } from "@/lib/clock";
+import { ApiRefusal } from "@/lib/api-errors";
 
 const NOTARY_DIRECTORY = "https://www.notariat.lu/trouver-notaire";
 const COMPROMIS_GUIDE = "https://guichet.public.lu/fr/citoyens/logement/acquisition/aspects-contractuels/compromis-vente.html";
@@ -51,7 +53,7 @@ export default function Acquisitions({ locale, records, onSave, readOnly = false
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ record: AcquisitionRecord | null } | null>(null);
   const [notice, setNotice] = useState("");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const selected = records.find((record) => record.id === selectedId);
   const visible = useMemo(() => sortAcquisitions(records.filter((record) => {
     const matchesStage = stage === "all" || (stage === "active" ? isActive(record) : record.stage === stage);
@@ -197,7 +199,7 @@ function DateField({ name, value, required = false, hint, error, id, d, onChange
   id: string; d: AcquisitionDict; onChange: (value: string | null) => void;
 }) {
   return <div className="min-w-0"><Field label={d.dates[name]} hint={hint}>
-    <Input id={id} type="date" value={value || ""} min="1000-01-01" max={(acquisitionActualDateFields as readonly string[]).includes(name) ? new Date().toISOString().slice(0, 10) : "9999-12-31"} required={required} aria-invalid={Boolean(error)} {...(error ? { "aria-describedby": `${id}-error` } : {})} onChange={(event) => onChange(event.target.value || null)} />
+    <Input id={id} type="date" value={value || ""} min="1000-01-01" max={(acquisitionActualDateFields as readonly string[]).includes(name) ? todayISO() : "9999-12-31"} required={required} aria-invalid={Boolean(error)} {...(error ? { "aria-describedby": `${id}-error` } : {})} onChange={(event) => onChange(event.target.value || null)} />
   </Field><FieldError id={`${id}-error`} error={error} /></div>;
 }
 
@@ -287,7 +289,7 @@ function AcquisitionEditor({ record, d, locale, onClose, onSave }: {
     setSaving(true);
     setSaveError("");
     try { await onSave(valid, record?.id); }
-    catch { setSaving(false); setSaveError(d.saveError); requestAnimationFrame(() => errorRef.current?.focus()); }
+    catch (e) { setSaving(false); setSaveError(e instanceof ApiRefusal && e.problem.kind !== "generic" ? e.problem.message : d.saveError); requestAnimationFrame(() => errorRef.current?.focus()); }
   }
 
   const labelForField = (field: DraftField): string => {

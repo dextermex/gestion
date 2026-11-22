@@ -158,3 +158,13 @@ export async function billingPage(visitor: Visitor, now: number = Math.floor(Dat
     } : null,
   };
 }
+
+/**
+ * Whether the subscription page says a subscription was confirmed. The
+ * return route adds `?confirme=1` only after Stripe vouched for the session,
+ * but anybody can type the address: the sentence also needs a subscription
+ * on the workspace's own record.
+ */
+export function confirmationShown(param: string | string[] | undefined, data: Pick<BillingPageData, "subscription">, sample: boolean): boolean {
+  return param === "1" && !sample && data.subscription !== null;
+}

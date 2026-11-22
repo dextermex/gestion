@@ -23,6 +23,8 @@ export interface DeletionLabels {
   restore: string;
   failed: string;
   sampleNote: string | null;
+  /** Said when the request was noted on the account but neither a row nor an e-mail reached the team. */
+  writeToTeam?: string;
 }
 
 export default function AccountDeletion({ requested, labels }: { requested: boolean; labels: DeletionLabels }) {
@@ -31,16 +33,20 @@ export default function AccountDeletion({ requested, labels }: { requested: bool
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [sample, setSample] = useState(false);
+  const [unnotified, setUnnotified] = useState(false);
 
   const send = async (action: "delete" | "restore") => {
     setBusy(true);
     setError(false);
     try {
       const res = await fetch("/api/compte", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
-      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; sample?: boolean };
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; sample?: boolean; notified?: boolean };
       if (!res.ok || !json.ok) setError(true);
       else if (json.sample) setSample(true);
-      else router.refresh();
+      else {
+        setUnnotified(action === "delete" && json.notified === false);
+        router.refresh();
+      }
     } catch {
       setError(true);
     }
@@ -52,6 +58,7 @@ export default function AccountDeletion({ requested, labels }: { requested: bool
     return (
       <div data-account-deletion="pending">
         <p role="status" className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">{labels.pending}</p>
+        {unnotified && labels.writeToTeam && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{labels.writeToTeam}</p>}
         <Button variant="secondary" size="sm" className="mt-3 max-sm:min-h-11" onClick={() => send("restore")} disabled={busy}>
           {labels.restore}
         </Button>

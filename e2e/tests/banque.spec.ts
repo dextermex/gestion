@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createHouse, foldGettingStarted, leaseIdOf, letLot, mail, signIn, signUp } from "./helpers";
+import { createHouse, foldGettingStarted, leaseIdOf, letLot, mail, signIn, signUp, unfold } from "./helpers";
 
 /**
  * Money, on the real database. A cabinet without a bank feed imports the
@@ -78,10 +78,11 @@ test("the owner lets a house to a tenancy that began five months ago", async ({ 
   ({ propertyId, unitId } = await createHouse(page, houseName));
   await letLot(page, unitId, tenant, "1250", startDate);
   leaseId = await leaseIdOf(page, propertyId);
-  // The tenancy's permanent RF reference, printed on Loyers for the avis.
-  await page.goto("/app/loyers");
-  rf = ((await page.locator("code").filter({ hasText: /^RF\d{2}/ }).first().textContent()) ?? "").trim();
+  // The tenancy's permanent RF reference, printed on its lease sheet for the avis.
+  await page.goto(`/app/baux/${leaseId}`);
+  rf = ((await page.getByText(/^RF\d{2}[0-9A-Z]+$/).first().textContent()) ?? "").trim();
   expect(rf, "the lease's RF reference").toMatch(/^RF\d{2}/);
+  await page.goto("/app/loyers");
   // Five months in, the oldest periods are on the arrears ladder.
   await expect(arrearsCase(page, monthsBack(5))).toBeVisible();
   await expect(arrearsCase(page, monthsBack(3))).toBeVisible();
@@ -160,6 +161,8 @@ test("the arrears ladder is recorded step by step; the AR carries legal effect a
   const m3 = monthsBack(3);
   const li = arrearsCase(page, m3);
   await expect(li).toBeVisible();
+  // The ladder waits inside the tenant's row.
+  await unfold(li);
   const rentPeriodId = (await li.locator("[data-arrears-actions]").getAttribute("data-arrears-actions")) ?? "";
   expect(rentPeriodId).not.toBe("");
   const recorded = () => page.waitForResponse((r) => r.url().includes("/relances") && r.request().method() === "POST");
@@ -171,16 +174,20 @@ test("the arrears ladder is recorded step by step; the AR carries legal effect a
     expect((await res).ok(), `${stage} is recorded`).toBe(true);
     await expect(li.getByRole("status")).toContainText(`${stage} enregistrée le`);
     await page.reload();
-    await expect(li.locator("dl")).toContainText(stage);
+    await unfold(li);
+    await expect(li.locator("ol")).toContainText(stage);
   }
   // The mise en demeure: sent by registered letter today, then waiting for its AR.
   const med = recorded();
   await li.getByRole("button", { name: "Confirmer la mise en demeure" }).click();
   expect((await med).ok(), "the mise en demeure is recorded").toBe(true);
   await expect(li.getByRole("status")).toContainText("Mise en demeure enregistrée");
+  // The page has re-read the ladder: the AR's field is there under the confirmation, without a reload.
+  await expect(li.getByRole("button", { name: "Enregistrer l'AR" })).toBeVisible();
   await page.reload();
+  await unfold(li);
   await expect(li).toContainText("en attente de l'accusé de réception");
-  await expect(li.locator("dl")).toContainText("Mise en demeure");
+  await expect(li.locator("ol")).toContainText("Mise en demeure");
   // The justice file is refused until the AR is in hand: the law's order, checked server-side too.
   const early = await page.request.post(`/api/baux/${leaseId}/relances`, { data: { stage: "justice_dossier", rentPeriodId } });
   expect(early.status(), "no justice file before the AR").toBe(409);
@@ -193,12 +200,14 @@ test("the arrears ladder is recorded step by step; the AR carries legal effect a
   expect((await ar).ok(), "the AR date is written").toBe(true);
   await expect(li.getByRole("status")).toContainText("AR reçu le");
   await page.reload();
-  await expect(li.locator("dl")).toContainText("AR reçu le");
+  await unfold(li);
+  await expect(li.locator("ol")).toContainText("AR reçu le");
   await expect(li).toContainText("Mise en demeure");
   const justice = recorded();
   await li.getByRole("button", { name: "Consigner le dossier justice de paix" }).click();
   expect((await justice).ok(), "the justice file is recorded once the AR is there").toBe(true);
   await page.reload();
-  await expect(li.locator("dl")).toContainText("Dossier justice");
+  await unfold(li);
+  await expect(li.locator("ol")).toContainText("Dossier justice");
   await expect(li.locator("[data-arrears-actions]")).toHaveCount(0);
 });

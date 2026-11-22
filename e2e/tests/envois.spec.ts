@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, signIn, signOutFromShell, signUp, createAccountFromInvitation } from "./helpers";
+import { createHouse, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, signIn, signOutFromShell, signUp, createAccountFromInvitation, unfold } from "./helpers";
 
 /**
  * Delivery, on the real database. This deployment has no mail key, and the
@@ -52,12 +52,14 @@ test("the deployment cannot send and says so; a produced notice is mailed to the
   await foldGettingStarted(page);
   const control = page.locator('[data-doc-kind="rent_notice"]').first();
   const produced = page.waitForResponse((r) => r.url().endsWith("/api/documents/generer") && r.request().method() === "POST");
+  await unfold(control);
   await control.getByRole("button", { name: /Produire/ }).click();
   const pres = await produced;
   expect(pres.status(), "the notice is produced").toBe(201);
   noticeId = ((await pres.json()) as { documentId: string }).documentId;
   await page.reload();
   const mailed = page.waitForResponse((r) => r.url().includes(`/api/documents/${noticeId}/envoyer`) && r.request().method() === "POST");
+  await unfold(page.locator(`[data-doc-send="${noticeId}"]`));
   await page.locator(`[data-doc-send="${noticeId}"]`).click();
   const mres = await mailed;
   expect(mres.status(), "the mail is composed and recorded").toBe(201);

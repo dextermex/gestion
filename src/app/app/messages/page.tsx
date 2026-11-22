@@ -2,7 +2,9 @@ import { EmptyState } from "@/components/pro/ui";
 import MessagesCenter, { type MessageView, type PhoneView, type RequestView, type Tab, type ThreadView } from "@/components/gestion/MessagesCenter";
 import { getDemo, isSampleData } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
-import { INTL_LOCALE, type Locale, fmt } from "@/lib/i18n/config";
+import { fmt } from "@/lib/i18n/config";
+import { byMostRecent, threadMessageLine } from "@/lib/gestion/threads";
+import { whenShort } from "@/lib/portal/format";
 import { requestStatusOf } from "@/lib/portal/types";
 import { formatDate, requestStatusMeta } from "@/lib/types";
 
@@ -21,19 +23,11 @@ import { formatDate, requestStatusMeta } from "@/lib/types";
  * unless the address named one.
  *
  * The page reads one conversation in full: the one the address names, else
- * the most recent. The others come with their last word and their unread
- * count; opening one names it in the address and reads the page again.
+ * the most recent (`byMostRecent`, the rule the loader chooses with and the
+ * list is ordered by). The others come with their last word and their
+ * unread count; the screen reads one when it is opened, by a request of its
+ * own. Every hour is printed on Luxembourg's clock.
  */
-
-function timeOf(iso: string, locale: Locale): string {
-  return new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" });
-}
-
-/** For the list: the time today, the day otherwise. */
-function whenLabel(iso: string, locale: Locale, today: string): string {
-  if (iso.length <= 10) return formatDate(iso, locale);
-  return iso.slice(0, 10) === today ? timeOf(iso, locale) : new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { day: "numeric", month: "short" });
-}
 
 /** The tenant's words, without the kind tag a non-technical request carries in storage. */
 function plainDescription(description: string | null): string | null {
@@ -80,7 +74,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
       createdLabel: formatDate(t.createdAt, locale),
       openedLabel: fmt(m.requestOpened, { date: formatDate(t.createdAt, locale) }),
       activityAt,
-      activityLabel: whenLabel(activityAt, locale, TODAY),
+      activityLabel: whenShort(activityAt, locale, TODAY),
       threadId: thread?.id ?? null,
       interventionId: t.interventionId,
       attachments: t.attachments,
@@ -89,15 +83,10 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
   });
   const requestById = new Map(requests.map((r) => [r.id, r]));
 
-  const toMessage = (msg: (typeof CONVERSATIONS)[number]["messages"][number]): MessageView => ({
-    id: msg.id,
-    from: msg.from,
-    kind: msg.kind,
-    body: msg.body,
-    dayLabel: formatDate(msg.at.slice(0, 10), locale),
-    timeLabel: timeOf(msg.at, locale),
-    requestId: msg.ticketId && requestById.has(msg.ticketId) ? msg.ticketId : null,
-  });
+  const toMessage = (msg: (typeof CONVERSATIONS)[number]["messages"][number]): MessageView => {
+    const { ticketId, ...line } = threadMessageLine(msg, locale);
+    return { ...line, requestId: ticketId && requestById.has(ticketId) ? ticketId : null };
+  };
   const threads: ThreadView[] = CONVERSATIONS.map((c): ThreadView => {
     const messages = c.messages.map(toMessage);
     const last = messages[messages.length - 1];
@@ -110,14 +99,14 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
       participantName: c.participantName,
       isTenancy: c.scopeType === "lease",
       lastMessageAt: c.lastMessageAt,
-      lastLabel: whenLabel(c.lastMessageAt, locale, TODAY),
+      lastLabel: whenShort(c.lastMessageAt, locale, TODAY),
       unread: c.unread,
       preview: lastRequest ? lastRequest.title : (last?.body ?? ""),
       previewIsRequest: Boolean(lastRequest),
       messages,
       loaded: c.loaded,
     };
-  }).sort((a, b) => (a.lastMessageAt < b.lastMessageAt ? 1 : -1));
+  }).sort(byMostRecent);
   // A tenancy nobody has written to yet is still a conversation to open:
   // the desk's first word creates it.
   const withConversation = new Set(threads.filter((t) => t.leaseId).map((t) => t.leaseId));
@@ -185,8 +174,14 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
           replyPlaceholder: m.replyPlaceholder,
           send: d.common.send,
           sent: m.replySent,
+          sentNoMail: m.replySentNoMail,
           sendFailed: m.sendFailed,
+          sessionEnded: m.sessionEnded,
+          signInAgain: m.signInAgain,
+          sendLocked: m.sendLocked,
+          sendForbidden: m.sendForbidden,
           statusFailed: m.statusFailed,
+          statusHeld: m.statusHeld,
           interventionFailed: m.interventionFailed,
           unreadAria: m.unreadAria,
           colSubject: m.colSubject,
@@ -202,6 +197,9 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
           backToThreads: m.backToThreads,
           backToRequests: m.backToRequests,
           loading: d.common.loading,
+          loadFailed: m.threadLoadFailed,
+          retry: m.threadRetry,
+          showEarlier: m.threadEarlier,
         }}
       />
     </div>

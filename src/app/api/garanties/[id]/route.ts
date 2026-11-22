@@ -3,6 +3,7 @@ import { withOrg, dbError } from "@/lib/gestion/api";
 import { parseEuroInput } from "@/lib/gestion/euros";
 import { depositTransitionAllowed } from "@/lib/gestion/deposits";
 import type { DepositStatus } from "@/lib/types";
+import { todayISO } from "@/lib/clock";
 
 /**
  * The rental guarantee attached to a lease: its form, its amount, where it
@@ -26,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { g, org } = ctx;
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const { data: current, error: readErr } = await g
     .from("deposits")

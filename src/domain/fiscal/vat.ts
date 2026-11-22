@@ -17,6 +17,7 @@ import { Cents, pct } from "@/domain/money";
 import { ISODate, addMonths, startOfMonth } from "@/domain/dates";
 import { getParamValue } from "@/domain/legal/params";
 import { LeaseType, ValidationIssue } from "@/domain/lease/rules";
+import { todayISO } from "@/lib/clock";
 
 export type VatRegime = "exempt" | "opted";
 
@@ -39,7 +40,7 @@ export function assessVatOption(req: VatOptionRequest, asOf?: ISODate): VatOptio
   const issues: ValidationIssue[] = [];
   // Param resolution date: the AED decision date when known, else the
   // caller-supplied assessment date — never a hard-coded literal.
-  const resolutionDate = req.aedDecisionDate ?? asOf ?? new Date().toISOString().slice(0, 10);
+  const resolutionDate = req.aedDecisionDate ?? asOf ?? todayISO();
   const minRatio = getParamValue("vat.option_min_tenant_deduction_pct", resolutionDate);
 
   if (req.leaseType === "residential") {

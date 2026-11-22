@@ -80,6 +80,8 @@ const DEFAULTS: Record<string, () => Row> = {
     vat_regime: "exempt",
     vat_option: {},
     details: {},
+    // 0032: the month rent tracking starts from.
+    ledger_from: null,
   }),
   lease_parties: () => ({ joint_liability: true, moved_in_on: null, moved_out_on: null }),
   rent_periods: () => ({ charges_cents: 0, other_cents: 0, other_label: null, vat_cents: 0, written_off: false }),
@@ -91,7 +93,10 @@ const DEFAULTS: Record<string, () => Row> = {
     released_first_tranche_cents: null,
     released_balance_cents: null,
   }),
-  payment_allocations: () => ({ auto: false, reversed_at: null }),
+  payments: () => ({ bank_transaction_id: null, method: "transfer", note: null, cancelled_at: null, cancelled_by: null, cancel_reason: null, request_key: null }),
+  payment_allocations: () => ({ auto: false, reversed_at: null, reversed_by: null, allocated_by: null }),
+  bank_transactions: () => ({ match_status: "unmatched", match_tier: null, match_confidence: null, match_explain: null, currency: "EUR", counterparty_name: "", counterparty_iban: null, remittance_info: "", end_to_end_id: null }),
+  charge_periods: () => ({ status: "open", advances_billed_cents: 0, actual_cents: 0, issued_on: null, due_on: null }),
   tickets: () => ({ description: null, closed_at: null, sla_due_at: null }),
   work_orders: () => ({ status: "offered", artisan_contact_id: null }),
   conversations: () => ({ last_message_at: null }),
@@ -145,6 +150,9 @@ const GENERATED: Record<string, (row: Row) => void> = {
 
 const UNIQUE: Record<string, string[][]> = {
   rent_periods: [["lease_id", "period"]],
+  arrears_actions: [["rent_period_id", "stage"]],
+  bank_transactions: [["bank_account_id", "bank_tx_id"]],
+  properties: [["org_id", "request_key"]],
   iban_bindings: [["org_id", "payer_iban", "lease_id"]],
   workspace_settings: [["org_id"]],
   template_validations: [["org_id", "kind", "lang"]],
@@ -194,6 +202,14 @@ export class FakeDb {
   private tables = new Map<string, Row[]>();
   /** Tables the base does not carry yet (a migration not applied): every query on them fails as PostgREST says. */
   readonly absent = new Set<string>();
+  /** Columns the base does not carry yet, by table: a read naming one or a write setting one fails as PostgREST says. */
+  readonly absentColumns = new Map<string, Set<string>>();
+  /** Tables whose every query fails as an unreachable base does (a timeout, a dropped connection). */
+  readonly failing = new Set<string>();
+  /** Functions the base does not carry yet: calling one fails as PostgREST says (PGRST202). */
+  readonly absentFunctions = new Set<string>();
+  /** A base before 0031: a tenant files photographs only, on their own request. */
+  photosOnly = false;
   private leaseSeq = 0;
 
   constructor(public today: string) {}
@@ -214,11 +230,29 @@ export class FakeDb {
         this.table("contacts").some((c) => c.id === lp.contact_id && c.user_id === userId),
     );
   }
+  /** gestion.portal_tenant_live_lease (0032): a tenant party not moved out, of a tenancy in force. */
   tenantLiveLease(leaseId: unknown, userId: string): boolean {
-    return this.tenantLease(leaseId, userId) && this.table("leases").some((l) => l.id === leaseId && LIVE.has(String(l.status)));
+    return (
+      this.table("leases").some((l) => l.id === leaseId && LIVE.has(String(l.status))) &&
+      this.table("lease_parties").some(
+        (lp) =>
+          lp.lease_id === leaseId &&
+          TENANT_ROLES.has(String(lp.role)) &&
+          (lp.moved_out_on == null || String(lp.moved_out_on) > this.today) &&
+          this.table("contacts").some((c) => c.id === lp.contact_id && c.user_id === userId),
+      )
+    );
   }
+  /** gestion.guard_live_lease_tenant (0032): a tenancy in force keeps at least one tenant who has not left. */
+  tenantKeptError(leaseId: unknown): DbError | null {
+    const lease = this.table("leases").find((l) => l.id === leaseId);
+    if (!lease || !LIVE.has(String(lease.status))) return null;
+    const stays = this.table("lease_parties").some((lp) => lp.lease_id === leaseId && TENANT_ROLES.has(String(lp.role)) && lp.moved_out_on == null);
+    return stays ? null : { code: "23514", message: "gestion: a tenancy in force keeps a tenant" };
+  }
+  /** 0031: a request is the tenant's when it sits on one of their leases and they raised it. */
   tenantTicket(ticketId: unknown, userId: string): boolean {
-    return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && this.tenantLease(t.lease_id, userId));
+    return this.table("tickets").some((t) => t.id === ticketId && t.lease_id != null && t.source === "tenant" && this.tenantLease(t.lease_id, userId));
   }
   /** The tenancy's conversation, or a request's own thread from before 0019. */
   private tenantConversation(conversationId: unknown, userId: string): boolean {
@@ -244,17 +278,21 @@ export class FakeDb {
         return row.lease_id != null && this.tenantLease(row.lease_id, userId);
       case "payment_allocations":
         return this.table("rent_periods").some((rp) => rp.id === row.rent_period_id && this.tenantLease(rp.lease_id, userId));
+      // 0031: the pieces of the lease the cabinet shares, and those of the tenant's own requests.
       case "documents":
         return (
-          (row.related_type === "lease" && row.related_id != null && this.tenantLease(row.related_id, userId)) ||
+          (row.related_type === "lease" && row.related_id != null && row.shared_with_tenant === true && this.tenantLease(row.related_id, userId)) ||
           (row.related_type === "ticket" && row.related_id != null && this.tenantTicket(row.related_id, userId))
         );
       case "tickets":
-        return row.lease_id != null && this.tenantLease(row.lease_id, userId);
+        return row.lease_id != null && row.source === "tenant" && this.tenantLease(row.lease_id, userId);
       case "conversations":
         return this.tenantScope(row, userId);
       case "messages":
         return this.tenantConversation(row.conversation_id, userId);
+      // 0031: each account reads its own read marks, and writes none directly.
+      case "message_reads":
+        return row.user_id === userId;
       default:
         return false; // leases, units, properties, contacts, payments, bank tables, invites: nothing
     }
@@ -266,9 +304,15 @@ export class FakeDb {
       case "tickets":
         return row.lease_id != null && row.source === "tenant" && this.tenantLiveLease(row.lease_id, userId);
       case "documents":
+        // 0031: a photograph, the insurance certificate or another paper, in the lease's own folder of its workspace.
         return (
-          row.related_type === "ticket" && row.related_id != null && row.class === "photo" && row.uploaded_by === userId &&
-          this.table("tickets").some((t) => t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId))
+          row.related_type === "ticket" && row.related_id != null && row.uploaded_by === userId &&
+          (this.photosOnly ? row.class === "photo" : ["photo", "insurance", "other"].includes(String(row.class))) &&
+          this.table("tickets").some(
+            (t) =>
+              t.id === row.related_id && t.lease_id != null && this.tenantLiveLease(t.lease_id, userId) &&
+              (this.photosOnly || (t.org_id === row.org_id && String(row.storage_path ?? "").startsWith(`${row.org_id}/tickets/${t.lease_id}/`))),
+          )
         );
       case "conversations":
         return row.scope_type === "lease" && row.scope_id != null && this.tenantLease(row.scope_id, userId);
@@ -285,10 +329,59 @@ export class FakeDb {
 
   // ── The portal RPCs (0006, 0015), with the same checks as their SQL ──
 
+  /** Functions the base does not carry yet (a migration not applied): calling one fails as PostgREST says. */
+  readonly absentRpc = new Set<string>();
+
   callRpc(name: string, args: Row, principal: Principal): Result {
+    if (this.absentRpc.has(name)) return { data: null, error: { code: "PGRST202", message: `Could not find the function gestion.${name} in the schema cache` } };
+    try {
+      const ledger = this.callLedgerRpc(name, args, principal);
+      if (ledger) return ledger;
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      return { data: null, error: { code: err.code ?? "XX000", message: err.message } };
+    }
     const raise = (message: string): Result => ({ data: null, error: { code: "P0001", message } });
     const uid = principal.kind === "tenant" ? principal.userId : null;
+    if (this.absentFunctions.has(name)) return { data: null, error: { code: "PGRST202", message: `Could not find the function gestion.${name} in the schema cache` } };
     switch (name) {
+      // 0031: the tenant's read mark, bounded by the last message written, never moving back.
+      case "mark_conversation_read": {
+        const denied: Result = { data: null, error: { code: "42501", message: "gestion: conversation not found" } };
+        if (!uid) return denied;
+        const cv = this.table("conversations").find((c) => c.id === args.p_conversation && c.scope_type === "lease" && c.scope_id != null && this.tenantLease(c.scope_id, uid));
+        if (!cv) return denied;
+        const times = this.table("messages").filter((m) => m.conversation_id === cv.id).map((m) => String(m.sent_at)).sort((a, b) => Date.parse(a) - Date.parse(b));
+        const last = times[times.length - 1];
+        if (!last) return { data: null, error: null };
+        const asked = typeof args.p_until === "string" && args.p_until ? args.p_until : last;
+        let mark = Date.parse(asked) < Date.parse(last) ? asked : last;
+        const rows = this.table("message_reads");
+        const row = rows.find((r) => r.conversation_id === cv.id && r.user_id === uid);
+        if (row) {
+          if (Date.parse(String(row.read_until)) > Date.parse(mark)) mark = String(row.read_until);
+          row.read_until = mark;
+        } else rows.push({ conversation_id: cv.id, user_id: uid, org_id: cv.org_id, read_until: mark });
+        return { data: mark, error: null };
+      }
+      // 0031: what the signed-in tenant has not read, conversation by conversation.
+      case "my_unread_messages": {
+        if (!uid) return { data: [], error: null };
+        const at = (v: unknown): number => (typeof v === "string" && v ? Date.parse(v) : -Infinity);
+        return {
+          data: this.table("conversations")
+            .filter((c) => c.scope_type === "lease" && c.scope_id != null && this.tenantLease(c.scope_id, uid))
+            .map((c) => {
+              const own = this.table("messages").filter((m) => m.conversation_id === c.id);
+              const mineOf = (m: Row) => m.sender_kind === "tenant" && m.sender_user_id === uid;
+              const read = this.table("message_reads").find((r) => r.conversation_id === c.id && r.user_id === uid);
+              const mark = Math.max(at(read?.read_until), ...own.filter(mineOf).map((m) => at(m.sent_at)));
+              const last = own.map((m) => String(m.sent_at)).sort((a, b) => Date.parse(a) - Date.parse(b)).pop() ?? null;
+              return { conversation_id: c.id, lease_id: c.scope_id, unread: own.filter((m) => !mineOf(m) && at(m.sent_at) > mark).length, last_sent_at: last, read_until: read?.read_until ?? null };
+            }),
+          error: null,
+        };
+      }
       case "my_home": {
         if (!uid) return { data: [], error: null };
         const rows = this.table("leases")
@@ -323,6 +416,10 @@ export class FakeDb {
             return { lease_id: lp.lease_id, contact_id: c.id, display_name: c.display_name, role: lp.role, moved_in_on: lp.moved_in_on, moved_out_on: lp.moved_out_on, is_me: c.user_id === uid };
           });
         return { data: rows, error: null };
+      }
+      case "my_lease_credit": {
+        if (!uid) return { data: [], error: null };
+        return { data: this.leaseCredit().filter((c) => this.tenantLease(c.lease_id, uid)).map((c) => ({ lease_id: c.lease_id, credit_cents: c.credit_cents })), error: null };
       }
       case "my_payment_instructions": {
         if (!uid) return { data: [], error: null };
@@ -362,8 +459,10 @@ export class FakeDb {
         const orgIds = [...new Set(this.table("leases").filter((l) => this.tenantLease(l.id, uid)).map((l) => l.org_id))];
         const rows = orgIds.map((orgId) => {
           const a = this.table("agencies").find((x) => x.id === orgId) ?? { id: orgId, name: "" };
-          const m = this.table("crm_members").find((x) => x.agency_id === orgId && x.role === "owner" && x.status === "active");
-          return { org_id: orgId, name: a.name, email: (a.email as string | undefined) || m?.email || null, phone: (a.phone as string | undefined) || m?.phone || null };
+          // The contact the workspace declares (0035): the agency's, then the lessor's identity in the settings; never the owner's login.
+          const ws = this.table("workspace_settings").find((x) => x.org_id === orgId);
+          const declared = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
+          return { org_id: orgId, name: a.name, email: declared(a.email) ?? declared(ws?.email), phone: declared(a.phone) ?? declared(ws?.phone) };
         });
         return { data: rows, error: null };
       }
@@ -450,6 +549,9 @@ export class FakeDb {
         inv.accepted_by = uid;
         return { data: { org_id: inv.org_id, role: inv.role, lease_id: inv.lease_id, already: false }, error: null };
       }
+      case "can":
+        // The fake's manager is the workspace's owner, who holds every permission; a tenant or a visitor holds none.
+        return { data: principal.kind === "manager", error: null };
       default:
         return { data: null, error: { code: "PGRST202", message: `unknown rpc ${name}` } };
     }
@@ -499,6 +601,10 @@ export class FakeDb {
 
   /** The unique indexes, checked on every insert and update. */
   uniqueConflictOf(table: string, row: Row): DbError | null {
+    // Every table's primary key: an id given twice collides, as in SQL.
+    if (row.id !== undefined && row.id !== null && this.table(table).some((r) => r !== row && r.id === row.id)) {
+      return { code: "23505", message: `duplicate key value violates unique constraint "${table}_pkey"` };
+    }
     for (const key of UNIQUE[table] ?? []) {
       // As in SQL, a key with a null part never collides.
       if (key.some((k) => row[k] === null || row[k] === undefined)) continue;
@@ -514,6 +620,22 @@ export class FakeDb {
     if (table === "signature_envelopes" && (row.status === "draft" || row.status === "ongoing")) {
       const clash = this.table(table).some((r) => r !== row && r.lease_id === row.lease_id && (r.status === "draft" || r.status === "ongoing"));
       if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "signature_envelopes_live_idx"' };
+    }
+    // payments_bank_transaction_live_key and payments_request_key (0032).
+    if (table === "payments") {
+      if (row.bank_transaction_id != null && row.cancelled_at == null) {
+        const clash = this.table(table).some((r) => r !== row && r.bank_transaction_id === row.bank_transaction_id && r.cancelled_at == null);
+        if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "payments_bank_transaction_live_key"' };
+      }
+      if (row.request_key != null) {
+        const clash = this.table(table).some((r) => r !== row && r.org_id === row.org_id && r.request_key === row.request_key);
+        if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "payments_request_key"' };
+      }
+    }
+    // lease_parties_present_key (0032): one present place per person and role on a lease.
+    if (table === "lease_parties" && row.moved_out_on == null) {
+      const clash = this.table(table).some((r) => r !== row && r.lease_id === row.lease_id && r.contact_id === row.contact_id && r.role === row.role && r.moved_out_on == null);
+      if (clash) return { code: "23505", message: 'duplicate key value violates unique constraint "lease_parties_present_key"' };
     }
     // contacts_email_active_key (0002): one live contact per e-mail and workspace.
     if (table === "contacts" && row.email != null && row.archived_at == null) {
@@ -597,7 +719,259 @@ export class FakeDb {
     if (table === "rent_period_status") return this.periodStatus();
     if (table === "conversation_heads") return this.conversationHeads();
     if (table === "edl_session_counts") return this.edlSessionCounts();
+    if (table === "lease_credit") return this.leaseCredit();
     return this.table(table);
+  }
+
+  // ── The ledger's functions (0032), with the same rules as their SQL ──
+
+  /** What of a period nothing live covers yet. */
+  private openCents(period: Row): number {
+    const allocated = this.table("payment_allocations")
+      .filter((a) => a.rent_period_id === period.id && a.reversed_at == null)
+      .reduce((sum, a) => sum + n(a.amount_cents), 0);
+    return n(period.total_cents) - allocated;
+  }
+
+  /** What of a payment sits on no period. */
+  private unallocated(payment: Row): number {
+    const allocated = this.table("payment_allocations")
+      .filter((a) => a.payment_id === payment.id && a.reversed_at == null)
+      .reduce((sum, a) => sum + n(a.amount_cents), 0);
+    return n(payment.amount_cents) - allocated;
+  }
+
+  /** The lease_credit view: money received on a tenancy that no period carries. */
+  leaseCredit(): Row[] {
+    const byLease = new Map<string, Row>();
+    for (const p of this.table("payments")) {
+      if (p.lease_id == null || p.cancelled_at != null) continue;
+      const row = byLease.get(String(p.lease_id)) ?? { org_id: p.org_id, lease_id: p.lease_id, credit_cents: 0 };
+      row.credit_cents = n(row.credit_cents) + this.unallocated(p);
+      byLease.set(String(p.lease_id), row);
+    }
+    return [...byLease.values()].filter((r) => n(r.credit_cents) > 0);
+  }
+
+  private periodsOldestFirst(rows: Row[]): Row[] {
+    return rows.slice().sort((a, b) => (String(a.due_date) < String(b.due_date) ? -1 : String(a.due_date) > String(b.due_date) ? 1 : String(a.period) < String(b.period) ? -1 : 1));
+  }
+
+  /** gestion.apply_lease_credit: the tenancy's unallocated money onto its open periods, oldest first. */
+  applyLeaseCredit(leaseId: unknown, auto = true, by: string | null = null): number {
+    let total = 0;
+    const payments = this.table("payments")
+      .filter((p) => p.lease_id === leaseId && p.cancelled_at == null)
+      .slice()
+      .sort((a, b) => (String(a.received_on) < String(b.received_on) ? -1 : String(a.received_on) > String(b.received_on) ? 1 : 0));
+    for (const pay of payments) {
+      let left = this.unallocated(pay);
+      if (left <= 0) continue;
+      for (const per of this.periodsOldestFirst(this.table("rent_periods").filter((rp) => rp.lease_id === leaseId && !rp.written_off))) {
+        if (left <= 0) break;
+        const open = this.openCents(per);
+        if (open <= 0) continue;
+        const take = Math.min(left, open);
+        this.insertRow("payment_allocations", { org_id: pay.org_id, payment_id: pay.id, rent_period_id: per.id, amount_cents: take, auto, allocated_by: by });
+        left -= take;
+        total += take;
+      }
+    }
+    return total;
+  }
+
+  /** gestion.settle_lease_end: the ledger trimmed after the end month and, the day come, the tenancy ended. */
+  settleLeaseEnd(leaseId: unknown): { status: string; dropped: number } {
+    const lease = this.table("leases").find((l) => l.id === leaseId);
+    if (!lease) throw Object.assign(new Error("gestion: lease not found"), { code: "P0002" });
+    if (lease.end_date == null || lease.status === "draft") return { status: String(lease.status), dropped: 0 };
+    const end = String(lease.end_date);
+    const [y, m] = end.slice(0, 7).split("-").map(Number);
+    const after = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const allocations = this.table("payment_allocations");
+    const live = (rp: Row) => allocations.some((a) => a.rent_period_id === rp.id && a.reversed_at == null);
+    const any = (rp: Row) => allocations.some((a) => a.rent_period_id === rp.id);
+    let dropped = 0;
+    const kept: Row[] = [];
+    for (const rp of this.table("rent_periods")) {
+      const future = rp.lease_id === leaseId && String(rp.period) >= after;
+      if (!future) {
+        kept.push(rp);
+      } else if (n(rp.other_cents) !== 0) {
+        if (!live(rp)) {
+          rp.rent_cents = 0;
+          rp.charges_cents = 0;
+          rp.vat_cents = 0;
+          GENERATED.rent_periods(rp);
+        }
+        kept.push(rp);
+      } else if (!any(rp)) {
+        dropped += 1;
+      } else {
+        if (!live(rp) && !rp.written_off) {
+          rp.written_off = true;
+          dropped += 1;
+        }
+        kept.push(rp);
+      }
+    }
+    this.replace("rent_periods", kept);
+    if (LIVE.has(String(lease.status)) && end <= this.today) {
+      lease.status = "ended";
+      const details = { ...((lease.details as Row | null) ?? {}) };
+      delete details.departure;
+      lease.details = details;
+      for (const lp of this.table("lease_parties")) if (lp.lease_id === leaseId && lp.moved_out_on == null) lp.moved_out_on = end;
+    }
+    return { status: String(lease.status), dropped };
+  }
+
+  /** The ledger RPCs of 0032, for the manager's client. */
+  private callLedgerRpc(name: string, args: Row, principal: Principal): Result | null {
+    const raise = (message: string, code = "P0001"): Result => ({ data: null, error: { code, message } });
+    const manager = principal.kind === "manager";
+    switch (name) {
+      case "apply_lease_credit":
+        return { data: manager ? this.applyLeaseCredit(args.p_lease, args.p_auto !== false) : 0, error: null };
+      case "record_payment": {
+        const amount = n(args.p_amount_cents);
+        if (amount <= 0 || !args.p_received_on) return raise("gestion: invalid payment", "22023");
+        const lease = this.table("leases").find((l) => l.id === args.p_lease);
+        if (!lease || !manager) return raise("gestion: lease not found", "P0002");
+        if (args.p_request_key != null) {
+          const prior = this.table("payments").find((p) => p.org_id === lease.org_id && p.request_key === args.p_request_key);
+          if (prior) {
+            const left = this.unallocated(prior);
+            return { data: { payment_id: prior.id, allocated: n(prior.amount_cents) - left, credit: Math.max(left, 0), linked: false, replayed: true }, error: null };
+          }
+        }
+        const auto = args.p_auto === true;
+        let payment: Row | undefined;
+        let linked = false;
+        if (args.p_bank_transaction != null) {
+          const tx = this.table("bank_transactions").find(
+            (t) => t.id === args.p_bank_transaction && t.org_id === lease.org_id && (t.match_status === "unmatched" || t.match_status === "review") && n(t.amount_cents) === amount,
+          );
+          if (!tx) return raise("gestion: operation already matched");
+          const match = (args.p_match as Row | null) ?? {};
+          tx.match_status = auto ? "auto" : "manual";
+          tx.match_tier = match.tier ?? (auto ? null : "manual");
+          tx.match_confidence = match.confidence ?? null;
+          tx.match_explain = match.explain ?? null;
+          const days = n(args.p_twin_days);
+          if (days > 0) {
+            const gap = (a: unknown, b: unknown) => Math.abs((Date.parse(`${String(a)}T00:00:00Z`) - Date.parse(`${String(b)}T00:00:00Z`)) / 86400000);
+            payment = this.table("payments")
+              .filter((p) => p.org_id === lease.org_id && p.lease_id === lease.id && p.bank_transaction_id == null && p.cancelled_at == null && n(p.amount_cents) === amount && gap(p.received_on, args.p_received_on) <= days)
+              .sort((a, b) => gap(a.received_on, args.p_received_on) - gap(b.received_on, args.p_received_on))[0];
+            if (payment) {
+              payment.bank_transaction_id = args.p_bank_transaction;
+              linked = true;
+            }
+          }
+        }
+        if (!payment) {
+          payment = this.insertRow("payments", {
+            org_id: lease.org_id, lease_id: lease.id, bank_transaction_id: args.p_bank_transaction ?? null, received_on: args.p_received_on,
+            amount_cents: amount, method: args.p_method ?? "transfer", note: args.p_note || null, request_key: args.p_request_key ?? null,
+          });
+          if (Array.isArray(args.p_periods)) {
+            let left = amount;
+            const named = this.table("rent_periods").filter((rp) => (args.p_periods as unknown[]).includes(rp.id) && rp.org_id === lease.org_id && rp.lease_id === lease.id && !rp.written_off);
+            for (const per of this.periodsOldestFirst(named)) {
+              if (left <= 0) break;
+              const open = this.openCents(per);
+              if (open <= 0) continue;
+              const take = Math.min(left, open);
+              this.insertRow("payment_allocations", { org_id: lease.org_id, payment_id: payment.id, rent_period_id: per.id, amount_cents: take, auto, allocated_by: null });
+              left -= take;
+            }
+          }
+        }
+        this.applyLeaseCredit(lease.id, auto);
+        const left = this.unallocated(payment);
+        return { data: { payment_id: payment.id, allocated: n(payment.amount_cents) - left, credit: Math.max(left, 0), linked, replayed: false }, error: null };
+      }
+      case "cancel_payment": {
+        const payment = this.table("payments").find((p) => p.id === args.p_payment);
+        if (!payment || !manager) return raise("gestion: payment not found", "P0002");
+        if (payment.cancelled_at != null) return { data: { ok: true, already: true, lease_id: payment.lease_id, bank_transaction_id: payment.bank_transaction_id }, error: null };
+        const own = this.table("payment_allocations").filter((a) => a.payment_id === payment.id && a.reversed_at == null);
+        const receipt = !this.absent.has("generated_documents") && own.some((a) => this.table("generated_documents").some((gd) => gd.kind === "rent_receipt" && gd.source_id === a.rent_period_id));
+        if (receipt) return raise("gestion: receipt issued");
+        for (const a of own) a.reversed_at = this.nowIso();
+        payment.cancelled_at = this.nowIso();
+        payment.cancel_reason = typeof args.p_reason === "string" && args.p_reason !== "" ? args.p_reason.slice(0, 500) : null;
+        if (payment.bank_transaction_id != null) {
+          const tx = this.table("bank_transactions").find((t) => t.id === payment.bank_transaction_id && (t.match_status === "auto" || t.match_status === "manual"));
+          if (tx) Object.assign(tx, { match_status: "review", match_tier: null, match_confidence: null, match_explain: "payment_cancelled" });
+        }
+        if (payment.lease_id != null) this.applyLeaseCredit(payment.lease_id, true);
+        return { data: { ok: true, already: false, lease_id: payment.lease_id, bank_transaction_id: payment.bank_transaction_id }, error: null };
+      }
+      case "settle_lease_end": {
+        if (!manager || !this.table("leases").some((l) => l.id === args.p_lease)) return raise("gestion: lease not found", "P0002");
+        return { data: this.settleLeaseEnd(args.p_lease), error: null };
+      }
+      case "close_lease": {
+        const lease = this.table("leases").find((l) => l.id === args.p_lease);
+        if (!lease || !manager) return raise("gestion: lease not found", "P0002");
+        if (lease.status === "ended") return raise("gestion: lease already ended");
+        if (lease.status === "draft") return raise("gestion: lease not live");
+        const end = String(args.p_end_date ?? "");
+        if (!end || end <= String(lease.start_date)) return raise("gestion: end before start", "22023");
+        if (end > this.today) lease.status = "notice";
+        lease.end_date = end;
+        return { data: { ...this.settleLeaseEnd(lease.id), end_date: end, unit_id: lease.unit_id }, error: null };
+      }
+      case "issue_charge_period": {
+        const cp = this.table("charge_periods").find((x) => x.id === args.p_period);
+        if (!cp || !manager) return raise("gestion: charge period not found", "P0002");
+        if (cp.status !== "draft") return raise("gestion: not a draft");
+        Object.assign(cp, { status: "issued", issued_on: args.p_issued_on, due_on: args.p_due_on });
+        const balance = n(cp.actual_cents) - n(cp.advances_billed_cents);
+        let carried: string | null = null;
+        if (balance > 0) {
+          const month = `${this.today.slice(0, 7)}-01`;
+          const label = String(args.p_label ?? "");
+          const allocations = this.table("payment_allocations");
+          const dueOn = String(args.p_due_on);
+          const free = this.table("rent_periods")
+            .filter((rp) => rp.lease_id === cp.lease_id && String(rp.period) >= month && !rp.written_off && String(rp.due_date) >= dueOn && !allocations.some((a) => a.rent_period_id === rp.id && a.reversed_at == null))
+            .sort((a, b) => (String(a.period) < String(b.period) ? -1 : 1))[0];
+          if (free) {
+            free.other_cents = n(free.other_cents) + balance;
+            free.other_label = !free.other_label || free.other_label === label ? label : `${String(free.other_label)} · ${label}`;
+            GENERATED.rent_periods(free);
+            carried = String(free.period);
+          } else {
+            const lease = this.table("leases").find((l) => l.id === cp.lease_id) ?? {};
+            carried = month;
+            const next = (d: string): string => {
+              const [y, m] = d.slice(0, 7).split("-").map(Number);
+              return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+            };
+            const live = LIVE.has(String(lease.status));
+            const day = String(Math.min(Math.max(n(lease.payment_day) || 1, 1), 28)).padStart(2, "0");
+            const normalDue = (m: string): string => {
+              const d = `${m.slice(0, 7)}-${day}`;
+              return d < String(lease.start_date) ? String(lease.start_date) : d;
+            };
+            while (this.table("rent_periods").some((rp) => rp.lease_id === cp.lease_id && rp.period === carried) || (live && normalDue(carried) < dueOn)) carried = next(carried);
+            const runs = live && (lease.status !== "notice" || lease.end_date == null || carried <= `${String(lease.end_date).slice(0, 7)}-01`);
+            const due = `${carried.slice(0, 7)}-${day}`;
+            this.insertRow("rent_periods", {
+              org_id: cp.org_id, lease_id: cp.lease_id, period: carried,
+              due_date: runs ? (due < String(lease.start_date) ? lease.start_date : due) : args.p_due_on,
+              rent_cents: runs ? n(lease.rent_cents) : 0, charges_cents: runs ? n(lease.charges_cents) : 0, other_cents: balance, other_label: label,
+            });
+          }
+        }
+        return { data: { ok: true, balance_cents: balance, carried_to: carried }, error: null };
+      }
+      default:
+        return null;
+    }
   }
 
   removeLease(id: unknown): void {
@@ -662,8 +1036,8 @@ class FakeQuery implements PromiseLike<Result> {
   private ignoreDuplicates = false;
   private wantRows = false;
   private shape: "single" | "maybe" | null = null;
-  private orderKey: string | null = null;
-  private orderAsc = true;
+  /** `order()` calls add up, as PostgREST's do: the first key leads, the next ones break its ties. */
+  private orders: Array<{ key: string; asc: boolean }> = [];
   private limitN: number | null = null;
 
   constructor(
@@ -678,7 +1052,7 @@ class FakeQuery implements PromiseLike<Result> {
 
   // The columns are accepted for the caller's sake and ignored: rows come back whole.
   select(columns?: string, opts?: { count?: "exact" | "planned" | "estimated"; head?: boolean }): this {
-    void columns;
+    if (this.op === "select" && columns) this.columns = columns.split(",").map((c) => c.trim());
     this.wantRows = true;
     if (opts?.count) this.wantCount = true;
     return this;
@@ -737,6 +1111,10 @@ class FakeQuery implements PromiseLike<Result> {
     this.filters.push((r) => String(r[key]) <= String(value));
     return this;
   }
+  lt(key: string, value: unknown): this {
+    this.filters.push((r) => String(r[key]) < String(value));
+    return this;
+  }
   neq(key: string, value: unknown): this {
     this.filters.push((r) => r[key] !== value);
     return this;
@@ -779,8 +1157,7 @@ class FakeQuery implements PromiseLike<Result> {
     return this;
   }
   order(key: string, opts?: { ascending?: boolean }): this {
-    this.orderKey = key;
-    this.orderAsc = opts?.ascending !== false;
+    this.orders.push({ key, asc: opts?.ascending !== false });
     return this;
   }
   limit(count: number): this {
@@ -829,17 +1206,36 @@ class FakeQuery implements PromiseLike<Result> {
     return { data: rows, error: null };
   }
 
+  private columns: string[] = [];
+
   private run(): Result {
     if (this.db.absent.has(this.table)) return { data: null, error: { code: "PGRST205", message: `Could not find the table 'gestion.${this.table}' in the schema cache` } };
+    if (this.db.failing.has(this.table)) return { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } };
+    // A column the base does not carry yet: named in a read, it is unknown; written, PostgREST does not find it.
+    const missing = this.db.absentColumns.get(this.table);
+    if (missing) {
+      if (this.op === "select" && this.columns.some((c) => missing.has(c))) return { data: null, error: { code: "42703", message: `column ${this.table}.${this.columns.find((c) => missing.has(c))} does not exist` } };
+      const written = this.op === "update" ? [this.patch] : this.op === "insert" || this.op === "upsert" ? this.payload : [];
+      const key = written.flatMap((r) => Object.keys(r)).find((k) => missing.has(k));
+      if (key) return { data: null, error: { code: "PGRST204", message: `Could not find the '${key}' column of '${this.table}' in the schema cache` } };
+    }
     try {
       switch (this.op) {
         case "select": {
           let rows = this.matching();
           const total = rows.length;
-          if (this.orderKey) {
-            const k = this.orderKey;
-            rows = rows.slice().sort((a, b) => (String(a[k]) < String(b[k]) ? -1 : String(a[k]) > String(b[k]) ? 1 : 0));
-            if (!this.orderAsc) rows.reverse();
+          if (this.orders.length > 0) {
+            const orders = this.orders;
+            // Rows no key tells apart keep the table's order, read backwards when the leading key descends.
+            const place = new Map(rows.map((r, i) => [r, i]));
+            const tie = orders[0].asc ? 1 : -1;
+            rows = rows.slice().sort((a, b) => {
+              for (const { key, asc } of orders) {
+                const c = String(a[key]) < String(b[key]) ? -1 : String(a[key]) > String(b[key]) ? 1 : 0;
+                if (c !== 0) return asc ? c : -c;
+              }
+              return tie * ((place.get(a) ?? 0) - (place.get(b) ?? 0));
+            });
           }
           if (this.rangeFrom !== null && this.rangeTo !== null) rows = rows.slice(this.rangeFrom, this.rangeTo + 1);
           if (this.limitN !== null) rows = rows.slice(0, this.limitN);
@@ -880,16 +1276,35 @@ class FakeQuery implements PromiseLike<Result> {
               Object.assign(r, before);
               return { data: null, error: rule };
             }
+            // lease_keeps_tenant (0032): a tenancy in force keeps a tenant who has not left.
+            const kept =
+              this.table === "lease_parties" ? this.db.tenantKeptError(before.lease_id) ?? this.db.tenantKeptError(r.lease_id)
+              : this.table === "leases" && before.status === "draft" && LIVE.has(String(r.status)) ? this.db.tenantKeptError(r.id)
+              : null;
+            if (kept) {
+              Object.assign(r, before);
+              return { data: null, error: kept };
+            }
           }
           return this.wantRows ? this.shaped(rows.map((r) => ({ ...r }))) : { data: null, error: null };
         }
         case "delete": {
           const gone = this.matching();
           const ids = new Set(gone.map((r) => r.id));
+          const kept = this.db.table(this.table);
           this.db.replace(
             this.table,
             this.db.table(this.table).filter((r) => !ids.has(r.id)),
           );
+          if (this.table === "lease_parties") {
+            for (const leaseId of new Set(gone.map((r) => r.lease_id))) {
+              const refused = this.db.tenantKeptError(leaseId);
+              if (refused) {
+                this.db.replace(this.table, kept);
+                return { data: null, error: refused };
+              }
+            }
+          }
           if (this.table === "leases") for (const r of gone) this.db.removeLease(r.id);
           return this.wantRows ? this.shaped(gone.map((r) => ({ ...r }))) : { data: null, error: null };
         }

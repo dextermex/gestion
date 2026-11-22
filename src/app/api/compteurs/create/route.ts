@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withOrg, dbError } from "@/lib/gestion/api";
+import { withOrg, dbError, isUuid, refuseWithout, jsonBody } from "@/lib/gestion/api";
 
 const KINDS = ["electricity", "gas", "water_cold", "water_hot", "heat"] as const;
 
@@ -11,13 +11,18 @@ export async function POST(req: NextRequest) {
   const ctx = await withOrg("write");
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
+  const refused = await refuseWithout(ctx, "gestion.properties.edit");
+  if (refused) return refused;
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const kind = (KINDS as readonly string[]).includes(String(body.kind)) ? String(body.kind) : "electricity";
+  const body = await jsonBody(req);
+  // A meter is of a kind the register knows: an unknown one is refused, never recorded as electricity.
+  if (!(KINDS as readonly string[]).includes(String(body.kind))) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  const kind = String(body.kind);
   const serial = String(body.serial ?? "").trim().slice(0, 60);
   const supplier = String(body.supplier ?? "").trim().slice(0, 120);
   const target = String(body.target ?? "");
   if (!serial || !target) return NextResponse.json({ error: "invalid" }, { status: 400 });
+  if (!isUuid(target.startsWith("common-") ? target.slice("common-".length) : target)) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
   let propertyId: string;
   let unitId: string | null;

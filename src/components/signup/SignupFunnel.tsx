@@ -8,11 +8,11 @@ import GestionLogo from "@/components/gestion/GestionLogo";
 import { getSupabase } from "@/lib/supabase/browser";
 import { fmt, htmlLang, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
 import { signupCopy, type SignupCopy } from "@/lib/i18n/signup";
-import { EMPTY_PREFERENCES, emailConfirmed, resumeStep, safeSignupNext, type Preferences, type SignupRole, type SignupStep } from "@/lib/signup/model";
+import { EMPTY_PREFERENCES, arrivedFromRecoveryLink, emailConfirmed, resumeStep, safeSignupNext, type Preferences, type SignupRole, type SignupStep } from "@/lib/signup/model";
 import { normalizePhone } from "@/lib/signup/phone";
 import { MORADA_URL } from "@/lib/constants";
 import { AUTH_APP_URL } from "@/lib/auth/redirects";
-import { logSignupFailure, signupErrorKey, type SignupStage } from "@/lib/signup/errors";
+import { logSignupFailure, signupErrorKey, unknownNumberAtLogin, type SignupStage } from "@/lib/signup/errors";
 import CountryPicker from "./CountryPicker";
 import Turnstile from "./Turnstile";
 import SocialButtons from "./SocialButtons";
@@ -117,12 +117,14 @@ function errorMessage(stage: SignupStage, failure: { code?: string; status?: num
 /** A session delivered by an email link (confirmation, magic link, recovery). */
 const fromAuthLink = (url: URL) => /access_token=|refresh_token=|type=(signup|magiclink|recovery|invite|email_change)|[?&]code=/.test(url.hash + url.search);
 
-export default function SignupFunnel({ locale: initialLocale, preview = false, signedIn = false, next, loginMode = false, phoneLogin = false, oauthIntent, initialEmail = "", recovery = false }: {
+export default function SignupFunnel({ locale: initialLocale, preview = false, signedIn = false, next, loginMode = false, phoneLogin = false, oauthIntent, initialEmail = "", recovery = false, placement }: {
   locale: Locale; preview?: boolean; signedIn?: boolean; next?: string; loginMode?: boolean; phoneLogin?: boolean; oauthIntent?: "link" | "login";
   /** An invitation's address: prefilled, never trusted (Auth confirms it). */
   initialEmail?: string;
   /** Arriving from a password-recovery email: choose a new password. */
   recovery?: boolean;
+  /** Where on the public site the person pressed "try it" (`?ref=`): noted on the account it creates, nowhere else. */
+  placement?: string;
 }) {
   const [locale, setLocale] = useState(initialLocale);
   const c = signupCopy[locale];
@@ -201,10 +203,14 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     const callbackReason = url.searchParams.get("error_description") ?? new URLSearchParams(url.hash.slice(1)).get("error_description") ?? "";
     const callbackFailed = url.searchParams.has("error") || new URLSearchParams(url.hash.slice(1)).has("error");
     const linkSession = fromAuthLink(url);
+    // The new-password form opens for the recovery link only, never for a session
+    // that merely exists: a password is changed by whoever reads the account's mail.
+    const recoveryArrival = recovery && arrivedFromRecoveryLink(url);
     getSupabase().auth.getUser().then(async ({ data, error: authError }) => {
       if (!active) return;
       if (recovery) {
-        if (data.user && !authError) go("reset");
+        if (data.user && !authError && recoveryArrival && !callbackFailed) go("reset");
+        else if (data.user && !authError && !callbackFailed) restoreUser(data.user);
         else { go("login"); setError(copyRef.current.resetExpired); }
         return;
       }
@@ -289,10 +295,11 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
         const answer = await getSupabase().auth.signInWithOtp({
           phone: number, options: {
             captchaToken: captcha, shouldCreateUser: !loginMode,
-            ...(!loginMode ? { data: { preferred_language: locale, morada_signup: { version: 1, stage: "role" } } } : {}),
+            ...(!loginMode ? { data: { preferred_language: locale, morada_signup: { version: 1, stage: "role", ...(placement ? { ref: placement } : {}) } } } : {}),
           },
         });
-        if (answer.error) { setPendingPhone(""); setError(errorMessage("send", answer.error, c)); return; }
+        // Signing in, a number without an account is answered as one with: a code is awaited.
+        if (answer.error && !(loginMode && unknownNumberAtLogin(answer.error))) { setPendingPhone(""); setError(errorMessage("send", answer.error, c)); return; }
       } catch (failure) {
         setPendingPhone(""); setError(errorMessage("send", failure as { name?: string }, c)); return;
       } finally {
@@ -302,6 +309,8 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     }
     setPendingPhone(""); setPhone(number); setCode(""); setRetryAt(Date.now() + 60000); setRemaining(60);
     if (resend) setStatus(c.resent); else go("verify");
+    // The same words for every number signing in, whether or not an account uses it.
+    if (loginMode && !resend) setStatus(c.phoneCodeIfAccount);
   };
 
   // The code, or the link clicked on any device: Auth marks the address
@@ -310,6 +319,10 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     if (confirming.current) return;
     confirming.current = true;
     try {
+      // The session in hand was issued before the address was confirmed (a link
+      // clicked on another device): renewed, it carries the confirmed address,
+      // which accepting an invitation reads.
+      await getSupabase().auth.refreshSession().catch(() => undefined);
       if (await save({ action: "email_confirmed" })) { setEmailPending(false); setEmailVerified(true); go("create-password"); }
     } finally { confirming.current = false; }
   };
@@ -578,6 +591,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
                   <div className="signup-otp-slots" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} data-current={index === emailCode.length}>{emailCode[index] ?? ""}</span>)}</div>
                 </div>
                 <p id="email-code-hint" className="signup-helper">{c.emailCodeHint}</p>
+                <p className="signup-helper">{c.emailCodeOtherAccount}</p>
                 {preview && <p className="signup-preview-security">{c.previewCode}</p>}
               </>}
               {step === "create-password" && <div className="signup-fields-stack">

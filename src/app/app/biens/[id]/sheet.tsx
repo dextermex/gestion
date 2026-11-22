@@ -240,13 +240,17 @@ export function Overview({
   d,
   locale,
   real,
+  base,
 }: {
   card: PropertyCard;
   demo: DemoData;
   d: Dict;
   locale: Locale;
   real: boolean;
+  /** The sheet's own address, when it is not the property's (a lot's): "see all" opens this sheet's tabs. */
+  base?: string;
 }) {
+  const sheet = base ?? `/app/biens/${card.property.id}`;
   const p = card.property;
   const single = card.single;
   const unit = single?.unit;
@@ -402,7 +406,8 @@ export function Overview({
       <Panel
         title={d.bien.recentDocuments}
         action={
-          <Link href="/app/documents" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+          // This property's documents, in its own tab: the workspace's register cannot be narrowed to one property.
+          <Link href={`${sheet}?onglet=documents`} className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
             {d.bien.seeAll}
           </Link>
         }
@@ -553,19 +558,34 @@ export function Rental({
                       </li>
                     ))}
                   </ul>
+                  {/* Money received above what was due: said here, corrected (with every payment) on the lease sheet. */}
+                  {(demo.LEASE_CREDITS[lease.id] ?? 0) > 0 && (
+                    <p className="mt-3 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900" data-lease-credit>
+                      {fmt(d.baux.creditLine, { amount: euros(demo.LEASE_CREDITS[lease.id], locale) })}
+                    </p>
+                  )}
+                  <p className="mt-3 text-sm">
+                    <Link href={`/app/baux/${lease.id}?onglet=loyer`} className="font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+                      {d.baux.paymentsTitle}
+                    </Link>
+                  </p>
                 </div>
               </div>
               {/* Every running tenancy ends the same way: through the guided
                   departure, resumable where it stands. */}
               <div className="mt-5 flex flex-col gap-2.5 border-t border-sand-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm tabular-nums text-ink-soft">
-                  {lease.departure ? fmt(d.bien.departureInProgress, { done: Math.max(0, lease.departure.step - 1), total: 7 }) : ""}
+                  {lease.status === "notice" && lease.endDate
+                    ? fmt(d.bien.departurePlanned, { date: formatDate(lease.endDate, locale) })
+                    : lease.departure
+                      ? fmt(d.bien.departureInProgress, { done: Math.max(0, lease.departure.step - 1), total: 7 })
+                      : ""}
                 </p>
                 <Link
                   href={`/app/biens/depart?bail=${lease.id}`}
                   className="tactile inline-flex min-h-9 items-center justify-center rounded-xl border border-sand-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-ink shadow-sm transition hover:border-brand-300 hover:text-brand-700"
                 >
-                  {lease.departure ? d.bien.departureResume : d.modify.departure}
+                  {lease.status === "notice" && lease.endDate ? d.bien.departureChange : lease.departure ? d.bien.departureResume : d.modify.departure}
                 </Link>
               </div>
               <InvitePanel
@@ -706,8 +726,9 @@ export function Technical({
     (m) => m.propertyId === p.id && (card.scope === "property" || m.unitId === null || m.unitId === card.single?.unit.id),
   );
   const policies = demo.INSURANCES.filter((i) => i.propertyId === p.id);
-  const cpe = cpeExpiryDeadline(p.name, p.cpeIssuedOn);
-  const cpeState = deadlineStatus(cpe, demo.TODAY);
+  // A certificate whose issue date was never recorded has no expiry to compute.
+  const cpe = p.cpeIssuedOn ? cpeExpiryDeadline(p.name, p.cpeIssuedOn) : null;
+  const cpeState = cpe ? deadlineStatus(cpe, demo.TODAY) : null;
   const syndic = p.syndicMandateStart ? syndicMandateDeadline(p.syndicName ?? "", p.syndicMandateStart) : null;
   const unitLabel = (id: string | null) =>
     id ? demo.UNITS.find((u) => u.id === id)?.label ?? d.biens.metersCommon : d.biens.metersCommon;
@@ -719,7 +740,9 @@ export function Technical({
           items={[
             {
               k: d.biens.cpeRow,
-              v: p.energyClass ? (
+              v: p.energyClass && !cpe ? (
+                <Badge className="bg-amber-100 text-amber-800">{fmt(d.biens.cpeBadgeUndated, { cls: p.energyClass })}</Badge>
+              ) : p.energyClass && cpe ? (
                 <Badge
                   className={
                     cpeState === "overdue"
@@ -837,8 +860,9 @@ export function Interventions({
     <Panel
       title={d.hubs.interventions}
       action={
+        // The list here is already this property's own: the link says it leaves for the whole workspace's.
         <Link href="/app/interventions" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
-          {d.bien.seeAll}
+          {d.bien.allInterventions}
         </Link>
       }
     >
@@ -1090,6 +1114,7 @@ export function modifyLabels(d: Dict) {
     failed: d.modify.failed,
     emailTaken: d.modify.emailTaken,
     schemaOutdated: d.modify.schemaOutdated,
+    datePlaceholder: d.loyers.datePlaceholder,
     photoCurrent: d.modify.photoCurrent,
     photoChoose: d.modify.photoChoose,
     photoRemove: d.modify.photoRemove,

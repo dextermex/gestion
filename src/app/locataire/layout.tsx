@@ -1,25 +1,30 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import GestionLogo from "@/components/gestion/GestionLogo";
+import KeepFresh from "@/components/KeepFresh";
 import ScrollHeader from "@/components/gestion/ScrollHeader";
+import SessionKeeper from "@/components/gestion/SessionKeeper";
+import DegradedBanner from "@/components/gestion/DegradedBanner";
 import TenantAccountMenu from "@/components/gestion/TenantAccountMenu";
 import TenantBottomNav from "@/components/gestion/TenantBottomNav";
 import TenantTabs from "@/components/gestion/TenantTabs";
+import UnreadWatch from "@/components/gestion/UnreadWatch";
 import { TenantBecomeOwner, TenantSampleBanner } from "@/components/gestion/TenantChrome";
 import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
-import { SEEN_COOKIE, parseSeen } from "@/lib/portal/seen";
+import { latestMoment, unreadSignature } from "@/lib/gestion/threads";
 import { getTenantView } from "@/lib/portal/space";
 import { todoFor, unreadCount } from "@/lib/portal/view";
 import { getSession } from "@/lib/supabase/server";
+import { REQUESTED_PATH_HEADER, signInAddress } from "@/lib/auth/return-path";
 
-export const metadata: Metadata = {
-  title: "Morada Gestion · Espace locataire",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n();
+  return { title: `Morada Gestion · ${d.tenant.space}`, robots: { index: false, follow: false } };
+}
 
 /**
  * The tenant's space: five destinations, one header, no configuration. The
@@ -39,13 +44,15 @@ export const metadata: Metadata = {
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const { d } = await getI18n();
   const view = await getTenantView();
-  if (view.kind === "signed_out") redirect("/connexion?next=/locataire");
+  // Signing in returns to the page that was asked for (the middleware names it).
+  if (view.kind === "signed_out") redirect(signInAddress((await headers()).get(REQUESTED_PATH_HEADER), "locataire"));
   const session = await getSession();
   const { space, sample, canManage } = view;
   const sampleCabinet = sample ? (await getDemo()).ORG.shortName : null;
 
-  // What the other side wrote since this browser last showed the conversation (or since the tenant's own last word).
-  const unread = unreadCount(space.conversations, parseSeen((await cookies()).get(SEEN_COOKIE)?.value));
+  // What the other side wrote that this account has not read: the database's count, the same on every device.
+  const unread = unreadCount(space.conversations);
+  const lastMessageAt = latestMoment(space.conversations.map((c) => c.lastMessageAt));
   const unreadBadge = unread > 0 ? { count: unread, label: fmt(d.tenant.unreadAria, { n: unread }) } : undefined;
   // A paper the tenant still owes (the insurance certificate) is said where the documents are.
   const toSend = space.current ? todoFor(space.current, space.payments, space.today).filter((a) => a.kind === "insurance_missing").length : 0;
@@ -61,6 +68,9 @@ export default async function TenantLayout({ children }: { children: React.React
 
   return (
     <div className="tenant-space min-h-dvh bg-sand-50">
+      {/* The documents and photographs of this space are links signed for an hour: a page left open is read again before they run out. */}
+      <KeepFresh />
+      {session && <SessionKeeper />}
       {/* A conversation filling a phone's screen (Messages, `html[data-phone-chat]`)
           is the whole screen: the bar, the sample line, the foot and the bottom bar
           step aside, and the conversation's own header takes the top. */}
@@ -77,9 +87,9 @@ export default async function TenantLayout({ children }: { children: React.React
           </span>
           {canManage && (
             <nav aria-label={d.shell.roleAria} className="ml-1 flex gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1 max-sm:hidden">
-              <a href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
+              <Link href="/app" className="rounded-lg px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink">
                 {d.shell.roleOwner}
-              </a>
+              </Link>
               <span aria-current="true" className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-brand-800 shadow-sm">
                 {d.shell.roleTenant}
               </span>
@@ -91,7 +101,7 @@ export default async function TenantLayout({ children }: { children: React.React
               name={space.me.name}
               email={space.me.email}
               signedIn={Boolean(session)}
-              labels={{ menu: d.tenant.accountMenu, profile: d.tenant.navProfile, settings: d.tenant.navSettings, signOut: d.tenant.signOutShort, sampleNotice: d.common.demoNotice }}
+              labels={{ menu: d.tenant.accountMenu, profile: d.tenant.navProfile, settings: d.tenant.navSettings, documents: d.tenant.navDocuments, help: d.tenant.navHelp, signOut: d.tenant.signOutShort, sampleNotice: d.common.demoNotice }}
             />
           )}
         </div>
@@ -105,6 +115,8 @@ export default async function TenantLayout({ children }: { children: React.React
           <TenantSampleBanner text={fmt(d.shell.sampleBanner, { cabinet: sampleCabinet })} back={d.shell.sampleBack} />
         </div>
       )}
+
+      {space.degraded && <DegradedBanner text={d.shell.readDegraded} retry={d.shell.readRetry} />}
 
       {/* A conversation open over the phone's screen gets the screen whole: no gutter, no width limit. */}
       <main className="tenant-main mx-auto w-full max-w-6xl px-safe-4 py-6 max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6">{children}</main>
@@ -136,6 +148,8 @@ export default async function TenantLayout({ children }: { children: React.React
           ],
         }}
       />
+      {/* The count stays current without a reload: a light read now and then, the page read again when it differs. */}
+      {!sample && session && <UnreadWatch endpoint="/api/locataire/messages" signature={unreadSignature(unread, lastMessageAt)} fastOn="/locataire/messages" />}
     </div>
   );
 }

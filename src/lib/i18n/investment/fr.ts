@@ -1,4 +1,5 @@
 export const investmentFr = {
+  datePlaceholder: "jj/mm/aaaa",
   allocationNeeded: "Ce lot partage un crédit du bâtiment. Consultez la projection de l’ensemble du bien tant que le financement n’est pas réparti entre les lots.", unitScopeHint: "Projection du lot sélectionné et des crédits qui lui sont directement rattachés. Les dépôts et charges locatives sont exclus.",
   loans: "Crédits immobiliers", acquisitions: "Projets d’achat", simulator: "Simuler un achat",
   loansHint: "Vos remboursements, vos soldes et le revenu disponible de vos biens.",

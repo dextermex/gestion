@@ -28,7 +28,10 @@ export default async function TenantPaymentsPage() {
   const ended = space.current === null;
   const pay = space.payments ?? paymentsOf(lease, space.today);
   const due = rentDue(lease, space.today);
-  const owed = !ended && due.lateCents > 0;
+  // Owed is owed, in force or not: the balance and the way to pay it stay on screen.
+  const owed = due.lateCents > 0;
+  // The tenant's other tenancies in force, each with its own ledger and reference.
+  const others = space.others.map((o) => ({ lease: o, late: rentDue(o, space.today).lateCents }));
   const onlyLate = due.latePeriods.length === 1 ? due.latePeriods[0] : null;
   const rentMeta = rentStatusMeta(d) as Record<string, Meta>;
   const metaOf = (status: string): Meta => rentMeta[status] ?? rentMeta[status === "partial_late" ? "late" : "pending"];
@@ -47,7 +50,7 @@ export default async function TenantPaymentsPage() {
         <p className="mt-1 text-sm text-ink-soft">{d.tenant.paySub}</p>
       </div>
 
-      {!ended && (
+      {(!ended || owed) && (
         <Card className="tenant-payment-summary mb-5 p-5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{owed ? d.tenant.dueNowTitle : d.tenant.payCurrentTitle}</p>
           {owed || current ? (
@@ -133,7 +136,16 @@ export default async function TenantPaymentsPage() {
         </Card>
       )}
 
-      {!ended && (
+      {/* Money received above what was due: the tenant reads the same credit the owner does. */}
+      {lease.creditCents > 0 && (
+        <Card className="mb-5 p-5" data-tenant-credit>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.creditTitle}</p>
+          <p className="mt-1 font-display text-2xl font-bold tracking-tight tabular-nums text-emerald-800">{euros(lease.creditCents, locale)}</p>
+          <p className="mt-1 text-sm text-ink-soft">{fmt(ended ? d.tenant.creditEnded : d.tenant.creditBody, { amount: euros(lease.creditCents, locale) })}</p>
+        </Card>
+      )}
+
+      {(!ended || owed) && (
         <Card className="mb-5 p-5" data-pay-instructions>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.payInstructions}</p>
           {instructions ? (
@@ -166,6 +178,23 @@ export default async function TenantPaymentsPage() {
           ) : (
             <p className="mt-2 text-sm text-ink-soft">{d.tenant.payNoInstructions}</p>
           )}
+        </Card>
+      )}
+
+      {others.length > 0 && (
+        <Card className="mb-5 p-5" data-pay-others>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{d.tenant.othersTitle}</p>
+          <ul className="mt-2 divide-y divide-sand-100">
+            {others.map(({ lease: o, late }) => (
+              <li key={o.id} className="py-2.5 text-sm">
+                <p className="font-semibold text-ink">{`${o.unit.label} · ${o.property.name}`}</p>
+                <p className={late > 0 ? "mt-0.5 font-semibold tabular-nums text-red-700" : "mt-0.5 text-ink-soft"}>
+                  {late > 0 ? fmt(d.tenant.otherDueNow, { amount: euros(late, locale) }) : d.tenant.rentOk}
+                </p>
+                {o.rfReference && <p className="mt-0.5 tabular-nums text-ink-soft">{fmt(d.tenant.otherReference, { ref: o.rfReference })}</p>}
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 

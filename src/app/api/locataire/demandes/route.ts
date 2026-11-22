@@ -4,9 +4,10 @@ import { createTenantRequest, parseRequestInput } from "@/lib/portal/requests";
 import { leaseSubject, ticketRef } from "@/lib/portal/types";
 
 /**
- * A tenant's new request. The lease it lands on is not taken from the
- * request: it is the tenancy in force that `my_home()` returns for this
- * account, so a forged id changes nothing. The request then takes its place
+ * A tenant's new request. The lease it lands on is one of the tenancies in
+ * force that `my_home()` returns for this account: the one the form names
+ * (a tenant with a second lot chooses), else the latest to start. A forged
+ * id finds nothing. The request then takes its place
  * in the tenancy's conversation. Photos are not part of this body: the
  * browser sends them afterwards to `/api/locataire/demandes/[id]/pieces`,
  * which stores each file and only then records it, so no document row ever
@@ -24,7 +25,11 @@ export async function POST(req: NextRequest) {
 
   const { data: homes, error: homeErr } = await g.rpc("my_home");
   if (homeErr) return NextResponse.json({ error: "storage_failed" }, { status: 502 });
-  const rows = ((homes as Array<Record<string, unknown>> | null) ?? []).filter((h) => h.lease_status === "active" || h.lease_status === "notice");
+  // The tenancies in force, the latest to start first: the one a request lands on when none is named.
+  const rows = ((homes as Array<Record<string, unknown>> | null) ?? [])
+    .filter((h) => h.lease_status === "active" || h.lease_status === "notice")
+    .sort((a, b) => (String(a.start_date) < String(b.start_date) ? 1 : String(a.start_date) > String(b.start_date) ? -1 : 0));
+  // One the tenant named, if it is one of their own in force; a forged or ended one finds nothing.
   const wanted = str(body.leaseId, 64);
   const home = (wanted ? rows.find((h) => h.lease_id === wanted) : rows[0]) ?? null;
   if (!home) return NextResponse.json({ error: "no_live_lease" }, { status: 409 });

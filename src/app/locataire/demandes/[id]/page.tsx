@@ -9,6 +9,8 @@ import { getDemo } from "@/lib/demo";
 import { getI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n/config";
 import { momentShort, visitWhen } from "@/lib/portal/format";
+import PieceThumb from "@/components/gestion/PieceThumb";
+import { tenantPieceLabels } from "@/lib/portal/labels";
 import { getTenantView } from "@/lib/portal/space";
 import { requestTimeline } from "@/lib/portal/view";
 import { formatDate, requestStateMeta, ticketSeverityMeta } from "@/lib/types";
@@ -57,6 +59,7 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
   const conversation = space.conversations.find((c) => c.id === request.conversationId) ?? space.conversations.find((c) => c.leaseId === request.leaseId) ?? null;
   const anchorAt = conversation?.messages.find((m) => m.ticketId === request.id)?.sentAt ?? request.createdAt;
   const managerName = space.managers.map((m) => m.name).filter(Boolean).join(" · ") || d.tenant.managerTitle;
+  const pieceLabels = tenantPieceLabels(d);
   // A step's date as its row gives it: with the hour when the row carries one, and said to be an update when that is all the row knows.
   const stepWhen = (step: (typeof steps)[number]): string => {
     const at = step.key === "sent" && anchorAt.length > 10 ? anchorAt : (step.at ?? "");
@@ -104,7 +107,14 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
             {visitAhead && when ? (
               <>
                 <p className="mt-1 font-display text-base font-bold text-ink">
-                  {visit?.artisanName ? fmt(d.tenant.nextVisit, { name: visit.artisanName, date: when.date, time: when.time }) : fmt(d.tenant.nextVisitAnon, { date: when.date, time: when.time })}
+                  {/* The hour only when the desk entered one: a visit planned for a day says the day. */}
+                  {when.time
+                    ? visit?.artisanName
+                      ? fmt(d.tenant.nextVisit, { name: visit.artisanName, date: when.date, time: when.time })
+                      : fmt(d.tenant.nextVisitAnon, { date: when.date, time: when.time })
+                    : visit?.artisanName
+                      ? fmt(d.tenant.nextVisitDay, { name: visit.artisanName, date: when.date })
+                      : fmt(d.tenant.nextVisitAnonDay, { date: when.date })}
                 </p>
                 {live && <p className="mt-0.5 text-sm text-ink-soft">{d.tenant.nextVisitBody}</p>}
               </>
@@ -160,28 +170,21 @@ export default async function TenantRequestPage({ params }: { params: Promise<{ 
         {live && (
           <TenantReply
             leaseId={request.leaseId}
-            labels={{ placeholder: d.tenant.replyPlaceholder, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed }}
+            labels={{ placeholder: d.tenant.replyPlaceholder, send: d.tenant.threadSend, sent: d.tenant.threadSent, failed: d.tenant.threadFailed, sessionEnded: d.tenant.sessionEnded, signInAgain: d.tenant.signInAgain, forbidden: d.tenant.threadForbidden }}
             sampleNote={sampleNote}
-            before={open ? <TenantAddPhotos compact requestId={request.id} labels={{ add: d.tenant.attachPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed }} sampleNote={sampleNote} /> : undefined}
+            before={open ? <TenantAddPhotos compact requestId={request.id} labels={{ add: d.tenant.attachPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed, someFailed: d.tenant.filesSomeFailed, pieces: pieceLabels }} sampleNote={sampleNote} /> : undefined}
           />
         )}
       </Panel>
 
-      <Panel title={d.tenant.photosTitle} action={open && live ? <TenantAddPhotos requestId={request.id} labels={{ add: d.tenant.addPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed }} sampleNote={sampleNote} /> : undefined}>
+      <Panel title={d.tenant.photosTitle} action={open && live ? <TenantAddPhotos requestId={request.id} labels={{ add: d.tenant.addPhoto, uploading: d.tenant.uploading, added: d.tenant.photoAdded, failed: d.tenant.photoFailed, someFailed: d.tenant.filesSomeFailed, pieces: pieceLabels }} sampleNote={sampleNote} /> : undefined}>
         {request.attachments.length === 0 ? (
           <p className="text-sm text-ink-soft">{d.tenant.photosNone}</p>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {request.attachments.map((a) => (
               <li key={a.id} className="overflow-hidden rounded-xl border border-sand-200 bg-sand-50">
-                {a.url ? (
-                  <a href={a.url} target="_blank" rel="noreferrer" className="block">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
-                  </a>
-                ) : (
-                  <p className="p-3 text-xs text-ink-soft">{a.name}</p>
-                )}
+                <PieceThumb name={a.name} url={a.url} />
               </li>
             ))}
           </ul>

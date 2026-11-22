@@ -6,6 +6,13 @@ import { Button, Field, Input, Modal, Select, Spinner } from "@/components/pro/u
 import type { Dict } from "@/lib/i18n/fr";
 import { fmt } from "@/lib/i18n/config";
 import { callForm } from "./call";
+import { ApiProblemNote } from "@/components/gestion/ApiErrors";
+import { apiProblem, networkProblem, type ApiProblem } from "@/lib/api-errors";
+import { invalidDayField } from "@/lib/forms";
+import { MAX_DOCUMENT_BYTES } from "@/lib/gestion/documents-rules";
+import { IN_REQUEST_MAX_BYTES, putInBucket } from "@/lib/gestion/upload-client";
+import DateField from "./DateField";
+import { HERO_ACTION, HERO_ACTION_LABEL, HERO_ROUND } from "./Hero";
 
 /**
  * Bill intake for the finance module: forward-by-email inbox, a drop zone,
@@ -33,7 +40,8 @@ export default function BillUpload({
   unitOptions,
   ocr,
   writable,
-  sampleNote,
+  trigger = "button",
+  triggerLabel,
 }: {
   d: Dict;
   inbox: string;
@@ -43,16 +51,29 @@ export default function BillUpload({
   ocr: BillOcr | null;
   writable: boolean;
   sampleNote: string | null;
+  /** How the way in is drawn: a button, or the round action of a screen's head. */
+  trigger?: "button" | "round";
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const upload = (
+    <svg className={trigger === "round" ? "h-[22px] w-[22px]" : "h-4 w-4"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
   return (
     <>
-      <Button onClick={() => setOpen(true)} data-bill-add>
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
-        </svg>
-        {d.finance.addBill}
-      </Button>
+      {trigger === "round" ? (
+        <button type="button" onClick={() => setOpen(true)} data-bill-add aria-label={d.finance.addBill} className={HERO_ACTION}>
+          <span className={HERO_ROUND}>{upload}</span>
+          <span className={HERO_ACTION_LABEL}>{triggerLabel ?? d.finance.addBill}</span>
+        </button>
+      ) : (
+        <Button onClick={() => setOpen(true)} data-bill-add>
+          {upload}
+          {d.finance.addBill}
+        </Button>
+      )}
       {open && (
         <BillModal
           d={d}
@@ -61,7 +82,6 @@ export default function BillUpload({
           unitOptions={unitOptions}
           ocr={ocr}
           writable={writable}
-          sampleNote={sampleNote}
           onClose={() => setOpen(false)}
         />
       )}
@@ -78,7 +98,6 @@ function BillModal({
   unitOptions,
   ocr,
   writable,
-  sampleNote,
   onClose,
 }: {
   d: Dict;
@@ -87,18 +106,19 @@ function BillModal({
   unitOptions: Array<{ id: string; label: string }>;
   ocr: BillOcr | null;
   writable: boolean;
-  sampleNote: string | null;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [scan, setScan] = useState<ScanState>("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal in words (src/lib/api-errors.ts): which field, a piece too large, a session that ended.
+  const [problem, setProblem] = useState<ApiProblem | null>(null);
 
   const [direction, setDirection] = useState<"income" | "expense">("expense");
   const [supplier, setSupplier] = useState("");
@@ -108,8 +128,10 @@ function BillModal({
   const [dueDate, setDueDate] = useState("");
   const [paid, setPaid] = useState(false);
   const [cashflow, setCashflow] = useState(true);
-  const [unitId, setUnitId] = useState(unitOptions[0]?.id ?? "");
-  const [category, setCategory] = useState("maintenance_repairs");
+  // No lot and no category are chosen for the person: a bill for a whole building sits on no lot,
+  // and the category is the fiscal bucket the tax pack reads, so it is picked, never assumed.
+  const [unitId, setUnitId] = useState("");
+  const [category, setCategory] = useState("");
   const [vat, setVat] = useState("17");
   const [amount, setAmount] = useState("");
 
@@ -119,10 +141,12 @@ function BillModal({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(inbox);
+      setCopyFailed(false);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard can be unavailable — the address stays selectable.
+      // The clipboard can be refused or absent: the address stays on screen, selectable, and the form says so.
+      setCopyFailed(true);
     }
   };
 
@@ -131,7 +155,7 @@ function BillModal({
   const ingest = (chosen: File | null, name: string) => {
     setFileName(name);
     setFile(chosen);
-    setError(null);
+    setProblem(null);
     if (!ocr) {
       setScan("done");
       return;
@@ -164,9 +188,26 @@ function BillModal({
     { id: "other_frais", label: d.finance.billCatOther },
   ];
 
+  /** The route names the field it refuses (`problem`): the form says which one. */
+  const fieldLabels: Record<string, string> = {
+    subject: d.finance.billSubject,
+    category: d.finance.billCategory,
+    vat: d.finance.billVat,
+    amount: d.finance.amountTotal,
+    date: d.finance.billDocDate,
+    unit: d.finance.billUnit,
+    supplier: d.finance.billSupplier,
+  };
+
   /** The bill, written; the books are re-read behind the dialog. */
-  const submit = async () => {
-    setError(null);
+  const submit = async (formEl: HTMLFormElement) => {
+    setProblem(null);
+    // A date typed that is not a day is corrected before anything is sent: it would otherwise be saved as no date.
+    const badDay = invalidDayField(formEl);
+    if (badDay) {
+      badDay.focus();
+      return;
+    }
     if (!writable) {
       setSubmitted(true);
       return;
@@ -174,7 +215,18 @@ function BillModal({
     setBusy(true);
     try {
       const form = new FormData();
-      if (file) form.set("file", file);
+      if (file && file.size > IN_REQUEST_MAX_BYTES) {
+        // Larger than a request carries: straight to the bucket first, then the bill names it.
+        const put = await putInBucket(file, "/app/finance");
+        if (!put) return;
+        if (!("path" in put)) {
+          setProblem(apiProblem(put.status, put.payload, d.apiErrors, { fallback: d.finance.billFailed, maxMb: MAX_DOCUMENT_BYTES / (1024 * 1024), codes: { unsupported_type: d.finance.billBadType } }));
+          setBusy(false);
+          return;
+        }
+        form.set("uploadedPath", put.path);
+        form.set("fileName", file.name);
+      } else if (file) form.set("file", file);
       form.set("direction", direction);
       form.set("supplierContactId", supplier);
       form.set("subject", subject);
@@ -187,226 +239,211 @@ function BillModal({
       form.set("category", category);
       form.set("vatRate", vat);
       form.set("amount", amount);
-      const res = await callForm("/api/finance/factures", form, "/app/finance");
+      // The form holds a piece and what was typed: a session that ended is said here, never a page change.
+      const res = await callForm("/api/finance/factures", form, null);
       if (!res) return;
       if (res.ok) {
         setSubmitted(true);
         router.refresh();
-      } else setError(res.status === 400 ? d.finance.billInvalid : res.status === 413 ? d.finance.billTooLarge : res.status === 415 ? d.finance.billBadType : d.finance.billFailed);
+      } else {
+        const refusal = apiProblem(res.status, res.payload, d.apiErrors, {
+          keepsInput: true,
+          returnTo: "/app/finance",
+          fallback: d.finance.billFailed,
+          fields: fieldLabels,
+          maxMb: MAX_DOCUMENT_BYTES / (1024 * 1024),
+          codes: { unsupported_type: d.finance.billBadType },
+        });
+        // A refusal that names no field keeps the form's own reminder of what to check.
+        setProblem(refusal.kind === "invalid" && !(refusal.field && fieldLabels[refusal.field]) ? { ...refusal, message: d.finance.billInvalid } : refusal);
+      }
     } catch {
-      setError(d.finance.billFailed);
+      setProblem(networkProblem(d.apiErrors));
     }
     setBusy(false);
   };
 
-  return (
-    <Modal open onClose={onClose} title={d.finance.addBill} wide closeLabel={d.common.close}>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        {/* Intake — forward by email, or drop the file */}
-        <div className="space-y-4 lg:col-span-2">
-          <div className="rounded-xl border border-sand-200 bg-sand-50/60 p-4">
-            <p className="text-sm font-semibold text-ink">{d.finance.billForwardTitle}</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-soft">{d.finance.billForwardBody}</p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-800">
-                {inbox}
-              </code>
-              <button
-                onClick={copy}
-                className="tactile shrink-0 rounded-lg border border-sand-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700"
-              >
-                {copied ? d.finance.billCopied : d.finance.billCopy}
-              </button>
-            </div>
-          </div>
+  const fileState =
+    scan === "scanning" ? d.finance.billScanning : scan === "done" ? (ocr ? d.finance.billScanned : fmt(d.finance.billFileChosen, { name: fileName ?? "" })) : d.finance.attach;
 
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label={d.finance.billDropTitle}
-            onClick={() => fileInput.current?.click()}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileInput.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              const dropped = e.dataTransfer.files[0] ?? null;
-              ingest(dropped, dropped?.name ?? "facture.pdf");
-            }}
-            className={
-              "flex min-h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center transition-colors duration-150 " +
-              (dragOver ? "border-brand-400 bg-brand-50/60" : "border-sand-300 bg-white hover:border-brand-300")
-            }
-          >
-            <input
-              ref={fileInput}
-              id="bill-file"
-              type="file"
-              accept={ACCEPT}
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && ingest(e.target.files[0], e.target.files[0].name)}
-            />
-            {scan === "scanning" ? (
-              <>
-                <Spinner size={24} />
-                <p className="text-sm font-semibold text-ink">{d.finance.billScanning}</p>
-                {fileName && <p className="text-xs text-ink-soft">{fileName}</p>}
-              </>
-            ) : scan === "done" ? (
-              <>
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="h-5 w-5" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                  </svg>
-                </span>
-                <p role="status" className="text-sm font-semibold text-ink">
-                  {ocr ? d.finance.billScanned : fmt(d.finance.billFileChosen, { name: fileName ?? "" })}
-                </p>
-                {ocr && fileName && <p className="text-xs text-ink-soft">{fileName}</p>}
-              </>
-            ) : (
-              <>
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-700">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
-                  </svg>
-                </span>
-                <p className="text-sm font-semibold text-ink">{d.finance.billDropTitle}</p>
-                <p className="text-xs text-ink-soft">{d.finance.billDropBody}</p>
-              </>
-            )}
-          </div>
-          <p className="text-[11px] leading-relaxed text-ink-soft">{ocr ? d.finance.billOcrNote : d.finance.billFile}</p>
+  return (
+    <Modal open onClose={onClose} title={d.finance.addBill} closeLabel={d.common.close}>
+      <form
+        className="space-y-3.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit(e.currentTarget);
+        }}
+      >
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1" role="radiogroup">
+          {(["expense", "income"] as const).map((dir) => (
+            <button
+              key={dir}
+              type="button"
+              role="radio"
+              aria-checked={direction === dir}
+              onClick={() => setDirection(dir)}
+              className={
+                "min-h-10 rounded-lg px-3 py-1.5 text-sm font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+                (direction === dir ? "bg-brand-600 text-white shadow-sm" : "text-ink-soft hover:text-ink")
+              }
+            >
+              {dir === "income" ? d.finance.billIncome : d.finance.billExpense}
+            </button>
+          ))}
         </div>
 
-        {/* Transaction form */}
-        <form
-          className="space-y-3.5 lg:col-span-3"
-          onSubmit={(e) => {
+        {/* What every bill needs, in the order it is read off the paper. */}
+        <Field label={d.finance.amountTotal}>
+          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" className="text-xl font-semibold tabular-nums" />
+        </Field>
+        <Field label={d.finance.billSubject}>
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={140} />
+        </Field>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label={d.finance.billSupplier}>
+            <Select value={supplier} onChange={(e) => setSupplier(e.target.value)}>
+              <option value="">{d.finance.billSupplierNone}</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={d.finance.billUnit}>
+            <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+              <option value="">{d.finance.billUnitNone}</option>
+              {unitOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <Field label={d.finance.billDocDate}>
+          <DateField value={docDate} onChange={setDocDate} placeholder={d.loyers.datePlaceholder} />
+        </Field>
+        {/* The fiscal bucket and the VAT are part of the bill: in sight, so neither is saved on a default nobody saw. */}
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label={d.finance.billCategory}>
+            <Select value={category} onChange={(e) => setCategory(e.target.value)} required>
+              <option value="">{d.finance.billSupplierNone}</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={d.finance.billVat}>
+            <Select value={vat} onChange={(e) => setVat(e.target.value)}>
+              <option value="17">17 %</option>
+              <option value="14">14 %</option>
+              <option value="8">8 %</option>
+              <option value="3">3 %</option>
+              <option value="0">{d.finance.billVatExempt}</option>
+            </Select>
+          </Field>
+        </div>
+
+        {/* The paper itself: one line to tap or drop on. */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={d.finance.billDropTitle}
+          onClick={() => fileInput.current?.click()}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileInput.current?.click()}
+          onDragOver={(e) => {
             e.preventDefault();
-            void submit();
+            setDragOver(true);
           }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            // Only a file is a piece: a dragged link or a line of text chooses nothing.
+            const dropped = e.dataTransfer.files[0];
+            if (dropped) ingest(dropped, dropped.name);
+          }}
+          className={
+            "flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border border-dashed px-4 py-2.5 transition-colors duration-150 " +
+            (dragOver ? "border-brand-400 bg-brand-50/60" : scan === "done" ? "border-emerald-300 bg-emerald-50/50" : "border-sand-300 bg-white hover:border-brand-300")
+          }
         >
-          <div className="grid grid-cols-2 gap-1 rounded-xl border border-sand-200 bg-sand-50 p-1" role="radiogroup">
-            {(["income", "expense"] as const).map((dir) => (
-              <button
-                key={dir}
-                type="button"
-                role="radio"
-                aria-checked={direction === dir}
-                onClick={() => setDirection(dir)}
-                className={
-                  "rounded-lg px-3 py-1.5 text-sm font-semibold transition duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] " +
-                  (direction === dir ? "bg-brand-600 text-white shadow-sm" : "text-ink-soft hover:text-ink")
-                }
-              >
-                {dir === "income" ? d.finance.billIncome : d.finance.billExpense}
+          <input ref={fileInput} id="bill-file" type="file" accept={ACCEPT} className="hidden" onChange={(e) => e.target.files?.[0] && ingest(e.target.files[0], e.target.files[0].name)} />
+          <span className={"grid h-9 w-9 shrink-0 place-items-center rounded-full " + (scan === "done" ? "bg-emerald-100 text-emerald-700" : "bg-brand-50 text-brand-700")}>
+            {scan === "scanning" ? (
+              <Spinner size={18} />
+            ) : scan === "done" ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="h-4 w-4" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+              </svg>
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span role={scan === "done" ? "status" : undefined} className="block truncate text-sm font-semibold text-ink">{fileState}</span>
+            <span className="block truncate text-xs text-ink-soft">{scan === "idle" ? d.finance.attachHint : (fileName ?? "")}</span>
+          </span>
+        </div>
+
+        {/* What an accountant asks for; a bill is complete without it. */}
+        <details className="group rounded-2xl border border-sand-200 bg-sand-50/50">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 [&::-webkit-details-marker]:hidden">
+            {d.finance.moreDetails}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-ink-soft transition-transform group-open:rotate-90" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" />
+            </svg>
+          </summary>
+          <div className="space-y-3.5 border-t border-sand-200 px-4 py-4">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label={d.finance.billDocNo}>
+                <Input value={docNo} onChange={(e) => setDocNo(e.target.value)} maxLength={40} />
+              </Field>
+              <Field label={d.finance.billDueDate}>
+                <DateField value={dueDate} onChange={setDueDate} placeholder={d.loyers.datePlaceholder} />
+              </Field>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              <Toggle checked={paid} onChange={setPaid} label={d.finance.billPaid} />
+              <Toggle checked={cashflow} onChange={setCashflow} label={d.finance.billCashflow} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-sand-200 pt-3">
+              <p className="text-xs font-semibold text-ink-soft">{d.finance.billForwardTitle}</p>
+              <code className="min-w-0 flex-1 select-all truncate rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-800">{inbox}</code>
+              <button type="button" onClick={copy} className="tactile shrink-0 rounded-lg border border-sand-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:border-brand-300 hover:text-brand-700 max-sm:min-h-10">
+                {copied ? d.finance.billCopied : d.finance.billCopy}
               </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={d.finance.billSupplier}>
-              <Select value={supplier} onChange={(e) => setSupplier(e.target.value)}>
-                <option value="">{d.finance.billSupplierNone}</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={d.finance.billSubject}>
-              <Input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={140} />
-            </Field>
-            <Field label={d.finance.billDocNo}>
-              <Input value={docNo} onChange={(e) => setDocNo(e.target.value)} maxLength={40} />
-            </Field>
-            <Field label={d.finance.billDocDate}>
-              <Input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} />
-            </Field>
-            <Field label={d.finance.billDueDate}>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </Field>
-            <Field label={d.finance.billUnit}>
-              <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                {unitOptions.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={d.finance.billCategory}>
-              <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={d.finance.billVat}>
-                <Select value={vat} onChange={(e) => setVat(e.target.value)}>
-                  <option value="17">17 %</option>
-                  <option value="14">14 %</option>
-                  <option value="8">8 %</option>
-                  <option value="3">3 %</option>
-                  <option value="0">{d.finance.billVatExempt}</option>
-                </Select>
-              </Field>
-              <Field label={d.finance.billAmount}>
-                <Input
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0,00"
-                  className="text-right tabular-nums"
-                />
-              </Field>
+              {copyFailed && (
+                <p role="status" className="basis-full text-xs font-semibold text-amber-800">
+                  {d.finance.billCopyFailed}
+                </p>
+              )}
             </div>
           </div>
+        </details>
 
-          <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
-            <Toggle checked={paid} onChange={setPaid} label={d.finance.billPaid} />
-            <Toggle checked={cashflow} onChange={setCashflow} label={d.finance.billCashflow} />
-          </div>
+        {submitted && (
+          <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+            {writable ? d.finance.billCreated : d.common.demoCreateNotice}
+          </p>
+        )}
+        <ApiProblemNote problem={problem} className="text-xs font-semibold text-red-700" />
 
-          {submitted && (
-            <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-              {writable ? d.finance.billCreated : d.common.demoCreateNotice}
-            </p>
-          )}
-          {error && (
-            <p role="alert" className="text-xs font-semibold text-red-700">
-              {error}
-            </p>
-          )}
-          {!writable && sampleNote && <p className="text-[11px] text-amber-900/80">{sampleNote}</p>}
-
-          <div className="flex items-center justify-between gap-3 border-t border-sand-100 pt-4">
-            <p className="text-sm text-ink-soft">
-              {d.finance.billTotal}{" "}
-              <span className="font-display text-base font-bold tabular-nums text-ink">
-                {amount.trim() ? `${amount} €` : "0,00 €"}
-              </span>
-            </p>
-            <div className="flex gap-2">
-              <Button type="button" variant="ghost" onClick={onClose}>
-                {d.common.cancel}
-              </Button>
-              <Button type="submit" loading={busy} disabled={submitted && writable}>
-                {d.finance.billCreate}
-              </Button>
-            </div>
-          </div>
-        </form>
-      </div>
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {d.common.cancel}
+          </Button>
+          <Button type="submit" loading={busy} disabled={submitted && writable}>
+            {d.finance.billCreate}
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

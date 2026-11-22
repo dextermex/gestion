@@ -7,14 +7,19 @@
  */
 export type CsvCell = string | number;
 
+/**
+ * A spreadsheet reads a cell that begins with =, +, - or @ as a formula. A
+ * name somebody typed (a property, an owner, a line's label) is text: it is
+ * written with a leading apostrophe, which the spreadsheet shows as text
+ * and does not compute. A figure this file wrote itself ("-12,50") stays a
+ * figure.
+ */
+function asText(s: string): string {
+  return /^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+([.,]\d+)?$/.test(s) ? `'${s}` : s;
+}
+
 function escape(v: CsvCell): string {
-  let s = String(v);
-  // Neutralise a spreadsheet formula lead (= + - @ TAB CR) so a cell a person
-  // typed cannot run on open (DDE / HYPERLINK / WEBSERVICE). A genuine number,
-  // including a negative amount like "-123,45" from csvEuros, is left intact.
-  if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(?:[.,]\d+)?$/.test(s)) {
-    s = "'" + s;
-  }
+  const s = typeof v === "number" ? String(v) : asText(v);
   return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

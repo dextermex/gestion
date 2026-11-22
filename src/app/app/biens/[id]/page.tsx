@@ -88,7 +88,8 @@ export default async function BienDetailPage({
   return (
     <div>
       <div className="mb-3">
-        <Link href="/app/biens" className="text-sm font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center">
+        <Link href="/app/biens" className="inline-flex items-center gap-0.5 text-sm font-semibold text-brand-700 hover:underline max-sm:min-h-10">
+          <Icon name="chevron-left" size={16} />
           {d.biens.backToList}
         </Link>
       </div>
@@ -100,7 +101,7 @@ export default async function BienDetailPage({
           shown at all. The title row dissolves into the column (`contents`) so its two
           children can take their places; above `sm` the layout is the one declared. */}
       <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
-        <div className={"aspect-[4/3] w-full overflow-hidden rounded-2xl max-sm:order-2 max-sm:aspect-[16/9]" + (p.photoUrl ? "" : " max-sm:hidden")}>
+        <div className="aspect-[4/3] w-full overflow-hidden rounded-2xl max-sm:aspect-[16/9]" data-cover>
           <PropertyPhoto
             url={p.photoUrl}
             kind={card.kind}
@@ -108,7 +109,7 @@ export default async function BienDetailPage({
             rounded="rounded-2xl"
           />
         </div>
-        <div className="min-w-0 max-sm:order-1 max-sm:flex max-sm:flex-col">
+        <div className="min-w-0 max-sm:flex max-sm:flex-col">
           <div className="flex flex-wrap items-start justify-between gap-3 max-sm:contents">
             <div className="flex min-w-0 flex-wrap items-center gap-3 max-sm:order-1">
               <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">{p.name}</h1>

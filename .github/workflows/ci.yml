@@ -68,6 +68,8 @@ jobs:
           echo "E2E_DB_URL=$DB_URL" >> "$GITHUB_ENV"
       - name: Database security audit (RLS on every table, anon locked out, definers pinned)
         run: psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -f e2e/db/rls-audit.sql
+      - name: Isolation audit (no row points across workspaces, tenant clock, archive cascade, link guards)
+        run: psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -f e2e/db/isolation-audit.sql
       - name: Install browsers
         run: npx playwright install --with-deps chromium webkit
       - name: Build the app against the local stack

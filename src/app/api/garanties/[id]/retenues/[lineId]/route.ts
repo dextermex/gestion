@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { undoArrearsSettlement } from "@/lib/banking/retention";
 import { withOrg, dbError } from "@/lib/gestion/api";
 import { loadSettlement } from "@/lib/gestion/deposit-settlement";
 import { ownedDocument } from "@/lib/gestion/documents";
 import { settlementOpen } from "@/lib/gestion/deposits";
 import { computeSettlement } from "@/domain/deposits/settlement";
+import { todayISO } from "@/lib/clock";
 
 /**
  * One retention line: justified on a date by a piece (an invoice or an
@@ -26,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { g, org } = ctx;
   const { id, lineId } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const justifiedOn = str(body.justifiedOn, 10);
   const documentId = str(body.documentId, 64);
   if (!ISO.test(justifiedOn) || Number.isNaN(Date.parse(justifiedOn)) || justifiedOn > today) {
@@ -76,7 +78,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (ctx instanceof NextResponse) return ctx;
   const { g, org } = ctx;
   const { id, lineId } = await params;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const loaded = await loadSettlement(ctx, id, today);
   if ("error" in loaded) return loaded.error === "not_found" ? NextResponse.json({ error: "not_found" }, { status: 404 }) : dbError(loaded.context, loaded.detail);
@@ -85,6 +87,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!settlementOpen(loaded.deposit.status, loaded.deposit.keyHandoverOn)) return NextResponse.json({ error: "not_open" }, { status: 409 });
   if (line.justifiedAt && line.justificationDocumentId) return NextResponse.json({ error: "refused" }, { status: 409 });
 
+  // An arrears line withdrawn takes back what it settled: the months are owed again.
+  if (line.kind === "arrears" && !(await undoArrearsSettlement(ctx, lineId))) return NextResponse.json({ error: "storage_failed" }, { status: 502 });
   const { data, error } = await g.from("deposit_deductions").delete().eq("org_id", org.id).eq("id", lineId).eq("deposit_id", id).select("id");
   if (error) return dbError("deposit deduction delete", error);
   if (!data?.length) return NextResponse.json({ error: "not_found" }, { status: 404 });

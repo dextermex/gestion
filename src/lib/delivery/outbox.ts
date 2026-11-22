@@ -3,7 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { APP_URL } from "@/lib/constants";
 import type { GestionReader } from "@/lib/demo/data-real";
 import type { OrgContext } from "@/lib/gestion/api";
+import { shareDocument } from "@/lib/gestion/documents";
 import { MEDIA_BUCKET } from "@/lib/gestion/media";
+import { RATE, withinRate } from "@/lib/gestion/rate-limit";
 import { getDict } from "@/lib/i18n";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { mailConfigured, sendMail, type MailMessage } from "@/lib/mail";
@@ -137,6 +139,12 @@ export async function notifyTenantsOfMessage(ctx: OrgContext, input: { leaseId: 
     if (!settings.notifyTenant) return [];
     const recipients = await tenantRecipients(ctx, input.leaseId, settings.lang);
     if (recipients.length === 0) return [];
+    // The message is written whatever happens here; the e-mails that announce
+    // it are counted per person and per workspace, and past the limit none leaves.
+    if (mailConfigured() && !(await withinRate(ctx.g, RATE.mailMessage, ctx.org.id))) {
+      console.warn("tenant notification held back: over the hourly limit");
+      return [];
+    }
     const home = await homeOf(ctx, input.leaseId);
     const out: DeliveryOutcome[] = [];
     for (const r of recipients) {
@@ -178,18 +186,21 @@ export async function leaseOfConversation(ctx: OrgContext, conversationId: strin
   return null;
 }
 
-export type SendDocumentFailure = "not_found" | "no_recipient" | "storage_failed";
+export type SendDocumentFailure = "not_found" | "no_recipient" | "storage_failed" | "already_sent";
 
 /**
  * A piece of the tenancy, mailed to its tenants with the PDF attached: the
  * document's own kind names it, in each tenant's language. Only a piece
- * related to a lease of the workspace, with a file behind it.
+ * related to a lease of the workspace, with a file behind it. A piece that
+ * already left is not sent again unless asked (`again`): the answer says
+ * to whom and when it went.
  */
 export async function sendDocumentByMail(
   ctx: OrgContext,
   client: SupabaseClient,
   documentId: string,
-): Promise<{ name: string; deliveries: DeliveryOutcome[] } | { error: SendDocumentFailure }> {
+  opts: { again?: boolean } = {},
+): Promise<{ name: string; deliveries: DeliveryOutcome[] } | { error: SendDocumentFailure; emails?: string[]; sentAt?: string }> {
   const { data: doc, error } = await ctx.g.from("documents").select("id,name,storage_path,related_type,related_id").eq("org_id", ctx.org.id).eq("id", documentId).maybeSingle();
   if (error) {
     console.error("document lookup for mail failed:", error.code, error.message);
@@ -198,6 +209,14 @@ export async function sendDocumentByMail(
   const row = (doc as Row | null) ?? null;
   if (!row || s(row.related_type) !== "lease" || !s(row.related_id) || !s(row.storage_path)) return { error: "not_found" };
   const leaseId = s(row.related_id);
+  if (!opts.again) {
+    // Already left once: said, not repeated by a second click. (A base without the outbox has sent nothing.)
+    const { data: past } = await ctx.g.from("deliveries").select("recipient_email,sent_at,created_at").eq("org_id", ctx.org.id).eq("document_id", documentId).eq("status", "sent").order("created_at", { ascending: false }).limit(20);
+    const sent = ((past as Row[] | null) ?? []).filter((d) => s(d.recipient_email));
+    if (sent.length > 0) {
+      return { error: "already_sent", emails: [...new Set(sent.map((d) => s(d.recipient_email)))], sentAt: s(sent[0].sent_at) || s(sent[0].created_at) };
+    }
+  }
   const settings = await workspaceMail(ctx);
   const recipients = await tenantRecipients(ctx, leaseId, settings.lang);
   if (recipients.length === 0) return { error: "no_recipient" };
@@ -233,6 +252,8 @@ export async function sendDocumentByMail(
     });
     deliveries.push({ email: r.email, status: result.status, id });
   }
+  // What left for the tenants is theirs to read in their space too (a formal reminder is withheld until then).
+  if (deliveries.some((x) => x.status === "sent")) await shareDocument(ctx, documentId, true);
   return { name, deliveries };
 }
 
@@ -255,6 +276,11 @@ export async function notifyManagerFromTenant(
     }
     const target = ((targets as Row[] | null) ?? [])[0];
     if (!target || target.enabled === false || !s(target.email).includes("@")) return null;
+    // The tenant's word is kept whatever happens here; the e-mails to the desk are counted on the tenant.
+    if (mailConfigured() && !(await withinRate(g, RATE.mailFromTenant, null))) {
+      console.warn("manager notification held back: over the hourly limit");
+      return null;
+    }
     const { data: parties } = await g.rpc("my_lease_parties");
     const me = ((parties as Row[] | null) ?? []).find((p) => s(p.lease_id) === lease.id && p.is_me === true);
     const lang = localeOf(target.lang, "fr");

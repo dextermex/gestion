@@ -2,9 +2,10 @@
  * An email address or a phone number as the thing a phone does with it: a
  * tap writes or calls. On a laptop the same links open the mail client or
  * nothing at all, which is what they did as plain text. A missing value
- * shows the dash the rest of the product uses.
+ * shows what the caller passes: the placeholder of the dictionary
+ * (`common.none`), or nothing.
  */
-export function ContactLink({ email, phone, none = "—", className = "" }: { email?: string | null; phone?: string | null; none?: string; className?: string }) {
+export function ContactLink({ email, phone, none, className = "" }: { email?: string | null; phone?: string | null; /** What a missing value shows: the dictionary's placeholder, or nothing. */ none: string; className?: string }) {
   const base = "font-semibold text-brand-700 hover:underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center " + className;
   if (email) {
     return (

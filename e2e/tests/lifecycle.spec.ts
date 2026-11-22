@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHouse, daysFromNow, foldGettingStarted, inviteTenant, leaseIdOf, letLot, mail, nextStep, nextUntil, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus, createAccountFromInvitation } from "./helpers";
+import { createHouse, daysFromNow, foldGettingStarted, frDay, inviteTenant, leaseIdOf, letLot, mail, nextStep, nextUntil, signIn, signOutFromShell, signOutFromTenantSpace, signUp, typeAndKeepFocus, createAccountFromInvitation } from "./helpers";
 
 /**
  * One tenancy, start to finish, on the real database: the owner creates a
@@ -34,7 +34,8 @@ test("the owner creates a house", async ({ page }) => {
 
 test("the rental dossier is filled and activated", async ({ page }) => {
   await signIn(page, owner.email);
-  await letLot(page, unitId, tenant);
+  // The tenancy began ten days ago, so that a departure can be recorded for today further down.
+  await letLot(page, unitId, tenant, "1250", daysFromNow(-10));
   leaseId = await leaseIdOf(page, propertyId);
   await expect(page.getByText("Inviter le locataire")).toBeVisible();
 });
@@ -46,7 +47,9 @@ test("the tenant is invited; the link is refused to the wrong account", async ({
   await page.goto(`/invitation/${token}`);
   // The page's own notice (the framework's route announcer is an alert too).
   await expect(page.getByRole("alert").filter({ hasText: tenant.email })).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`/invitation/${token}`));
+  // The invitation's page, at an address that no longer names the token (it waits in a cookie the server reads).
+  await expect(page).toHaveURL(/\/invitation$/);
+  expect(page.url()).not.toContain(token);
   await page.goto("/locataire");
   // The owner is no tenant: the tenant space has nothing for this account.
   await expect(page.getByText(houseName)).toHaveCount(0);
@@ -172,6 +175,11 @@ test("the owner reads the chat, answers, tracks the request and opens an interve
   await page.keyboard.press("Escape");
   await page.goto("/app/interventions");
   await expect(page.getByText(requestTitle)).toBeVisible();
+  // Where a message or a request is shown, the row opens it: the lease's Messages tab, and Accueil's activity.
+  await page.goto(`/app/baux/${leaseId}?onglet=messages`);
+  await expect(page.locator("a[data-thread-link]").first()).toHaveAttribute("href", /\/app\/messages\?fil=/);
+  await page.goto("/app");
+  await expect(page.locator(`a[href="/app/messages?demande=${requestId}"]`).first()).toBeVisible();
   await signOutFromShell(page);
 });
 
@@ -260,13 +268,42 @@ test("another manager sees none of it", async ({ page }) => {
   await signOutFromShell(page);
 });
 
-test("the owner records the departure", async ({ page }) => {
+test("the owner gives notice of a departure ahead: the tenancy stays in force", async ({ page }) => {
   await signIn(page, owner.email);
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
   await foldGettingStarted(page);
   await page.getByRole("link", { name: "Enregistrer le départ du locataire" }).click();
   await page.waitForURL(/\/app\/biens\/depart\?bail=/);
-  await page.getByLabel("Date de fin du bail").fill(daysFromNow(45));
+  await page.getByLabel("Date de fin du bail").fill(frDay(daysFromNow(45)));
+  // A date ahead is a notice: the first step records it, the rest of the departure waits for the day.
+  await page.getByRole("button", { name: "Enregistrer le préavis" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: /Le départ de .+ est prévu le / })).toBeVisible({ timeout: 30_000 });
+  // The lot is still let: no new tenant is offered, the tenant is still on the sheet, the departure can be completed.
+  await expect(page.getByRole("button", { name: "Ajouter un nouveau locataire" })).toHaveCount(0);
+  await page.goto(`/app/biens/${propertyId}?onglet=location`);
+  await expect(page.getByText(`${tenant.first} ${tenant.last}`).first()).toBeVisible();
+  await expect(page.getByText(/Départ prévu le /).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Modifier ou finaliser le départ" })).toBeVisible();
+  await signOutFromShell(page);
+});
+
+test("the tenant on notice keeps the home and can still ask", async ({ page }) => {
+  await signIn(page, tenant.email, "/locataire");
+  await expect(page.getByText(houseName).first()).toBeVisible();
+  await expect(page.getByText("Votre location est terminée")).toHaveCount(0);
+  await page.goto("/locataire/demandes");
+  await expect(page.getByRole("button", { name: /nouvelle demande/i })).toBeVisible();
+  await signOutFromTenantSpace(page);
+});
+
+test("the owner records the departure on the day: the tenancy ends", async ({ page }) => {
+  await signIn(page, owner.email);
+  await page.goto(`/app/biens/${propertyId}?onglet=location`);
+  await foldGettingStarted(page);
+  await page.getByRole("link", { name: "Modifier ou finaliser le départ" }).click();
+  await page.waitForURL(/\/app\/biens\/depart\?bail=/);
+  // Today: the departure happens now, and the whole flow is walked.
+  await page.getByLabel("Date de fin du bail").fill(frDay(daysFromNow(0)));
   await nextStep(page, "Suivant"); // date → inventory
   await nextStep(page, "Plus tard"); // the exit inventory, later
   await nextUntil(page, page.getByRole("button", { name: "Confirmer le départ" }), 6); // meters, keys, outstanding, deposit
@@ -278,6 +315,7 @@ test("the owner records the departure", async ({ page }) => {
   // The lot is free again: no departure to record, and the tenancy is history.
   await page.goto(`/app/biens/${propertyId}?onglet=location`);
   await expect(page.getByRole("link", { name: "Enregistrer le départ du locataire" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Modifier ou finaliser le départ" })).toHaveCount(0);
   await page.goto(`/app/biens/${propertyId}?onglet=historique`);
   await expect(page.getByText(`${tenant.first} ${tenant.last}`).first()).toBeVisible();
 });
