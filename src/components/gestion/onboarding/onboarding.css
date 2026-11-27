@@ -56,9 +56,14 @@ html[data-setup-arrival] body { overflow: hidden; background: var(--color-brand-
 .setup-tour-ring { position: fixed; pointer-events: none; overflow: visible; }
 .setup-tour-ring rect { stroke-dasharray: 1; stroke-dashoffset: 1; animation: setup-ring 3s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 @keyframes setup-ring { to { stroke-dashoffset: 0; } }
+/* The headline stands on a panel of its own: the page behind is only dimmed, and its rows would show through the words. */
 .setup-tour-bubble {
   position: fixed;
   width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem 1.125rem;
+  border-radius: 1.125rem;
+  background: rgb(6 34 41 / 0.94);
+  box-shadow: 0 12px 32px -12px rgb(6 34 41 / 0.5);
   animation: setup-fade 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .setup-tour { animation: setup-fade 250ms cubic-bezier(0.22, 1, 0.36, 1) both; }

@@ -300,7 +300,7 @@ button.signup-recovery:disabled { cursor: default; opacity: 0.6; }
 .signup-page .signup-bell svg { width: 132px; height: 132px; }
 .signup-bell span { position: absolute; top: 14px; right: 18px; min-width: 44px; height: 44px; border-radius: 99px; display: grid; place-items: center; background: #d6453d; color: #fff; font-weight: 700; font-size: 20px; border: 3px solid #fff; }
 @keyframes signup-ring { 0% { transform: rotate(0); } 20% { transform: rotate(-12deg); } 45% { transform: rotate(10deg); } 70% { transform: rotate(-6deg); } 100% { transform: rotate(0); } }
-.signup-trial-rows { list-style: none; margin: 0 0 22px; padding: 0; display: grid; }
+.signup-trial-rows { list-style: none; margin: 24px 0 22px; padding: 0; display: grid; }
 .signup-trial-rows li { position: relative; display: grid; gap: 2px; padding: 0 0 22px 42px; font-size: 14px; line-height: 1.5; color: var(--signup-muted); }
 .signup-trial-rows li:last-child { padding-bottom: 0; }
 .signup-trial-rows li::before { content: ""; position: absolute; left: 12px; top: 26px; bottom: 0; width: 4px; border-radius: 4px; background: linear-gradient(var(--color-brand-200, #b8dbe1), transparent); }

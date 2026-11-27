@@ -47,8 +47,10 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
   const { errors } = getDict(locale);
+  // The guided tour's arrival is started by a script before first paint, as an attribute on <html>
+  // (src/components/gestion/onboarding/SetupTour.tsx): the one difference from the server's HTML, and expected.
   return (
-    <html lang={htmlLang(locale)} className="scroll-smooth">
+    <html lang={htmlLang(locale)} className="scroll-smooth" suppressHydrationWarning>
       <body className="min-h-dvh bg-sand-50 text-ink antialiased">
         {/* An error screen is a client component: it gets its few lines, in the person's language, from here. */}
         <ErrorCopyProvider copy={{ title: errors.errorTitle, body: errors.errorBody, retry: errors.retry, toHome: errors.toHome, toTenantHome: errors.toTenantHome, toSpace: errors.toSpace }}>{children}</ErrorCopyProvider>
