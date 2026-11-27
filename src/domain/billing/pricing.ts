@@ -16,7 +16,7 @@
  *    Every screen leads with the price per month.
  *  - Each renewal year lowers the price: 5 % off in the second year of a
  *    subscription, 10 % from the third.
- *  - A 30-day trial without a card replaces the former free tier.
+ *  - A 30-day trial, the card taken before it, replaces the former free tier.
  *  - Up to 50 lots on these terms; beyond, the price is built with the team.
  *
  * A lot counts when it is let under a lease of its own: a dwelling, a shop
@@ -28,11 +28,9 @@
  */
 import type { Cents } from "@/domain/money";
 
-/** Days of free use from the workspace's first visit, with or without a card. */
+/** The free days of a subscription's trial, the card taken before them (src/domain/billing/trial.ts). */
 export const TRIAL_DAYS = 30;
-/** The one extension a workspace may take when its trial is over or nearly. */
-export const TRIAL_EXTENSION_DAYS = 7;
-/** From this many days before the end, every screen reminds. */
+/** From this many days before the trial's end, the counter grows louder and the first e-mail goes out. */
 export const REMINDER_DAYS = 7;
 /** Prices include VAT: the figure shown is the total paid. */
 export const PRICES_INCLUDE_VAT = true;
