@@ -313,7 +313,8 @@ button.signup-recovery:disabled { cursor: default; opacity: 0.6; }
 .signup-understand { text-align: center; font-size: 13px; color: var(--signup-muted); margin-top: 4px; }
 .signup-inline-button { display: inline-flex; align-items: center; min-height: 40px; color: var(--color-brand-700); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .signup-step[data-step="offer"] .signup-primary, .signup-step[data-step="winback"] .signup-primary { margin-top: 18px; }
-.signup-price-panel { text-align: left; padding: 28px 24px 20px; display: grid; gap: 18px; }
+/* Closed, a dialog is not displayed: the grid applies only while it is open. */
+.signup-price-panel { text-align: left; padding: 28px 24px 20px; gap: 18px; }
 .signup-price-panel[open] { display: grid; }
 .signup-price-panel h2 { font-size: 22px; }
 .signup-panel-rule, .signup-panel-note { font-size: 13px; line-height: 1.55; color: var(--signup-muted); }
