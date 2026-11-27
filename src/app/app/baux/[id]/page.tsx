@@ -571,13 +571,16 @@ export default async function BailDetailPage({
 
             {/* The tenant's own space: one invitation per party, its state read
                 from the same rows the tenant's acceptance writes. */}
-            <InvitePanel
-              leaseId={l.id}
-              sample={sample}
-              parties={partyInvitations({ INVITES, TODAY, contactById }, l, d, locale, sample)}
-              labels={inviteLabels(d)}
-              stateMeta={inviteStateMeta(d)}
-            />
+            {/* The anchor the setup card's "invite a tenant" step opens at (src/lib/gestion/setup.ts). */}
+            <div id="espace-locataire" className="min-w-0 scroll-mt-24">
+              <InvitePanel
+                leaseId={l.id}
+                sample={sample}
+                parties={partyInvitations({ INVITES, TODAY, contactById }, l, d, locale, sample)}
+                labels={inviteLabels(d)}
+                stateMeta={inviteStateMeta(d)}
+              />
+            </div>
 
             <Panel
               title={d.baux.docsTitle}
