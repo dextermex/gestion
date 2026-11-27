@@ -75,7 +75,7 @@ describe("the session read on the server", () => {
     const token = jwt(now() + 1800);
     jar.set("morada_auth", cookieOf({ access_token: token, refresh_token: "refresh-1" }));
     const { getSession } = await load();
-    expect(await getSession()).toEqual({ userId: "user-1", email: "anne@example.lu", accessToken: token, metadata: { first_name: "Anne" } });
+    expect(await getSession()).toMatchObject({ userId: "user-1", email: "anne@example.lu", accessToken: token, metadata: { first_name: "Anne" }, user: { id: "user-1" } });
     expect(getUser).toHaveBeenCalledWith(token);
     expect(fetch).not.toHaveBeenCalled();
     expect(sets).toEqual([]);
@@ -87,7 +87,7 @@ describe("the session read on the server", () => {
     vi.mocked(fetch).mockResolvedValue(answer(200, body));
     const { getSession } = await load();
     const session = await getSession();
-    expect(session).toEqual({ userId: "user-1", email: "anne@example.lu", accessToken: body.access_token, metadata: { first_name: "Anne" } });
+    expect(session).toMatchObject({ userId: "user-1", email: "anne@example.lu", accessToken: body.access_token, metadata: { first_name: "Anne" }, user: { id: "user-1" } });
     // The expired token is not sent for verification; the refresh token is sent once, to the account system only.
     expect(getUser).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledTimes(1);

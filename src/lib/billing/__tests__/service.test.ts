@@ -1,13 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import Stripe from "stripe";
 import { DAY } from "@/domain/billing/trial";
+import { quote } from "@/domain/billing/pricing";
+import type { BillingRow } from "@/domain/billing/trial";
+import { offerQuote } from "@/lib/signup/offer";
 import {
-  META, PRODUCT, checkoutBelongs, chooseRhythm, createCheckout, customerFacts, ensureSnapshot, extendTrial, findCustomer,
-  pickSubscription, portalUrl, snapshotOf, stepLoyalty, subscriptionView, syncPrice, type BillingSnapshot,
+  META, PRODUCT, WINBACK_COUPON, checkoutBelongs, checkoutReturn, chooseRhythm, createCheckout, customerFacts, ensureSnapshot, findCustomer,
+  nextQuote, pickSubscription, portalUrl, snapshotOf, stepLoyalty, subscriptionView, syncPrice, type BillingSnapshot, type CheckoutInput,
 } from "@/lib/billing/service";
+import { decideAccess, recordedRows, type AccessDeps } from "@/lib/billing/access";
 import { lockedFor } from "@/lib/billing/gate";
 import { billingProvider, exemptOrgs } from "@/lib/billing/provider";
-import { confirmationShown, signupChoice } from "@/lib/billing/view";
+import { returnMetadata, returnPath } from "@/lib/billing/retour";
+import { confirmationShown } from "@/lib/billing/view";
 
 /**
  * The billing service against a recorded stand-in for Stripe: the real SDK,
@@ -90,7 +95,7 @@ describe("finding and creating the workspace's customer", () => {
     await expect(findCustomer(stripe, "x' OR metadata['a']:'b")).rejects.toThrow();
   });
 
-  it("starts the trial on the first visit: a customer carrying the workspace id and the rhythm picked at sign-up", async () => {
+  it("creates the customer when Checkout first needs it: the workspace id, the rhythm, one per workspace", async () => {
     const { stripe, calls } = standIn((c) => {
       if (c.path === "/v1/customers/search") return { body: search([]) };
       if (c.path === "/v1/customers" && c.method === "GET") return { body: list([]) };
@@ -104,14 +109,17 @@ describe("finding and creating the workspace's customer", () => {
     expect(create.form.get("preferred_locales[0]")).toBe("de");
     // The key names the workspace alone: two members arriving together make one customer.
     expect(create.idempotency).toBe(`morada-gestion-customer-${ORG}`);
-    expect(snapshot.customer).toMatchObject({ id: "cus_new", trialEnd: NOW + 30 * DAY, rhythm: "year", extended: false });
+    expect(snapshot.customer).toMatchObject({ id: "cus_new", rhythm: "year" });
     expect(snapshot.subscription).toBeNull();
+    // A new customer has had no subscription: its first Checkout offers the free days.
+    expect(snapshot.everSubscribed).toBe(false);
   });
 
-  it("dates the trial from Stripe's creation date, an extension only from the server", () => {
-    expect(customerFacts(customer() as unknown as Stripe.Customer).trialEnd).toBe(NOW - 3 * DAY + 30 * DAY);
-    const extended = customer({ metadata: { ...customer().metadata, [META.trialEnd]: String(NOW + 40 * DAY) } });
-    expect(customerFacts(extended as unknown as Stripe.Customer)).toMatchObject({ trialEnd: NOW + 40 * DAY, extended: true });
+  it("finds an existing customer instead of creating a second, and reads its language and rhythm", async () => {
+    const { stripe, calls } = standIn((c) => c.path === "/v1/customers/search" ? { body: search([customer()]) } : c.path === "/v1/subscriptions" ? { body: list([]) } : undefined);
+    await ensureSnapshot(stripe, { orgId: ORG, orgName: "Cabinet Test", email: "owner@example.lu", userId: "u1", locale: "fr" });
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    expect(customerFacts(customer({ metadata: { ...customer().metadata, [META.locale]: "lu", [META.rhythm]: "weekly" } }) as unknown as Stripe.Customer)).toMatchObject({ locale: "lu", rhythm: "quarter" });
   });
 });
 
@@ -119,8 +127,9 @@ describe("reading the subscription", () => {
   it("reads the rhythm from the price, the pricing it records, the period, the charge and the card", () => {
     expect(view()).toMatchObject({
       id: "sub_1", status: "trialing", rhythm: "quarter", managed: true, itemId: "si_1", charged: 12_600, lots: 3, base: 12_600,
-      paidFrom: NOW + 27 * DAY, periodEnd: NOW + 27 * DAY, card: { brand: "visa", last4: "4242" }, trialEnd: NOW + 27 * DAY,
+      paidFrom: NOW + 27 * DAY, periodEnd: NOW + 27 * DAY, card: { brand: "visa", last4: "4242" }, trialEnd: NOW + 27 * DAY, reminders: [],
     });
+    expect(view({}, { [META.reminders]: "d7" }).reminders).toEqual(["d7"]);
     expect(view({}, {}, { price: price({ unit_amount: 100_000, recurring: { interval: "year", interval_count: 1 } }) })).toMatchObject({ rhythm: "year", charged: 100_000 });
     expect(view({ trial_end: null })).toMatchObject({ paidFrom: NOW - DAY });
   });
@@ -148,12 +157,22 @@ describe("reading the subscription", () => {
     expect(calls[0].query.get("status")).toBe("all");
     expect(calls[0].query.get("expand[0]")).toBe("data.default_payment_method");
     expect(snapshot.subscription?.lots).toBe(3);
+    expect(snapshot.everSubscribed).toBe(true);
+  });
+
+  it("remembers a subscription that ended: the free days are spent", async () => {
+    const { stripe } = standIn((c) => (c.path === "/v1/subscriptions" ? { body: list([subscription({ status: "canceled" })]) } : undefined));
+    const snapshot = await snapshotOf(stripe, customer() as unknown as Stripe.Customer);
+    expect(snapshot).toMatchObject({ everSubscribed: true, subscription: { status: "canceled" } });
+    const none = standIn((c) => (c.path === "/v1/subscriptions" ? { body: list([]) } : undefined));
+    expect((await snapshotOf(none.stripe, customer() as unknown as Stripe.Customer)).everSubscribed).toBe(false);
   });
 });
 
 const snapshot = (over: Partial<BillingSnapshot> = {}): BillingSnapshot => ({
-  customer: { id: "cus_A", created: NOW - 3 * DAY, email: "owner@example.lu", trialEnd: NOW + 27 * DAY, extended: false, rhythm: "quarter", locale: "fr", reminders: [] },
+  customer: { id: "cus_A", created: NOW - 3 * DAY, email: "owner@example.lu", rhythm: "quarter", locale: "fr" },
   subscription: null,
+  everSubscribed: false,
   ...over,
 });
 
@@ -161,6 +180,8 @@ const snapshot = (over: Partial<BillingSnapshot> = {}): BillingSnapshot => ({
 const priced = (c: Call): Reply | undefined => {
   if (c.path === `/v1/products/${PRODUCT.id}` && c.method === "GET") return missing;
   if (c.path === "/v1/products" && c.method === "POST") return { body: { id: PRODUCT.id, object: "product" } };
+  if (c.path === `/v1/coupons/${WINBACK_COUPON.id}` && c.method === "GET") return missing;
+  if (c.path === "/v1/coupons" && c.method === "POST") return { body: { id: WINBACK_COUPON.id, object: "coupon" } };
   if (c.path === "/v1/checkout/sessions" && c.method === "POST") return { body: { id: "cs_test_abc12345", object: "checkout.session", url: "https://checkout.stripe.com/c/pay/cs_test_abc12345" } };
   if (c.path === "/v1/customers/cus_A") return { body: customer() };
   if (c.path === "/v1/subscriptions/sub_1") return { body: subscription() };
@@ -169,17 +190,24 @@ const priced = (c: Call): Reply | undefined => {
 const subscriptionUpdate = (calls: Call[]) => calls.find((c) => c.path === "/v1/subscriptions/sub_1")?.form ?? null;
 
 describe("Checkout", () => {
-  const input = { orgId: ORG, rhythm: "quarter" as const, rents: RENTS, locale: "fr", origin: "https://app.morada.lu", now: NOW, tax: false, submitMessage: "Aucun prélèvement avant le 2 novembre." };
+  const input = (over: Partial<CheckoutInput> = {}): CheckoutInput => ({
+    snapshot: snapshot(), orgId: ORG, quote: quote(RENTS, "quarter", 1), source: "page", locale: "fr", origin: "https://app.morada.lu", tax: false,
+    submitMessage: "Rien n'est prélevé aujourd'hui.", ...over,
+  });
+  const form = (calls: Call[]) => calls.find((c) => c.path === "/v1/checkout/sessions")!.form;
 
-  it("creates the subscription at the portfolio's own price, with the rest of the trial, the workspace named", async () => {
+  it("takes the card and gives the thirty free days to a workspace that never subscribed", async () => {
     const { stripe, calls } = standIn(priced);
-    const result = await createCheckout(stripe, { ...input, snapshot: snapshot() });
+    const result = await createCheckout(stripe, input());
     expect(result).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_abc12345" });
     expect(calls.find((c) => c.path === "/v1/products" && c.method === "POST")!.form.get("id")).toBe(PRODUCT.id);
-    const f = calls.find((c) => c.path === "/v1/checkout/sessions")!.form;
+    const f = form(calls);
     expect(f.get("mode")).toBe("subscription");
     expect(f.get("customer")).toBe("cus_A");
     expect(f.get("client_reference_id")).toBe(ORG);
+    expect(f.get("payment_method_collection")).toBe("always");
+    expect(f.get("subscription_data[trial_period_days]")).toBe("30");
+    expect(f.get("subscription_data[trial_end]")).toBeNull();
     expect(f.get("line_items[0][price_data][unit_amount]")).toBe("12600");
     expect(f.get("line_items[0][price_data][currency]")).toBe("eur");
     expect(f.get("line_items[0][price_data][product]")).toBe(PRODUCT.id);
@@ -188,52 +216,101 @@ describe("Checkout", () => {
     expect(f.get("line_items[0][price_data][tax_behavior]")).toBe("inclusive");
     expect(f.get("line_items[0][quantity]")).toBe("1");
     expect(f.get("line_items[1][price_data][unit_amount]")).toBeNull();
-    expect(f.get("subscription_data[trial_end]")).toBe(String(NOW + 27 * DAY));
     expect(f.get(`subscription_data[metadata][${META.org}]`)).toBe(ORG);
+    expect(f.get(`subscription_data[metadata][${META.app}]`)).toBe("gestion");
     expect(f.get(`subscription_data[metadata][${META.pricing}]`)).toBe("portfolio");
     expect(f.get(`subscription_data[metadata][${META.lots}]`)).toBe("3");
     expect(f.get(`subscription_data[metadata][${META.base}]`)).toBe("12600");
-    expect(f.get("payment_method_collection")).toBe("always");
     expect(f.get("allow_promotion_codes")).toBe("true");
+    expect(f.get("tax_id_collection[enabled]")).toBe("true");
+    expect(f.get("billing_address_collection")).toBe("auto");
+    expect(f.get("automatic_tax[enabled]")).toBe("false");
     expect(f.get("locale")).toBe("fr");
-    expect(f.get("custom_text[submit][message]")).toBe(input.submitMessage);
+    expect(f.get("custom_text[submit][message]")).toBe("Rien n'est prélevé aujourd'hui.");
     expect(f.get("success_url")).toBe("https://app.morada.lu/api/abonnement/retour?session_id={CHECKOUT_SESSION_ID}");
+    expect(f.get("cancel_url")).toBe("https://app.morada.lu/app/abonnement");
   });
 
-  it("charges a year as ten months, once a year", async () => {
+  it("charges at once a workspace that had a subscription before: the free days are promised once", async () => {
     const { stripe, calls } = standIn(priced);
-    await createCheckout(stripe, { ...input, rhythm: "year", snapshot: snapshot() });
-    const f = calls.find((c) => c.path === "/v1/checkout/sessions")!.form;
+    await createCheckout(stripe, input({ snapshot: snapshot({ everSubscribed: true, subscription: view({ status: "canceled" }) }) }));
+    const f = form(calls);
+    expect(f.get("subscription_data[trial_period_days]")).toBeNull();
+    expect(f.get("subscription_data[trial_end]")).toBeNull();
+  });
+
+  it("prices the sign-up's offer, names it for the return, and sends a cancelled Checkout back to the offer", async () => {
+    const { stripe, calls } = standIn(priced);
+    const offer = { units: 3, band: 1, billing: "year" as const };
+    await createCheckout(stripe, input({ quote: offerQuote(offer), offer, source: "signup" }));
+    const f = form(calls);
+    // Three lots in the second band (14 € a lot), a year billed as ten months.
     expect(f.get("line_items[0][price_data][unit_amount]")).toBe(String(4200 * 10));
     expect(f.get("line_items[0][price_data][recurring][interval]")).toBe("year");
     expect(f.get("line_items[0][price_data][recurring][interval_count]")).toBeNull();
+    expect(f.get(`metadata[${META.source}]`)).toBe("signup");
+    expect(f.get(`subscription_data[metadata][${META.source}]`)).toBe("signup");
+    expect(f.get(`metadata[${META.units}]`)).toBe("3");
+    expect(f.get(`metadata[${META.band}]`)).toBe("1");
+    expect(f.get(`metadata[${META.rhythm}]`)).toBe("year");
+    expect(f.get("subscription_data[trial_period_days]")).toBe("30");
+    expect(f.get("cancel_url")).toBe("https://app.morada.lu/inscription?etape=offre&retour=annule");
   });
 
-  it("charges at once after the trial, and gives the shortest trial Stripe allows in its last two days", async () => {
-    const late = standIn(priced);
-    await createCheckout(late.stripe, { ...input, snapshot: snapshot({ customer: { ...snapshot().customer, trialEnd: NOW - DAY } }) });
-    const lateForm = late.calls.find((c) => c.path === "/v1/checkout/sessions")!.form;
-    expect(lateForm.get("subscription_data[trial_end]")).toBeNull();
-    expect(lateForm.get("subscription_data[trial_period_days]")).toBeNull();
-    const close = standIn(priced);
-    await createCheckout(close.stripe, { ...input, snapshot: snapshot({ customer: { ...snapshot().customer, trialEnd: NOW + 20 * 3600 } }) });
-    expect(close.calls.find((c) => c.path === "/v1/checkout/sessions")!.form.get("subscription_data[trial_period_days]")).toBe("2");
-  });
-
-  it("refuses a second subscription, and more lots than the published terms take", async () => {
+  it("applies the one-time offer through a coupon installed once, a quarter off for twelve months, without promotion codes", async () => {
     const { stripe, calls } = standIn(priced);
-    expect(await createCheckout(stripe, { ...input, snapshot: snapshot({ subscription: view() }) })).toEqual({ error: "already_subscribed" });
-    expect(await createCheckout(stripe, { ...input, rents: Array.from({ length: 51 }, () => 90_000), snapshot: snapshot() })).toEqual({ error: "too_many_lots" });
+    const offer = { units: 3, band: 1, billing: "quarter" as const };
+    await createCheckout(stripe, input({ quote: offerQuote(offer), offer, source: "signup", winback: true }));
+    const coupon = calls.find((c) => c.path === "/v1/coupons" && c.method === "POST")!.form;
+    expect(coupon.get("id")).toBe("morada_winback_25");
+    expect(coupon.get("percent_off")).toBe("25");
+    expect(coupon.get("duration")).toBe("repeating");
+    expect(coupon.get("duration_in_months")).toBe("12");
+    const f = form(calls);
+    expect(f.get("discounts[0][coupon]")).toBe("morada_winback_25");
+    expect(f.get("allow_promotion_codes")).toBeNull();
+    expect(f.get(`metadata[${META.winback}]`)).toBe("1");
+    // The coupon is asked for once per client.
+    await createCheckout(stripe, input({ quote: offerQuote(offer), offer, source: "signup", winback: true }));
+    expect(calls.filter((c) => c.path.startsWith("/v1/coupons")).length).toBe(2);
+  });
+
+  it("refuses a second subscription, one waiting for its payment too, and more lots than the published terms take", async () => {
+    const { stripe, calls } = standIn(priced);
+    expect(await createCheckout(stripe, input({ snapshot: snapshot({ subscription: view() }) }))).toEqual({ error: "already_subscribed" });
+    expect(await createCheckout(stripe, input({ snapshot: snapshot({ subscription: view({ status: "past_due" }) }) }))).toEqual({ error: "already_subscribed" });
+    expect(await createCheckout(stripe, input({ quote: quote(Array.from({ length: 51 }, () => 90_000), "quarter") }))).toEqual({ error: "too_many_lots" });
     expect(calls).toHaveLength(0);
   });
 
-  it("refreshes only for a session the workspace itself started", async () => {
-    const { stripe } = standIn((c) => c.path === "/v1/checkout/sessions/cs_test_mine1234"
-      ? { body: { id: "cs_test_mine1234", client_reference_id: ORG, metadata: { [META.org]: ORG } } }
+  it("acknowledges only a session the workspace itself started, with the offer it priced and whether it is trialing", async () => {
+    const mine = { id: "cs_test_mine1234", client_reference_id: ORG, metadata: { [META.org]: ORG, [META.source]: "signup", [META.units]: "8", [META.band]: "2", [META.rhythm]: "quarter" }, subscription: { id: "sub_1", object: "subscription", status: "trialing" } };
+    const { stripe, calls } = standIn((c) => c.path === "/v1/checkout/sessions/cs_test_mine1234"
+      ? { body: mine }
+      : c.path === "/v1/checkout/sessions/cs_test_page1234" ? { body: { ...mine, id: "cs_test_page1234", metadata: { [META.org]: ORG, [META.rhythm]: "year" }, subscription: { id: "sub_2", status: "active" } } }
       : c.path === "/v1/checkout/sessions/cs_test_other123" ? { body: { id: "cs_test_other123", client_reference_id: OTHER, metadata: { [META.org]: OTHER } } } : undefined);
-    expect(await checkoutBelongs(stripe, ORG, "cs_test_mine1234")).toBe(true);
+    expect(await checkoutReturn(stripe, ORG, "cs_test_mine1234")).toEqual({ source: "signup", offer: { units: 8, band: 2, billing: "quarter", addon: false }, trialing: true });
+    expect(calls[0].query.get("expand[0]")).toBe("subscription");
+    expect(await checkoutReturn(stripe, ORG, "cs_test_page1234")).toEqual({ source: "page", offer: null, trialing: false });
     expect(await checkoutBelongs(stripe, ORG, "cs_test_other123")).toBe(false);
     expect(await checkoutBelongs(stripe, ORG, "../../v1/customers")).toBe(false);
+  });
+});
+
+describe("the return from Checkout", () => {
+  const at = new Date("2026-11-27T10:00:00Z");
+  it("records the offer and the trial's start beside what the account already holds", () => {
+    const done = { source: "signup" as const, offer: { units: 3, band: 1, billing: "year" as const, addon: false as const }, trialing: true };
+    expect(returnMetadata({ quiz: { kind: "flats" }, tour: 1 }, done, at)).toEqual({ quiz: { kind: "flats" }, tour: 1, offer: done.offer, trial_started_at: "2026-11-27T10:00:00.000Z" });
+    // Charged at once: no trial is recorded; a malformed previous value is not kept.
+    expect(returnMetadata("garbage", { ...done, trialing: false }, at)).toEqual({ offer: done.offer });
+  });
+
+  it("sends a sign-up to Bienvenue, a resumed subscription to the space, the rest to the subscription page", () => {
+    expect(returnPath({ source: "signup", offer: null, trialing: true })).toBe("/inscription?etape=bienvenue");
+    expect(returnPath({ source: "resume", offer: null, trialing: false })).toBe("/app");
+    expect(returnPath({ source: "page", offer: null, trialing: false })).toBe("/app/abonnement?confirme=1");
+    expect(returnPath(null)).toBe("/app/abonnement");
   });
 });
 
@@ -288,6 +365,19 @@ describe("rhythm and price of a running subscription", () => {
     expect(leaving.calls).toHaveLength(0);
   });
 
+  it("brings a subscription quoted for three lots to the one lot a subscription bills at least, while nothing is let yet", async () => {
+    // Quoted at sign-up for 3 lots in the second band (42 € a month), no lease recorded yet.
+    const sub = view();
+    expect(nextQuote(snapshot({ subscription: sub }), [], NOW)).toMatchObject({ lots: 0, charged: 1000 * 3 });
+    const { stripe, calls } = standIn(priced);
+    expect(await syncPrice(stripe, snapshot({ subscription: sub }), [], NOW)).toBe(true);
+    const f = subscriptionUpdate(calls)!;
+    expect(f.get("items[0][price_data][unit_amount]")).toBe("3000");
+    expect(f.get(`metadata[${META.lots}]`)).toBe("0");
+    // In the trial: nothing is charged by the change.
+    expect(f.get("proration_behavior")).toBe("none");
+  });
+
   it("lowers the price for the second year from the renewal that opens it, never the period already paid", async () => {
     const paidFrom = Date.UTC(2025, 10, 2) / 1000;
     const renewal = Date.UTC(2026, 10, 2) / 1000;
@@ -319,7 +409,7 @@ describe("rhythm and price of a running subscription", () => {
   });
 });
 
-describe("portal and extension", () => {
+describe("the portal", () => {
   it("opens the portal on the app's own settings, created once", async () => {
     const { stripe, calls } = standIn((c) => {
       if (c.path === "/v1/billing_portal/configurations" && c.method === "GET") return { body: list([]) };
@@ -336,15 +426,6 @@ describe("portal and extension", () => {
     expect(session.get("flow_data[type]")).toBe("payment_method_update");
     expect(session.get("locale")).toBe("auto");
   });
-
-  it("extends a finished trial once, by seven days, server-side", async () => {
-    const { stripe, calls } = standIn((c) => (c.path === "/v1/customers/cus_A" ? { body: customer() } : undefined));
-    const over = snapshot({ customer: { ...snapshot().customer, trialEnd: NOW - DAY } });
-    expect(await extendTrial(stripe, over, NOW)).toEqual({ trialEnd: NOW + 7 * DAY });
-    expect(calls[0].form.get(`metadata[${META.trialEnd}]`)).toBe(String(NOW + 7 * DAY));
-    expect(await extendTrial(stripe, { ...over, customer: { ...over.customer, extended: true } }, NOW)).toEqual({ error: "not_offered" });
-    expect(await extendTrial(stripe, snapshot(), NOW)).toEqual({ error: "not_offered" });
-  });
 });
 
 describe("configuration and the write lock", () => {
@@ -357,35 +438,77 @@ describe("configuration and the write lock", () => {
     expect([...exemptOrgs({ BILLING_EXEMPT_ORGS: ` ${ORG.toUpperCase()}, ,${OTHER}` })]).toEqual([ORG, OTHER]);
   });
 
-  it("locks writes only after an unpaid trial, and opens on every doubt", async () => {
-    const env = { STRIPE_SECRET_KEY: "sk_test_51abcdefghijklmnop" };
-    const over = snapshot({ customer: { ...snapshot().customer, trialEnd: NOW - DAY } });
-    const still = async () => over;
-    expect(await lockedFor(ORG, async () => over, env, NOW, still)).toBe(true);
-    expect(await lockedFor(ORG, async () => snapshot(), env, NOW, still)).toBe(false);
-    const paying = snapshot({ customer: over.customer, subscription: view({ status: "active" }) });
-    expect(await lockedFor(ORG, async () => paying, env, NOW, still)).toBe(false);
-    expect(await lockedFor(ORG, async () => null, env, NOW)).toBe(false);
-    expect(await lockedFor(ORG, async () => { throw new Error("stripe down"); }, env, NOW)).toBe(false);
-    expect(await lockedFor(ORG, async () => over, {}, NOW)).toBe(false);
-    expect(await lockedFor(ORG, async () => over, { ...env, BILLING_EXEMPT_ORGS: ORG }, NOW)).toBe(false);
+  const env = { STRIPE_SECRET_KEY: "sk_test_51abcdefghijklmnop" };
+  const iso = (t: number) => new Date(t * 1000).toISOString();
+  const deps = (over: Partial<AccessDeps> = {}): AccessDeps => ({
+    env, now: NOW, sample: false,
+    rows: async () => [],
+    cached: async () => null,
+    fresh: async () => { throw new Error("not asked"); },
+    ...over,
+  });
+  const row = (source: string, status: string, end: number | null = NOW + 20 * DAY): BillingRow => ({ source, status, current_period_end: end === null ? null : iso(end) });
+  const trialing = snapshot({ everSubscribed: true, subscription: view() });
+  const ended = snapshot({ everSubscribed: true, subscription: view({ status: "canceled" }) });
+  const failed = snapshot({ everSubscribed: true, subscription: view({ status: "past_due" }) });
+
+  it("opens a workspace whose recorded subscription runs, of either store, without asking Stripe", async () => {
+    const stripeNotAsked = { cached: async () => { throw new Error("asked"); }, fresh: async () => { throw new Error("asked"); } };
+    expect(await decideAccess(ORG, deps({ rows: async () => [row("apple", "active")], ...stripeNotAsked }))).toMatchObject({ access: "open", configured: true, reason: null });
+    expect(await decideAccess(ORG, deps({ rows: async () => [row("stripe", "trialing")], ...stripeNotAsked }))).toMatchObject({ access: "open" });
+    expect(await decideAccess(ORG, deps({ rows: async () => [row("stripe", "canceled"), row("apple", "trialing", null)], ...stripeNotAsked }))).toMatchObject({ access: "open" });
   });
 
-  it("confirms a cached lock with Stripe before refusing, so a payment made elsewhere opens at once", async () => {
-    const env = { STRIPE_SECRET_KEY: "sk_test_51abcdefghijklmnop" };
-    const over = snapshot({ customer: { ...snapshot().customer, trialEnd: NOW - DAY } });
-    const paid = snapshot({ customer: over.customer, subscription: view({ status: "active" }) });
+  it("opens on Stripe's word while the webhook trails a Checkout: the cached snapshot, then a fresh read", async () => {
+    expect(await decideAccess(ORG, deps({ cached: async () => trialing }))).toMatchObject({ access: "open", snapshot: trialing, trialOffered: false });
     let asked = 0;
-    const confirm = (answer: BillingSnapshot | null) => async () => { asked += 1; return answer; };
-    expect(await lockedFor(ORG, async () => over, env, NOW, confirm(paid))).toBe(false);
-    expect(await lockedFor(ORG, async () => over, env, NOW, confirm(over))).toBe(true);
-    // An open workspace is never asked twice.
-    asked = 0;
-    expect(await lockedFor(ORG, async () => snapshot(), env, NOW, confirm(over))).toBe(false);
-    expect(asked).toBe(0);
-    // Stripe silent on the second look: the lock it gave stands.
+    const answer = await decideAccess(ORG, deps({ rows: async () => [row("stripe", "active", NOW - DAY)], cached: async () => ended, fresh: async () => { asked += 1; return trialing; } }));
+    expect(answer).toMatchObject({ access: "open" });
+    expect(asked).toBe(1);
+  });
+
+  it("locks with Stripe's reason when nothing runs: never subscribed, ended, payment failed", async () => {
+    expect(await decideAccess(ORG, deps())).toMatchObject({ access: "locked", reason: "no_trial", trialOffered: true });
+    expect(await decideAccess(ORG, deps({ cached: async () => ended, fresh: async () => ended }))).toMatchObject({ access: "locked", reason: "ended", trialOffered: false });
+    expect(await decideAccess(ORG, deps({ cached: async () => failed, fresh: async () => failed }))).toMatchObject({ access: "locked", reason: "payment" });
+    expect(await decideAccess(ORG, deps({ rows: async () => [row("stripe", "past_due")], cached: async () => failed, fresh: async () => failed }))).toMatchObject({ access: "locked", reason: "payment" });
+  });
+
+  it("locks when Stripe cannot be reached: no doubt lets a workspace through", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await lockedFor(ORG, async () => over, env, NOW, async () => { throw new Error("stripe down"); })).toBe(true);
+    const down = async () => { throw new Error("stripe down"); };
+    expect(await decideAccess(ORG, deps({ cached: async () => ended, fresh: down }))).toMatchObject({ access: "locked", reason: "ended" });
+    expect(await decideAccess(ORG, deps({ cached: down, fresh: down }))).toMatchObject({ access: "locked", reason: "no_trial" });
+    expect(await decideAccess(ORG, deps({ rows: async () => [row("stripe", "unpaid")], cached: down, fresh: down }))).toMatchObject({ access: "locked", reason: "payment", trialOffered: false });
+    // The record unread too: still locked, on Stripe's last word.
+    expect(await decideAccess(ORG, deps({ rows: down, cached: async () => ended, fresh: down }))).toMatchObject({ access: "locked", reason: "ended" });
+  });
+
+  it("opens with nothing about subscriptions on a deployment without a key, for an exempt workspace and on a sample cabinet", async () => {
+    const asked = { rows: async () => { throw new Error("asked"); } };
+    expect(await decideAccess(ORG, deps({ env: {}, ...asked }))).toEqual({ access: "open", reason: null, configured: false, trialOffered: false, snapshot: null });
+    expect(await decideAccess(ORG, deps({ env: { STRIPE_SECRET_KEY: "pk_live_51abcdefghijklmnop" }, ...asked }))).toMatchObject({ access: "open", configured: false });
+    expect(await decideAccess(ORG, deps({ env: { ...env, BILLING_EXEMPT_ORGS: ORG.toUpperCase() }, ...asked }))).toMatchObject({ access: "open", configured: true });
+    expect(await decideAccess(ORG, deps({ sample: true, ...asked }))).toMatchObject({ access: "open", configured: true });
+  });
+
+  it("reads the record under the member's token, a table not there yet counting as no row", async () => {
+    const g = (answer: { data: unknown; error: { code: string } | null }) => {
+      const seen: string[] = [];
+      const chain = { select: (cols: string) => { seen.push(cols); return chain; }, eq: (col: string, value: string) => { seen.push(`${col}=${value}`); return Promise.resolve(answer); } };
+      return { client: { from: (table: string) => { seen.push(table); return chain; } } as unknown as Parameters<typeof recordedRows>[0], seen };
+    };
+    const ok = g({ data: [{ source: "apple", status: "active", current_period_end: null }], error: null });
+    expect(await recordedRows(ok.client, ORG)).toEqual([{ source: "apple", status: "active", current_period_end: null }]);
+    expect(ok.seen).toEqual(["billing_status", "source,status,current_period_end", `org_id=${ORG}`]);
+    expect(await recordedRows(g({ data: null, error: { code: "PGRST205" } }).client, ORG)).toEqual([]);
+    expect(await recordedRows(g({ data: null, error: { code: "42P01" } }).client, ORG)).toEqual([]);
+    await expect(recordedRows(g({ data: null, error: { code: "57014" } }).client, ORG)).rejects.toThrow();
+  });
+
+  it("refuses writes with the same answer the pages get", async () => {
+    expect(await lockedFor({ id: ORG }, async () => ({ access: "locked", reason: "ended", configured: true, trialOffered: false, snapshot: null }))).toBe(true);
+    expect(await lockedFor({ id: ORG }, async () => ({ access: "open", reason: null, configured: false, trialOffered: false, snapshot: null }))).toBe(false);
   });
 
   it("says a subscription was confirmed only when one is on record, whatever the address says", () => {
@@ -394,12 +517,5 @@ describe("configuration and the write lock", () => {
     expect(confirmationShown("1", { subscription: null }, false)).toBe(false);
     expect(confirmationShown(undefined, { subscription: sub }, false)).toBe(false);
     expect(confirmationShown("1", { subscription: sub }, true)).toBe(false);
-  });
-
-  it("reads the rhythm picked at sign-up defensively, an older choice's plan name ignored", () => {
-    expect(signupChoice({ morada_signup: { plan: { rhythm: "year" } } })).toEqual({ rhythm: "year" });
-    expect(signupChoice({ morada_signup: { plan: { id: "landlord", rhythm: "quarter" } } })).toEqual({ rhythm: "quarter" });
-    expect(signupChoice({ morada_signup: { plan: { rhythm: "weekly" } } })).toEqual({ rhythm: null });
-    expect(signupChoice(undefined)).toEqual({ rhythm: null });
   });
 });
