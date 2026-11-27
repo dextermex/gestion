@@ -669,7 +669,7 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     if (preview) { setPreviewDone(true); return; }
     writeSession(ANSWERS_KEY, null); writeSession(WINBACK_KEY, null);
     // A landlord starts with the first property (its type from the first question), or on the home screen without a lot yet.
-    window.location.assign(role === "tenant" || invited || (role === null && next) ? safeSignupNext(next, role ?? "landlord") : spaceAddress(answers));
+    window.location.assign(step !== "welcome" || role === "tenant" || invited ? safeSignupNext(next, role ?? "landlord") : spaceAddress(answers));
   };
 
   const challenge = answers.challenge ?? "rent";
