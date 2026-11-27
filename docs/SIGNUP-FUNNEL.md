@@ -26,7 +26,8 @@ is deleted; nothing renders it as a fallback.
   invited `email` and the `ref` placement tag.
 - The marketing site links “Start for free” to `https://app.morada.lu/inscription`.
 - Invitations open `/inscription?next=/invitation/…&email=…`; the invited
-  address is prefilled at the email step and still confirmed by Auth.
+  address is prefilled at the email step and confirmed with the code before the
+  password (the only sign-up that waits for it).
 - Password recovery emails return to `/connexion?mode=reset` (allow-listed as
   `https://app.morada.lu/connexion?**`), where the new design asks for a new
   password.
@@ -35,46 +36,132 @@ is deleted; nothing renders it as a fallback.
 
 ## Journey
 
+Since 27 November 2026 the web runs the iPhone app's funnel (rebuilt in
+October; the app's `app/(onboarding)` is the reference, and
+`docs/WEB-ONBOARDING.md` Part A lists every screen and what it saves). Same
+order, same questions, same answer keys, same saved shapes, so an account
+started on one surface continues on the other. One question per step in the
+funnel's centred column; a bar across the top runs through the whole journey
+and is front-loaded like the app's (`src/lib/signup/journey.ts`: the account
+steps fill half of it). Nothing about money appears before the offer screen.
+
+The account (A.1):
+
 1. Phone number, Luxembourg selected. The searchable country dialog pins
    Luxembourg, Belgium, France, Germany and the Netherlands, followed by the
    remaining supported countries sorted by their translated names.
 2. Six-digit SMS code. One real input supports paste and OS autofill; six visual
    cells show the digits. Edit number, error recovery and a 60-second resend
    cooldown are provided.
-3. Landlord or tenant.
+3. Landlord or tenant (the web's own step: the app is for landlords; the web
+   keeps it where the app asks for notifications, which a browser has no
+   prompt for: the trial reminder is an e-mail).
 4. First and last name.
 5. Email, added to the same authenticated phone account (`email_change`).
-6. Email code. The email carries a six-digit code and a link; either confirms
-   it (`verifyOtp({ email, token, type: "email_change" })`). The page also
-   polls Auth every 5 seconds, so a link clicked on another device moves it
-   on. Resend has a 60-second cooldown; the address can be corrected.
-7. Password (required, at least 8 characters, typed twice). Set only after the
-   email is confirmed, so every finished account signs in with email and
-   password on `/connexion`; phone login stays available.
-8. Landlords answer three optional questions: portfolio size, main challenge
-   and time spent. “Skip for now” remains visible. Tenants finish at step 7.
-9. Landlords pick how they will be billed after the free trial: quarterly, or
-   yearly with two months free, each led by its lowest monthly price per lot (from
-   €10, from €8.33 a year), above the published rule (each let lot by its rent, from
-   €10 to €32 a month, lower with more lots and over the years). No card is asked;
-   "Commencer mes 30 jours gratuits" notes the choice (`{action:"plan", rhythm}`, kept
-   in `morada_signup.plan`) and the side panel shows the trial as three dated steps.
-   An account arriving through an invitation joins a workspace that already has its
-   subscription and skips this step. See ARCHITECTURE.md, "Subscriptions".
-10. Welcome and handoff to `/app` or `/locataire`. A tenant still needs an actual
-   invitation to access a tenancy. Choosing a role grants no access.
+   **Recorded, not verified in the funnel** (the owner's rule of October 2026,
+   the app's): the confirmation mail goes out on its own, with its code and its
+   link, and the funnel goes on. One exception: an account created to accept an
+   invitation (`next=/invitation`) still waits for the code or the link
+   (`funnelStep` in `src/lib/signup/model.ts`), because accepting the
+   invitation reads the confirmed address. An address another account holds is
+   answered like any other and the funnel goes on the same way.
+6. Password (required, at least 8 characters, typed twice). Sign-in by e-mail
+   and password works once the address is confirmed; phone login stays
+   available. A tenant finishes here (welcome, then `/locataire` or the
+   invitation): no question, no plan, no payment.
+
+The questions (A.2), landlords only: eleven one-tap questions with an emoji per
+answer, in the app's order and keys (`src/lib/signup/quiz.ts`): what you let
+(`flats`, `houses`, `building`, `mixed`), for whom (`self`, `family`,
+`clients`), how many lots (`1`, `2-5`, `6-10`, `11-20`, `21-50`, `0`), the
+average rent (band `0` to `4`), where (`lu`, `be`, `fr`, `de`, `multi`), how
+today (`spreadsheet`, `software`, `paper`, `starting`), the main difficulty
+(`rent`, `documents`, `compliance`, `finances`, `maintenance`), the time spent
+(`1`, `5`, `20`, `40`), how soon a late rent is noticed (`same_day`, `days`,
+`month_end`, `never`), the goal (`rent`, `everything`, `time`, `tax`, `grow`),
+where they heard of Morada (`instagram`, `tiktok`, `word`, `search`, `press`,
+`other`). Arrow keys move between answers, Enter continues, Back is a button.
+`?q=N` names the question: a reload stays put (the answers of the tab are kept
+in `sessionStorage`, keys only) and the browser's Back walks the questions.
+Then the interests: three groups of chips pre-filled from the answers
+(`dashboardFromQuiz`, ported from the app's `src/lib/dashboard.ts`).
+
+The plan (A.3): "Vous avez tout pour y arriver" (the goal and the first month as
+a rising SVG curve), the reviews step (built, skipped while
+`src/lib/signup/reviews.ts` holds no quote: the list is empty and only real,
+owner-confirmed quotes may go in it), "Nous créons votre espace" (the figure
+counts to 100 over four lines built from the answers while the account is
+finished: `complete` with the answers, then `POST /api/espace/creer` opens the
+management space, then `GET /api/abonnement/etat` is read), "Votre plan est
+prêt" (what Morada will do about the difficulty named, no price).
+
+The trial and the payment (A.4), only when `GET /api/abonnement/etat` answers
+`configured: true` and `access: "locked"`; otherwise (no Stripe key, as in CI, a
+subscription already running, no answer, or an invitation's account) the plan
+goes straight to "Bienvenue". Three screens: "Nous voulons que vous essayiez
+Morada gratuitement" (a real capture of the app's Accueil on the sample
+workspace, `public/signup/home-<locale>.jpg`, copied from the iPhone app's
+`assets/onboarding`), "Nous vous prévenons avant la fin de votre essai" (the
+bell; by e-mail, two days before the end), then the offer: "Vos 30 premiers
+jours sont offerts", three dated rows (today, in 28 days the reminder, in 30
+days the subscription starts), one price line from `offerQuote`
+(`src/lib/signup/offer.ts`) and "Tarif pour 3 lots · Comprendre mon tarif",
+which opens a panel (the lots bracket, the rent band, yearly with "2 mois
+offerts" or quarterly; the price changes at once). "Commencer mes 30 jours
+gratuits" posts `/api/abonnement/checkout` with `{ source: "signup", units, band,
+billing }` and opens Stripe Checkout; a 409 goes to "Bienvenue", any other
+refusal is said on the screen. A workspace that already had its free days
+(`trialOffered: false`) is told the subscription starts today. "Pas maintenant",
+or a Checkout cancelled (`/inscription?etape=offre&retour=annule`), opens the
+one-time offer once (a quarter off the first year, `WINBACK_PCT`), whose button
+posts the same route with `winback: true`; "Non merci" leads to `/app`, which
+shows the locked screen.
+
+Bienvenue (`/inscription?etape=bienvenue`): "Ouvrir mon espace" opens
+`/app/biens/nouveau?type=<apartment|house|building>&tour=1` when the questions
+named lots (the type from the first question; `mixed` gives no type) and
+`/app?tour=1` for "Pas encore de lot".
+
+Addresses other pages link to: `/inscription?etape=offre` (the offer, for a
+signed-in landlord whose sign-up is complete; with `retour=annule`, the
+one-time offer instead), `/inscription?etape=bienvenue`. A complete landlord
+arriving at `/inscription` without `etape` is sent to `/app`.
 
 ### Stages (server-side, `/api/signup/profile`)
 
 `user_metadata.morada_signup.stage` records the last step the server accepted:
-`role` → `email` → `email_code` → `password` → `tailor` (landlords) →
-`complete`. The server refuses `email_confirmed`, `password` and `complete`
-(409 `email_unconfirmed`) until Auth reports the email confirmed, and refuses
-`complete` without `password_set_at` (`password_required`). The password is
-sent once, over HTTPS, to Supabase Auth, which stores only its bcrypt hash;
-it is never logged or kept. `resumeStep()` (`src/lib/signup/model.ts`) sends
-any signed-in account, including one finished before this order existed, to
-its first missing step, and a sign-in does not skip it.
+`role` → `email` → `password` → `tailor` (landlords) → `complete`
+(`email_code` on accounts from before October 2026). `resumeStep()`
+(`src/lib/signup/model.ts`) is the iPhone app's, word for word, with its two
+departures from the web's former rules: an Apple or Google account
+(`providerAccount`, read from Auth's own `app_metadata`) skips the phone and
+the password, and a pending address counts as given (`emailGiven`). The route
+accepts such an account where it asked for a verified phone, and `complete`
+without a password for it.
+
+The route refuses `password` and `complete` (409 `email_unconfirmed`) until
+an address was given, and `complete` without `password_set_at`
+(`password_required`). `email_confirmed` still needs Auth to report the address
+confirmed (the invitation's case). The password is sent once, over HTTPS, to
+Supabase Auth, which stores only its bcrypt hash; it is never logged or kept;
+only the first one is set here (a change goes through the reset link).
+
+What is saved, in the shapes the app writes (`src/lib/signup/stages.ts` there):
+
+- `morada_signup.preferences = { properties, challenge, involvement }`, the
+  web's own shape (`webProperties` turns `11-20` and `21-50` into `11+`).
+- `morada_mobile.quiz = { kind, manageFor, units, where, today, late, goal,
+  source, offer }` and `morada_mobile.dashboard` (`{ order, hidden, interests,
+  horizon, watch }`), both with `complete`. Validated with strict zod enums of
+  the app's keys: any other key or value is refused, nothing is free-form.
+- `{ action: "offer", outcome, offer }` records `morada_mobile.quiz.offer`
+  (`paywall`, `winback`, `declined`) and the price quoted
+  (`morada_mobile.offer = { units, band, billing, addon: false }`), once the
+  sign-up is complete and for a landlord only. Bookkeeping: access is the
+  subscription's (`/api/abonnement/retour` records the trial's start).
+
+The former plan step (`{ action: "plan", rhythm }`, `morada_signup.plan`) is
+gone: the offer screen replaces it.
 
 ### Hosted template (manual)
 
@@ -83,11 +170,11 @@ The six-digit code needs the regenerated `supabase/templates/email_change.html`
 Emails, Templates, “Change email address”. Until then the email holds the
 link only, which the page still detects.
 
-There are no extra “you completed a step” interstitials. Saved account stages
-resume after a refresh; unsaved text and optional answers are kept during
-in-page back navigation, not persisted to browser storage. Preferences are
-recorded for subsequent personalization; this change does not rearrange the
-existing dashboard based on those answers.
+Saved account stages resume after a refresh; unsaved text is kept during
+in-page back navigation, never in browser storage. The questions' answers (keys
+only, no name, number or address) are kept in the tab's `sessionStorage` until
+the welcome, so a reload stays on its question. The web's home screen does not
+read `morada_mobile.dashboard` yet; it is saved so the iPhone app finds it.
 
 ## Design
 

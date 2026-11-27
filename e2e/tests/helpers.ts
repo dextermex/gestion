@@ -29,10 +29,15 @@ export interface Person {
 /**
  * Create an account. Account creation in the product is phone-first
  * (/inscription), and this local stack has no SMS provider; the phone funnel
- * has its own suite (e2e/signup). So the account is registered through
- * GoTrue's public signup endpoint with the publishable key (no service role,
- * the same metadata the email registration always wrote), then signed in on
- * the real door and landed where `next` says.
+ * has its own suite (e2e/signup: the account, the questions saved in the
+ * iPhone app's keys, the offer's outcome, the space). So the account is
+ * registered through GoTrue's public signup endpoint with the publishable key
+ * (no service role, the same metadata the email registration always wrote),
+ * then signed in on the real door and landed where `next` says. It carries no
+ * `morada_signup`, like every account from the email registration:
+ * `resumeStep` reads it as finished, so the door opens its space with no
+ * question, no trial screen and, on a deployment without Stripe (CI), no
+ * payment step.
  */
 export async function createAccount(person: Person): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
