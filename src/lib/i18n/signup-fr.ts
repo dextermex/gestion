@@ -33,7 +33,6 @@ export const signupFr = {
   "phoneLogin": "Se connecter par téléphone",
   "emailLogin": "Se connecter par e-mail",
   "haveAccount": "Déjà un compte ?",
-  "free": "Gratuit. Sans carte bancaire.",
   "back": "Retour",
   "close": "Fermer",
   "editNumber": "Modifier le numéro",
@@ -59,26 +58,6 @@ export const signupFr = {
   "emailIntro": "Pour vos messages importants et la confirmation de votre adresse.",
   "email": "Adresse e-mail",
   "emailPending": "Consultez votre boîte mail pour confirmer votre adresse. Votre accès par téléphone reste disponible.",
-  "propertiesTitle": "Combien de biens gérez-vous ?",
-  "propertiesIntro": "Pour mieux comprendre votre portefeuille.",
-  "properties": [
-    "Pas encore de bien",
-    "1 bien",
-    "2 à 5 biens",
-    "6 à 10 biens",
-    "11 biens ou plus"
-  ],
-  "challengeTitle": "Qu’aimeriez-vous simplifier ?",
-  "challengeIntro": "Choisissez ce qui vous prend le plus d’énergie.",
-  "challenges": [
-    "Gérer les réparations",
-    "Suivre mes obligations",
-    "Relancer les loyers",
-    "Organiser mes documents",
-    "Suivre les revenus et dépenses"
-  ],
-  "involvementTitle": "Quel temps y consacrez-vous ?",
-  "involvementIntro": "Une estimation suffit.",
   "involvement": [
     "Environ 1 h par semaine",
     "Environ 5 h par semaine",
@@ -86,49 +65,19 @@ export const signupFr = {
     "40 h par semaine ou plus"
   ],
   "skip": "Passer pour le moment",
-  "finish": "Terminer",
   "welcomeTitle": "Bienvenue, {name}.",
   "welcomeIntro": "Votre compte est prêt. Commençons par votre premier bien.",
   "tenantWelcome": "Votre compte est prêt. Ouvrez l’invitation de votre propriétaire pour retrouver votre location.",
-  "enter": "Continuer gratuitement",
+  "enter": "Ouvrir mon espace",
   "enterTenant": "Ouvrir mon espace locataire",
-  "account": "Votre compte",
-  "details": "Vos coordonnées",
-  "tailor": "À votre mesure",
-  "optional": "Facultatif",
   "verified": "Numéro confirmé",
-  "nextStep": "La suite",
   "saved": "Vos coordonnées sont enregistrées.",
-  "planStage": "Dernière étape",
-  "planTitle": "Choisissez votre formule",
-  "planIntro": "30 jours gratuits pour tout essayer. Sans carte bancaire, sans engagement.",
-  "planRhythm": "Rythme de facturation",
-  "planQuarter": "Trimestrielle",
-  "planYear": "Annuelle",
-  "planSave": "{months} mois offerts",
-  "planPerLot": "par lot et par mois",
-  "planFromLabel": "Dès",
-  "planBilledQuarter": "Facturation tous les 3 mois",
-  "planBilledYear": "Facturation une fois par an",
-  "planNote": "Chaque lot loué est facturé selon son loyer, de {min} à {max} par mois. Le prix par lot baisse avec le nombre de lots, puis avec les années. TVA incluse.",
-  "planCta": "Commencer mes 30 jours gratuits",
-  "planFree": "Aucune carte demandée aujourd’hui. Vous changez de formule quand vous voulez.",
-  "planTimelineTitle": "Comment fonctionne l’essai",
-  "planToday": "Aujourd’hui",
-  "planTodayBody": "Accès complet à toutes les fonctionnalités.",
-  "planReminderBody": "Un rappel par e-mail avant la fin de l’essai.",
-  "planEndBody": "Fin de l’essai : ajoutez une carte pour continuer. Rien n’est prélevé sans votre accord.",
-  "welcomeTrialQuarter": "Essai gratuit jusqu’au {date}, puis facturation trimestrielle.",
-  "welcomeTrialYear": "Essai gratuit jusqu’au {date}, puis facturation annuelle.",
   "progress": "Progression de l’inscription",
-  "progressCount": "{current} sur {total}",
   "language": "Langue",
   "sideTitle": "La location,\nsimplement.",
   "sideBody": "Vos biens, vos loyers, vos échanges.\nUn seul espace.",
   "sideFoot": "Pensé pour la vie locative au Luxembourg.",
   "sideLabel": "Morada Gestion",
-  "benefit1": "Un espace à vous",
-  "benefit2": "L’essentiel, simplement",
   "termsPrefix": "En continuant, vous acceptez les",
   "terms": "conditions d’utilisation",
   "and": "et prenez connaissance de la",
@@ -186,6 +135,303 @@ export const signupFr = {
   "previewDone": "L’aperçu est terminé. Aucune donnée n’a été enregistrée.",
   "restart": "Recommencer l’aperçu",
   "previewSecurity": "Aperçu : la vérification de sécurité est simulée.",
-  "secureLabel": "Connexion sécurisée"
+  "onboarding": {
+    "quiz": {
+      "kind": {
+        "title": "Que louez-vous ?",
+        "intro": "Pour vous montrer les bons écrans.",
+        "options": {
+          "flats": "Des appartements",
+          "houses": "Des maisons",
+          "building": "Un immeuble entier",
+          "mixed": "Un peu de tout"
+        }
+      },
+      "manage": {
+        "title": "Vous gérez pour…",
+        "intro": "Chacun a son rythme.",
+        "options": {
+          "self": "Moi-même",
+          "family": "Ma famille ou une société familiale",
+          "clients": "Des clients, je suis gestionnaire"
+        }
+      },
+      "units": {
+        "title": "Combien de lots, à peu près ?",
+        "intro": "Appartements, maisons, studios, parkings.",
+        "options": {
+          "0": "Pas encore de lot",
+          "1": "1 lot",
+          "2-5": "2 à 5 lots",
+          "6-10": "6 à 10 lots",
+          "11-20": "11 à 20 lots",
+          "21-50": "21 à 50 lots"
+        }
+      },
+      "rent": {
+        "title": "Et vos loyers, en moyenne ?",
+        "intro": "Par lot, hors charges. Une estimation suffit.",
+        "options": [
+          "Moins de 1 000 €",
+          "1 000 à 1 499 €",
+          "1 500 à 1 999 €",
+          "2 000 à 2 999 €",
+          "3 000 € et plus"
+        ]
+      },
+      "where": {
+        "title": "Où sont vos biens ?",
+        "intro": "Les règles ne sont pas les mêmes partout.",
+        "options": {
+          "lu": "Luxembourg",
+          "be": "Belgique",
+          "fr": "France",
+          "de": "Allemagne",
+          "multi": "Plusieurs pays"
+        }
+      },
+      "today": {
+        "title": "Comment gérez-vous aujourd’hui ?",
+        "intro": "Pour partir de là où vous en êtes.",
+        "options": {
+          "spreadsheet": "Un tableur",
+          "software": "Un autre logiciel",
+          "paper": "Papier et e-mails",
+          "starting": "Je débute"
+        }
+      },
+      "challenge": {
+        "title": "Qu’est-ce qui vous pèse le plus ?",
+        "intro": "On commence par ça.",
+        "options": {
+          "rent": {
+            "label": "Relancer les loyers en retard",
+            "sub": "Et vérifier chaque virement sur le compte"
+          },
+          "documents": {
+            "label": "Baux, états des lieux, documents",
+            "sub": "Tout retrouver quand il le faut"
+          },
+          "compliance": {
+            "label": "Indexation, charges, délais",
+            "sub": "Ne rien rater, ne rien perdre"
+          },
+          "finances": {
+            "label": "Revenus, dépenses, déclaration",
+            "sub": "Savoir où j’en suis, sans tableur"
+          },
+          "maintenance": {
+            "label": "Demandes et réparations",
+            "sub": "Les appels, les devis, les relances"
+          }
+        }
+      },
+      "time": {
+        "title": "Combien de temps y passez-vous ?",
+        "intro": "Par semaine, à peu près."
+      },
+      "late": {
+        "title": "Un loyer en retard, vous l’apprenez…",
+        "intro": "Soyez honnête, ça nous aide à régler l’app.",
+        "options": {
+          "same_day": "Le jour même",
+          "days": "Au bout de quelques jours",
+          "month_end": "À la fin du mois",
+          "never": "Parfois jamais"
+        }
+      },
+      "goal": {
+        "title": "Votre objectif cette année ?",
+        "intro": "Un seul, le plus important.",
+        "options": {
+          "rent": "Ne plus courir après les loyers",
+          "everything": "Tout avoir au même endroit",
+          "time": "Y passer moins de temps",
+          "tax": "Préparer ma déclaration sans stress",
+          "grow": "Louer un bien de plus"
+        }
+      },
+      "source": {
+        "title": "Où avez-vous entendu parler de Morada ?",
+        "intro": "Ça nous aide à mieux vous trouver.",
+        "options": {
+          "instagram": "Instagram",
+          "tiktok": "TikTok",
+          "word": "Un proche ou un collègue",
+          "search": "Une recherche Google",
+          "press": "La presse ou un article",
+          "other": "Autre"
+        }
+      }
+    },
+    "interests": {
+      "groups": {
+        "first": "À voir en premier",
+        "horizon": "Votre horizon",
+        "watch": "À surveiller de près"
+      },
+      "horizons": {
+        "month": "Le mois",
+        "year": "L’année"
+      },
+      "watches": {
+        "arrears": "Retards de paiement",
+        "vacancy": "Lots vacants",
+        "edl_exit": "Fins de bail",
+        "ticket": "Travaux urgents",
+        "invite": "Espaces locataires"
+      },
+      "title": "Qu’est-ce qui compte pour vous ?",
+      "intro": "Votre accueil s’adapte à vos réponses.",
+      "chosen": {
+        "one": "1 choisi",
+        "many": "{n} choisis"
+      },
+      "chips": {
+        "arrears": "Impayés",
+        "cashflow": "Trésorerie",
+        "actions": "À faire",
+        "costs": "Dépenses",
+        "requests": "Demandes",
+        "activity": "Activité"
+      }
+    },
+    "potential": {
+      "title": "Vous avez tout pour y arriver.",
+      "intro": "Voici votre premier mois avec Morada, tel qu’il se passe.",
+      "introGoal": "Votre objectif : {goal}. Voici votre premier mois avec Morada, tel qu’il se passe.",
+      "chart": "Votre premier mois",
+      "steps": {
+        "w1": "Semaine 1",
+        "w1Body": "Banque connectée, loyers rapprochés tout seuls",
+        "w2": "Semaine 2",
+        "w2Body": "Les retards signalés le jour même, la relance prête",
+        "m1": "Mois 1",
+        "m1Body": "Le mois bouclé, chaque euro à sa place"
+      },
+      "foot": "Rien à saisir chaque mois : vos virements font le travail.",
+      "cta": "Continuer"
+    },
+    "reviews": {
+      "title": "Des bailleurs comme vous gèrent déjà leurs loyers ici",
+      "rating": "avis de bailleurs",
+      "cta": "Continuer"
+    },
+    "setup": {
+      "title": "Nous créons votre espace",
+      "intro": "Personnalisé d’après vos réponses.",
+      "items": {
+        "answers": "Vos réponses analysées : {challenge}",
+        "home": "Votre accueil : {sections}",
+        "alerts": "Vos alertes : {watch}",
+        "price": "Votre tarif pour {n}"
+      },
+      "retry": "Réessayer"
+    },
+    "ready": {
+      "title": "Votre plan est prêt.",
+      "intro": "Réglé sur ce qui vous pèse : {challenge}.",
+      "goal": "Objectif : {goal}",
+      "home": "Accueil",
+      "cta": "Continuer",
+      "foot": "Votre essai gratuit de 30 jours démarre juste après.",
+      "rows": {
+        "rent": [
+          "Chaque virement rapproché avec le bon loyer",
+          "Un retard signalé le jour même",
+          "Relance en un geste, texte prêt"
+        ],
+        "documents": [
+          "Un dossier par location : bail, EDL, pièces",
+          "État des lieux signé sur place, scellé en PDF",
+          "Tout retrouvable depuis votre téléphone"
+        ],
+        "compliance": [
+          "Indexation calculée, courrier prêt",
+          "Décompte de charges guidé",
+          "Délais légaux rappelés à temps"
+        ],
+        "finances": [
+          "Entrées et sorties, mois par mois",
+          "Dépenses saisies en photographiant le reçu",
+          "Une vue annuelle prête pour la déclaration"
+        ],
+        "maintenance": [
+          "Demandes des locataires au même endroit",
+          "Urgences signalées en rouge",
+          "Historique par logement"
+        ]
+      }
+    },
+    "tryFree": {
+      "title": "Nous voulons que vous essayiez Morada gratuitement.",
+      "cta": "Essayer gratuitement",
+      "shot": "Accueil de Morada sur un téléphone, avec des chiffres d’exemple"
+    },
+    "reminder": {
+      "title": "Nous vous prévenons avant la fin de votre essai.",
+      "intro": "Par e-mail, deux jours avant la fin.",
+      "cta": "Continuer gratuitement"
+    },
+    "offer": {
+      "noPayment": "Aucun paiement aujourd’hui",
+      "onUsTitle": "Vos {days} premiers jours sont offerts.",
+      "tl": {
+        "today": "Aujourd’hui",
+        "todayBody": "Accès complet à toutes les fonctions.",
+        "inDays": "Dans {days} jours",
+        "remindBody": "Un rappel par e-mail vous prévient que votre essai se termine.",
+        "startBody": "Votre abonnement démarre, sauf annulation avant cette date."
+      },
+      "tryThen": "Essayez {days} jours gratuitement, puis",
+      "periodYear": "par an",
+      "periodQuarter": "par trimestre",
+      "monthlyEq": "({amount} par mois)",
+      "priceFor": "Tarif pour {units}",
+      "lots": {
+        "one": "1 lot",
+        "many": "{n} lots"
+      },
+      "understand": "Comprendre mon tarif",
+      "start": "Commencer mes {days} jours gratuits",
+      "noCharge": "Aucun paiement aujourd’hui. Annulable à tout moment.",
+      "notNow": "Pas maintenant",
+      "nowTitle": "Votre abonnement démarre aujourd’hui.",
+      "nowSub": "Ce compte a déjà profité de ses jours gratuits.",
+      "startNow": "Démarrer mon abonnement",
+      "finePrintNow": "{amount} {period}, débité aujourd’hui puis renouvelé automatiquement. Annulable à tout moment.",
+      "checkoutFailed": "La page de paiement n’a pas pu s’ouvrir. Réessayez dans un instant.",
+      "unavailable": "Le paiement en ligne est momentanément indisponible. Réessayez plus tard.",
+      "retry": "Réessayer",
+      "scalesTitle": "Un prix qui grandit avec vous",
+      "perUnitLine": "{perUnit} par lot et par mois, loyer hors charges. Dégressif dès le 6e lot.",
+      "adjustLots": "Nombre de lots",
+      "adjustRent": "Loyer moyen par lot",
+      "rhythm": "Facturation",
+      "plans": {
+        "year": "Annuel",
+        "quarter": "Trimestriel"
+      },
+      "twoMonths": "2 mois offerts",
+      "launchNote": "Prix de lancement, en cours de validation : ils peuvent évoluer.",
+      "done": "Terminé",
+      "close": "Fermer"
+    },
+    "winback": {
+      "eyebrow": "Votre offre, une seule fois",
+      "badge": "-{pct} %",
+      "title": "{pct} % de réduction\nsur votre première année",
+      "sub": "Elle disparaît en quittant cet écran. Toujours 0 € aujourd’hui, et 30 jours gratuits.",
+      "subCharged": "Elle disparaît en quittant cet écran. Facturée aujourd’hui, annulable à tout moment.",
+      "plan": "Annuel · 12 mois",
+      "firstYear": "{amount} la première année, puis {full} par an",
+      "perMonth": "par mois",
+      "cta": "Commencer mes {days} jours gratuits",
+      "ctaCharged": "Prendre l’offre",
+      "noCommit": "Sans engagement, annulable à tout moment",
+      "decline": "Non merci"
+    },
+    "progressLabel": "Étape {current} sur {total}"
+  }
 };
 export type SignupCopy = typeof signupFr;
