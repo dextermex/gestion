@@ -20,13 +20,25 @@ const second = { first: "Tom", last: "Weber", email: mail("guided-type") };
 
 /** The tour as a new browser meets it, whatever the shared setup did before. */
 async function tourUnseen(page: Page): Promise<void> {
+  // Once for the tab, not on every page: the tour's own memory (seen, the last count) must then
+  // live on from page to page, or the card could never be pointed out again after a step.
   await page.addInitScript(() => {
     try {
+      if (sessionStorage.getItem("e2e.tour") === "on") return;
+      sessionStorage.setItem("e2e.tour", "on");
       localStorage.removeItem("morada.tour.seen");
       localStorage.removeItem("morada.tour.count");
     } catch {
       /* storage blocked: nothing to take away */
     }
+  });
+}
+
+/** A further account on the same tab: this browser forgets the tour the account before it saw. */
+async function tourForgotten(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    localStorage.removeItem("morada.tour.seen");
+    localStorage.removeItem("morada.tour.count");
   });
 }
 
@@ -127,6 +139,8 @@ test("the card and the tour fit a phone at 390 and 320 pixels", async ({ page })
   const third = { first: "Mia", last: "Schmit", email: mail("guided-phone") };
   await createAccount(third);
   await signIn(page, third.email, "/app/biens");
+  await tourUnseen(page);
+  await tourForgotten(page);
   for (const width of [390, 320]) {
     await test.step(`overlay ${width}px`, async () => {
       await page.setViewportSize({ width, height: 844 });

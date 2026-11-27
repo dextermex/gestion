@@ -78,17 +78,25 @@ export function speakAsThePage(page: Page): void {
 }
 
 /** Sign in on the door, leaving whatever account the browser still holds. */
-export async function signIn(page: Page, email: string, next = "/app"): Promise<void> {
-  // The guided tour dims the page on a first arrival and after each setup step
-  // (src/components/gestion/onboarding/SetupTour.tsx). Every spec but its own
-  // (guided-setup.spec.ts, which removes this key) starts with it off.
+/**
+ * The guided tour dims the page on a first arrival and after each setup step
+ * (src/components/gestion/onboarding/SetupTour.tsx). Every spec but its own
+ * starts with it off on its browser: `signIn` does it, and a spec that signs
+ * in by its own steps calls this first. guided-setup.spec.ts turns it back on
+ * for its tab (`sessionStorage["e2e.tour"] = "on"`), which this respects.
+ */
+export async function quietTour(page: Page): Promise<void> {
   await page.addInitScript(() => {
     try {
-      localStorage.setItem("morada.tour.seen", "off");
+      if (sessionStorage.getItem("e2e.tour") !== "on") localStorage.setItem("morada.tour.seen", "off");
     } catch {
       /* storage refused: the tour's own first-paint check then decides */
     }
   });
+}
+
+export async function signIn(page: Page, email: string, next = "/app"): Promise<void> {
+  await quietTour(page);
   await page.goto(`/connexion?next=${encodeURIComponent(next)}`);
   speakAsThePage(page);
   await leaveSignedInAccountIfAny(page);
