@@ -141,7 +141,8 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState(initialEmail);
   const [emailPending, setEmailPending] = useState(false);
-  const [answers, setAnswers] = useState<QuizAnswers>(EMPTY_ANSWERS);
+  // The answers this tab already gave (a reload stays put); none on the server.
+  const [answers, setAnswers] = useState<QuizAnswers>(() => ({ ...EMPTY_ANSWERS, ...readSession<{ answers?: QuizAnswers }>(ANSWERS_KEY)?.answers }));
   const [q, setQ] = useState(questionFromParam(question === undefined ? null : String(question)));
   const [interests, setInterests] = useState<InterestsValue>(NO_INTERESTS);
   const [dashboard, setDashboard] = useState<DashboardPrefs | null>(null);
@@ -226,12 +227,10 @@ export default function SignupFunnel({ locale: initialLocale, preview = false, s
     setEmailVerified(confirmedEmail(user));
     setRole(meta?.role === "tenant" ? "tenant" : meta?.role === "landlord" ? "landlord" : null);
     // The answers of this tab first; otherwise what the account holds (the other surface may have written them).
-    const kept = readSession<{ answers?: QuizAnswers }>(ANSWERS_KEY)?.answers;
     const storedBand = typeof mobile.offer?.band === "number" ? mobile.offer.band : null;
     const fromAccount = answersFromStored(mobile.quiz, storedBand);
     if (!fromAccount.units && typeof mobile.offer?.units === "number") fromAccount.units = answerForUnits(mobile.offer.units);
-    const restored = kept ? { ...EMPTY_ANSWERS, ...kept } : fromAccount;
-    setAnswers(restored);
+    setAnswers((current) => (Object.values(current).some((value) => value !== null) ? current : fromAccount));
     const target = funnelStep(user, invited);
     if (target === "properties") { openQuestion(question ?? 1); return; }
     if (target !== "existing") { go(target); return; }
