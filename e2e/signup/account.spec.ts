@@ -78,7 +78,10 @@ async function confirmEmail(request: APIRequestContext, email: string) {
   expect(destination.hash).not.toContain("error");
 }
 
-test("phone signup persists one identity, confirms its email by code, sets a password and provisions a private landlord workspace", async ({ request }) => {
+const quiz = { kind: "flats", manageFor: "self", units: "2-5", where: "lu", today: "spreadsheet", late: "days", goal: "rent", source: "word" };
+const dashboard = { order: ["arrears", "actions", "cashflow", "costs", "requests", "activity"], hidden: ["costs", "requests"], interests: ["arrears", "actions", "cashflow"], horizon: "month", watch: ["arrears"] };
+
+test("phone signup persists one identity, records its email without waiting for it, sets a password, saves the questions in the app's keys and provisions a private landlord workspace", async ({ request }) => {
   const anonymous = await request.post("/api/signup/profile", { headers: { origin: APP }, data: { action: "complete", preferences } });
   expect(anonymous.status()).toBe(401);
   const { db, session } = await phoneAccount("+12025550101");
@@ -94,41 +97,47 @@ test("phone signup persists one identity, confirms its email by code, sets a pas
   const profile = await db.from("profiles").select("first_name,last_name,phone,preferred_language").eq("id", id).single();
   expect(profile.error).toBeNull();
   expect(profile.data).toEqual({ first_name: "Signup", last_name: "Landlord", phone: "12025550101", preferred_language: "en" });
+  // No password and no finish before an address is given.
+  expect((await save(request, session, { action: "password", password: "Signup-Passw0rd" })).status()).toBe(409);
   const email = `landlord.${Date.now()}@signup.morada.test`;
   const registered = await save(request, session, { action: "email", email });
   expect(registered.status()).toBe(200);
   expect(await registered.json()).toEqual({ ok: true, emailPending: true });
-  // No password before the email is confirmed, no finish before the password.
-  expect((await save(request, session, { action: "password", password: "Signup-Passw0rd" })).status()).toBe(409);
+  // The address is recorded and its mail goes out; the funnel goes on to the password without waiting for it.
   expect((await save(request, session, { action: "email_confirmed" })).status()).toBe(409);
+  expect(await (await save(request, session, { action: "complete", preferences })).json()).toEqual({ error: "password_required" });
+  const passwordSet = await save(request, session, { action: "password", password: "Signup-Passw0rd" });
+  expect(await passwordSet.json()).toEqual({ ok: true, stage: "tailor" });
+  expect((await db.auth.getUser()).data.user?.user_metadata.morada_signup).toMatchObject({ stage: "tailor", password_set_at: expect.any(String) });
+  // The questions, in the iPhone app's keys only.
+  expect((await save(request, session, { action: "complete", preferences, quiz: { ...quiz, kind: "castle" } })).status()).toBe(400);
+  expect((await save(request, session, { action: "complete", preferences, quiz: { ...quiz, note: "hello" } })).status()).toBe(400);
+  expect((await save(request, session, { action: "complete", preferences, quiz, dashboard })).status()).toBe(200);
+  // The former plan choice is gone; what the offer screen came to is kept beside the answers.
+  expect((await save(request, session, { action: "plan", rhythm: "year" })).status()).toBe(400);
+  expect((await save(request, session, { action: "offer", outcome: "declined", offer: { units: 3, band: 1, billing: "year" } })).status()).toBe(200);
+  const completed = (await db.auth.getUser()).data.user;
+  expect(completed?.user_metadata.morada_signup).toMatchObject({ role: "landlord", stage: "complete", preferences });
+  expect(completed?.user_metadata.morada_mobile).toEqual({ quiz: { ...quiz, offer: "declined" }, dashboard, offer: { units: 3, band: 1, billing: "year", addon: false } });
+  // The confirmation mail did go out: its code still confirms the address, which then signs in with the password.
   const wrongCode = await db.auth.verifyOtp({ email, token: "000000", type: "email_change" });
   expect(wrongCode.error).not.toBeNull();
   const confirmedByCode = await db.auth.verifyOtp({ email, token: await emailCode(request, email), type: "email_change" });
   expect(confirmedByCode.error).toBeNull();
-  // As in the browser, the session the code returns is the one the cookie
-  // carries from here on. Setting a password revokes every other session.
   const current = confirmedByCode.data.session ?? session;
   const user = await db.auth.getUser();
   expect(user.data.user?.id).toBe(id);
   expect(user.data.user?.email).toBe(email);
   expect(user.data.user?.email_confirmed_at).toBeTruthy();
-  expect((await save(request, current, { action: "email_confirmed" })).status()).toBe(200);
-  expect(await (await save(request, current, { action: "complete", preferences })).json()).toEqual({ error: "password_required" });
-  const passwordSet = await save(request, current, { action: "password", password: "Signup-Passw0rd" });
-  expect(await passwordSet.json()).toEqual({ ok: true, stage: "tailor" });
-  // The same account now signs in with its email and password.
   const byPassword = await client().auth.signInWithPassword({ email, password: "Signup-Passw0rd" });
   expect(byPassword.error).toBeNull();
   expect(byPassword.data.user?.id).toBe(id);
-  expect((await save(request, current, { action: "complete", preferences })).status()).toBe(200);
-  // The billing rhythm for after the free trial: noted with the account, nothing charged, an unknown rhythm refused.
-  expect((await save(request, current, { action: "plan", rhythm: "monthly" })).status()).toBe(400);
-  expect((await save(request, current, { action: "plan", rhythm: "year" })).status()).toBe(200);
-  const completed = (await db.auth.getUser()).data.user;
-  expect(completed?.user_metadata.morada_signup).toMatchObject({ role: "landlord", stage: "complete", preferences, plan: { rhythm: "year" } });
-  const dashboard = await request.get("/app", { headers: sessionHeaders(current) });
-  expect(dashboard.status()).toBe(200);
-  expect(new URL(dashboard.url()).pathname).toBe("/app");
+  // The funnel opens the space while it counts, as /app would on first entry.
+  const created = await request.post("/api/espace/creer", { headers: sessionHeaders(current) });
+  expect(created.status()).toBe(200);
+  const dashboardPage = await request.get("/app", { headers: sessionHeaders(current) });
+  expect(dashboardPage.status()).toBe(200);
+  expect(new URL(dashboardPage.url()).pathname).toBe("/app");
   const memberships = await db.from("crm_members").select("agency_id,role").eq("user_id", id);
   expect(memberships.error).toBeNull();
   expect(memberships.data).toHaveLength(1);
@@ -143,13 +152,13 @@ test("tenant signup saves its own profile and opens without creating a landlord 
   expect((await save(request, session, { action: "details", firstName: "Signup", lastName: "Tenant", role: "tenant", locale: "fr" })).status()).toBe(200);
   const email = `tenant.${Date.now()}@signup.morada.test`;
   expect((await save(request, session, { action: "email", email })).status()).toBe(200);
-  // The link in the same email works as well as the code.
+  // An invitation's sign-up confirms the address before going on: the link in the email works as well as the code.
   await confirmEmail(request, email);
   expect((await save(request, session, { action: "email_confirmed" })).status()).toBe(200);
   expect(await (await save(request, session, { action: "password", password: "Tenant-Passw0rd" })).json()).toEqual({ ok: true, stage: "complete" });
   expect((await db.auth.getUser()).data.user?.user_metadata.morada_signup).toMatchObject({ role: "tenant", stage: "complete", preferences: null });
-  // A tenant has no subscription to pick.
-  expect((await save(request, session, { action: "plan", rhythm: "quarter" })).status()).toBe(400);
+  // A tenant has no offer to answer.
+  expect((await save(request, session, { action: "offer", outcome: "paywall", offer: { units: 1, band: 0, billing: "quarter" } })).status()).toBe(400);
   expect((await client().auth.signInWithPassword({ email, password: "Tenant-Passw0rd" })).error).toBeNull();
   const tenant = await request.get("/locataire", { headers: sessionHeaders(session) });
   expect(tenant.status()).toBe(200);
