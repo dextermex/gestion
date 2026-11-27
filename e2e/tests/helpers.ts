@@ -79,6 +79,16 @@ export function speakAsThePage(page: Page): void {
 
 /** Sign in on the door, leaving whatever account the browser still holds. */
 export async function signIn(page: Page, email: string, next = "/app"): Promise<void> {
+  // The guided tour dims the page on a first arrival and after each setup step
+  // (src/components/gestion/onboarding/SetupTour.tsx). Every spec but its own
+  // (guided-setup.spec.ts, which removes this key) starts with it off.
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("morada.tour.seen", "off");
+    } catch {
+      /* storage refused: the tour's own first-paint check then decides */
+    }
+  });
   await page.goto(`/connexion?next=${encodeURIComponent(next)}`);
   speakAsThePage(page);
   await leaveSignedInAccountIfAny(page);
@@ -262,7 +272,7 @@ export async function unfold(target: Locator): Promise<void> {
 }
 
 export async function foldGettingStarted(page: Page): Promise<void> {
-  const card = page.getByRole("region", { name: "Bien démarrer avec Morada Gestion" });
+  const card = page.getByRole("region", { name: "Terminez votre installation" });
   const fold = card.getByRole("button", { name: "Réduire", exact: true });
   if (await fold.isVisible().catch(() => false)) {
     await fold.click();
