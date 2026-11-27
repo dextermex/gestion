@@ -1,27 +1,28 @@
 import "server-only";
 import { after } from "next/server";
-import { DEFAULT_RHYTHM, isRhythm, subscriptionYear, type Rhythm } from "@/domain/billing/pricing";
+import { DEFAULT_RHYTHM, subscriptionYear, type Rhythm } from "@/domain/billing/pricing";
 import type { Cents } from "@/domain/money";
-import { billingState, canExtend, type BillingPhase, type BillingState, type Nudge } from "@/domain/billing/trial";
+import { billingState, trialOffered, type BillingPhase, type BillingState, type Nudge } from "@/domain/billing/trial";
 import type { Workspace } from "@/lib/workspace";
 import { billingProvider, exemptOrgs, type BillingMode } from "./provider";
 import { stripeClient } from "./stripe";
-import { ensureSnapshot, factsOf, nextQuote, syncPrice, type BillingSnapshot } from "./service";
+import { factsOf, nextQuote, syncPrice, type BillingSnapshot } from "./service";
 import { cachedSnapshot, within } from "./cache";
 
-/** Who may choose the rhythm, add the card and open the invoices: the workspace's owner and admins. */
+/** Who may choose the rhythm, change the card and open the invoices: the workspace's owner and admins. */
 export const canManageBilling = (role: string) => role === "owner" || role === "admin";
 
-/** What the shell shows of the subscription: the chip, the banner, the paywall. */
+/** What the shell shows of a running subscription: the trial's counter, louder near its end. */
 export interface BillingBrief {
   phase: BillingPhase;
   daysLeft: number;
   nudge: Nudge;
-  /** Unix seconds. */
-  trialEnd: number;
+  /** Unix seconds; null outside a trial, or when the trial was cancelled. */
   firstChargeAt: number | null;
+  /** The first charge, in cents. */
+  charged: Cents;
+  rhythm: Rhythm;
   canManage: boolean;
-  canExtend: boolean;
 }
 
 export interface Visitor {
@@ -29,32 +30,18 @@ export interface Visitor {
   userId: string;
   email: string;
   locale: string;
-  /** Auth metadata: the rhythm picked at sign-up, if any. */
-  metadata?: Record<string, unknown>;
-}
-
-/** The rhythm a visitor picked at sign-up, read defensively (metadata is the user's own). */
-export function signupChoice(metadata: Record<string, unknown> | undefined): { rhythm: Rhythm | null } {
-  const signup = (metadata?.morada_signup ?? null) as { plan?: { rhythm?: unknown } } | null;
-  const chosen = signup?.plan?.rhythm;
-  return { rhythm: isRhythm(chosen) ? chosen : null };
 }
 
 /**
- * The workspace's snapshot. On its first visit with subscriptions on, its
- * Stripe customer is created, which starts the trial. Null when
- * subscriptions are off, the workspace never pays, or Stripe does not
- * answer in five seconds: the screens then show nothing about it.
+ * The workspace's snapshot, as Stripe holds it, read through the five-minute
+ * cache. Never creates anything: a customer exists only once the workspace
+ * has opened Checkout. Null when subscriptions are off, the workspace never
+ * pays, it has no customer yet, or Stripe does not answer in five seconds.
  */
 export async function visitSnapshot(visitor: Visitor): Promise<BillingSnapshot | null> {
-  const stripe = stripeClient();
-  if (!stripe || exemptOrgs().has(visitor.org.id.toLowerCase())) return null;
-  const choice = signupChoice(visitor.metadata);
+  if (!stripeClient() || exemptOrgs().has(visitor.org.id.toLowerCase())) return null;
   try {
-    return await within((async () => (await cachedSnapshot(visitor.org.id)) ?? ensureSnapshot(stripe, {
-      orgId: visitor.org.id, orgName: visitor.org.name, email: visitor.email, userId: visitor.userId, locale: visitor.locale,
-      rhythm: choice.rhythm,
-    }))(), 5000);
+    return await within(cachedSnapshot(visitor.org.id, visitor.email), 5000);
   } catch (error) {
     console.error("billing read failed:", error instanceof Error ? error.message : "unknown");
     return null;
@@ -62,13 +49,13 @@ export async function visitSnapshot(visitor: Visitor): Promise<BillingSnapshot |
 }
 
 export function briefOf(snapshot: BillingSnapshot, role: string, now: number = Math.floor(Date.now() / 1000)): BillingBrief {
-  const facts = factsOf(snapshot, now);
-  const state = billingState(facts);
+  const state = billingState(factsOf(snapshot, now));
+  const sub = snapshot.subscription;
   return {
     phase: state.phase, daysLeft: state.daysLeft, nudge: state.nudge, firstChargeAt: state.firstChargeAt,
-    trialEnd: snapshot.customer.trialEnd,
+    charged: sub?.charged ?? 0,
+    rhythm: sub?.rhythm ?? DEFAULT_RHYTHM,
     canManage: canManageBilling(role),
-    canExtend: canExtend(facts, snapshot.customer.extended),
   };
 }
 
@@ -100,9 +87,9 @@ export function reconcilePrice(snapshot: BillingSnapshot, rents: readonly Cents[
 }
 
 /** The shell's view of the subscription; a running subscription's price is reconciled after the response. */
-export function shellBillingOf(snapshot: BillingSnapshot, role: string, counts: { lots: number; leases: number; rents: readonly Cents[] }): BillingBrief & { lots: number; leases: number } {
-  reconcilePrice(snapshot, counts.rents);
-  return { ...briefOf(snapshot, role), lots: counts.lots, leases: counts.leases };
+export function shellBillingOf(snapshot: BillingSnapshot, role: string, rents: readonly Cents[]): BillingBrief {
+  reconcilePrice(snapshot, rents);
+  return briefOf(snapshot, role);
 }
 
 /** The subscription as the subscription page shows it. */
@@ -119,29 +106,35 @@ export interface SubscriptionSummary {
 }
 
 export interface BillingPageData {
-  /** ready: subscriptions run; off: no key; not_secret: a key that is not a secret key; unreachable: Stripe silent; exempt: the workspace never pays. */
-  status: "ready" | "off" | "not_secret" | "unreachable" | "exempt";
+  /** ready: subscriptions run; off: no key; not_secret: a key that is not a secret key; unreachable: Stripe silent; exempt: the workspace never pays; store: no Stripe subscription, the workspace is open through the App Store's. */
+  status: "ready" | "off" | "not_secret" | "unreachable" | "exempt" | "store";
   mode: BillingMode | null;
   canManage: boolean;
-  /** The rhythm in force, or chosen for the trial. */
+  /** The rhythm in force. */
   rhythm: Rhythm;
   /** The year of subscription the next charge falls in (loyalty): 1 until a subscription has run a year. */
   year: number;
-  trialEnd: number | null;
-  canExtend: boolean;
   state: BillingState | null;
   subscription: SubscriptionSummary | null;
+  /** A new Checkout would come with the free days (the workspace never had a subscription). */
+  trialOffered: boolean;
 }
 
 export async function billingPage(visitor: Visitor, now: number = Math.floor(Date.now() / 1000)): Promise<BillingPageData> {
   const provider = billingProvider();
   const canManage = canManageBilling(visitor.org.role);
-  const base = { mode: provider.mode, canManage, rhythm: DEFAULT_RHYTHM, year: 1, trialEnd: null, canExtend: false, state: null, subscription: null };
+  const base = { mode: provider.mode, canManage, rhythm: DEFAULT_RHYTHM, year: 1, state: null, subscription: null, trialOffered: false };
   if (!provider.configured) return { ...base, status: provider.problem === "not_secret" ? "not_secret" : "off" };
   if (exemptOrgs().has(visitor.org.id.toLowerCase())) return { ...base, status: "exempt" };
-  const snapshot = await visitSnapshot(visitor);
-  if (!snapshot) return { ...base, status: "unreachable" };
-  const facts = factsOf(snapshot, now);
+  let snapshot: BillingSnapshot | null;
+  try {
+    snapshot = await within(cachedSnapshot(visitor.org.id, visitor.email), 5000);
+  } catch (error) {
+    console.error("billing read failed:", error instanceof Error ? error.message : "unknown");
+    return { ...base, status: "unreachable" };
+  }
+  // The page is reached only by an open workspace: without a Stripe customer, the subscription is the App Store's.
+  if (!snapshot) return { ...base, status: "store" };
   const sub = snapshot.subscription;
   const running = !!sub && ["trialing", "active", "past_due", "incomplete"].includes(sub.status);
   return {
@@ -149,9 +142,8 @@ export async function billingPage(visitor: Visitor, now: number = Math.floor(Dat
     status: "ready",
     rhythm: running && sub!.rhythm ? sub!.rhythm : snapshot.customer.rhythm,
     year: running && sub!.managed ? subscriptionYear(sub!.paidFrom, sub!.periodEnd ?? now) : 1,
-    trialEnd: snapshot.customer.trialEnd,
-    canExtend: canExtend(facts, snapshot.customer.extended),
-    state: billingState(facts),
+    state: billingState(factsOf(snapshot, now)),
+    trialOffered: trialOffered(snapshot.everSubscribed),
     subscription: sub ? {
       status: sub.status, rhythm: sub.rhythm, periodEnd: sub.periodEnd, cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
       card: sub.card, charged: sub.charged, managed: sub.managed,

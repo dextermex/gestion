@@ -191,13 +191,12 @@ const REQUEST_STATUS_COLORS: Record<RequestStatus, string> = {
 };
 
 /** Where a workspace stands with its subscription (src/domain/billing/trial.ts). */
-export type BillingPhaseUi = "trial" | "trial_card" | "active" | "past_due" | "expired" | "ended";
+export type BillingPhaseUi = "none" | "trial" | "active" | "payment" | "ended";
 const BILLING_PHASE_COLORS: Record<BillingPhaseUi, string> = {
+  none: "bg-amber-100 text-amber-800",
   trial: "bg-brand-100 text-brand-800",
-  trial_card: "bg-brand-100 text-brand-800",
   active: "bg-emerald-100 text-emerald-800",
-  past_due: "bg-red-100 text-red-700",
-  expired: "bg-amber-100 text-amber-800",
+  payment: "bg-red-100 text-red-700",
   ended: "bg-neutral-200 text-neutral-600",
 };
 /** A running trial grows louder as its end nears. */

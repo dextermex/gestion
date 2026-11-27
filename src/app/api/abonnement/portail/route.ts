@@ -10,6 +10,8 @@ export async function POST(req: NextRequest) {
   if (r instanceof NextResponse) return r;
   const body = (await req.json().catch(() => null)) as { flow?: unknown } | null;
   const flow = body?.flow === "payment_method_update" ? "payment_method_update" : undefined;
+  // No customer yet: nothing to manage until a first Checkout.
+  if (!r.snapshot) return NextResponse.json({ error: "no_subscription" }, { status: 409 });
   try {
     const url = await portalUrl(r.stripe, r.snapshot.customer.id, `${r.origin}/api/abonnement/retour?portail=1`, r.locale, flow);
     return NextResponse.json({ url });

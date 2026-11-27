@@ -7,106 +7,103 @@ import { de } from "@/lib/i18n/de";
 import { lu } from "@/lib/i18n/lu";
 import type { Locale } from "@/lib/i18n/config";
 import type { MailMessage } from "@/lib/mail";
-import { META, customerFacts, subscriptionView } from "@/lib/billing/service";
+import { META, subscriptionView } from "@/lib/billing/service";
 import { reminderMail, sendTrialReminders } from "@/lib/billing/reminders";
 
 const NOW = 1_790_000_000;
 const DICTS = { fr, en, de, lu };
-const ORG_A = "0f0f0f0f-0000-4000-8000-0000000000a1";
-const ORG_B = "0f0f0f0f-0000-4000-8000-0000000000b2";
-const ORG_C = "0f0f0f0f-0000-4000-8000-0000000000c3";
 
-const customer = (id: string, org: string, created: number, over: Record<string, string> = {}, email = `${id}@example.lu`) =>
-  ({ id, object: "customer", created, email, metadata: { [META.app]: "gestion", [META.org]: org, [META.rhythm]: "quarter", [META.locale]: "fr", ...over } });
+const customer = (id: string, over: Record<string, string> = {}, email: string | null = `${id}@example.lu`) =>
+  ({ id, object: "customer", created: NOW - 40 * DAY, email, metadata: { [META.app]: "gestion", [META.locale]: "fr", ...over } });
 
-const trialing = (customerId: string, trialEnd: number) => ({
-  id: `sub_${customerId}`, object: "subscription", status: "trialing", created: NOW - 2 * DAY, start_date: NOW - 2 * DAY, trial_end: trialEnd, cancel_at_period_end: false, cancel_at: null,
-  metadata: { [META.rhythm]: "quarter", [META.pricing]: "portfolio", [META.lots]: "4", [META.base]: "6000" }, default_payment_method: null,
-  items: { object: "list", has_more: false, data: [{ id: "si_1", quantity: 1, current_period_end: trialEnd, price: { id: "price_1", unit_amount: 6000, recurring: { interval: "month", interval_count: 3 }, metadata: {} } }] },
-});
+/** A subscription in its trial, its customer expanded as the search returns it. */
+const trialing = (name: string, daysLeft: number, over: { reminders?: string; locale?: string; cancel?: boolean; email?: string | null } = {}) => {
+  const trialEnd = NOW + daysLeft * DAY - 3600;
+  return {
+    id: `sub_${name}`, object: "subscription", status: "trialing", created: NOW - 2 * DAY, start_date: NOW - 2 * DAY, trial_end: trialEnd, cancel_at_period_end: over.cancel ?? false, cancel_at: null,
+    customer: customer(`cus_${name}`, over.locale ? { [META.locale]: over.locale } : {}, over.email === undefined ? `cus_${name}@example.lu` : over.email),
+    metadata: { [META.app]: "gestion", [META.rhythm]: "quarter", [META.pricing]: "portfolio", [META.lots]: "4", [META.base]: "6000", ...(over.reminders ? { [META.reminders]: over.reminders } : {}) },
+    default_payment_method: null,
+    items: { object: "list", has_more: false, data: [{ id: "si_1", quantity: 1, current_period_end: trialEnd, price: { id: "price_1", unit_amount: 6000, recurring: { interval: "month", interval_count: 3 }, metadata: {} } }] },
+  };
+};
 
-function standIn(customers: unknown[], subs: Record<string, unknown[]>) {
+function standIn(subs: unknown[]) {
   const updates: { id: string; form: URLSearchParams }[] = [];
+  const searches: URLSearchParams[] = [];
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input instanceof Request ? input.url : input));
     const method = String(init?.method ?? "GET").toUpperCase();
     let body: unknown = { error: { type: "invalid_request_error", message: "no stand-in" } };
     let status = 404;
-    if (url.pathname === "/v1/customers/search") { status = 200; body = { object: "search_result", data: customers, has_more: false, next_page: null, url: url.pathname }; }
-    else if (url.pathname === "/v1/subscriptions") { status = 200; body = { object: "list", data: subs[url.searchParams.get("customer") ?? ""] ?? [], has_more: false, url: url.pathname }; }
-    else if (url.pathname.startsWith("/v1/customers/") && method === "POST") {
+    if (url.pathname === "/v1/subscriptions/search") { status = 200; searches.push(url.searchParams); body = { object: "search_result", data: subs, has_more: false, next_page: null, url: url.pathname }; }
+    else if (url.pathname.startsWith("/v1/subscriptions/") && method === "POST") {
       status = 200;
       const id = url.pathname.split("/").pop()!;
       updates.push({ id, form: new URLSearchParams(String(init?.body ?? "")) });
-      body = { id, object: "customer" };
+      body = { id, object: "subscription" };
     }
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
-  return { stripe: new Stripe("sk_test_standin0000000000", { httpClient: Stripe.createFetchHttpClient(fetchImpl), maxNetworkRetries: 0, telemetry: false }), updates };
+  return { stripe: new Stripe("sk_test_standin0000000000", { httpClient: Stripe.createFetchHttpClient(fetchImpl), maxNetworkRetries: 0, telemetry: false }), updates, searches };
 }
 
+const mailer = () => {
+  const sent: MailMessage[] = [];
+  return { sent, send: async (m: MailMessage) => { sent.push(m); return { sent: true as const, id: "m" }; } };
+};
+const deps = (send: (m: MailMessage) => Promise<{ sent: true; id: string } | { sent: false; reason: string }>, over = {}) =>
+  ({ send, dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu", ...over }) as Parameters<typeof sendTrialReminders>[2];
+
 describe("trial reminder e-mails", () => {
-  it("mails each workspace the reminder it is due, once, recording it at Stripe", async () => {
-    const created = (daysLeft: number) => NOW - (30 - daysLeft) * DAY + 3600;
-    const customers = [
-      customer("cus_week", ORG_A, created(6)),                                   // six days left: the week's reminder
-      customer("cus_twin", ORG_A, created(6) + 600),                               // a duplicate of the same workspace: ignored
-      customer("cus_done", ORG_B, created(1), { [META.reminders]: "d7,d2" }),      // both already sent
-      customer("cus_card", ORG_C, created(5), { [META.locale]: "de" }),            // a card on file: the first charge announced
+  it("mails each trial seven days and two days before its first charge, once each, recording it on the subscription", async () => {
+    const subs = [
+      trialing("week", 6),                                  // six days left: the week's reminder
+      trialing("early", 12),                                // nothing due yet
+      trialing("last", 2, { reminders: "d7", locale: "de" }), // two days left, the week's sent: the last one
+      trialing("done", 1, { reminders: "d7,d2" }),          // both already sent
+      trialing("stopped", 5, { cancel: true }),             // cancelled: nothing will be charged
+      trialing("nomail", 6, { email: null }),               // no address: nobody to write to
     ];
-    const { stripe, updates } = standIn(customers, { cus_card: [trialing("cus_card", created(5) + 30 * DAY)] });
-    const sent: MailMessage[] = [];
-    const run = await sendTrialReminders(stripe, NOW, { send: async (m) => { sent.push(m); return { sent: true, id: "m" }; }, dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu" });
-    expect(run).toEqual({ checked: 3, sent: 2, failed: 0, deferred: 0 });
-    expect(sent.map((m) => m.to).sort()).toEqual(["cus_card@example.lu", "cus_week@example.lu"]);
+    const { stripe, updates, searches } = standIn(subs);
+    const { sent, send } = mailer();
+    const run = await sendTrialReminders(stripe, NOW, deps(send));
+    expect(searches[0].get("query")).toBe("status:'trialing' AND metadata['morada_app']:'gestion'");
+    expect(searches[0].get("expand[0]")).toBe("data.customer");
+    expect(run).toEqual({ checked: 6, sent: 2, failed: 0, deferred: 0 });
+    expect(sent.map((m) => m.to).sort()).toEqual(["cus_last@example.lu", "cus_week@example.lu"]);
     const week = sent.find((m) => m.to === "cus_week@example.lu")!;
-    expect(week.subject).toContain("Votre essai Morada Gestion se termine le");
+    expect(week.subject).toContain("Votre abonnement Morada Gestion démarre le");
+    expect(week.text).toContain("60");
     expect(week.html).toContain("https://app.morada.lu/app/abonnement");
-    const card = sent.find((m) => m.to === "cus_card@example.lu")!;
-    expect(card.subject).toContain("Ihr Morada-Gestion-Abonnement beginnt am");
-    expect(card.text).toContain("60,00");
-    expect(updates.map((u) => [u.id, u.form.get(`metadata[${META.reminders}]`)]).sort()).toEqual([["cus_card", "d7"], ["cus_week", "d7"]]);
+    const last = sent.find((m) => m.to === "cus_last@example.lu")!;
+    expect(last.subject).toContain("Erinnerung: Ihr Morada-Gestion-Abonnement beginnt am");
+    expect(updates.map((u) => [u.id, u.form.get(`metadata[${META.reminders}]`)]).sort()).toEqual([["sub_last", "d7,d2"], ["sub_week", "d7"]]);
   });
 
   it("does not record a reminder the mail service refused, so the next run tries again", async () => {
-    const { stripe, updates } = standIn([customer("cus_week", ORG_A, NOW - 24 * DAY)], {});
-    const run = await sendTrialReminders(stripe, NOW, { send: async () => ({ sent: false, reason: "not_configured" }), dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu" });
+    const { stripe, updates } = standIn([trialing("week", 6)]);
+    const run = await sendTrialReminders(stripe, NOW, deps(async () => ({ sent: false, reason: "not_configured" })));
     expect(run).toEqual({ checked: 1, sent: 0, failed: 1, deferred: 0 });
     expect(updates).toHaveLength(0);
   });
 
-  it("stops by itself when its time is up and counts what it leaves for the next run", async () => {
-    const customers = [customer("cus_a", ORG_A, NOW - 24 * DAY), customer("cus_b", ORG_B, NOW - 24 * DAY), customer("cus_c", ORG_C, NOW - 24 * DAY)];
-    const { stripe } = standIn(customers, {});
-    // Each look at the clock is twenty seconds later: with fifty seconds in all, the second workspace is the last one in time.
+  it("stops by itself when its time is up, nearest first charge first, and counts what it leaves", async () => {
+    // Listed far first: the run still begins with the trial that charges in two days.
+    const { stripe } = standIn([trialing("far", 6), trialing("mid", 5), trialing("near", 2)]);
     let at = 0;
-    const sent: MailMessage[] = [];
-    const run = await sendTrialReminders(stripe, NOW, { send: async (m) => { sent.push(m); return { sent: true, id: "m" }; }, dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu", budgetMs: 50_000, clock: () => (at += 20_000) });
+    const { sent, send } = mailer();
+    const run = await sendTrialReminders(stripe, NOW, deps(send, { budgetMs: 50_000, clock: () => (at += 20_000) }));
     expect(run).toEqual({ checked: 2, sent: 2, failed: 0, deferred: 1 });
-    expect(sent).toHaveLength(2);
+    expect(sent.map((m) => m.to)).toEqual(["cus_near@example.lu", "cus_mid@example.lu"]);
   });
 
-  it("takes the trials nearest their end first, so what waits for the next run is furthest from a reminder", async () => {
-    const created = (daysLeft: number) => NOW - (30 - daysLeft) * DAY + 3600;
-    // Listed far first: the run still begins with the trial that ends in two days.
-    const customers = [customer("cus_far", ORG_A, created(25)), customer("cus_near", ORG_B, created(2))];
-    const { stripe } = standIn(customers, {});
-    let at = 0;
-    const sent: MailMessage[] = [];
-    const run = await sendTrialReminders(stripe, NOW, { send: async (m) => { sent.push(m); return { sent: true, id: "m" }; }, dict: (l: Locale) => DICTS[l], appUrl: "https://app.morada.lu", budgetMs: 30_000, clock: () => (at += 20_000) });
-    expect(run).toEqual({ checked: 1, sent: 1, failed: 0, deferred: 1 });
-    expect(sent.map((m) => m.to)).toEqual(["cus_near@example.lu"]);
-  });
-
-  it("writes every reminder in all four languages, without em dashes or arrows", () => {
-    const facts = customerFacts(customer("cus_x", ORG_A, NOW - 29 * DAY) as unknown as Stripe.Customer);
-    const card = subscriptionView(trialing("cus_x", NOW + 2 * DAY) as unknown as Stripe.Subscription);
+  it("writes both reminders in all four languages, without em dashes, arrows or a placeholder left", () => {
+    const sub = subscriptionView(trialing("x", 2) as unknown as Stripe.Subscription);
     for (const locale of ["fr", "en", "de", "lu"] as const) {
-      for (const [kind, subscription] of [["d7", null], ["d2", null], ["ended", null], ["d7", card]] as const) {
-        const mail = reminderMail(kind, { customer: facts, subscription }, DICTS[locale], locale, "https://app.morada.lu/app/abonnement", NOW);
-        for (const part of [mail.subject, mail.text]) {
-          expect(part).not.toMatch(/[—→]|\{\w+\}/);
-        }
+      for (const kind of ["d7", "d2"] as const) {
+        const mail = reminderMail(kind, sub, DICTS[locale], locale, "https://app.morada.lu/app/abonnement");
+        for (const part of [mail.subject, mail.text]) expect(part).not.toMatch(/[—→]|\{\w+\}/);
         expect(mail.html).toContain("https://app.morada.lu/app/abonnement");
       }
     }

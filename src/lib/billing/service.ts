@@ -2,22 +2,22 @@ import "server-only";
 import type Stripe from "stripe";
 import { DEFAULT_RHYTHM, PRICES_INCLUDE_VAT, isRhythm, quote, subscriptionYear, withLoyalty, type Quote, type Rhythm } from "@/domain/billing/pricing";
 import type { Cents } from "@/domain/money";
-import { canExtend, checkoutTrial, extendedEnd, trialEndOf, type BillingFacts, type SubscriptionFacts } from "@/domain/billing/trial";
+import { checkoutTrial, isRunningStatus, trialOffered, type BillingFacts, type SubscriptionFacts } from "@/domain/billing/trial";
+import { WINBACK_PCT, offerSchema, type Offer } from "@/lib/signup/offer";
 import { stripeCode, stripeStatus } from "./stripe";
 
 /**
- * A workspace's subscription, kept entirely at Stripe: nothing about it is
- * stored in the shared database, so there is no migration, no service key
- * and no webhook (docs/ARCHITECTURE.md: the state is read back instead).
+ * A workspace's subscription, held at Stripe. Stripe's webhook copies its
+ * status into gestion.billing_status (supabase/shared/functions/stripe), which
+ * the gate reads first (./access.ts); this module talks to Stripe itself.
  *
  *  - One Stripe customer per workspace, found by the workspace id in its
- *    metadata. The trial runs from that customer's creation, a date Stripe
- *    sets and nobody edits: a workspace cannot lengthen its own trial, and
- *    deleting its records changes nothing.
- *  - The rhythm chosen during the trial sits in the customer's metadata;
- *    the subscription is only created when a card is added, through
- *    Checkout, with the rest of the trial carried over so the first charge
- *    falls on the trial's last day.
+ *    metadata, created when the workspace first opens Checkout (never
+ *    because a page was opened).
+ *  - The subscription is created by Checkout, the card taken first, with a
+ *    thirty-day trial for a workspace that never had a subscription: the
+ *    first charge falls on the trial's last day. A workspace that had one
+ *    is charged at once (the free days are promised once).
  *  - A subscription carries one price: the portfolio's charge, computed
  *    here from the rents of the lots it bills (src/domain/billing/pricing.ts)
  *    and handed to Stripe as is, loyalty included, so what the screen shows
@@ -37,10 +37,15 @@ export const META = {
   org: "morada_org",
   rhythm: "morada_rhythm",
   locale: "morada_locale",
-  /** An extension's end, in unix seconds. */
-  trialEnd: "morada_trial_end",
-  /** The reminder e-mails already sent, comma-separated. */
+  /** On a subscription in its trial: the reminder e-mails already sent, comma-separated. */
   reminders: "morada_reminders",
+  /** On a Checkout session and its subscription: where it was started (signup, resume, page). */
+  source: "morada_source",
+  /** On a Checkout session: the offer it prices (lots and rent band), for the return route. */
+  units: "morada_units",
+  band: "morada_band",
+  /** On a Checkout session: the one-time offer applied. */
+  winback: "morada_winback",
   /** On a subscription priced here from the portfolio: PORTFOLIO_PRICING. */
   pricing: "morada_pricing",
   /** On such a subscription: the lots counted at its last pricing. */
@@ -57,13 +62,9 @@ export interface CustomerFacts {
   id: string;
   created: number;
   email: string | null;
-  /** The workspace's trial end: creation plus the trial, or the extension's end. */
-  trialEnd: number;
-  extended: boolean;
-  /** The rhythm chosen during the trial (the default until then). */
+  /** The rhythm last chosen (the default until then). */
   rhythm: Rhythm;
   locale: string;
-  reminders: string[];
 }
 
 export interface SubscriptionView extends SubscriptionFacts {
@@ -83,31 +84,34 @@ export interface SubscriptionView extends SubscriptionFacts {
   paidFrom: number;
   /** The payment method on file, as its holder recognises it. */
   card: { brand: string; last4: string } | null;
+  /** The trial reminders already sent. */
+  reminders: string[];
 }
 
 export interface BillingSnapshot {
   customer: CustomerFacts;
   subscription: SubscriptionView | null;
+  /** The customer ever had a subscription (the free days are then spent). */
+  everSubscribed: boolean;
 }
 
-export const factsOf = (snapshot: BillingSnapshot, now: number): BillingFacts => ({ now, trialEnd: snapshot.customer.trialEnd, subscription: snapshot.subscription });
+export const factsOf = (snapshot: BillingSnapshot, now: number): BillingFacts => ({ now, subscription: snapshot.subscription });
+
+/** Whether the snapshot shows a subscription that runs (trialing or active). */
+export const snapshotRuns = (snapshot: BillingSnapshot | null): boolean => isRunningStatus(snapshot?.subscription?.status);
 
 /** Statuses under which a subscription is the workspace's current one. */
 const CURRENT = ["trialing", "active", "past_due", "incomplete", "unpaid", "paused"];
 
 export function customerFacts(customer: Stripe.Customer): CustomerFacts {
   const meta = customer.metadata ?? {};
-  const extendedTo = Number(meta[META.trialEnd]) || null;
   const rhythm = meta[META.rhythm];
   return {
     id: customer.id,
     created: customer.created,
     email: customer.email ?? null,
-    trialEnd: trialEndOf(customer.created, extendedTo),
-    extended: extendedTo !== null,
     rhythm: isRhythm(rhythm) ? rhythm : DEFAULT_RHYTHM,
     locale: meta[META.locale] || "fr",
-    reminders: (meta[META.reminders] ?? "").split(",").filter(Boolean),
   };
 }
 
@@ -139,6 +143,7 @@ export function subscriptionView(sub: Stripe.Subscription): SubscriptionView {
     base: Number.isInteger(base) && base > 0 ? base : null,
     paidFrom: sub.trial_end ?? sub.start_date,
     card,
+    reminders: (meta[META.reminders] ?? "").split(",").filter(Boolean),
   };
 }
 
@@ -178,7 +183,7 @@ export interface NewCustomer {
 /** The languages Stripe writes to the customer in (receipts, its own e-mails). */
 export const preferredLocales = (locale: string): string[] => (locale === "lu" ? ["de", "fr"] : [locale === "en" || locale === "de" ? locale : "fr"]);
 
-/** The workspace's customer, created now: the trial starts here. */
+/** The workspace's customer, created now (at its first Checkout). */
 export async function createCustomer(stripe: Stripe, input: NewCustomer): Promise<Stripe.Customer> {
   if (!UUID.test(input.orgId)) throw new Error("createCustomer: not a workspace id");
   const params: Stripe.CustomerCreateParams = {
@@ -209,7 +214,7 @@ export async function createCustomer(stripe: Stripe, input: NewCustomer): Promis
 export async function snapshotOf(stripe: Stripe, customer: Stripe.Customer): Promise<BillingSnapshot> {
   const subs = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 10, expand: ["data.default_payment_method"] });
   const current = pickSubscription(subs.data);
-  return { customer: customerFacts(customer), subscription: current ? subscriptionView(current) : null };
+  return { customer: customerFacts(customer), subscription: current ? subscriptionView(current) : null, everSubscribed: subs.data.length > 0 };
 }
 
 /** The snapshot of a workspace whose customer already exists; null when it does not yet. */
@@ -218,12 +223,12 @@ export async function readSnapshot(stripe: Stripe, orgId: string, email?: string
   return customer ? snapshotOf(stripe, customer) : null;
 }
 
-/** The snapshot, creating the customer (and so starting the trial) on the workspace's first visit. */
+/** The snapshot, creating the customer when the workspace has none yet: called by Checkout only. */
 export async function ensureSnapshot(stripe: Stripe, input: NewCustomer): Promise<BillingSnapshot> {
   const existing = await findCustomer(stripe, input.orgId, input.email);
   if (existing) return snapshotOf(stripe, existing);
   const created = await createCustomer(stripe, input);
-  return { customer: customerFacts(created), subscription: null };
+  return { customer: customerFacts(created), subscription: null, everSubscribed: false };
 }
 
 // ── The price ──────────────────────────────────────────────────────────────
@@ -266,48 +271,86 @@ const pricingMeta = (q: Quote) => ({ [META.pricing]: PORTFOLIO_PRICING, [META.rh
 /** The year of subscription the next charge falls in: the trial's end, else the current period's. */
 const nextChargeYear = (sub: SubscriptionView, now: number) => subscriptionYear(sub.paidFrom, sub.periodEnd ?? now);
 
-// ── Checkout, portal, rhythm, price, extension ────────────────────────────
+/** The one-time offer: a quarter off the first year (one yearly charge, or four quarterly ones). */
+export const WINBACK_COUPON = { id: `morada_winback_${WINBACK_PCT}`, percent_off: WINBACK_PCT, duration: "repeating" as const, duration_in_months: 12 };
+
+const couponConfirmed = new WeakSet<object>();
+
+/** The coupon, created in the Stripe account the first time the offer is taken. */
+async function ensureWinbackCoupon(stripe: Stripe): Promise<void> {
+  if (couponConfirmed.has(stripe)) return;
+  try {
+    await stripe.coupons.retrieve(WINBACK_COUPON.id);
+  } catch (error) {
+    if (stripeStatus(error) !== 404) throw error;
+    try {
+      await stripe.coupons.create({ ...WINBACK_COUPON, name: `Morada Gestion -${WINBACK_PCT} %`, metadata: { [META.app]: APP } });
+    } catch (again) {
+      if (stripeCode(again) !== "resource_already_exists") throw again;
+    }
+  }
+  couponConfirmed.add(stripe);
+}
+
+// ── Checkout, portal, rhythm, price ───────────────────────────────────────
 
 /** The language Checkout and the portal speak; Lëtzebuergesch readers get their browser's. */
 export const checkoutLocale = (locale: string): "fr" | "en" | "de" | "auto" =>
   locale === "fr" || locale === "en" || locale === "de" ? locale : "auto";
 
+/** A subscription the running price follows (repriced, rhythm changed): running, or waiting for a payment. */
 const isRunning = (sub: SubscriptionView | null) => !!sub && ["trialing", "active", "past_due", "incomplete"].includes(sub.status);
+
+/** A subscription that a new Checkout must not duplicate: running, or held until its payment is settled. */
+const blocksCheckout = (sub: SubscriptionView | null) => !!sub && ["trialing", "active", "past_due", "unpaid", "incomplete"].includes(sub.status);
+
+/** Where a Checkout was started: the sign-up's offer screen, the locked screen's "resume", the subscription page. */
+export type CheckoutSource = "signup" | "resume" | "page";
 
 export interface CheckoutInput {
   snapshot: BillingSnapshot;
   orgId: string;
-  rhythm: Rhythm;
-  /** The rents of the lots the subscription bills, read here (never taken from the browser). */
-  rents: readonly Cents[];
+  /** The price: from the sign-up's answers (offerQuote) or the portfolio's rents, computed on the server. */
+  quote: Quote;
+  /** The offer it prices, when it came from one (recorded on the account on return). */
+  offer?: Offer | null;
+  source: CheckoutSource;
+  /** The one-time offer: a quarter off the first year. */
+  winback?: boolean;
   locale: string;
   /** The app's own origin, for the return addresses. */
   origin: string;
-  now: number;
   tax: boolean;
-  /** Shown above Checkout's button: when the first charge falls. */
+  /** Shown above Checkout's button: when the first charge falls, that nothing is charged today. */
   submitMessage: string;
 }
 
 export type CheckoutResult = { url: string } | { error: "already_subscribed" | "too_many_lots" };
 
-/** A Checkout page that creates the subscription, the rest of the trial carried over. */
+const CANCEL_PATH: Record<CheckoutSource, string> = { signup: "/inscription?etape=offre&retour=annule", resume: "/app", page: "/app/abonnement" };
+
+/** A Checkout page that takes the card and creates the subscription, with the thirty free days when the workspace never had them. */
 export async function createCheckout(stripe: Stripe, input: CheckoutInput): Promise<CheckoutResult> {
-  if (isRunning(input.snapshot.subscription)) return { error: "already_subscribed" };
-  const q = quote(input.rents, input.rhythm, 1);
+  if (blocksCheckout(input.snapshot.subscription)) return { error: "already_subscribed" };
+  const q = input.quote;
   // Beyond the published terms, the price is built with the team.
   if (!q.fits) return { error: "too_many_lots" };
   await ensureProduct(stripe);
-  const trial = checkoutTrial(input.now, input.snapshot.customer.trialEnd);
-  const meta = { [META.app]: APP, [META.org]: input.orgId, [META.rhythm]: input.rhythm };
+  if (input.winback) await ensureWinbackCoupon(stripe);
+  const trial = checkoutTrial(trialOffered(input.snapshot.everSubscribed));
+  const meta: Record<string, string> = { [META.app]: APP, [META.org]: input.orgId, [META.rhythm]: q.rhythm, [META.source]: input.source };
+  const sessionMeta: Record<string, string> = { ...meta };
+  if (input.offer) Object.assign(sessionMeta, { [META.units]: String(input.offer.units), [META.band]: String(input.offer.band) });
+  if (input.winback) sessionMeta[META.winback] = "1";
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: input.snapshot.customer.id,
     client_reference_id: input.orgId,
-    line_items: [{ price_data: priceData(q.charged, input.rhythm), quantity: 1 }],
+    line_items: [{ price_data: priceData(q.charged, q.rhythm), quantity: 1 }],
     subscription_data: { ...(trial ?? {}), metadata: { ...meta, ...pricingMeta(q) } },
     payment_method_collection: "always",
-    allow_promotion_codes: true,
+    // Stripe takes a coupon or promotion codes, not both: the one-time offer comes without codes.
+    ...(input.winback ? { discounts: [{ coupon: WINBACK_COUPON.id }] } : { allow_promotion_codes: true }),
     billing_address_collection: "auto",
     tax_id_collection: { enabled: true },
     customer_update: { name: "auto", address: "auto" },
@@ -315,18 +358,41 @@ export async function createCheckout(stripe: Stripe, input: CheckoutInput): Prom
     locale: checkoutLocale(input.locale),
     custom_text: input.submitMessage ? { submit: { message: input.submitMessage.slice(0, 1200) } } : undefined,
     success_url: `${input.origin}/api/abonnement/retour?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${input.origin}/app/abonnement`,
-    metadata: meta,
+    cancel_url: `${input.origin}${CANCEL_PATH[input.source]}`,
+    metadata: sessionMeta,
   });
   if (!session.url) throw new Error("createCheckout: Stripe returned no address");
   return { url: session.url };
 }
 
+/** What a finished Checkout session says, once it is known to be this workspace's own. */
+export interface CheckoutReturn {
+  source: CheckoutSource;
+  /** The offer it priced, as the account records it (`morada_mobile.offer`); null when it priced the portfolio. */
+  offer: (Offer & { addon: false }) | null;
+  /** The subscription it created is in its trial. */
+  trialing: boolean;
+}
+
+/** A finished Checkout session, when it is this workspace's own; null for anybody else's (nothing is then recorded or refreshed). */
+export async function checkoutReturn(stripe: Stripe, orgId: string, sessionId: string): Promise<CheckoutReturn | null> {
+  if (!/^cs_(test|live)_[A-Za-z0-9]{8,}$/.test(sessionId)) return null;
+  const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["subscription"] });
+  if (session.client_reference_id !== orgId || session.metadata?.[META.org] !== orgId) return null;
+  const meta = session.metadata ?? {};
+  const marked = meta[META.source];
+  const source: CheckoutSource = marked === "signup" || marked === "resume" ? marked : "page";
+  const parsed = meta[META.units] && meta[META.band]
+    ? offerSchema.safeParse({ units: Number(meta[META.units]), band: Number(meta[META.band]), billing: meta[META.rhythm] })
+    : null;
+  const offer = parsed?.success ? { ...parsed.data, addon: false as const } : null;
+  const sub = session.subscription && typeof session.subscription === "object" ? session.subscription : null;
+  return { source, offer, trialing: sub?.status === "trialing" };
+}
+
 /** Whether a finished Checkout session is this workspace's own, before anything is refreshed for it. */
 export async function checkoutBelongs(stripe: Stripe, orgId: string, sessionId: string): Promise<boolean> {
-  if (!/^cs_(test|live)_[A-Za-z0-9]{8,}$/.test(sessionId)) return false;
-  const session = await stripe.checkout.sessions.retrieve(sessionId);
-  return session.client_reference_id === orgId && session.metadata?.[META.org] === orgId;
+  return (await checkoutReturn(stripe, orgId, sessionId)) !== null;
 }
 
 let portalConfiguration: string | null = null;
@@ -444,12 +510,4 @@ export async function stepLoyalty(stripe: Stripe, now: number): Promise<LoyaltyR
     }
   }
   return run;
-}
-
-/** The one extension, written where only the server reaches it. */
-export async function extendTrial(stripe: Stripe, snapshot: BillingSnapshot, now: number): Promise<{ trialEnd: number } | { error: "not_offered" }> {
-  if (!canExtend({ now, trialEnd: snapshot.customer.trialEnd, subscription: snapshot.subscription }, snapshot.customer.extended)) return { error: "not_offered" };
-  const trialEnd = extendedEnd(now, snapshot.customer.trialEnd);
-  await stripe.customers.update(snapshot.customer.id, { metadata: { [META.trialEnd]: String(trialEnd), [META.reminders]: "" } });
-  return { trialEnd };
 }
