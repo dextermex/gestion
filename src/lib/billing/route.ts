@@ -12,20 +12,23 @@ import type { Dict } from "@/lib/i18n/fr";
 import { getDatasetId } from "@/lib/demo";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { stripeClient } from "./stripe";
-import { canManageBilling, visitSnapshot } from "./view";
+import { canManageBilling } from "./view";
+import { cachedSnapshot, within } from "./cache";
 import type { BillingSnapshot } from "./service";
 
 /**
  * The spine of the subscription routes: same origin, a session, the active
  * workspace, its owner or an admin, real data (never the sample cabinet),
- * subscriptions on, a counted number of calls, and the workspace's snapshot. Subscribing is itself a
- * read for the write lock: a workspace whose trial is over must still be
- * able to pay.
+ * subscriptions on, a counted number of calls, and the workspace's snapshot
+ * (null while it has no Stripe customer: Checkout creates it). Subscribing is
+ * not a write to the workspace: a locked workspace must still be able to pay.
  */
 export interface BillingRoute {
   ctx: OrgContext & { client: SupabaseClient };
   stripe: Stripe;
-  snapshot: BillingSnapshot;
+  snapshot: BillingSnapshot | null;
+  /** The signed-in member's address, for the customer Checkout creates. */
+  email: string;
   locale: Locale;
   d: Dict;
   origin: string;
@@ -45,9 +48,14 @@ export async function billingRoute(req: NextRequest): Promise<BillingRoute | Nex
   if (limited) return limited;
   const session = await getSession();
   const { locale, d } = await getI18n();
-  const snapshot = await visitSnapshot({ org: ctx.org, userId: ctx.userId, email: session?.email ?? "", locale, metadata: session?.metadata });
-  if (!snapshot) return NextResponse.json({ error: "unavailable" }, { status: 503 });
-  return { ctx, stripe, snapshot, locale, d, origin: req.nextUrl.origin };
+  const email = session?.email ?? "";
+  let snapshot: BillingSnapshot | null;
+  try {
+    snapshot = await within(cachedSnapshot(ctx.org.id, email), 5000);
+  } catch (error) {
+    return stripeFailure("read", error);
+  }
+  return { ctx, stripe, snapshot, email, locale, d, origin: req.nextUrl.origin };
 }
 
 /**

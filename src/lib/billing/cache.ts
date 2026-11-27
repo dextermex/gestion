@@ -14,14 +14,18 @@ export const billingTag = (orgId: string) => `billing:${orgId}`;
 
 const NOT_YET = "billing_not_yet";
 
-/** The snapshot, or null while the workspace has no customer yet (not cached, so its creation shows at once). */
-export async function cachedSnapshot(orgId: string): Promise<BillingSnapshot | null> {
+/**
+ * The snapshot, or null while the workspace has no customer yet (not cached,
+ * so its creation shows at once). The e-mail finds a customer Stripe's search
+ * does not show yet (it lags a creation by up to a minute: a Checkout just made).
+ */
+export async function cachedSnapshot(orgId: string, email?: string | null): Promise<BillingSnapshot | null> {
   const stripe = stripeClient();
   if (!stripe) return null;
   try {
     return await unstable_cache(
       async () => {
-        const snapshot = await readSnapshot(stripe, orgId);
+        const snapshot = await readSnapshot(stripe, orgId, email);
         if (!snapshot) throw Object.assign(new Error(NOT_YET), { code: NOT_YET });
         return snapshot;
       },
@@ -41,10 +45,10 @@ export async function cachedSnapshot(orgId: string): Promise<BillingSnapshot | n
  * (another tab, the invoice e-mail, the team) unlocks at the next write
  * instead of up to five minutes later.
  */
-export async function freshSnapshot(orgId: string): Promise<BillingSnapshot | null> {
+export async function freshSnapshot(orgId: string, email?: string | null): Promise<BillingSnapshot | null> {
   const stripe = stripeClient();
   if (!stripe) return null;
-  const snapshot = await readSnapshot(stripe, orgId);
+  const snapshot = await readSnapshot(stripe, orgId, email);
   try {
     revalidateTag(billingTag(orgId));
   } catch {

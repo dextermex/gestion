@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { SESSION_MAX_AGE, decodeSession, sessionCookieNames, sessionCookieParts, sharedCookieDomain } from "@/lib/sessionCookie";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, STORAGE_KEY } from "./config";
 
@@ -82,6 +82,8 @@ export interface Session {
   accessToken: string;
   /** Auth's user metadata as verified: personalisation only, never a permission. */
   metadata?: Record<string, unknown>;
+  /** The verified user as Auth gave it: where an unfinished sign-up resumes is read from it (resumeStep). */
+  user?: User;
 }
 
 /** The account system's answer to a renewal: the session as supabase-js stores it. */
@@ -185,7 +187,7 @@ async function verify(accessToken: string): Promise<Verified> {
       const status = (error as { status?: number } | null)?.status;
       return typeof status === "number" && status >= 400 && status < 500 ? { kind: "refused" } : { kind: "unreachable" };
     }
-    return { kind: "ok", session: { userId: data.user.id, email: data.user.email ?? "", accessToken, metadata: data.user.user_metadata ?? {} } };
+    return { kind: "ok", session: { userId: data.user.id, email: data.user.email ?? "", accessToken, metadata: data.user.user_metadata ?? {}, user: data.user } };
   } catch {
     return { kind: "unreachable" };
   }
@@ -214,7 +216,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
   const renewed = await renew(stored.refreshToken);
   if (!renewed) return null;
   await storeRenewedSession(renewed);
-  return { userId: renewed.user.id, email: renewed.user.email ?? "", accessToken: renewed.access_token, metadata: renewed.user.user_metadata ?? {} };
+  return { userId: renewed.user.id, email: renewed.user.email ?? "", accessToken: renewed.access_token, metadata: renewed.user.user_metadata ?? {}, user: renewed.user as unknown as User };
 });
 
 /**
