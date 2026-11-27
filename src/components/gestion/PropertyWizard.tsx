@@ -29,7 +29,7 @@ import type { Dict } from "@/lib/i18n/fr";
  * and nothing is stored.
  */
 
-type PropertyType = "apartment" | "house" | "building" | "commercial" | "parking" | "other";
+export type PropertyType = "apartment" | "house" | "building" | "commercial" | "parking" | "other";
 
 const TYPE_ICONS: Record<PropertyType, React.ReactNode> = {
   apartment: (
@@ -113,8 +113,14 @@ export default function PropertyWizard({
   notice,
   noticeTone = "demo",
   real = false,
+  initialType = null,
+  returnTo = null,
 }: {
   d: Dict;
+  /** The kind chosen before the form opened (the sign-up's answer): preselected, nothing else skipped. */
+  initialType?: PropertyType | null;
+  /** The guided first entry: finishing or leaving the form goes back there (a full load, so the space reads its new records). */
+  returnTo?: string | null;
   /** Demo end-screen message (sample cabinets only). */
   notice: string;
   noticeTone?: "demo" | "pending";
@@ -126,7 +132,7 @@ export default function PropertyWizard({
   const shellRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
-  const [type, setType] = useState<PropertyType | null>(null);
+  const [type, setType] = useState<PropertyType | null>(initialType);
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -383,6 +389,8 @@ export default function PropertyWizard({
     await sendPhotos(created.id);
     setStep(9);
     setSaving(false);
+    // The space's shell (the setup card, the pickers) reads the new property.
+    router.refresh();
   };
 
   const submit = () => {
@@ -426,7 +434,12 @@ export default function PropertyWizard({
   const overlay = (
     <div ref={shellRef} className="journey-shell fixed inset-0 z-[60] overflow-y-auto bg-sand-50">
       <div className="journey-topbar sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-sand-100 bg-white/90 px-4 backdrop-blur sm:px-6">
-        {step === 1 || step === 9 ? (
+        {(step === 1 || step === 9) && returnTo ? (
+          <a href={returnTo} className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
+            <BackIcon />
+            {d.nav.home}
+          </a>
+        ) : step === 1 || step === 9 ? (
           <Link href="/app/biens" className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink max-sm:min-h-11">
             <BackIcon />
             {d.biens.wizBack}
@@ -790,6 +803,11 @@ export default function PropertyWizard({
                       {saveError}
                     </p>
                   )}
+                  {returnTo ? (
+                    <Button className="mt-6" onClick={() => window.location.assign(returnTo)}>
+                      {d.onboarding.resume}
+                    </Button>
+                  ) : (
                   <div className="mt-6 flex flex-col gap-2.5">
                     {createdUnits.length > 0 && (
                       <Button onClick={() => router.push(`/app/biens/locataire?lot=${createdUnits[0].id}`)}>
@@ -806,6 +824,7 @@ export default function PropertyWizard({
                       {d.biens.wizDoneFinish}
                     </Button>
                   </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -818,8 +837,8 @@ export default function PropertyWizard({
                   >
                     {notice}
                   </p>
-                  <Button className="mt-6" onClick={() => router.push("/app/biens")}>
-                    {d.biens.wizBack}
+                  <Button className="mt-6" onClick={() => (returnTo ? window.location.assign(returnTo) : router.push("/app/biens"))}>
+                    {returnTo ? d.onboarding.resume : d.biens.wizBack}
                   </Button>
                 </>
               )}

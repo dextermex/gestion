@@ -11,6 +11,9 @@ import NoWorkspace from "@/components/gestion/NoWorkspace";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { previewEmpty } from "@/lib/deployment";
+import { shellSetup, tourSeenOn } from "@/lib/gestion/setup";
+// The setup card and the tour are on every page of the space.
+import "@/components/gestion/onboarding/onboarding.css";
 import { WORKSPACE_SEEN, getIdentity, hadWorkspace, provisionDefaultWorkspace, tenantAnswer } from "@/lib/workspace";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { updateSignupUser } from "@/lib/signup/update-user";
@@ -194,15 +197,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     })),
     vacantUnitOptions: quickLease.units,
     tenantOptions: quickLease.tenants,
-    // The getting-started card ticks what the rows attest, never what a
-    // browser remembers: the same records Biens, Contacts and Loyers read.
-    progress: {
-      property: demo.PROPERTIES.length > 0,
-      contact: demo.CONTACTS.length > 0,
-      lease: demo.LEASES.some((l) => l.status === "active" || l.status === "notice"),
-      bank: demo.BANK_ACCOUNTS.length > 0,
-      rent: demo.RENT_PERIODS.some((rp) => rp.allocatedCents > 0),
-    },
+    // The guided setup ticks what the rows attest, never what a browser
+    // remembers (src/lib/gestion/setup.ts). The tour plays on the account's
+    // own data only, signed in, never on a sample cabinet or the empty preview.
+    progress: shellSetup(demo, {
+      tourSeen: tourSeenOn(session?.metadata),
+      guide: datasetId === "real" && session !== null && !previewEmpty(),
+    }),
     billing: billingSnapshot ? shellBillingOf(billingSnapshot, workspace.role, billedRents(demo.UNITS, demo.LEASES)) : null,
     // The workspaces the account may open, for the switch in the rail: shown only when there are several, never on a sample cabinet.
     workspaceId: workspace.id,
