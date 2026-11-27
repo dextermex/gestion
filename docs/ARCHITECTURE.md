@@ -589,7 +589,7 @@ leaves the sending open, to be read again, nothing half-written. `POST /api/sign
 annuler` cancels a sending still out. Migration 0027 holds the tables; the sample cabinet
 plays a sending under way and one completed.
 
-### Subscriptions: a 30-day trial, then Stripe, nothing stored here
+### Subscriptions: no running subscription, no access; the card before the trial
 
 The price is the public site's (dextermex/morada-gestion-web, `src/lib/pricing.ts`, the
 launch pricing of 27 September 2026, still a hypothesis there and here), restated in
@@ -603,62 +603,78 @@ brackets so a reduction lands on the cheaper ones; a year costs ten months; loya
 lot, a parking space or a cellar is not billed, and a subscription bills at least one lot.
 Up to 50 lots the terms are self-service; beyond, or for an agency's own terms, the
 price is built with the team (`TEAM_EMAIL`). Every screen leads with the price per month,
-and Stripe charges per quarter or per year. `src/domain/billing/trial.ts` says where a
-workspace stands (trial, card on file, active, payment failed, expired, ended), how loudly
-the screens remind (quiet, the last week, the last two days, locked) and which reminder
-e-mail is due.
+and Stripe charges per quarter or per year. `src/domain/billing/trial.ts` holds the
+rules (owner's decision of 19 and 27 November 2026, the iPhone app's `src/lib/access.ts`):
+a workspace is open only while a subscription runs (Stripe `trialing` or `active`);
+otherwise every page under `/app` is locked, with a reason, `no_trial` (never
+subscribed), `payment` (`past_due`, `unpaid`, `incomplete`) or `ended` (cancelled,
+expired, `incomplete_expired`, paused). There is no trial without a card and no
+extension. The trial is the subscription's own thirty days, started by Stripe Checkout
+with the card taken first, and the first charge falls on its last day unless cancelled.
+The free days are promised once: a workspace whose customer ever had a subscription is
+charged at once. Nothing is deleted when it locks.
 
-Nothing about a subscription is stored in the shared database: no migration, no service
-key, no webhook (as for signatures, the state is read back). `src/lib/billing/` keeps it
-at Stripe. One customer per workspace, found by the workspace id in its metadata (Stripe's
-search, with the caller's e-mail as an immediate fallback while the search catches up; the
-oldest wins should two exist). The trial runs from that customer's creation, a date Stripe
-sets and no workspace can move; the customer is created on the workspace's first visit
-with subscriptions on, so existing accounts get their 30 days from then. The billing
-rhythm picked at sign-up (`morada_signup.plan.rhythm` in the account's metadata,
-personalisation only) is copied onto it. The one seven-day extension, offered once the trial is over or in its last two
-days, is written on the customer by the server.
+**The shared record.** `gestion.billing_status` (`supabase/applied/0036`, one row per
+workspace and store, `stripe` or `apple`) is written only by two Edge Functions with the
+service role, which never leaves Supabase: `supabase/shared/functions/stripe` (Stripe's
+webhook: signature checked, `customer.subscription.*` and `invoice.payment_failed`, the
+web app's own subscriptions only, read from `morada_org` in their metadata) and
+`revenuecat` (Apple). Members read their workspace's rows under their own token.
 
-A subscription carries one price on one product (`morada_gestion`): the portfolio's own
-charge, computed here and handed to Stripe as an inline price (`price_data`), loyalty
-included, so the screen and the charge cannot disagree. The card is taken by Stripe
-Checkout, which creates the subscription with the rest of the trial carried over
-(`trial_end`, or Stripe's shortest trial in the last 48 hours), so the first charge falls
-on the trial's last day; the rents are read here under the caller's rights, never taken
-from the browser. The subscription records its pricing in its metadata
-(`morada_pricing=portfolio`, the lots counted, the charge before loyalty); one set up with
-the team carries no such mark and is never repriced. Stripe's portal (card, invoices,
-cancelling at the period's end) runs on a configuration the app creates once. A running
-subscription's price follows the portfolio: the layout reconciles it after the response,
-free during the trial, a dearer portfolio prorated onto the next invoice, a cheaper one
-applied from the next period. The loyalty years need no portfolio: the daily run brings
-each subscription priced here to the charge its next renewal's year calls for, from the
-charge before loyalty it recorded, before that renewal. `cache.ts` keeps each snapshot
-five minutes in Next's data cache, refreshed at once when Stripe sends the browser back
-(`/api/abonnement/retour`) or the page changes something.
+**Who may enter** (`src/lib/billing/access.ts`, `accessFor`): no valid key, an exempt
+workspace (`BILLING_EXEMPT_ORGS`), a sample cabinet or the empty preview open, with
+nothing about subscriptions shown (CI runs this way). Otherwise a running row of either
+store opens (so an iPhone subscriber enters the web); with none, Stripe is asked (the
+cached snapshot, then a fresh read, since the webhook can trail a Checkout), and a
+Stripe that says no or does not answer locks: no doubt lets a workspace through. The
+layout first sends an unfinished sign-up back to `/inscription` (`resumeStep`), then
+renders `components/gestion/Locked.tsx` in place of the whole shell for a locked
+workspace (the button for its reason: start the trial on the sign-up's offer screen,
+resume the subscription through Checkout, or update the card in Stripe's portal; sign
+out; deletion asked of the team by e-mail). The tenant space is never locked. Every
+write route asks the same question (`withOrg("write")`, `gate.ts`, 402
+`subscription_required`, on which the shell reads the page again and so shows the lock).
+`GET /api/abonnement/etat` gives the funnel and the guided entry the same answer
+(`configured`, `access`, `reason`, `trialOffered`).
 
-Once a trial ends with nothing subscribed, the workspace reads everything and changes
-nothing: each write route says so (`withOrg("write")`, 56 handlers), and `gate.ts` answers
-402 `subscription_required`, which the shell turns into the paywall. Every doubt opens: no
-key, Stripe slow or unreachable, no customer yet, a workspace listed in
-`BILLING_EXEMPT_ORGS`. Marking a conversation read, refreshing a signature and reading a
-document stay open; a middleware was not used, since Next.js then buffers request bodies
-and truncates uploads beyond 10 MB.
+**Stripe.** One customer per workspace, found by the workspace id in its metadata
+(Stripe's search, with the caller's e-mail as an immediate fallback while the search
+catches up; the oldest wins should two exist), created at the workspace's first Checkout
+and never because a page was opened. `POST /api/abonnement/checkout` takes the sign-up's
+offer (`{ source: "signup", units, band, billing, winback? }`, priced by
+`src/lib/signup/offer.ts`) or, from the subscription page, a rhythm priced on the
+portfolio's rents read here. The one-time offer is a coupon the app installs once
+(`morada_winback_25`, a quarter off for twelve months; no promotion codes with it).
+`/api/abonnement/retour` checks the session is the workspace's own, records
+`morada_mobile.offer` and `trial_started_at` on the account (bookkeeping, never access),
+drops the cache and sends a sign-up to "Bienvenue".
 
-Conversion is the screens' job, without a card at sign-up: the plan step ends the
-landlord's sign-up (`/inscription`, "30 jours gratuits, sans carte", quarterly from €10 or
-yearly from €8.33 per lot and per month); in the app, a chip
-counts the days, the dashboard offers to add the card once a lot exists ("0 € today, the
-first charge on the trial's last day"), a banner takes over in the last week, and the
-paywall after it says what is kept ("your 12 lots and 9 leases"). `/api/cron/essais`
-(Vercel Cron, daily, `CRON_SECRET`) e-mails a week before the end, two days before and
-once it has ended, announces the first charge a week ahead to a card on file, and steps
-the loyalty years; it reads only Stripe. `/app/abonnement/apercu` shows every state in development.
+A subscription carries one price on one product (`morada_gestion`): the charge, computed
+here and handed to Stripe as an inline price (`price_data`), loyalty included, so the
+screen and the charge cannot disagree. The subscription records its pricing in its
+metadata (`morada_pricing=portfolio`, the lots counted, the charge before loyalty); one
+set up with the team carries no such mark and is never repriced. Stripe's portal (card,
+invoices, cancelling at the period's end) runs on a configuration the app creates once.
+A running subscription's price follows the portfolio: the layout reconciles it after the
+response, free during the trial (a subscription quoted at sign-up for three lots is
+brought to the lots actually let, at least one), a dearer portfolio prorated onto the
+next invoice, a cheaper one applied from the next period. The loyalty years need no
+portfolio: the daily run brings each subscription priced here to the charge its next
+renewal's year calls for. `cache.ts` keeps each snapshot five minutes in Next's data
+cache, dropped when Stripe sends the browser back or the page changes something.
+
+In an open workspace, a quiet chip counts the trial's days, louder in its last week and
+last two days, and a banner then says when the first charge falls and for how much.
+`/api/cron/essais` (Vercel Cron, daily, `CRON_SECRET`) e-mails every trial seven days and
+two days before its first charge, each once (recorded on the subscription), and steps
+the loyalty years; it reads only Stripe. `/app/abonnement/apercu` shows every state,
+the locked screen's included, in development.
 
 Server variables: `STRIPE_SECRET_KEY` (a secret `sk_`/`rk_` key; anything else, such as a
 key's dashboard identifier `mk_…`, is refused by name on the page), `STRIPE_TAX=1` once
 Stripe Tax is set up, `BILLING_EXEMPT_ORGS`, `CRON_SECRET` and `RESEND_API_KEY` for the
-e-mails. Without a key nothing about subscriptions shows or applies.
+e-mails. Without a key nothing about subscriptions shows or applies. The webhook's
+secret, `STRIPE_WEBHOOK_SECRET`, is a secret of the Edge Function, not of the app.
 
 ### Delivery: an outbox, one sender, notifications both ways
 
