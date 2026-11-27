@@ -187,6 +187,19 @@ describe("the first-run tour", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("stays silent on a browser told to (the key every browser test sets before the page loads)", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(TOUR_SEEN_KEY, "off");
+    search = new URLSearchParams("tour=1");
+    await accueil(setup({ property: true }));
+    expect(document.documentElement.hasAttribute("data-setup-arrival")).toBe(false);
+    await act(async () => vi.advanceTimersByTime(2000));
+    expect(dialog()).toBeNull();
+    expect(localStorage.getItem(TOUR_SEEN_KEY)).toBe("off");
+    expect(localStorage.getItem(TOUR_COUNT_KEY)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("points the card out again, once, when a return finds one more step done", async () => {
     vi.useFakeTimers();
     localStorage.setItem(TOUR_SEEN_KEY, "1");

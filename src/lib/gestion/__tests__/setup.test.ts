@@ -90,6 +90,9 @@ describe("the tour's state on the account", () => {
     expect(tourMode({ ...base, seenHere: true, lastCount: 1, count: 2 })).toBe("card");
     expect(tourMode({ ...base, seenHere: true, lastCount: 2, count: 2 })).toBe("off");
     expect(tourMode({ ...base, guide: false })).toBe("off");
+    // A browser told to stay quiet (the browser tests) never meets it, nor the reminders.
+    expect(tourMode({ ...base, quiet: true })).toBe("off");
+    expect(tourMode({ ...base, seenHere: true, quiet: true, lastCount: 1, count: 3 })).toBe("off");
     expect(tourMode({ ...base, complete: true, count: 5 })).toBe("off");
   });
 

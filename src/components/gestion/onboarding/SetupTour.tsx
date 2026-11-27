@@ -22,8 +22,9 @@
  * Browser memory (localStorage, every access in try/catch):
  *  - `morada.tour.seen` = "1": the tour was seen or skipped on this browser.
  *    It is read before the tour opens (and by the arrival's inline script,
- *    before the first paint), so a browser test that sets it in an init
- *    script never meets the overlay;
+ *    before the first paint). Set to "off" it also stops the later returns:
+ *    a browser test that sets `localStorage["morada.tour.seen"] = "off"` in
+ *    an init script never meets the overlay;
  *  - `morada.tour.count`: the setup count the card was last pointed out at.
  *
  * The overlay is a modal dialog for assistive technology: focus moves into
@@ -37,7 +38,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Dict } from "@/lib/i18n/fr";
-import { TOUR_COUNT_KEY, TOUR_SEEN_KEY, setupProgress, tourMode, type ShellSetup, type TourMode } from "@/lib/gestion/setup";
+import { TOUR_COUNT_KEY, TOUR_QUIET, TOUR_SEEN_KEY, setupProgress, tourMode, type ShellSetup, type TourMode } from "@/lib/gestion/setup";
 
 const ARRIVAL_MS = 1300;
 const PAD = 6;
@@ -64,7 +65,7 @@ const reducedMotion = () => typeof window !== "undefined" && typeof window.match
  * on the server's HTML, rather than after the page has shown at full size.
  * The component ends it, or cancels it when the tour is not owed.
  */
-const ARRIVAL_SCRIPT = `try{var q=new URLSearchParams(location.search);if(location.pathname==="/app"&&q.get("tour")==="1"&&localStorage.getItem(${JSON.stringify(TOUR_SEEN_KEY)})!=="1"&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.setAttribute("data-setup-arrival","")}catch(e){}`;
+const ARRIVAL_SCRIPT = `try{var q=new URLSearchParams(location.search);if(location.pathname==="/app"&&q.get("tour")==="1"&&localStorage.getItem(${JSON.stringify(TOUR_SEEN_KEY)})===null&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.setAttribute("data-setup-arrival","")}catch(e){}`;
 
 export function ArrivalScript() {
   return <script dangerouslySetInnerHTML={{ __html: ARRIVAL_SCRIPT }} />;
@@ -102,12 +103,15 @@ export default function SetupTour({ d, setup }: { d: Dict; setup: ShellSetup }) 
       url.searchParams.delete("tour");
       window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
     }
-    const seenHere = read(TOUR_SEEN_KEY) === "1";
+    const here = read(TOUR_SEEN_KEY);
+    const seenHere = here !== null;
+    const quiet = here === TOUR_QUIET;
     const rawCount = read(TOUR_COUNT_KEY);
     const lastCount = rawCount === null || !Number.isFinite(Number(rawCount)) ? null : Number(rawCount);
-    const m = tourMode({ guide: setup.guide, complete: p.complete, seenOnAccount: setup.tourSeen, seenHere, lastCount, count: p.count });
+    const m = tourMode({ guide: setup.guide, complete: p.complete, seenOnAccount: setup.tourSeen, seenHere, quiet, lastCount, count: p.count });
     if (m === "off") {
       endArrival();
+      if (quiet) return;
       // An account that saw the tour elsewhere starts counting from where the space stands.
       if (setup.guide && lastCount === null) write(TOUR_COUNT_KEY, String(p.count));
       if (setup.guide && setup.tourSeen && !seenHere) write(TOUR_SEEN_KEY, "1");

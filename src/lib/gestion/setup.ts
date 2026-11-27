@@ -126,10 +126,12 @@ export function shellSetup(r: Records, opts: { tourSeen: boolean; guide: boolean
 
 /**
  * This browser's memory of the tour (localStorage): "1" once it was seen or
- * skipped here. Read before the tour opens, so a browser test sets it in an
- * init script and the overlay never shows.
+ * skipped here. Read before the tour opens. `TOUR_QUIET` ("off") also stops
+ * the card being pointed out again on later returns: a browser test sets it
+ * in an init script and the overlay never shows.
  */
 export const TOUR_SEEN_KEY = "morada.tour.seen";
+export const TOUR_QUIET = "off";
 /** The setup count the card was last pointed out at (localStorage), so a return with one more step done points it out again. */
 export const TOUR_COUNT_KEY = "morada.tour.count";
 
@@ -140,8 +142,8 @@ export type TourMode = "full" | "card" | "off";
  * per account while a step is open; afterwards the card alone, once per
  * newly completed step, while the setup is incomplete.
  */
-export function tourMode(s: { guide: boolean; complete: boolean; seenOnAccount: boolean; seenHere: boolean; lastCount: number | null; count: number }): TourMode {
-  if (!s.guide || s.complete) return "off";
+export function tourMode(s: { guide: boolean; complete: boolean; seenOnAccount: boolean; seenHere: boolean; quiet?: boolean; lastCount: number | null; count: number }): TourMode {
+  if (!s.guide || s.complete || s.quiet) return "off";
   if (!s.seenOnAccount && !s.seenHere) return "full";
   return s.lastCount !== null && s.count > s.lastCount ? "card" : "off";
 }
