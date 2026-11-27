@@ -98,6 +98,14 @@ export async function POST(request: NextRequest) {
         const code = saved.error.code;
         return NextResponse.json({ error: ["weak_password", "same_password"].includes(code) ? code : code === "reauthentication_needed" ? "session_expired" : "save_failed" }, { status: code === "reauthentication_needed" ? 401 : 400 });
       }
+      // Setting a password withdraws every confirmation the account system had pending, the one for
+      // the address just given included: the code and the link in that mail stop working. The
+      // confirmation is asked again, so the mail the person opens is one that works. Never a reason
+      // to fail the password: the address is asked again on a later visit if this did not go out.
+      if (user.new_email) {
+        const again = await updateSignupUser(session.accessToken, { email: user.new_email });
+        if (again.error) console.error("signup: the address's confirmation was not re-sent after the password:", again.error.code);
+      }
       return NextResponse.json({ ok: true, stage: finished ? "complete" : "tailor" });
     }
 

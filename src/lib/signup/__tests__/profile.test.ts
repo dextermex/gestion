@@ -118,6 +118,18 @@ describe("authenticated profile completion", () => {
     vi.mocked(updateSignupUser).mockResolvedValueOnce({ error: { code: "weak_password" } });
     expect(await (await POST(request({ action: "password", password: "password1" }))).json()).toEqual({ error: "weak_password" });
   });
+  it("asks for the address's confirmation again once the password is set, since the first one stops working", async () => {
+    Object.assign(current, { new_email: "alex@example.test" });
+    current.user_metadata.morada_signup.stage = "password";
+    expect(await (await POST(request({ action: "password", password: "long-enough-1" }))).json()).toEqual({ ok: true, stage: "tailor" });
+    expect(vi.mocked(updateSignupUser).mock.calls.map(([, patch]) => Object.keys(patch as object))).toEqual([["password", "data"], ["email"]]);
+    expect(updateSignupUser).toHaveBeenLastCalledWith("user-token", { email: "alex@example.test" });
+    // A confirmation that could not be re-sent never fails the password.
+    vi.mocked(updateSignupUser).mockClear();
+    delete (current.user_metadata.morada_signup as Record<string, unknown>).password_set_at;
+    vi.mocked(updateSignupUser).mockResolvedValueOnce({ error: null }).mockResolvedValueOnce({ error: { code: "over_email_send_rate_limit" } });
+    expect(await (await POST(request({ action: "password", password: "long-enough-1" }))).json()).toEqual({ ok: true, stage: "tailor" });
+  });
   it("keeps an account finished before passwords existed finished once it sets one", async () => {
     Object.assign(current, { email: "alex@example.test", email_confirmed_at: "2026-09-27" });
     current.user_metadata.morada_signup.stage = "complete";
