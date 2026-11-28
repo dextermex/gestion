@@ -307,6 +307,25 @@ const blocksCheckout = (sub: SubscriptionView | null) => !!sub && ["trialing", "
 /** Where a Checkout was started: the sign-up's offer screen, the locked screen's "resume", the subscription page. */
 export type CheckoutSource = "signup" | "resume" | "page";
 
+/**
+ * Morada's look on Stripe's payment page, sent with each Checkout rather than
+ * set on the Stripe account, which other products share: the name, the app's
+ * icon, the brand teal on the button (brand-700 in globals.css), the sand
+ * background, Inter and pill buttons, as on the sign-up. Stripe fetches the
+ * icon from its address, so it is sent only from a public https origin.
+ */
+export function checkoutBranding(origin: string) {
+  const publicOrigin = /^https:\/\/(?!localhost|127\.)/.test(origin);
+  return {
+    display_name: "Morada",
+    background_color: "#faf7f2",
+    button_color: "#10505c",
+    border_style: "pill" as const,
+    font_family: "inter" as const,
+    ...(publicOrigin ? { icon: { type: "url" as const, url: `${origin}/icons/icon-512.png` } } : {}),
+  };
+}
+
 export interface CheckoutInput {
   snapshot: BillingSnapshot;
   orgId: string;
@@ -356,6 +375,7 @@ export async function createCheckout(stripe: Stripe, input: CheckoutInput): Prom
     customer_update: { name: "auto", address: "auto" },
     automatic_tax: { enabled: input.tax },
     locale: checkoutLocale(input.locale),
+    branding_settings: checkoutBranding(input.origin),
     custom_text: input.submitMessage ? { submit: { message: input.submitMessage.slice(0, 1200) } } : undefined,
     success_url: `${input.origin}/api/abonnement/retour?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${input.origin}${CANCEL_PATH[input.source]}`,
