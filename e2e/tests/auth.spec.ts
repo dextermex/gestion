@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { accountEmailInShell, autofill, leaveSignedInAccountIfAny, mail, PASSWORD, signIn, signOutFromShell, signUp } from "./helpers";
+import { accountEmailInShell, autofill, leaveSignedInAccountIfAny, mail, PASSWORD, quietTour, signIn, signOutFromShell, signUp } from "./helpers";
 
 /**
  * The door, against the real account system: signing
@@ -60,6 +60,8 @@ test("every older signup link opens the phone-first funnel, never the retired fo
 });
 
 test("Safari-style autofill (values without input events) still signs in", async ({ page }) => {
+  // Signed in by this test's own steps, not by `signIn`: the tour is put aside here.
+  await quietTour(page);
   await page.goto("/connexion");
   await autofill(page, { "#signup-email": alice.email });
   await page.locator("form button[type=submit]").click();

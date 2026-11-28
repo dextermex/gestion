@@ -13,8 +13,8 @@ import { billingPage, confirmationShown, type BillingPageData } from "@/lib/bill
  * Abonnement: how to be billed, the price, the card and the invoices. The
  * figures are the published pricing's (src/domain/billing/pricing.ts) over
  * the rents of the lots the account's own rows let; the subscription itself
- * is read from Stripe (src/lib/billing). On a sample cabinet, the cabinet's
- * sample trial.
+ * is read from Stripe (src/lib/billing). Only an open workspace reaches it
+ * (the layout locks the rest). On a sample cabinet, the cabinet's sample trial.
  */
 export default async function SubscriptionPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { locale, d } = await getI18n();
@@ -27,15 +27,15 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
   if (sample) {
     const trialEnd = now + (TRIAL_DAYS - demo.BILLING.trialDay) * DAY;
     data = {
-      status: "ready", mode: null, canManage: true, rhythm: demo.BILLING.rhythm, year: 1, trialEnd, canExtend: false,
-      state: billingState({ now, trialEnd, subscription: null }), subscription: null,
+      status: "ready", mode: null, canManage: true, rhythm: demo.BILLING.rhythm, year: 1, trialOffered: false,
+      state: billingState({ now, subscription: { status: "trialing", trialEnd, periodEnd: trialEnd, cancelAtPeriodEnd: false } }), subscription: null,
     };
   } else {
     const [identity, session] = await Promise.all([getIdentity(), getSession()]);
     const org = identity?.active;
     data = !org || !session
-      ? { status: "off", mode: null, canManage: false, rhythm: "quarter", year: 1, trialEnd: null, canExtend: false, state: null, subscription: null }
-      : await billingPage({ org, userId: session.userId, email: session.email, locale, metadata: session.metadata }, now);
+      ? { status: "off", mode: null, canManage: false, rhythm: "quarter", year: 1, trialOffered: false, state: null, subscription: null }
+      : await billingPage({ org, userId: session.userId, email: session.email, locale }, now);
   }
 
   const badge = data.state ? billingPhaseMeta(d)[data.state.phase] : null;

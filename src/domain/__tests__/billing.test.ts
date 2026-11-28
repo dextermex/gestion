@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BILLED_UNIT_KINDS, LOYALTY_PCT, MAX_LOTS, RENT_BANDS, RHYTHMS, VOLUME, bandOf, billedRents, fromPerLot, portfolioLots, quote, subscriptionYear } from "@/domain/billing/pricing";
-import { DAY, billingState, canExtend, checkoutTrial, extendedEnd, reminderDue, trialEndOf, type BillingFacts } from "@/domain/billing/trial";
+import { DAY, anyRowRuns, billingState, checkoutTrial, firstChargeOn, lockReasonOf, reasonFromRows, reminderDue, rowRuns, trialOffered, type BillingFacts, type SubscriptionFacts } from "@/domain/billing/trial";
 import { isLettable } from "@/lib/gestion/portfolio";
 import type { DemoUnit } from "@/lib/demo/data";
 
@@ -103,69 +103,94 @@ describe("the published pricing", () => {
   });
 });
 
-const facts = (over: Partial<BillingFacts> = {}): BillingFacts => ({ now: NOW, trialEnd: NOW + 20 * DAY, subscription: null, ...over });
+const sub = (status: string, over: Partial<SubscriptionFacts> = {}): SubscriptionFacts => ({ status, trialEnd: null, periodEnd: NOW + 80 * DAY, cancelAtPeriodEnd: false, ...over });
+const facts = (subscription: SubscriptionFacts | null): BillingFacts => ({ now: NOW, subscription });
+const trialing = (days: number, over: Partial<SubscriptionFacts> = {}) => sub("trialing", { trialEnd: NOW + days * DAY, periodEnd: NOW + days * DAY, ...over });
 
-describe("trial and subscription state", () => {
-  it("runs the trial without a card, louder in its last week and last two days", () => {
-    expect(billingState(facts())).toMatchObject({ phase: "trial", daysLeft: 20, nudge: "quiet", writable: true, firstChargeAt: null });
-    expect(billingState(facts({ trialEnd: NOW + 7 * DAY }))).toMatchObject({ daysLeft: 7, nudge: "soon" });
-    expect(billingState(facts({ trialEnd: NOW + 2 * DAY }))).toMatchObject({ daysLeft: 2, nudge: "urgent" });
-    expect(billingState(facts({ trialEnd: NOW + 60 }))).toMatchObject({ phase: "trial", daysLeft: 1, writable: true });
+describe("who may enter", () => {
+  it("opens only while a subscription runs: trialing or active", () => {
+    expect(billingState(facts(trialing(20)))).toMatchObject({ phase: "trial", open: true, reason: null, daysLeft: 20, firstChargeAt: NOW + 20 * DAY });
+    expect(billingState(facts(sub("active")))).toMatchObject({ phase: "active", open: true, reason: null, nudge: "none", daysLeft: 0, firstChargeAt: null });
   });
 
-  it("locks writing once the trial is over with nothing subscribed, and deletes nothing", () => {
-    expect(billingState(facts({ trialEnd: NOW }))).toMatchObject({ phase: "expired", daysLeft: 0, nudge: "locked", writable: false });
+  it("locks a workspace that never subscribed: no trial without a card", () => {
+    expect(billingState(facts(null))).toMatchObject({ phase: "none", open: false, reason: "no_trial", nudge: "locked" });
   });
 
-  it("charges a card added during the trial on the trial's last day, not before", () => {
-    const trialEnd = NOW + 12 * DAY;
-    const s = billingState(facts({ subscription: { status: "trialing", trialEnd, periodEnd: trialEnd, cancelAtPeriodEnd: false } }));
-    expect(s).toMatchObject({ phase: "trial_card", daysLeft: 12, firstChargeAt: trialEnd, nudge: "none", writable: true });
+  it("locks at once on a failed or unfinished payment", () => {
+    for (const status of ["past_due", "unpaid", "incomplete"]) {
+      expect(billingState(facts(sub(status)))).toMatchObject({ phase: "payment", open: false, reason: "payment" });
+    }
   });
 
-  it("keeps a paying workspace working, through a failed payment too", () => {
-    const sub = { trialEnd: null, periodEnd: NOW + 80 * DAY, cancelAtPeriodEnd: false };
-    expect(billingState(facts({ trialEnd: NOW - DAY, subscription: { ...sub, status: "active" } }))).toMatchObject({ phase: "active", writable: true });
-    expect(billingState(facts({ trialEnd: NOW - DAY, subscription: { ...sub, status: "past_due" } }))).toMatchObject({ phase: "past_due", nudge: "urgent", writable: true });
-    expect(billingState(facts({ trialEnd: NOW - DAY, subscription: { ...sub, status: "canceled" } }))).toMatchObject({ phase: "ended", writable: false });
-    expect(billingState(facts({ trialEnd: NOW - DAY, subscription: { ...sub, status: "unpaid" } }))).toMatchObject({ phase: "ended", writable: false });
+  it("locks a subscription that has stopped, whatever stopped it", () => {
+    for (const status of ["canceled", "incomplete_expired", "paused", "something_new"]) {
+      expect(billingState(facts(sub(status)))).toMatchObject({ phase: "ended", open: false, reason: "ended" });
+    }
+    expect(lockReasonOf(undefined)).toBe("no_trial");
+    expect(lockReasonOf("trialing")).toBeNull();
   });
 
-  it("falls back to the workspace's own trial when a subscription is cancelled during it", () => {
-    const s = billingState(facts({ subscription: { status: "canceled", trialEnd: NOW + 5 * DAY, periodEnd: null, cancelAtPeriodEnd: false } }));
-    expect(s).toMatchObject({ phase: "trial", daysLeft: 20, writable: true });
+  it("counts the trial quietly, louder in its last week and urgent in its last two days", () => {
+    expect(billingState(facts(trialing(20))).nudge).toBe("quiet");
+    expect(billingState(facts(trialing(8))).nudge).toBe("quiet");
+    expect(billingState(facts(trialing(7))).nudge).toBe("soon");
+    expect(billingState(facts(trialing(3))).nudge).toBe("soon");
+    expect(billingState(facts(trialing(2))).nudge).toBe("urgent");
+    expect(billingState(facts(sub("trialing", { trialEnd: NOW + 60 })))).toMatchObject({ daysLeft: 1, nudge: "urgent", open: true });
   });
 
-  it("dates the trial from its start, an extension only ever moving it later", () => {
-    expect(trialEndOf(NOW, null)).toBe(NOW + 30 * DAY);
-    expect(trialEndOf(NOW, NOW + 37 * DAY)).toBe(NOW + 37 * DAY);
-    expect(trialEndOf(NOW, NOW + DAY)).toBe(NOW + 30 * DAY);
-    expect(extendedEnd(NOW, NOW - 3 * DAY)).toBe(NOW + 7 * DAY);
-    expect(extendedEnd(NOW, NOW + DAY)).toBe(NOW + 8 * DAY);
+  it("announces no first charge for a trial cancelled before its end", () => {
+    expect(billingState(facts(trialing(10, { cancelAtPeriodEnd: true })))).toMatchObject({ phase: "trial", open: true, firstChargeAt: null });
   });
 
-  it("offers the extension once, at the end of a trial with nothing subscribed", () => {
-    expect(canExtend(facts({ trialEnd: NOW - DAY }), false)).toBe(true);
-    expect(canExtend(facts({ trialEnd: NOW + DAY }), false)).toBe(true);
-    expect(canExtend(facts({ trialEnd: NOW + 10 * DAY }), false)).toBe(false);
-    expect(canExtend(facts({ trialEnd: NOW - DAY }), true)).toBe(false);
+  it("promises the free days once: a workspace that ever subscribed is charged at once", () => {
+    expect(trialOffered(false)).toBe(true);
+    expect(trialOffered(true)).toBe(false);
+    expect(checkoutTrial(true)).toEqual({ trial_period_days: 30 });
+    expect(checkoutTrial(false)).toBeNull();
+    expect(firstChargeOn(NOW, true)).toBe(NOW + 30 * DAY);
+    expect(firstChargeOn(NOW, false)).toBe(NOW);
+  });
+});
+
+describe("the shared record", () => {
+  const iso = (t: number) => new Date(t * 1000).toISOString();
+  it("runs a row trialing or active whose period is not over, of either store", () => {
+    expect(rowRuns({ source: "stripe", status: "trialing", current_period_end: iso(NOW + DAY) }, NOW)).toBe(true);
+    expect(rowRuns({ source: "apple", status: "active", current_period_end: null }, NOW)).toBe(true);
+    expect(rowRuns({ source: "apple", status: "active", current_period_end: iso(NOW - 1) }, NOW)).toBe(false);
+    expect(rowRuns({ source: "stripe", status: "past_due", current_period_end: iso(NOW + DAY) }, NOW)).toBe(false);
+    expect(rowRuns({ source: "stripe", status: "active", current_period_end: "garbage" }, NOW)).toBe(false);
+    expect(anyRowRuns([{ source: "stripe", status: "canceled", current_period_end: null }, { source: "apple", status: "active", current_period_end: null }], NOW)).toBe(true);
+    expect(anyRowRuns([], NOW)).toBe(false);
   });
 
-  it("hands Checkout the trial's exact end, or Stripe's shortest trial, or none", () => {
-    expect(checkoutTrial(NOW, NOW + 10 * DAY)).toEqual({ trial_end: NOW + 10 * DAY });
-    expect(checkoutTrial(NOW, NOW + 47 * 3600)).toEqual({ trial_period_days: 2 });
-    expect(checkoutTrial(NOW, NOW - 1)).toBeNull();
+  it("gives the lock's reason from the rows: a failed payment, else an ended subscription, else none ever", () => {
+    expect(reasonFromRows([])).toBe("no_trial");
+    expect(reasonFromRows([{ source: "stripe", status: "canceled", current_period_end: null }])).toBe("ended");
+    expect(reasonFromRows([{ source: "apple", status: "expired", current_period_end: null }, { source: "stripe", status: "past_due", current_period_end: null }])).toBe("payment");
+  });
+});
+
+describe("the trial's e-mails", () => {
+  it("reminds a week before the first charge and two days before, each once", () => {
+    expect(reminderDue(facts(trialing(10)), [])).toBeNull();
+    expect(reminderDue(facts(trialing(7)), [])).toBe("d7");
+    expect(reminderDue(facts(trialing(6)), ["d7"])).toBeNull();
+    expect(reminderDue(facts(trialing(2)), ["d7"])).toBe("d2");
+    expect(reminderDue(facts(trialing(1)), ["d7", "d2"])).toBeNull();
   });
 
-  it("reminds by email a week before, two days before and once at the end, each once", () => {
-    expect(reminderDue(facts({ trialEnd: NOW + 10 * DAY }), [])).toBeNull();
-    expect(reminderDue(facts({ trialEnd: NOW + 6 * DAY }), [])).toBe("d7");
-    expect(reminderDue(facts({ trialEnd: NOW + 6 * DAY }), ["d7"])).toBeNull();
-    expect(reminderDue(facts({ trialEnd: NOW + DAY }), ["d7"])).toBe("d2");
-    expect(reminderDue(facts({ trialEnd: NOW - DAY }), ["d7", "d2"])).toBe("ended");
-    expect(reminderDue(facts({ trialEnd: NOW - 5 * DAY }), ["d7", "d2"])).toBeNull();
-    const waiting = { status: "trialing", trialEnd: NOW + 5 * DAY, periodEnd: NOW + 5 * DAY, cancelAtPeriodEnd: false };
-    expect(reminderDue(facts({ trialEnd: NOW + 5 * DAY, subscription: waiting }), [])).toBe("d7");
-    expect(reminderDue(facts({ trialEnd: NOW + 5 * DAY, subscription: { ...waiting, status: "active" } }), [])).toBeNull();
+  it("sends only the later one to a trial already in its last two days", () => {
+    expect(reminderDue(facts(trialing(1)), [])).toBe("d2");
+    expect(reminderDue(facts(trialing(5)), ["d2"])).toBeNull();
+  });
+
+  it("reminds nobody whose trial is cancelled, over, paid or never started", () => {
+    expect(reminderDue(facts(trialing(5, { cancelAtPeriodEnd: true })), [])).toBeNull();
+    expect(reminderDue(facts(sub("active")), [])).toBeNull();
+    expect(reminderDue(facts(sub("past_due")), [])).toBeNull();
+    expect(reminderDue(facts(null), [])).toBeNull();
   });
 });

@@ -1,35 +1,44 @@
 /**
- * Where a workspace stands with its subscription, from two facts: its own
- * trial clock (30 days from its first visit, kept by Stripe, out of the
- * workspace's reach) and the subscription Stripe holds for it, if any.
+ * Who may enter a workspace, and what the screens say about its
+ * subscription (owner's decision of 19 and 27 November 2026, the iPhone
+ * app's src/lib/access.ts):
  *
- * The trial needs no card. A card added during the trial starts nothing
- * before the trial's end: the first charge falls on that day. Without a
- * card, the trial simply ends: nothing is charged and nothing is deleted,
- * the workspace reads everything and changes nothing until it subscribes.
- * Times are unix seconds, as Stripe gives them.
+ *  - A workspace is open only while a subscription runs: Stripe's status
+ *    `trialing` or `active`. Everything else locks every page, with a reason:
+ *    `no_trial` (never subscribed), `payment` (a payment failed or was never
+ *    completed), `ended` (cancelled, expired, paused). Nothing is deleted
+ *    when it locks.
+ *  - The trial is the subscription's own: thirty days that start at Checkout,
+ *    with the card taken before them, and a first charge on the last day
+ *    unless the subscription is cancelled. There is no trial without a card
+ *    and no extension. The free days are promised once: a workspace that
+ *    ever had a subscription is charged at once on a new one.
+ *
+ * Pure: times are unix seconds, as Stripe gives them.
  */
-import { REMINDER_DAYS, TRIAL_DAYS, TRIAL_EXTENSION_DAYS } from "./pricing";
+import { REMINDER_DAYS, TRIAL_DAYS } from "./pricing";
 
 export const DAY = 86_400;
 
-/**
- *  trial       the trial runs, no card yet
- *  trial_card  the trial runs and a subscription waits for its end (card on file)
- *  active      a paid subscription runs
- *  past_due    a payment failed: Stripe retries, the workspace keeps working
- *  expired     the trial is over and nothing was subscribed
- *  ended       a subscription existed and has ended
- */
-export type BillingPhase = "trial" | "trial_card" | "active" | "past_due" | "expired" | "ended";
+/** Why a workspace is locked: the trial was never started, a payment failed, a subscription ended. */
+export type LockReason = "no_trial" | "payment" | "ended";
 
-/** How loudly the screens remind: not at all, a quiet chip, a banner, an urgent banner, the paywall. */
+/**
+ *  none     no subscription ever: locked, `no_trial`
+ *  trial    the subscription's trial runs, a card on file
+ *  active   a paid subscription runs
+ *  payment  a payment failed or was never completed: locked, `payment`
+ *  ended    a subscription existed and has stopped: locked, `ended`
+ */
+export type BillingPhase = "none" | "trial" | "active" | "payment" | "ended";
+
+/** How loudly the screens speak of the trial: not at all, a quiet counter, louder in its last week, urgent in its last two days; locked otherwise. */
 export type Nudge = "none" | "quiet" | "soon" | "urgent" | "locked";
 
 export interface SubscriptionFacts {
   /** Stripe's status, verbatim. */
   status: string;
-  /** The end of the subscription's own trial, if it has one. */
+  /** The end of the subscription's trial, if it has one. */
   trialEnd: number | null;
   /** The end of the period paid for (or of the trial). */
   periodEnd: number | null;
@@ -39,96 +48,108 @@ export interface SubscriptionFacts {
 
 export interface BillingFacts {
   now: number;
-  /** The workspace's trial end. */
-  trialEnd: number;
+  /** The workspace's current subscription (src/lib/billing/service.ts pickSubscription), if it ever had one. */
   subscription: SubscriptionFacts | null;
 }
 
 export interface BillingState {
   phase: BillingPhase;
-  /** Days left in the trial, the current one counted (1 on its last day); 0 once over. */
+  /** Whether the workspace opens at all. */
+  open: boolean;
+  reason: LockReason | null;
+  /** Days left in the trial, the current one counted (1 on its last day); 0 outside a trial. */
   daysLeft: number;
-  /** When the first charge falls, for a card added during the trial; null otherwise. */
+  /** When the trial's first charge falls; null outside a trial. */
   firstChargeAt: number | null;
   nudge: Nudge;
-  /** Whether the workspace may still change its records. */
-  writable: boolean;
 }
 
-/** Statuses under which the workspace keeps working. */
-const RUNNING = new Set(["trialing", "active", "past_due", "incomplete"]);
+/** Stripe statuses under which a subscription runs. */
+export const RUNNING_STATUSES: readonly string[] = ["trialing", "active"];
+/** Stripe statuses of a subscription waiting for a payment: it does not run. */
+export const PAYMENT_STATUSES: readonly string[] = ["past_due", "unpaid", "incomplete"];
+
+export const isRunningStatus = (status: string | null | undefined): boolean => !!status && RUNNING_STATUSES.includes(status);
+
+/** The days of the trial from which the counter grows louder, then urgent. */
+export const SOON_DAYS = REMINDER_DAYS;
+export const URGENT_DAYS = 2;
 
 export const daysUntil = (now: number, end: number): number => (end > now ? Math.ceil((end - now) / DAY) : 0);
 
+/** Why a workspace whose subscription has this Stripe status is locked; null while it runs. No subscription at all is `no_trial`. */
+export function lockReasonOf(status: string | null | undefined): LockReason | null {
+  if (!status) return "no_trial";
+  if (isRunningStatus(status)) return null;
+  return PAYMENT_STATUSES.includes(status) ? "payment" : "ended";
+}
+
 export function billingState(facts: BillingFacts): BillingState {
   const sub = facts.subscription;
-  if (sub && RUNNING.has(sub.status)) {
-    if (sub.status === "trialing") {
-      const end = sub.trialEnd ?? facts.trialEnd;
-      return { phase: "trial_card", daysLeft: daysUntil(facts.now, end), firstChargeAt: end, nudge: "none", writable: true };
-    }
-    if (sub.status === "active") return { phase: "active", daysLeft: 0, firstChargeAt: null, nudge: "none", writable: true };
-    // A failed payment: Stripe retries on its own schedule, the screens ask for another card meanwhile.
-    return { phase: "past_due", daysLeft: 0, firstChargeAt: null, nudge: "urgent", writable: true };
+  const reason = lockReasonOf(sub?.status);
+  if (reason) {
+    const phase: BillingPhase = reason === "no_trial" ? "none" : reason === "payment" ? "payment" : "ended";
+    return { phase, open: false, reason, daysLeft: 0, firstChargeAt: null, nudge: "locked" };
   }
-  const daysLeft = daysUntil(facts.now, facts.trialEnd);
-  if (daysLeft > 0) {
-    const nudge: Nudge = daysLeft <= 2 ? "urgent" : daysLeft <= REMINDER_DAYS ? "soon" : "quiet";
-    return { phase: "trial", daysLeft, firstChargeAt: null, nudge, writable: true };
+  if (sub!.status === "trialing") {
+    const end = sub!.trialEnd ?? sub!.periodEnd ?? facts.now;
+    const daysLeft = daysUntil(facts.now, end);
+    const nudge: Nudge = daysLeft <= URGENT_DAYS ? "urgent" : daysLeft <= SOON_DAYS ? "soon" : "quiet";
+    return { phase: "trial", open: true, reason: null, daysLeft, firstChargeAt: sub!.cancelAtPeriodEnd ? null : end, nudge };
   }
-  return { phase: sub ? "ended" : "expired", daysLeft: 0, firstChargeAt: null, nudge: "locked", writable: false };
+  return { phase: "active", open: true, reason: null, daysLeft: 0, firstChargeAt: null, nudge: "none" };
 }
 
-/** The workspace's trial end: its start plus the trial, unless an extension moved it. */
-export function trialEndOf(start: number, extendedTo: number | null): number {
-  const base = start + TRIAL_DAYS * DAY;
-  return extendedTo && extendedTo > base ? extendedTo : base;
+/** Whether a new Checkout comes with the free days: only for a workspace that never had a subscription. */
+export const trialOffered = (everSubscribed: boolean): boolean => !everSubscribed;
+
+/** The trial a Checkout carries: the thirty days when offered, else none (charged at once). */
+export const checkoutTrial = (offered: boolean): { trial_period_days: number } | null => (offered ? { trial_period_days: TRIAL_DAYS } : null);
+
+/** When a Checkout started now first charges: at the trial's end when one is offered, else today. */
+export const firstChargeOn = (now: number, offered: boolean): number => (offered ? now + TRIAL_DAYS * DAY : now);
+
+// ── The shared record (gestion.billing_status) ─────────────────────────────
+
+/** A row of gestion.billing_status, as either store's webhook writes it. */
+export interface BillingRow {
+  source: string;
+  status: string;
+  /** ISO timestamp, or null. */
+  current_period_end: string | null;
 }
 
-/** The one extension: offered when the trial is over or ends within two days, nothing subscribed, none taken. */
-export function canExtend(facts: BillingFacts, alreadyExtended: boolean): boolean {
-  if (alreadyExtended) return false;
-  const state = billingState(facts);
-  return state.phase === "expired" || (state.phase === "trial" && state.daysLeft <= 2);
+/** Whether a recorded subscription runs at `now`: trialing or active, its period not over. */
+export function rowRuns(row: BillingRow, now: number): boolean {
+  if (!isRunningStatus(row.status)) return false;
+  if (row.current_period_end === null) return true;
+  const end = Date.parse(row.current_period_end);
+  return Number.isFinite(end) && end / 1000 > now;
 }
 
-/** The extended end: seven days from the later of now and the current end. */
-export function extendedEnd(now: number, trialEnd: number): number {
-  return Math.max(now, trialEnd) + TRIAL_EXTENSION_DAYS * DAY;
+export const anyRowRuns = (rows: readonly BillingRow[], now: number): boolean => rows.some((r) => rowRuns(r, now));
+
+/** The lock reason the recorded rows give when nothing runs: a failed payment first, then an ended subscription, else none ever. */
+export function reasonFromRows(rows: readonly BillingRow[]): LockReason {
+  if (rows.some((r) => r.status === "past_due" || r.status === "unpaid")) return "payment";
+  return rows.length > 0 ? "ended" : "no_trial";
 }
 
-/** Stripe refuses a Checkout trial ending within 48 hours; a small margin covers the clock. */
-const CHECKOUT_MIN_TRIAL = 48 * 3600 + 600;
+// ── The trial's e-mails ─────────────────────────────────────────────────────
+
+/** A week before the first charge (as card schemes ask of trials), and two days before (the reminder the offer screen promises). */
+export type Reminder = "d7" | "d2";
 
 /**
- * What remains of the trial, in the form Checkout takes: its exact end when
- * that is far enough, else Stripe's shortest trial (a gift of under two days
- * rather than a charge before the promised date), else nothing (charged now).
- */
-export function checkoutTrial(now: number, trialEnd: number): { trial_end: number } | { trial_period_days: number } | null {
-  if (trialEnd - now >= CHECKOUT_MIN_TRIAL) return { trial_end: trialEnd };
-  if (trialEnd > now) return { trial_period_days: 2 };
-  return null;
-}
-
-export type Reminder = "d7" | "d2" | "ended";
-
-/**
- * The reminder a trial is due by email, if any: seven days before its end,
- * two days before, and once it has ended without a subscription. Windows,
- * not exact days, so a missed daily run still sends each one once.
+ * The reminder a running trial is due by e-mail, if any. Windows, not exact
+ * days, so a missed daily run still sends each one once; a trial already in
+ * its last two days gets only the later one. A trial cancelled before its
+ * end charges nothing and is not reminded.
  */
 export function reminderDue(facts: BillingFacts, sent: readonly string[]): Reminder | null {
   const state = billingState(facts);
-  if (state.phase === "trial") {
-    if (state.daysLeft <= 2) return sent.includes("d2") ? null : "d2";
-    if (state.daysLeft <= REMINDER_DAYS) return sent.includes("d7") ? null : "d7";
-    return null;
-  }
-  if (state.phase === "trial_card") {
-    // The first charge announced a week ahead, as card schemes ask of trials.
-    return state.daysLeft <= REMINDER_DAYS && !sent.includes("d7") ? "d7" : null;
-  }
-  if (state.phase === "expired" && facts.now - facts.trialEnd < 3 * DAY) return sent.includes("ended") ? null : "ended";
+  if (state.phase !== "trial" || state.firstChargeAt === null || state.daysLeft === 0) return null;
+  if (state.daysLeft <= URGENT_DAYS) return sent.includes("d2") ? null : "d2";
+  if (state.daysLeft <= SOON_DAYS) return sent.includes("d7") || sent.includes("d2") ? null : "d7";
   return null;
 }

@@ -39,7 +39,7 @@ est l'unique original.
 | `20261002120000_notifications_mobile.sql` | **Appliquée** le 2026-10-02 (hébergé, instruction par instruction) | `push_devices`, `notification_prefs`, `notifications` + fonctions `notify_*`, déclencheurs sur `messages`/`payments`/`tickets`/`portal_invites`/`work_orders`, tick `pg_cron`. Dépend de `vault`, `pg_net`, `pg_cron`. |
 | `20261010120000_referrals_mobile.sql` | **Appliquée** (constatée au catalogue le 2026-11-19 : `referral_codes`, `referral_uses`) | `referral_codes`, `referral_uses` + RPC `referral_code()` / `redeem_referral()`. |
 | `20261011120000_security_tenant_isolation.sql` | **Appliquée** le 2026-10-11 (hébergé, instruction par instruction) | **Correctif d'isolation inter-locataires de l'audit du 11 oct.** : `portal_tenant_lease`/`portal_owner_property` liés à l'organisation, inserts portail liés à l'org, déclencheurs `guard_link_org`, `agencies` restreint à `is_public`, gardes des tables héritées `g_*`, durcissement des notifications. **Ne pas ré-appliquer** : c'est ce que l'audit mené dans ce dépôt (même date) avait re-dérivé en doublon. |
-| `20261119120000_billing_status.sql` | **NON appliquée** (2026-11-19) | `gestion.billing_status` : un seul statut d'abonnement pour les deux surfaces (Stripe côté web, Apple/RevenueCat côté app). Écrite par les webhooks (service role) ; lue par les deux surfaces. **À finir de câbler côté web dans ce dépôt** (le webhook Stripe l'écrit, la porte de facturation la lit). |
+| `20261119120000_billing_status.sql` | **NON appliquée** (2026-11-19) | `gestion.billing_status` : un seul statut d'abonnement pour les deux surfaces (Stripe côté web, Apple/RevenueCat côté app). Écrite par les webhooks (service role) ; lue par les deux surfaces. Reprise dans le jeu numéroté sous `supabase/applied/0036_billing_status.sql` (rejouable, droits explicites), que la CI rejoue : c'est ce fichier-là qu'on applique. |
 
 État de production constaté au catalogue le 2026-11-19 : les trois migrations
 d'octobre sont appliquées, `billing_status` ne l'est pas ; `bank` (v6), `notify`
@@ -56,15 +56,17 @@ canonique ici.
 |---|---|
 | `bank/` (`index.ts`, `matching.ts`) | Import/rapprochement bancaire (Salt Edge). |
 | `notify/` (`index.ts`, `templates.ts`) | Moteur de notifications (push + inbox) réveillé par `pg_net`/`pg_cron` ; gabarits FR/EN/DE/LU. |
-| `revenuecat/` (`index.ts`) | Webhook RevenueCat (abonnements Apple) → écrit `gestion.billing_status`. |
+| `revenuecat/` (`index.ts`) | Webhook RevenueCat (abonnements Apple), écrit la ligne `apple` de `gestion.billing_status`. Secret `REVENUECAT_WEBHOOK_AUTH`. |
+| `stripe/` (`index.ts`, `logic.ts`) | Webhook Stripe (abonnements web), écrit la ligne `stripe` de `gestion.billing_status` : signature vérifiée (HMAC-SHA256, tolérance de 5 min) avec le secret `STRIPE_WEBHOOK_SECRET`, événements `customer.subscription.created/updated/deleted` et `invoice.payment_failed`, abonnements portant `morada_app=gestion` seulement. Déployée sans vérification de JWT. `logic.ts` est pur et testé depuis vitest (`src/lib/billing/__tests__/stripe-webhook.test.ts`). |
 | `scan-receipt/` (`index.ts`) | Reconnaissance de reçu (OCR/LLM) pour l'app. |
 
 ## Suites (division du travail)
 
 1. **App mobile** (`morada-mobile-app`) : retirer son `supabase/` (migrations + functions),
    rester un pur client lisant le schéma `gestion`.
-2. **Ce dépôt (web)** : finir de câbler `billing_status` (webhook Stripe en écriture,
-   porte de facturation en lecture), pour que l'accès soit cohérent web + app.
+2. **Ce dépôt (web)** : `billing_status` est câblé (fonction `stripe` en écriture, porte
+   `src/lib/billing/access.ts` en lecture) ; reste à appliquer 0036, déployer `stripe` et
+   `revenuecat`, et déclarer les deux webhooks.
 3. **Toute évolution future** du schéma `gestion` ou des Edge Functions se fait **ici**.
 4. Facultatif : promouvoir ces migrations dans le jeu numéroté testé en CI une fois la
    base e2e dotée de `vault`/`pg_cron`/`pg_net`.

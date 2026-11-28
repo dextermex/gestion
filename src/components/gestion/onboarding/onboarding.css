@@ -1,0 +1,78 @@
+/* The guided first entry (GettingStarted.tsx, SetupTour.tsx). Movement on the
+   house easing, never an overshoot; under reduced motion nothing moves. */
+
+/* The light that travels round the setup card's border while a step is open. */
+@property --setup-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.setup-glow { position: relative; isolation: isolate; }
+.setup-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--setup-angle), transparent 0 62%, rgb(31 124 142 / 0.15) 72%, var(--color-brand-500) 88%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: setup-lap 2.6s linear infinite;
+  pointer-events: none;
+}
+@keyframes setup-lap { to { --setup-angle: 360deg; } }
+
+.setup-ring-value { transition: stroke-dashoffset 600ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* The arrival straight after sign-up: the space scales up from the centre of the screen. */
+html[data-setup-arrival] .crm-shell {
+  transform-origin: 50% 50vh;
+  animation: setup-arrival 1.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+html[data-setup-arrival] body { overflow: hidden; background: var(--color-brand-950, #062229); }
+@keyframes setup-arrival {
+  0% { transform: scale(0.4); opacity: 0; border-radius: 44px; }
+  30% { opacity: 1; }
+  100% { transform: none; opacity: 1; border-radius: 0; }
+}
+
+/* The tour's overlay: a dim layer with a cut-out round the target. */
+.setup-tour { position: fixed; inset: 0; z-index: 70; }
+.setup-tour-backdrop { position: absolute; inset: 0; cursor: default; }
+.setup-tour-hole {
+  position: fixed;
+  box-shadow: 0 0 0 200vmax rgb(6 34 41 / 0.62);
+  pointer-events: none;
+  transition: top 300ms cubic-bezier(0.22, 1, 0.36, 1), left 300ms cubic-bezier(0.22, 1, 0.36, 1), width 300ms cubic-bezier(0.22, 1, 0.36, 1), height 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.setup-tour-target {
+  position: fixed;
+  background: transparent;
+  cursor: pointer;
+  border-radius: inherit;
+}
+.setup-tour-target:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+.setup-tour-ring { position: fixed; pointer-events: none; overflow: visible; }
+.setup-tour-ring rect { stroke-dasharray: 1; stroke-dashoffset: 1; animation: setup-ring 3s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes setup-ring { to { stroke-dashoffset: 0; } }
+/* The headline stands on a panel of its own: the page behind is only dimmed, and its rows would show through the words. */
+.setup-tour-bubble {
+  position: fixed;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem 1.125rem;
+  border-radius: 1.125rem;
+  background: rgb(6 34 41 / 0.94);
+  box-shadow: 0 12px 32px -12px rgb(6 34 41 / 0.5);
+  animation: setup-fade 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.setup-tour { animation: setup-fade 250ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes setup-fade { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .setup-glow::after { animation: none; background: none; }
+  .setup-ring-value, .setup-tour-hole { transition: none; }
+  html[data-setup-arrival] .crm-shell { animation: none; }
+  .setup-tour-ring rect { animation: none; stroke-dashoffset: 0; }
+  .setup-tour, .setup-tour-bubble { animation-duration: 150ms; }
+}

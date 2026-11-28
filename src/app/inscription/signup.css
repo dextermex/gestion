@@ -31,10 +31,6 @@
 .signup-back { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; margin-left: -10px; color: var(--color-ink); transition: background .18s; }
 .signup-back:hover { background: var(--signup-field); }
 .signup-back svg { width: 20px; height: 20px; }
-.signup-progress { display: flex; gap: 4px; width: 66px; }
-.signup-progress > span { flex: 1; }
-.signup-progress-line { display: block; height: 3px; border-radius: 5px; background: #dfe5e7; }
-.signup-progress [data-active="true"] .signup-progress-line, .signup-progress [data-done="true"] .signup-progress-line { background: var(--color-brand-700); }
 .signup-step { --signup-entry: 12px; animation: signup-enter .25s cubic-bezier(.22,1,.36,1) both; }
 .signup-step[data-backwards="true"] { --signup-entry: -12px; }
 @keyframes signup-enter { from { opacity: 0; transform: translateX(var(--signup-entry)); } to { opacity: 1; transform: translateX(0); } }
@@ -201,7 +197,7 @@
 @media (forced-colors: active) {
   .signup-choice[data-selected="true"] { outline: 2px solid Highlight; }
   .signup-primary, .signup-country { border: 1px solid ButtonText; }
-  .signup-progress [data-active="true"] .signup-progress-line { background: Highlight; forced-color-adjust: none; }
+  .signup-bar > span { background: Highlight; forced-color-adjust: none; }
 }
 
 
@@ -238,41 +234,113 @@ button.signup-recovery:disabled { cursor: default; opacity: 0.6; }
   .signup-confirm-dialog::backdrop { backdrop-filter: none; background: rgb(6 34 41 / .6); }
 }
 
-/* The subscription for after the trial: two ways to be billed, each led by its lowest monthly price; how the trial runs. */
-.signup-plans { display: grid; gap: 14px; }
-.signup-plan { align-items: flex-start; padding: 18px; gap: 14px; }
-.signup-plan .signup-radio { margin-top: 2px; }
-.signup-plan .signup-choice-copy { gap: 4px; }
-.signup-plan-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; }
-.signup-plan-name em { font-style: normal; font-size: 11px; font-weight: 650; color: var(--color-brand-800); background: #fff; border-radius: 99px; padding: 2px 8px; }
-.signup-plan-price { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; max-width: 46%; }
-.signup-plan-price strong { font-size: 26px; line-height: 1.1; letter-spacing: -.02em; font-weight: 700; color: var(--color-ink); }
-.signup-plan-price small { font-size: 11px; line-height: 1.4; color: var(--signup-muted); }
-.signup-plan-price small:first-child { font-size: 12px; font-weight: 550; }
-.signup-plan-note { font-size: 12px; line-height: 1.6; color: var(--signup-muted); margin: 2px 3px 0; }
-.signup-timeline { list-style: none; margin: 0; padding: 0; display: grid; }
-.signup-timeline li { position: relative; display: grid; gap: 3px; padding: 0 0 22px 30px; font-size: 13px; line-height: 1.55; color: var(--signup-muted); }
-.signup-timeline li:last-child { padding-bottom: 0; }
-.signup-timeline li::before { content: ""; position: absolute; left: 8px; top: 20px; bottom: 2px; width: 2px; border-radius: 2px; background: #d7e2e5; }
-.signup-timeline li:last-child::before { display: none; }
-.signup-timeline-dot { position: absolute; left: 2px; top: 4px; width: 14px; height: 14px; border-radius: 99px; background: #fff; border: 2px solid var(--color-brand-700); }
-.signup-timeline li[data-first] .signup-timeline-dot { background: var(--color-brand-700); }
-.signup-timeline strong { color: var(--color-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.signup-timeline-inline { margin-top: 28px; padding: 20px; border-radius: 18px; background: var(--color-sand-50); }
-.signup-visual-trial { position: relative; z-index: 1; margin: auto clamp(28px,3.5vw,56px); padding: clamp(24px,2.4vw,36px); border-radius: 22px; background: rgb(255 255 255 / .9); box-shadow: 0 24px 60px -32px rgb(6 34 41 / .28); }
-.signup-visual-trial h2 { font-size: clamp(24px,2.2vw,32px); line-height: 1.15; letter-spacing: -.035em; color: var(--color-brand-950); margin-bottom: 26px; }
-.signup-visual-trial .signup-timeline li { font-size: 14px; }
-.signup-welcome-summary [data-welcome-trial] { color: var(--color-brand-800); font-weight: 550; }
-@media (min-width: 1024px) {
-  .signup-timeline-inline { display: none; }
-}
+/*
+ * The sign-up after the account, the iPhone app's screens in the funnel's column:
+ * the journey bar, the questions with an emoji each, the interests as chips, the
+ * first month as a curve, the count while the space is created, the plan, the
+ * three trial screens and the one-time offer.
+ */
+.signup-back-space { width: 34px; height: 44px; flex-shrink: 0; }
+.signup-bar { flex: 1; height: 6px; border-radius: 99px; background: #e3eaec; overflow: hidden; }
+.signup-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--color-brand-700); transition: width .5s cubic-bezier(.22,1,.36,1); }
+.signup-choice-emoji { flex: 0 0 42px; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: #fff; font-size: 21px; line-height: 1; }
+.signup-quiz .signup-choice { min-height: 58px; padding: 10px 16px 10px 10px; }
+.signup-interests { display: grid; gap: 22px; }
+.signup-interests fieldset, .signup-panel-group { border: 0; padding: 0; margin: 0; min-width: 0; }
+.signup-interests legend, .signup-panel-group legend { font-size: 14px; font-weight: 650; margin-bottom: 10px; color: var(--color-ink); }
+.signup-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.signup-chip { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 14px 8px 12px; border-radius: 99px; background: var(--signup-field); border: 1px solid transparent; font-size: 14px; font-weight: 550; cursor: pointer; transition: background .12s, border-color .12s, box-shadow .12s; }
+.signup-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.signup-chip:hover { background: var(--color-brand-50); }
+.signup-chip[data-on="true"] { background: var(--color-brand-50); border-color: var(--color-brand-700); box-shadow: inset 0 0 0 1px var(--color-brand-700); color: var(--color-brand-900); }
+.signup-chip:has(input:focus-visible) { outline: 3px solid var(--color-brand-600); outline-offset: 2px; }
+.signup-curve { margin: 0; padding: 18px; border-radius: 20px; background: #fff; box-shadow: 0 1px 2px rgb(6 34 41 / .06), 0 18px 40px -28px rgb(6 34 41 / .35); color: var(--color-brand-700); }
+.signup-curve figcaption { font-size: 15px; font-weight: 650; color: var(--color-ink); }
+.signup-curve svg { display: block; width: 100%; height: auto; margin-top: 12px; }
+.signup-curve-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: signup-draw 1.1s .3s cubic-bezier(.22,1,.36,1) forwards; }
+.signup-curve-fill { opacity: 0; animation: signup-fade .9s .5s ease-out forwards; }
+.signup-curve-dot { fill: #fff; stroke: currentColor; stroke-width: 3; }
+.signup-curve-end { fill: currentColor; stroke: currentColor; stroke-width: 3; }
+@keyframes signup-draw { to { stroke-dashoffset: 0; } }
+@keyframes signup-fade { to { opacity: .9; } }
+.signup-curve-axis { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; font-size: 11px; color: var(--signup-muted); margin-top: 2px; }
+.signup-curve ul { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+.signup-curve li { position: relative; padding-left: 20px; font-size: 13px; line-height: 1.5; color: var(--color-ink); }
+.signup-curve li::before { content: ""; position: absolute; left: 0; top: 5px; width: 10px; height: 10px; border-radius: 99px; border: 2px solid var(--color-brand-600); background: #fff; }
+.signup-curve li[data-last]::before { background: var(--color-brand-600); }
+.signup-curve li strong { font-weight: 600; }
+.signup-reviews { display: grid; gap: 14px; }
+.signup-reviews-figure { display: flex; align-items: baseline; gap: 10px; color: var(--color-brand-700); }
+.signup-reviews-figure strong { font-size: 44px; letter-spacing: -.03em; }
+.signup-reviews ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.signup-reviews li { padding: 14px 16px; border-radius: 18px; background: var(--signup-field); font-size: 14px; line-height: 1.5; }
+.signup-reviews li > span { display: block; margin-top: 6px; font-size: 12px; color: var(--signup-muted); }
+.signup-setup { margin-bottom: 18px; }
+.signup-setup-figure { font-size: 64px; font-weight: 700; letter-spacing: -.04em; line-height: 1; color: var(--color-brand-800); font-variant-numeric: tabular-nums; margin: 0 0 14px; }
+.signup-setup-track { height: 6px; border-radius: 99px; background: #e3eaec; overflow: hidden; margin-bottom: 22px; }
+.signup-setup-track > span { display: block; height: 100%; background: var(--color-brand-700); border-radius: inherit; }
+.signup-setup ul, .signup-plan-ready ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.signup-setup li, .signup-plan-ready li { display: flex; align-items: center; gap: 12px; font-size: 14px; line-height: 1.5; color: var(--signup-muted); transition: color .2s; }
+.signup-setup li[data-done], .signup-plan-ready li { color: var(--color-ink); }
+.signup-setup-check { flex: 0 0 24px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 99px; background: #e3eaec; color: #fff; transition: background .2s; }
+.signup-setup li[data-done] .signup-setup-check, .signup-setup-check[data-done] { background: var(--color-brand-700); }
+.signup-page .signup-setup-check svg { width: 13px; height: 13px; }
+.signup-setup-retry { margin-top: 8px; }
+.signup-step[data-step="setup"] h1 { font-size: clamp(26px, 2.3vw, 34px); }
+.signup-ready-icon { margin-bottom: 22px; }
+.signup-plan-ready { padding: 20px; border-radius: 20px; background: var(--color-brand-50); display: grid; gap: 16px; }
+.signup-goal { justify-self: start; padding: 6px 12px; border-radius: 99px; background: #fff; color: var(--color-brand-800); font-size: 13px; font-weight: 600; }
+.signup-plan-home { padding-top: 14px; border-top: 1px solid #d3e3e6; font-size: 13px; color: var(--signup-muted); }
+.signup-shot { width: min(62vw, 260px); margin: 4px auto 0; padding: 9px; border-radius: 46px; background: #0d1416; box-shadow: 0 30px 60px -34px rgb(6 34 41 / .55); }
+.signup-shot img { display: block; width: 100%; height: auto; border-radius: 38px; }
+.signup-no-payment { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 26px; font-size: 15px; font-weight: 600; color: var(--color-ink); }
+.signup-no-payment svg { width: 16px; height: 16px; color: var(--color-brand-700); }
+.signup-no-payment + .signup-primary { margin-top: 14px; }
+.signup-bell { position: relative; width: 168px; height: 168px; margin: 20px auto 8px; display: grid; place-items: center; color: var(--color-brand-700); transform-origin: 50% 12%; animation: signup-ring .9s .5s cubic-bezier(.22,1,.36,1) both; }
+.signup-page .signup-bell svg { width: 132px; height: 132px; }
+.signup-bell span { position: absolute; top: 14px; right: 18px; min-width: 44px; height: 44px; border-radius: 99px; display: grid; place-items: center; background: #d6453d; color: #fff; font-weight: 700; font-size: 20px; border: 3px solid #fff; }
+@keyframes signup-ring { 0% { transform: rotate(0); } 20% { transform: rotate(-12deg); } 45% { transform: rotate(10deg); } 70% { transform: rotate(-6deg); } 100% { transform: rotate(0); } }
+.signup-trial-rows { list-style: none; margin: 24px 0 22px; padding: 0; display: grid; }
+.signup-trial-rows li { position: relative; display: grid; gap: 2px; padding: 0 0 22px 42px; font-size: 14px; line-height: 1.5; color: var(--signup-muted); }
+.signup-trial-rows li:last-child { padding-bottom: 0; }
+.signup-trial-rows li::before { content: ""; position: absolute; left: 12px; top: 26px; bottom: 0; width: 4px; border-radius: 4px; background: linear-gradient(var(--color-brand-200, #b8dbe1), transparent); }
+.signup-trial-rows li:last-child::before { display: none; }
+.signup-trial-dot { position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 99px; background: var(--color-brand-50); border: 2px solid var(--color-brand-700); }
+.signup-trial-rows li[data-first] .signup-trial-dot { background: var(--color-brand-700); }
+.signup-trial-rows strong { color: var(--color-ink); font-size: 15px; font-weight: 650; }
+.signup-price-line { text-align: center; font-size: 15px; line-height: 1.6; color: var(--color-ink); }
+.signup-price-line strong { font-weight: 700; }
+.signup-understand { text-align: center; font-size: 13px; color: var(--signup-muted); margin-top: 4px; }
+.signup-inline-button { display: inline-flex; align-items: center; min-height: 40px; color: var(--color-brand-700); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.signup-step[data-step="offer"] .signup-primary, .signup-step[data-step="winback"] .signup-primary { margin-top: 18px; }
+/* Closed, a dialog is not displayed: the grid applies only while it is open. */
+.signup-price-panel { text-align: left; padding: 28px 24px 20px; gap: 18px; }
+.signup-price-panel[open] { display: grid; }
+.signup-price-panel h2 { font-size: 22px; }
+.signup-panel-rule, .signup-panel-note { font-size: 13px; line-height: 1.55; color: var(--signup-muted); }
+.signup-panel-note { font-size: 11px; }
+.signup-panel-foot { display: flex; align-items: center; gap: 14px; padding-top: 14px; border-top: 1px solid #e3eaec; }
+.signup-panel-foot > div { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.signup-panel-foot small { font-size: 12px; color: var(--signup-muted); }
+.signup-panel-foot strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.signup-panel-done { min-height: 44px; padding: 0 20px; border-radius: 99px; background: var(--color-brand-700); color: #fff; font-weight: 600; font-size: 14px; }
+.signup-eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--color-brand-700); margin-bottom: 14px; }
+.signup-badge { padding: 4px 10px; border-radius: 10px; background: #ffd166; color: var(--color-brand-950); font-size: 15px; letter-spacing: 0; transform: rotate(-3deg); }
+.signup-winback-card { padding: 20px; border-radius: 20px; background: #fff; box-shadow: 0 1px 2px rgb(6 34 41 / .06), 0 18px 40px -28px rgb(6 34 41 / .35); }
+.signup-winback-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; font-weight: 650; color: var(--color-brand-700); text-transform: uppercase; letter-spacing: .03em; }
+.signup-zero { padding: 3px 8px; border-radius: 99px; background: var(--color-brand-50); text-transform: none; letter-spacing: 0; }
+.signup-winback-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.signup-winback-price strong { font-size: 40px; letter-spacing: -.03em; color: var(--color-brand-700); font-variant-numeric: tabular-nums; }
+.signup-winback-price span { color: var(--signup-muted); font-size: 14px; }
+.signup-winback-price s { color: var(--signup-muted); font-size: 14px; }
+.signup-winback-under { font-size: 13px; color: var(--signup-muted); margin-top: 4px; }
 @media (max-width: 400px) {
-  .signup-plan { padding: 14px; gap: 10px; }
-  .signup-plan-price strong { font-size: 23px; }
+  .signup-quiz .signup-choice { padding: 8px 12px 8px 8px; gap: 10px; }
+  .signup-choice-emoji { flex-basis: 38px; width: 38px; height: 38px; font-size: 19px; }
+  .signup-setup-figure { font-size: 52px; }
+  .signup-chip { font-size: 13px; padding: 8px 12px 8px 10px; }
 }
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .signup-visual-trial { background: #fff; }
-}
-@media (forced-colors: active) {
-  .signup-timeline-dot { forced-color-adjust: none; }
+@media (prefers-reduced-motion: reduce) {
+  .signup-curve-line { stroke-dashoffset: 0; }
+  .signup-curve-fill { opacity: .9; }
 }

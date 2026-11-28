@@ -9,8 +9,8 @@ import { fmt, type Locale } from "@/lib/i18n/config";
 import { formatDate } from "@/lib/types";
 import { TEAM_EMAIL } from "@/lib/constants";
 import type { Cents } from "@/domain/money";
-import { LOYALTY_PCT, MAX_LOTS, PAID_MONTHS, RENT_BANDS, REMINDER_DAYS, RHYTHMS, RHYTHM_MONTHS, VOLUME, quote, type Rhythm } from "@/domain/billing/pricing";
-import { DAY } from "@/domain/billing/trial";
+import { LOYALTY_PCT, MAX_LOTS, PAID_MONTHS, RENT_BANDS, RHYTHMS, RHYTHM_MONTHS, TRIAL_DAYS, VOLUME, quote, type Rhythm } from "@/domain/billing/pricing";
+import { DAY, SOON_DAYS, URGENT_DAYS } from "@/domain/billing/trial";
 import { bandLabel, dayOf, daysLeftLabel, lotsLabel, lotsLetLabel, pctOff, periodName, price } from "@/lib/billing/format";
 import type { BillingPageData } from "@/lib/billing/view";
 
@@ -44,17 +44,17 @@ function errorText(b: B, code: unknown): string {
     case "already_subscribed": return b.errAlreadySubscribed;
     case "too_many_lots": return fmt(b.errTooManyLots, { max: MAX_LOTS });
     case "custom_terms": return b.errCustomTerms;
-    case "not_offered": return b.errNotOffered;
     case "sample_read_only": return b.sampleNote;
     default: return b.errGeneric;
   }
 }
 
 /**
- * The subscription page: how to be billed, each way led by the account's
- * own price per month, the line by line of that price (each lot by its
- * rent, the volume brackets), how it falls over time, and beside it the one
- * action that moves the subscription forward. Every figure comes from
+ * The subscription page of an open workspace: during the trial, the days
+ * left, when the first charge falls and for how much, the card on file and
+ * the portal (card, invoices, cancelling at the period's end); then how to
+ * be billed, the line by line of the price (each lot by its rent, the
+ * volume brackets) and how it falls over time. Every figure comes from
  * src/domain/billing/pricing.ts, the same engine the Stripe price is
  * computed by, over the rents of the lots the account lets.
  */
@@ -81,7 +81,7 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
   const changed = running && !custom && rhythm !== sub!.rhythm;
   const money = (cents: Cents) => price(cents, locale);
   const date = (unix: number | null | undefined) => (unix ? formatDate(dayOf(unix), locale) : "");
-  const trialEnd = state?.firstChargeAt ?? data.trialEnd ?? now + 30 * DAY;
+  const trialEnd = state?.firstChargeAt ?? sub?.periodEnd ?? now + TRIAL_DAYS * DAY;
   const freeMonths = RHYTHM_MONTHS.year - PAID_MONTHS.year;
   // The month after the yearly offer and before loyalty: the bill's rows add up to the price exactly.
   const afterOffer = Math.round(q.base / RHYTHM_MONTHS[q.rhythm]);
@@ -123,21 +123,14 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
       router.refresh();
     }
   });
-  const extend = act("extend", async () => {
-    const answer = await post("/api/abonnement/prolonger", {});
-    if (answer && typeof answer.trialEnd === "number") {
-      setNotice(fmt(b.extended, { date: date(answer.trialEnd) }));
-      router.refresh();
-    }
-  });
-
-  const confirmedText = confirmed ? (phase === "trial_card" ? fmt(b.confirmedTrial, { date: date(trialEnd) }) : b.confirmed) : "";
+  const confirmedText = confirmed ? (phase === "trial" ? fmt(b.confirmedTrial, { date: date(trialEnd) }) : b.confirmed) : "";
   const statusNote =
     sample ? b.sampleNote
       : data.status === "off" ? b.off
       : data.status === "not_secret" ? b.notSecret
       : data.status === "unreachable" ? b.unreachable
       : data.status === "exempt" ? b.exempt
+      : data.status === "store" ? b.store
       : !data.canManage ? b.notManager
       : null;
   // Until subscriptions open, the figures are the published launch hypothesis.
@@ -145,14 +138,13 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
 
   const forWhom = q.lots > 0 ? fmt(b.summaryFor, { lots: lotsLetLabel(b, locale, q.lots) }) : b.noLotsLet;
   const chargedLine = fmt(rhythm === "quarter" ? b.chargedQuarter : b.chargedYear, { amount: money(custom ? sub!.charged : q.charged) });
-  const startsNow = phase === "expired" || phase === "ended";
+  // A new subscription comes with the free days only for a workspace that never had one.
+  const startsNow = !data.trialOffered;
 
   let status: string | null = null;
-  if (sub && phase === "trial_card") status = fmt(b.statusCard, { date: date(trialEnd), amount: money(sub.charged), period: periodName(b, sub.rhythm ?? rhythm) });
+  if (sub && phase === "trial") status = sub.cancelAtPeriodEnd ? fmt(b.statusCanceling, { date: date(sub.periodEnd) }) : fmt(b.statusCard, { date: date(trialEnd), amount: money(sub.charged), period: periodName(b, sub.rhythm ?? rhythm) });
   else if (sub && phase === "active") status = sub.cancelAtPeriodEnd ? fmt(b.statusCanceling, { date: date(sub.periodEnd) }) : fmt(b.statusActive, { date: date(sub.periodEnd), amount: money(sub.charged) });
-  else if (phase === "past_due") status = b.statusPastDue;
-  else if (phase === "expired") status = b.statusExpired;
-  else if (phase === "ended") status = b.statusEnded;
+  else if (phase === "payment") status = b.statusPastDue;
 
   return (
     <div className="crm-billing grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
@@ -261,7 +253,7 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
             <div className="mt-6 space-y-3">
               {!running && q.fits && (
                 <Button className="w-full min-h-14 text-[15px]" onClick={checkout} loading={busy === "checkout"} disabled={!canAct || (busy !== null && busy !== "checkout")} data-billing-action="checkout">
-                  {startsNow ? b.activate : b.addCard}
+                  {startsNow ? b.activate : fmt(b.lock.start, { days: TRIAL_DAYS })}
                 </Button>
               )}
               {!running && !q.fits && (
@@ -269,7 +261,7 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
                   {b.teamCta}
                 </a>
               )}
-              {running && phase === "past_due" && (
+              {running && phase === "payment" && (
                 <Button className="w-full min-h-14 text-[15px]" onClick={portal("payment_method_update")} loading={busy === "portal"} disabled={!canAct} data-billing-action="update-card">
                   {b.updateCard}
                 </Button>
@@ -280,14 +272,9 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
                 </Button>
               )}
               {sub && (
-                <Button variant="secondary" className="w-full min-h-12" onClick={portal()} loading={busy === "portal" && phase !== "past_due"} disabled={!canAct} data-billing-action="portal">
+                <Button variant="secondary" className="w-full min-h-12" onClick={portal()} loading={busy === "portal" && phase !== "payment"} disabled={!canAct} data-billing-action="portal">
                   {sub.cancelAtPeriodEnd ? b.resume : b.manage}
                 </Button>
-              )}
-              {data.canExtend && canAct && (
-                <button type="button" onClick={extend} disabled={busy !== null} className="block min-h-11 w-full text-center text-sm font-medium text-brand-700 underline underline-offset-4 hover:no-underline disabled:opacity-50">
-                  {b.extend}
-                </button>
               )}
               {!running && quoted && <p className="text-center text-xs leading-relaxed text-ink-soft">{startsNow ? b.reassureNow : fmt(b.reassure, { date: date(trialEnd) })}</p>}
               <p className="flex items-start justify-center gap-1.5 text-center text-[11px] leading-relaxed text-ink-soft">
@@ -299,7 +286,7 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
           {error && <p role="alert" className="mt-4 text-sm font-medium text-red-700">{error}</p>}
         </Card>
 
-        {(phase === "trial" || phase === "trial_card") && quoted && (
+        {phase === "trial" && running && quoted && state?.firstChargeAt && (
           <Card className="crm-panel p-5 sm:p-7">
             <h2 className="mb-5 font-display text-lg font-bold text-ink">{b.timelineTitle}</h2>
             <ol className="billing-timeline">
@@ -308,18 +295,19 @@ export default function BillingPanel({ locale, b, data, rents, sample, now, badg
                 <strong>{b.today}</strong>
                 <span>{b.timelineToday}</span>
               </li>
-              <li>
-                <span className="billing-timeline-dot" aria-hidden />
-                <strong>{date(trialEnd - REMINDER_DAYS * DAY)}</strong>
-                <span>{b.timelineReminder}</span>
-              </li>
+              {[SOON_DAYS, URGENT_DAYS].map((before) => (
+                <li key={before}>
+                  <span className="billing-timeline-dot" aria-hidden />
+                  <strong>{date(trialEnd - before * DAY)}</strong>
+                  <span>{b.timelineReminder}</span>
+                </li>
+              ))}
               <li>
                 <span className="billing-timeline-dot" aria-hidden />
                 <strong>{date(trialEnd)}</strong>
                 <span>{fmt(b.timelineCharge, { amount: money(running && sub ? sub.charged : q.charged) })}</span>
               </li>
             </ol>
-            {phase === "trial" && <p className="mt-5 text-xs leading-relaxed text-ink-soft">{b.timelineNoCard}</p>}
           </Card>
         )}
       </aside>

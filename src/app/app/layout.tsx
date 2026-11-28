@@ -11,12 +11,19 @@ import NoWorkspace from "@/components/gestion/NoWorkspace";
 import { getI18n } from "@/lib/i18n";
 import { getDatasetId, getDemo } from "@/lib/demo";
 import { previewEmpty } from "@/lib/deployment";
+import { shellSetup, tourSeenOn } from "@/lib/gestion/setup";
+// The setup card and the tour are on every page of the space.
+import "@/components/gestion/onboarding/onboarding.css";
 import { WORKSPACE_SEEN, getIdentity, hadWorkspace, provisionDefaultWorkspace, tenantAnswer } from "@/lib/workspace";
 import { authedClient, getSession } from "@/lib/supabase/server";
 import { updateSignupUser } from "@/lib/signup/update-user";
 import { REQUESTED_PATH_HEADER, signInAddress } from "@/lib/auth/return-path";
-import { billedRents, portfolioLots } from "@/domain/billing/pricing";
-import { shellBillingOf, visitSnapshot } from "@/lib/billing/view";
+import { TRIAL_DAYS, billedRents } from "@/domain/billing/pricing";
+import { shellBillingOf, visitSnapshot, canManageBilling } from "@/lib/billing/view";
+import { accessFor } from "@/lib/billing/access";
+import Locked from "@/components/gestion/Locked";
+import { resumeStep } from "@/lib/signup/model";
+import { offerSchema } from "@/lib/signup/offer";
 import { quickLeaseOptions } from "@/lib/gestion/quick-lease";
 import { paymentLeases } from "@/lib/gestion/ledger";
 import { latestMoment, unreadSignature } from "@/lib/gestion/threads";
@@ -104,16 +111,44 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     });
   }
 
-  // The shell's own read: the portfolio, the people and the badges, no
-  // history. The screen inside reads what it shows.
-  // The subscription is the account's own business: read on its own data only,
-  // alongside the portfolio, and never holding the page (five seconds at most).
+  // An account whose sign-up is not finished continues it: the space opens
+  // once the account, the questions and the offer are behind it.
+  if (session?.user && resumeStep(session.user) !== "existing") redirect("/inscription");
+
+  // Who may enter (src/lib/billing/access.ts): a running subscription, and
+  // nobody else. A locked workspace sees one screen in place of the whole
+  // space, on every page; nothing of it is deleted. Off without a Stripe
+  // key, for a workspace that never pays, and on a sample cabinet.
   const datasetId = await getDatasetId();
   const workspace = identity.active;
+  const gate = datasetId === "real" && session ? await accessFor(workspace, session) : null;
+  if (gate?.access === "locked") {
+    const offer = offerSchema.safeParse((session?.metadata?.morada_mobile as { offer?: unknown } | undefined)?.offer);
+    return (
+      <>
+        {session && <SessionKeeper />}
+        <Locked
+          reason={gate.reason ?? "no_trial"}
+          email={identity.email}
+          canManage={canManageBilling(workspace.role)}
+          offer={offer.success ? offer.data : null}
+          trialDays={TRIAL_DAYS}
+          copy={d.billing.lock}
+          errGeneric={d.billing.errGeneric}
+          signOut={d.shell.signOut}
+        />
+      </>
+    );
+  }
+
+  // The shell's own read: the portfolio, the people and the badges, no
+  // history. The screen inside reads what it shows.
+  // The trial's counter is read on the account's own data only, alongside
+  // the portfolio, and never holds the page (five seconds at most).
   const [demo, billingSnapshot] = await Promise.all([
     getDemo({ shell: true }),
-    datasetId === "real" && session
-      ? visitSnapshot({ org: workspace, userId: identity.userId, email: session.email || identity.email, locale, metadata: session.metadata })
+    gate?.configured && session
+      ? gate.snapshot ? Promise.resolve(gate.snapshot) : visitSnapshot({ org: workspace, userId: identity.userId, email: session.email || identity.email, locale })
       : Promise.resolve(null),
   ]);
 
@@ -162,22 +197,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     })),
     vacantUnitOptions: quickLease.units,
     tenantOptions: quickLease.tenants,
-    // The getting-started card ticks what the rows attest, never what a
-    // browser remembers: the same records Biens, Contacts and Loyers read.
-    progress: {
-      property: demo.PROPERTIES.length > 0,
-      contact: demo.CONTACTS.length > 0,
-      lease: demo.LEASES.some((l) => l.status === "active" || l.status === "notice"),
-      bank: demo.BANK_ACCOUNTS.length > 0,
-      rent: demo.RENT_PERIODS.some((rp) => rp.allocatedCents > 0),
-    },
-    billing: billingSnapshot
-      ? shellBillingOf(billingSnapshot, workspace.role, {
-          lots: portfolioLots(demo.UNITS),
-          leases: demo.LEASES.filter((l) => l.status === "active" || l.status === "notice").length,
-          rents: billedRents(demo.UNITS, demo.LEASES),
-        })
-      : null,
+    // The guided setup ticks what the rows attest, never what a browser
+    // remembers (src/lib/gestion/setup.ts). The tour plays on the account's
+    // own data only, signed in, never on a sample cabinet or the empty preview.
+    progress: shellSetup(demo, {
+      tourSeen: tourSeenOn(session?.metadata),
+      guide: datasetId === "real" && session !== null && !previewEmpty(),
+    }),
+    billing: billingSnapshot ? shellBillingOf(billingSnapshot, workspace.role, billedRents(demo.UNITS, demo.LEASES)) : null,
     // The workspaces the account may open, for the switch in the rail: shown only when there are several, never on a sample cabinet.
     workspaceId: workspace.id,
     workspaces: sampleCabinet === null && identity.workspaces.length > 1 ? identity.workspaces.map((w) => ({ id: w.id, name: w.name })) : [],

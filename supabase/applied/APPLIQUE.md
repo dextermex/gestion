@@ -565,3 +565,16 @@ décompte émis garde ce qu'il a dit, l'ancienne fonction d'invitation est
 retirée aux clients, une ligne d'activité reste dans son espace, le
 locataire lit le contact déclaré par l'espace). L'application n'en dépend
 pas.
+
+## 0036 · 2026-11-27 · l'état d'abonnement partagé (appliquée)
+
+Sur demande d'Alexandre du 27 novembre 2026 (« use the Stripe API and install
+everything ») : `gestion_0036_billing_status` appliquée par l'outil de
+migration Supabase. Elle n'ajoute que la table `gestion.billing_status` et sa
+policy de lecture (un membre lit les lignes de ses espaces ; personne n'écrit
+depuis un navigateur ou un téléphone). La fonction Edge `stripe`
+(`supabase/shared/functions/stripe`, version 1, `verify_jwt` désactivé) est
+déployée ; elle refuse tout appel tant que son secret `STRIPE_WEBHOOK_SECRET`
+n'est pas posé. Restent à faire côté Stripe : le point de terminaison du
+webhook et son secret (voir docs/WEB-ONBOARDING.md, partie B.3).
+`0035_registres_portail.sql` attend toujours l'accord du propriétaire.

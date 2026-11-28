@@ -308,12 +308,12 @@ it("an invitation's address is prefilled and survives the phone verification", a
   await act(async () => root.render(<SignupFunnel locale="en" signedIn initialEmail="tenant@example.test" next="/invitation/abc" />));
   expect(host.querySelector<HTMLInputElement>("#signup-email")?.value).toBe("tenant@example.test");
 });
-it("after the email the funnel asks for the emailed code, then a password, then the landlord questions", async () => {
+it("after the email the funnel goes straight to the password, then the first question: the address is confirmed by its own mail", async () => {
   const phoneUser = { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", new_email: "", email_confirmed_at: undefined,
     user_metadata: { first_name: "Alex", last_name: "Example", morada_signup: { version: 1, role: "landlord", stage: "email" } } };
   auth.getUser.mockResolvedValue({ data: { user: phoneUser }, error: null });
   const calls: Record<string, unknown>[] = [];
-  const answers: Record<string, unknown> = { email: { ok: true, emailPending: true }, email_confirmed: { ok: true }, password: { ok: true, stage: "tailor" } };
+  const answers: Record<string, unknown> = { email: { ok: true, emailPending: true }, password: { ok: true, stage: "tailor" } };
   vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
     const body = JSON.parse(init.body); calls.push(body);
     return { ok: true, status: 200, json: async () => answers[body.action] };
@@ -323,23 +323,9 @@ it("after the email the funnel asks for the emailed code, then a password, then 
   host.querySelector<HTMLInputElement>("#signup-email")!.value = "alex@example.test";
   await act(async () => { host.querySelector<HTMLInputElement>("#signup-email")!.dispatchEvent(new Event("input", { bubbles: true })); });
   await submit();
-  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
-  expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
-  // Every address gets the same page, with what a code that never comes may mean.
-  expect(host.textContent).toContain("This address may already belong to another account");
-  auth.verifyOtp.mockResolvedValueOnce({ data: { user: null }, error: { code: "otp_expired", status: 403 } });
-  vi.spyOn(console, "warn").mockImplementation(() => {});
-  host.querySelector<HTMLInputElement>("#email-code")!.value = "111111";
-  await submit();
-  expect(auth.verifyOtp).toHaveBeenCalledWith({ email: "alex@example.test", token: "111111", type: "email_change" });
-  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
-  auth.verifyOtp.mockResolvedValueOnce({ data: { user: {} }, error: null });
-  host.querySelector<HTMLInputElement>("#email-code")!.value = "123456";
-  expect(auth.refreshSession).not.toHaveBeenCalled();
-  await submit();
   expect(host.querySelector("h1")?.textContent).toBe("Create your password");
-  // The session is renewed once the address is confirmed: the token then carries it.
-  expect(auth.refreshSession).toHaveBeenCalledTimes(1);
+  expect(host.querySelector("#email-code")).toBeNull();
+  expect(auth.verifyOtp).not.toHaveBeenCalled();
   expect(host.querySelector(".signup-intro")?.textContent).toContain("alex@example.test");
   host.querySelector<HTMLInputElement>("#create-password")!.value = "long-enough-1";
   host.querySelector<HTMLInputElement>("#confirm-password")!.value = "long-enough-2";
@@ -347,59 +333,42 @@ it("after the email the funnel asks for the emailed code, then a password, then 
   expect(host.querySelector('[role="alert"]')?.textContent).toBe("The two passwords don’t match.");
   host.querySelector<HTMLInputElement>("#confirm-password")!.value = "long-enough-1";
   await submit();
-  expect(calls.map((call) => call.action)).toEqual(["email", "email_confirmed", "password"]);
-  expect(calls[2]).toEqual({ action: "password", password: "long-enough-1" });
-  expect(host.querySelector("h1")?.textContent).toBe("How many properties\ndo you manage?");
+  expect(calls.map((call) => call.action)).toEqual(["email", "password"]);
+  expect(calls[1]).toEqual({ action: "password", password: "long-enough-1" });
+  expect(host.querySelector("h1")?.textContent).toBe("What do you let?");
+  expect(new URL(window.location.href).searchParams.get("q")).toBe("1");
   vi.unstubAllGlobals();
 });
-it("an account finished before this change resumes at the email code, and a phone login does not skip it", async () => {
+it("an invitation's sign-up still confirms its address with the code, which accepting the invitation reads", async () => {
+  const tenant = { id: "u3", phone: "352621123458", phone_confirmed_at: "2026-09-27", email: "", new_email: "", email_confirmed_at: undefined,
+    user_metadata: { first_name: "Tom", last_name: "Faber", morada_signup: { version: 1, role: "tenant", stage: "email" } } };
+  auth.getUser.mockResolvedValue({ data: { user: tenant }, error: null });
+  const calls: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+    const body = JSON.parse(init.body); calls.push(body);
+    return { ok: true, status: 200, json: async () => (body.action === "email" ? { ok: true, emailPending: true } : { ok: true }) };
+  }));
+  await act(async () => root.render(<SignupFunnel locale="en" signedIn initialEmail="tom@example.test" next="/invitation" />));
+  await submit();
+  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  expect(host.textContent).toContain("This address may already belong to another account");
+  auth.verifyOtp.mockResolvedValueOnce({ data: { user: {} }, error: null });
+  host.querySelector<HTMLInputElement>("#email-code")!.value = "123456";
+  await submit();
+  expect(auth.verifyOtp).toHaveBeenCalledWith({ email: "tom@example.test", token: "123456", type: "email_change" });
+  // The session is renewed once the address is confirmed: the token then carries it.
+  expect(auth.refreshSession).toHaveBeenCalledTimes(1);
+  expect(calls.map((call) => call.action)).toEqual(["email", "email_confirmed"]);
+  expect(host.querySelector("h1")?.textContent).toBe("Create your password");
+  vi.unstubAllGlobals();
+});
+it("an account finished before October 2026 with its address pending resumes at the password, and a phone login does not skip it", async () => {
   const assign = vi.fn();
   vi.stubGlobal("location", { ...window.location, assign, protocol: "http:" });
   auth.getUser.mockResolvedValue({ data: { user: { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "", new_email: "alex@example.test",
     user_metadata: { morada_signup: { version: 1, role: "landlord", stage: "complete" } } } }, error: null });
   await act(async () => root.render(<SignupFunnel locale="en" signedIn loginMode />));
-  expect(host.querySelector("h1")?.textContent).toBe("Check your inbox");
+  expect(host.querySelector("h1")?.textContent).toBe("Create your password");
   expect(assign).not.toHaveBeenCalled();
-  vi.unstubAllGlobals();
-});
-it("after the landlord questions the funnel asks how to be billed after the trial, from the published price per lot, and notes it before the welcome", async () => {
-  const landlord = { id: "u1", phone: "352621123456", phone_confirmed_at: "2026-09-27", email: "alex@example.test", new_email: "", email_confirmed_at: "2026-09-27",
-    user_metadata: { first_name: "Alex", last_name: "Example", morada_signup: { version: 1, role: "landlord", stage: "tailor", password_set_at: "2026-09-27T10:00:00Z" } } };
-  auth.getUser.mockResolvedValue({ data: { user: landlord }, error: null });
-  const calls: Record<string, unknown>[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
-    calls.push(JSON.parse(init.body));
-    return { ok: true, status: 200, json: async () => ({ ok: true }) };
-  }));
-  await act(async () => root.render(<SignupFunnel locale="en" signedIn />));
-  expect(host.querySelector("h1")?.textContent).toBe("How many properties\ndo you manage?");
-  await act(async () => host.querySelector<HTMLButtonElement>(".signup-nav-skip")!.click());
-  expect(calls).toEqual([{ action: "complete", preferences: { properties: null, challenge: null, involvement: null } }]);
-  expect(host.querySelector("h1")?.textContent).toBe("Choose your plan");
-  // The site's prices: from €10 a lot a month by the quarter, a year at ten months.
-  const priceOf = (rhythm: string) => host.querySelector(`[data-rhythm="${rhythm}"] .signup-plan-price strong`)?.textContent;
-  expect(priceOf("quarter")).toBe("€10");
-  expect(priceOf("year")).toBe("€8.33");
-  expect(host.querySelector('[data-rhythm="year"]')?.textContent).toContain("2 months free");
-  expect(host.querySelector(".signup-plan-note")?.textContent).toContain("from €10 to €32 a month");
-  expect(host.querySelector('[data-rhythm="quarter"]')?.getAttribute("data-selected")).toBe("true");
-  await act(async () => host.querySelector<HTMLInputElement>('input[name="rhythm"][value="year"]')!.click());
-  expect(host.querySelector('[data-rhythm="year"]')?.getAttribute("data-selected")).toBe("true");
-  // Nothing is charged or asked for here: the promise says so under the button.
-  expect(host.querySelector(".signup-free")?.textContent).toBe("No card needed today. Change plan whenever you like.");
-  await submit();
-  expect(calls[1]).toEqual({ action: "plan", rhythm: "year" });
-  expect(host.querySelector('[data-step="welcome"]')).not.toBeNull();
-  expect(host.querySelector("[data-welcome-trial]")?.textContent).toContain("then annual billing");
-  vi.unstubAllGlobals();
-});
-it("an invited landlord joins a workspace that already has a plan: no plan step", async () => {
-  const invited = { id: "u2", phone: "352621123457", phone_confirmed_at: "2026-09-27", email: "staff@example.test", new_email: "", email_confirmed_at: "2026-09-27",
-    user_metadata: { morada_signup: { version: 1, role: "landlord", stage: "tailor", password_set_at: "2026-09-27T10:00:00Z" } } };
-  auth.getUser.mockResolvedValue({ data: { user: invited }, error: null });
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) })));
-  await act(async () => root.render(<SignupFunnel locale="en" signedIn next="/invitation/abc" />));
-  await act(async () => host.querySelector<HTMLButtonElement>(".signup-nav-skip")!.click());
-  expect(host.querySelector('[data-step="welcome"]')).not.toBeNull();
   vi.unstubAllGlobals();
 });

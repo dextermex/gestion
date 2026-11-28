@@ -4,7 +4,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fr } from "@/lib/i18n/fr";
 import GestionShell, { type ShellData } from "@/components/gestion/Shell";
-import GettingStarted from "@/components/gestion/GettingStarted";
 import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
 
 const push = vi.fn();
@@ -32,7 +31,7 @@ afterEach(async () => {
 const shell = (over: Partial<ShellData> = {}): ShellData => ({
   datasetId: "real", sampleCabinet: null, signedIn: true, tenant: false, workspaceKind: "owner", orgShortName: "Espace test", userName: "Nadia Kremer", userEmail: "nadia@example.invalid",
   badges: { review: 0, unread: 0 }, unitOptions: [], leaseOptions: [], vacantUnitOptions: [], tenantOptions: [],
-  progress: { property: false, contact: false, lease: false, bank: false, rent: false }, billing: null, ...over,
+  progress: { facts: { property: false, lease: false, bank: false, invite: false }, hrefs: { property: "/app/biens/nouveau", lease: "/app/biens", bank: "/app/banque", invite: "/app/baux" }, tourSeen: false, guide: false }, billing: null, ...over,
 });
 const open = (kind: string) => act(async () => { window.dispatchEvent(new CustomEvent(CREATE_EVENT, { detail: kind })); });
 const blocked = () => document.querySelector("[data-create-blocked]");
@@ -70,40 +69,6 @@ describe("a creation sheet whose required list is empty", () => {
     await open("contact");
     await open("document");
     expect(document.querySelector('form.crm-create-form input[name="name"]')).not.toBeNull();
-  });
-});
-
-describe("the getting-started card", () => {
-  const render = async (kind: string, progress = shell().progress) => {
-    // The card as a person left it open: its fold is a browser matter, kept in localStorage.
-    localStorage.setItem("morada_getting_started", JSON.stringify({ collapsed: false }));
-    await act(async () => root.render(<GettingStarted d={fr} progress={progress} kind={kind} />));
-  };
-
-  it("leads each step to the place where it is done", async () => {
-    await render("owner");
-    const links = [...host.querySelectorAll("a")].map((a) => a.getAttribute("href"));
-    expect(links).toContain("/app/reglages");
-    expect(links).toContain("/app/biens/nouveau");
-    expect(links).not.toContain("/app/conformite");
-    expect(links.filter((h) => h?.startsWith("http"))).toEqual([]);
-    expect(host.textContent).toContain(fr.onboarding.stepProfileOwner);
-    // A contact and a lease still to create open their sheet, not a list without a create control.
-    const seen: string[] = [];
-    const listen = (e: Event) => seen.push((e as CustomEvent<string>).detail);
-    window.addEventListener(CREATE_EVENT, listen);
-    for (const title of [fr.onboarding.stepContact, fr.onboarding.stepLease]) {
-      const row = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes(title));
-      await act(async () => row!.click());
-    }
-    window.removeEventListener(CREATE_EVENT, listen);
-    expect(seen).toEqual(["contact", "lease"]);
-  });
-
-  it("words the first step for a cabinet, and links a step already done to its list", async () => {
-    await render("manager", { ...shell().progress, contact: true });
-    expect(host.textContent).toContain(fr.onboarding.stepProfile);
-    expect([...host.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toContain("/app/contacts");
   });
 });
 

@@ -1,5 +1,8 @@
 import { z } from "zod";
 import type { User } from "@supabase/supabase-js";
+import { offerSchema } from "./offer";
+import { quizSchema } from "./quiz";
+import { dashboardSchema } from "./dashboard";
 
 export const roleSchema = z.enum(["landlord", "tenant"]);
 export const preferenceSchema = z.object({
@@ -9,51 +12,90 @@ export const preferenceSchema = z.object({
 });
 export type Preferences = z.infer<typeof preferenceSchema>;
 export type SignupRole = z.infer<typeof roleSchema>;
+/** What the offer screen came to, in the app's words (`morada_mobile.quiz.offer`). */
+export const OFFER_OUTCOMES = ["paywall", "winback", "declined"] as const;
+export type OfferOutcome = (typeof OFFER_OUTCOMES)[number];
 export const EMPTY_PREFERENCES: Preferences = { properties: null, challenge: null, involvement: null };
 
 export const profileInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("details"), firstName: z.string().trim().min(1).max(60), lastName: z.string().trim().min(1).max(60), role: roleSchema, locale: z.enum(["fr", "en", "de", "lu"]) }),
   z.object({ action: z.literal("email"), email: z.string().trim().email().max(160) }),
+  // Kept for an invitation's sign-up, which waits for the address to be confirmed (its acceptance reads it).
   z.object({ action: z.literal("email_confirmed") }),
   // Supabase stores only a bcrypt hash; 72 bytes is bcrypt's limit.
   z.object({ action: z.literal("password"), password: z.string().min(8).max(72) }),
-  z.object({ action: z.literal("complete"), preferences: preferenceSchema }),
-  // The billing rhythm a landlord picks for after the free trial: noted for later, nothing is charged or required.
-  z.object({ action: z.literal("plan"), rhythm: z.enum(["quarter", "year"]) }),
+  // The questions' answers, in the iPhone app's keys: `morada_signup.preferences` (the web's shape), `morada_mobile.quiz` and `morada_mobile.dashboard`.
+  z.object({ action: z.literal("complete"), preferences: preferenceSchema, quiz: quizSchema.optional(), dashboard: dashboardSchema.optional() }),
+  // What the offer screen came to (`morada_mobile.quiz.offer`) and the price it quoted (`morada_mobile.offer`): bookkeeping, never access.
+  z.object({ action: z.literal("offer"), outcome: z.enum(OFFER_OUTCOMES), offer: offerSchema }),
 ]);
 
-export type SignupStep = "login" | "password" | "phone" | "verify" | "role" | "name" | "email" | "email-code" | "create-password" | "properties" | "challenge" | "involvement" | "plan" | "welcome" | "existing" | "reset";
+export type SignupStep =
+  | "login" | "password" | "phone" | "verify" | "role" | "name" | "email" | "email-code" | "create-password"
+  /** The eleven questions (`?q=` names one); the name is the one `resumeStep` has always returned for them. */
+  | "properties"
+  | "interests" | "potential" | "reviews" | "setup" | "ready" | "try" | "reminder" | "offer" | "winback"
+  | "welcome" | "existing" | "reset";
 
 /**
- * Account creation, in order: phone code, role, name, email, email code,
- * password, then (landlords) three tailoring questions and the plan for the
- * free trial (noted, never charged here). `morada_signup.stage`
- * records the last step the server accepted: role, email, email_code,
- * password, tailor, complete. A password is set only after the email is
- * confirmed, so every finished account can sign in with email and password.
+ * Account creation, in the iPhone app's order: phone code, role, name,
+ * email (recorded, not verified here: the confirmation mail goes out on its
+ * own), password, then (landlords) the eleven questions, the plan, the
+ * trial and the offer. `morada_signup.stage` records the last step the
+ * server accepted: role, email, password, tailor, complete (`email_code`
+ * on accounts from before October 2026, and on an invitation's sign-up,
+ * which still confirms its address).
  */
 export type SignupStage = "role" | "email" | "email_code" | "password" | "tailor" | "complete";
 
 /** `ref` is the public site's placement tag the account arrived with (`/inscription?ref=`), when it carried one. */
-type SignupMeta = { version?: number; stage?: SignupStage; role?: SignupRole; password_set_at?: string; ref?: string };
+type SignupMeta = { version?: number; stage?: SignupStage; role?: SignupRole; password_set_at?: string; completed_at?: string; ref?: string };
 
 export const signupMeta = (user: Pick<User, "user_metadata">): SignupMeta | null => user.user_metadata?.morada_signup ?? null;
 export const emailConfirmed = (user: Pick<User, "email" | "email_confirmed_at" | "new_email">) => !!user.email && !!user.email_confirmed_at && !user.new_email;
 
-/** Where an account continues, from what Auth verified (phone, email) and the recorded stage. */
-export function resumeStep(user: Pick<User, "user_metadata" | "phone_confirmed_at" | "email" | "email_confirmed_at" | "new_email">): SignupStep {
+/** An account opened with Apple or Google (Supabase lists the identity's provider). */
+export const providerAccount = (user: Pick<User, "app_metadata">): boolean => {
+  const providers = (user.app_metadata?.providers as string[] | undefined) ?? [];
+  return providers.includes("apple") || providers.includes("google") || user.app_metadata?.provider === "apple" || user.app_metadata?.provider === "google";
+};
+
+/** The address the funnel took, confirmed or still pending (the confirmation mail goes out, nothing waits on it). */
+export const emailGiven = (user: Pick<User, "email" | "email_confirmed_at" | "new_email">) => emailConfirmed(user) || !!user.new_email;
+
+/**
+ * Where an account continues: the iPhone app's `resumeStep`, word for word
+ * (docs/WEB-ONBOARDING.md, A.6), so an account started on one surface goes
+ * on at the same step on the other. Its two departures from the web's
+ * former rules (the owner's decision of October 2026): an Apple or Google
+ * account skips the phone and the password, and the e-mail is asked but
+ * never verified in the funnel (a pending address does not send a finished
+ * account back to a code).
+ */
+export function resumeStep(user: Pick<User, "user_metadata" | "app_metadata" | "phone_confirmed_at" | "email" | "email_confirmed_at" | "new_email">): SignupStep {
   const meta = signupMeta(user);
   // Accounts from the email registration (or morada.lu) were never in this funnel.
   if (!meta) return "existing";
-  if (!user.phone_confirmed_at) return "phone";
+  const provider = providerAccount(user);
+  if (!user.phone_confirmed_at && !provider) return "phone";
   if (!meta.role || !meta.stage || meta.stage === "role") return "role";
-  if (meta.stage === "email") return "email";
-  // Past the email step, including accounts finished before email codes and
-  // passwords existed: the email must be confirmed, then a password set.
-  if (!emailConfirmed(user)) return user.new_email ? "email-code" : "email";
-  if (!meta.password_set_at) return "create-password";
+  if (meta.stage === "email" || !emailGiven(user)) return "email";
+  if (!meta.password_set_at && !provider) return "create-password";
   if (meta.stage === "tailor" && meta.role === "landlord") return "properties";
+  if (meta.stage === "email_code" || meta.stage === "password") return provider ? "properties" : "create-password";
   return "existing";
+}
+
+/**
+ * The step this browser opens, from `resumeStep`: the same, except that an
+ * account created to accept an invitation still confirms its address with
+ * the code before going on, because accepting reads the confirmed address
+ * (src/components/gestion/InvitationAccept.tsx).
+ */
+export function funnelStep(user: Parameters<typeof resumeStep>[0], invited: boolean): SignupStep {
+  const step = resumeStep(user);
+  if (!invited || ["phone", "role", "email"].includes(step) || emailConfirmed(user) || !user.new_email) return step;
+  return "email-code";
 }
 
 /** Navigation only. These preferences never confer permissions or tenant access. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
@@ -13,9 +13,11 @@ import GestionLogo from "./GestionLogo";
 import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
 import ScrollHeader from "./ScrollHeader";
-import GettingStarted, { type Progress } from "./GettingStarted";
+import GettingStarted from "./GettingStarted";
+import SetupTour, { ArrivalScript } from "./onboarding/SetupTour";
+import type { ShellSetup } from "@/lib/gestion/setup";
 import DegradedBanner from "./DegradedBanner";
-import { BillingBanner, Paywall, TrialChip, TrialPrompt, type ShellBilling } from "./BillingShell";
+import { BillingBanner, LockWatch, TrialChip, type ShellBilling } from "./BillingShell";
 import type { Dict } from "@/lib/i18n/fr";
 import { LOCALES, LOCALE_LABELS, fmt, type Locale } from "@/lib/i18n/config";
 import type { SearchHit } from "@/lib/demo/search";
@@ -51,8 +53,8 @@ export interface ShellData {
   /** The quick "Bail" sheet: lots that can be let and have no lease in force, contacts recorded as tenants. */
   vacantUnitOptions: Array<{ id: string; label: string }>;
   tenantOptions: Array<{ id: string; label: string }>;
-  /** What the account's own rows attest for the getting-started card. */
-  progress: Progress;
+  /** The guided setup: what the account's own rows attest, where each step starts, and whether the tour may play. */
+  progress: ShellSetup;
   /** The workspace's subscription, when subscriptions are on and the data is its own. */
   billing: ShellBilling | null;
   /** The workspace on screen and every workspace the account may open: more than one shows the switch in the rail. */
@@ -361,6 +363,7 @@ export default function GestionShell({
       <NavigationProgress />
       <KeepFresh />
       <div className="crm-shell min-h-dvh">
+        {shell.progress.guide && <ArrivalScript />}
         {/* Desktop sidebar */}
         <aside className="crm-sidebar chrome-material fixed z-40 hidden lg:block">
           {sidebar}
@@ -489,7 +492,8 @@ export default function GestionShell({
               conversation open over the phone's screen gets the screen whole:
               no gutter, no width limit (the card keeps the safe areas itself). */}
           <main id="main" tabIndex={-1} className={"crm-main mx-auto w-full max-w-6xl flex-1 px-safe-4 py-6 pb-[max(1.5rem,var(--safe-bottom))] max-lg:[html[data-phone-chat]_&]:max-w-none max-lg:[html[data-phone-chat]_&]:p-0 sm:px-safe-6" + (shell.sampleCabinet ? "" : " max-lg:pb-24")}>
-            {pathname === "/app" && shell.billing && <TrialPrompt billing={shell.billing} d={d} locale={locale} />}
+            {/* While a setup step is open, the setup card is the first thing on Accueil. */}
+            {pathname === "/app" && !shell.sampleCabinet && <GettingStarted d={d} locale={locale} setup={shell.progress} placement="home" />}
             {children}
           </main>
         </div>
@@ -521,11 +525,17 @@ export default function GestionShell({
           tenantOptions={shell.tenantOptions}
         />
 
-        {shell.billing && <Paywall billing={shell.billing} d={d} locale={locale} />}
+        {shell.billing && <LockWatch />}
 
         {/* A "0% done" checklist on top of a full sample cabinet contradicts
             itself. It belongs to the real account only. */}
-        {!shell.sampleCabinet && <GettingStarted d={d} progress={shell.progress} kind={shell.workspaceKind} />}
+        {!shell.sampleCabinet && pathname !== "/app" && <GettingStarted d={d} locale={locale} setup={shell.progress} placement="float" />}
+        {/* The first-run tour and its returns, on Accueil only (src/components/gestion/onboarding/SetupTour.tsx). */}
+        {pathname === "/app" && shell.progress.guide && (
+          <Suspense fallback={null}>
+            <SetupTour d={d} setup={shell.progress} />
+          </Suspense>
+        )}
       </div>
     </MotionConfig>
   );

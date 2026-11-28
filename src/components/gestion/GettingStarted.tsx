@@ -4,47 +4,52 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Dict } from "@/lib/i18n/fr";
+import { fmt, plural, type Locale } from "@/lib/i18n/config";
 import { TEAM_EMAIL } from "@/lib/constants";
-import { CREATE_EVENT } from "@/components/gestion/HeroCreate";
+import { SETUP_STEPS, setupProgress, type SetupHrefs, type SetupProgress, type SetupStep, type ShellSetup } from "@/lib/gestion/setup";
 
 /**
- * The new-account journey (the immocloud "getting started" card): a floating
- * checklist with progress, one row per setup step, each leading to the place
- * where the step is done: the settings form, the property wizard, the
- * creation sheet of a contact or a lease, the bank, the rents. A step
- * already done links to the list it filled.
+ * The setup card, the iPhone app's "Terminez votre installation" (its
+ * `SetupCard` and `setup-steps` sheet in one): a ring with the count, the
+ * next open step as the card's one button, the five steps with their state.
+ * A done step is ticked; a step that waits for another (a lease needs a
+ * property, an invitation needs a lease) is greyed and says what it waits
+ * for. Every tick is a fact the workspace's records attest
+ * (`src/lib/gestion/setup.ts`), so the card moves on by itself as data
+ * arrives. While a step is open a thin light travels round its border.
  *
- * What is done is read from the account's own rows: a property exists, a
- * contact exists, a lease is running, a bank account is connected, a rent
- * has been received. The browser remembers only what is a browser matter:
- * whether the card is collapsed or dismissed, and the one step (the cabinet
- * profile) that nothing in the database can attest. A checklist that said
- * "add your first property" over an account that had two, because its ticks
- * lived in localStorage, contradicted the very screen it floated over.
+ * Two placements. On Accueil (`home`) it is the first thing on the page
+ * while a step is open, and once all five are done it says so there, with
+ * Masquer, until hidden for good. On every other page (`float`) it is the
+ * compact control it always was, folded by default so it never covers a
+ * form, stepping aside while a phone's keyboard is up; a complete setup is
+ * not repeated there.
  *
- * Start as a compact control on every screen so setup never obscures work.
- * An explicit saved choice still wins.
+ * The browser remembers only browser matters (localStorage
+ * `morada_getting_started`): whether the floating card is folded, and
+ * whether the finished card was hidden. An unfinished setup cannot be
+ * hidden: the space keeps asking for the next step until it is done.
  */
 
 const STORE = "morada_getting_started";
 
-export type Progress = Record<"property" | "contact" | "lease" | "bank" | "rent", boolean>;
-
 interface Stored {
-  done: string[];
   collapsed: boolean;
-  hidden: boolean;
+  /** The finished card was hidden: for good, on this browser. */
+  doneHidden: boolean;
 }
 
 function load(): Stored {
-  // Open on request: the checklist must never cover the page on arrival.
   try {
     const raw = localStorage.getItem(STORE);
-    if (raw) return { done: [], collapsed: true, hidden: false, ...JSON.parse(raw) };
+    if (raw) {
+      const v = JSON.parse(raw) as Partial<Stored>;
+      return { collapsed: v.collapsed !== false, doneHidden: v.doneHidden === true };
+    }
   } catch {
     // Private mode or blocked storage: start fresh each visit.
   }
-  return { done: [], collapsed: true, hidden: false };
+  return { collapsed: true, doneHidden: false };
 }
 
 function save(s: Stored) {
@@ -55,39 +60,162 @@ function save(s: Stored) {
   }
 }
 
-export default function GettingStarted({ d, progress, kind }: { d: Dict; progress: Progress; /** "owner" for a landlord's own space: the first step is worded for a landlord, not a cabinet. */ kind: string }) {
+const ICON_PATHS: Record<SetupStep, string> = {
+  account: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0",
+  property: "M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1Z",
+  lease: "M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm7 0v5h5M9 13h6M9 17h6",
+  bank: "M3 10h18M5 10v8m4.67-8v8m4.66-8v8M19 10v8M3 21h18M12 3l9 5H3Z",
+  invite: "M10 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 11-5.7M19 14v6m-3-3h6",
+};
+
+function StepIcon({ step, done }: { step: SetupStep; done: boolean }) {
+  return (
+    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={done ? 3 : 1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={done ? "m5 13 4 4L19 7" : ICON_PATHS[step]} />
+    </svg>
+  );
+}
+
+function Ring({ count, total, complete, size = 52, label }: { count: number; total: number; complete: boolean; size?: number; label: string }) {
+  const stroke = 6;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: size, height: size }} role="img" aria-label={label}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-sand-200)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={complete ? "var(--color-emerald-600, #059669)" : "var(--color-brand-600)"}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - count / total)}
+          className="setup-ring-value"
+        />
+      </svg>
+      <span className="absolute text-xs font-bold tabular-nums text-ink" aria-hidden>{`${count}/${total}`}</span>
+    </span>
+  );
+}
+
+function StepRow({ d, step, p, href }: { d: Dict; step: SetupStep; p: SetupProgress; href: string | null }) {
+  const k = d.onboarding;
+  const done = p.done[step];
+  const locked = p.locked[step];
+  const isNext = p.next === step;
+  const sub = done ? k.stepDone : locked && (step === "lease" || step === "invite") ? k.stepsNeeds[step] : k.stepsSub[step];
+  const body = (
+    <>
+      <span
+        className={
+          "flex h-9 w-9 shrink-0 items-center justify-center " +
+          (done ? "rounded-full bg-emerald-600 text-white" : isNext ? "rounded-xl bg-brand-600 text-white" : "rounded-xl bg-brand-50 text-brand-700")
+        }
+      >
+        <StepIcon step={step} done={done} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={"block truncate text-sm font-semibold " + (done ? "text-ink-soft" : "text-ink")}>{k.steps[step]}</span>
+        <span className="block truncate text-xs text-ink-soft">{sub}</span>
+      </span>
+    </>
+  );
+  // An open step that can be done now leads to where it is done; the others are statements.
+  if (!done && !locked && href) {
+    return (
+      <li data-setup-step={step} className="setup-step">
+        <Link href={href} className="group flex min-h-14 items-center gap-3 rounded-xl px-2 py-2 hover:bg-sand-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-600">
+          {body}
+          <svg className="h-4 w-4 shrink-0 text-ink-soft group-hover:text-brand-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" />
+          </svg>
+        </Link>
+      </li>
+    );
+  }
+  return (
+    <li data-setup-step={step} data-state={done ? "done" : locked ? "waiting" : "open"} className={"setup-step flex min-h-14 items-center gap-3 px-2 py-2" + (locked ? " opacity-55" : "")}>
+      {body}
+    </li>
+  );
+}
+
+/** The card's content: the ring and the title, the five steps, the next one as the button. */
+export function SetupPanel({ d, locale, p, hrefs, onHide }: { d: Dict; locale: Locale; p: SetupProgress; hrefs: SetupHrefs; onHide?: () => void }) {
+  const k = d.onboarding;
+  const left = p.total - p.count;
+  const href = (s: SetupStep): string | null => (s === "account" ? null : hrefs[s]);
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <Ring count={p.count} total={p.total} complete={p.complete} label={fmt(k.count, { count: p.count, total: p.total })} />
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-base font-bold text-ink">{p.complete ? k.done : k.title}</h2>
+          <p className="text-sm text-ink-soft">{p.complete ? k.doneSub : fmt(plural(locale, left, k.stepsLeft.one, k.stepsLeft.many), { n: left })}</p>
+        </div>
+      </div>
+      {!p.complete && (
+        <>
+          <p className="mt-3 text-sm text-ink-soft max-sm:hidden">{k.guideSub}</p>
+          <ul className="mt-3 grid grid-cols-1 gap-0.5">
+            {SETUP_STEPS.map((s) => (
+              <StepRow key={s} d={d} step={s} p={p} href={href(s)} />
+            ))}
+          </ul>
+        </>
+      )}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        {p.next && p.next !== "account" ? (
+          <Link
+            href={hrefs[p.next]}
+            data-setup-next
+            className="tactile inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 max-sm:w-full"
+          >
+            {fmt(k.next, { step: k.steps[p.next] })}
+          </Link>
+        ) : onHide ? (
+          <button type="button" onClick={onHide} className="tactile inline-flex min-h-10 items-center rounded-full border border-sand-200 bg-white px-4 text-sm font-semibold text-ink hover:text-brand-700">
+            {k.hide}
+          </button>
+        ) : null}
+        {!p.complete && (
+          // The team's address: there is no help centre to send anyone to.
+          <a href={`mailto:${TEAM_EMAIL}`} className="inline-flex min-h-10 items-center text-xs font-semibold text-brand-700 hover:underline">
+            {k.help}
+          </a>
+        )}
+      </div>
+    </>
+  );
+}
+
+export default function GettingStarted({ d, locale, setup, placement }: { d: Dict; locale: Locale; setup: ShellSetup; placement: "home" | "float" }) {
   const [state, setState] = useState<Stored | null>(null);
   const reduced = useReducedMotion();
-
   useEffect(() => {
     setState(load());
   }, []);
-
-  if (!state || state.hidden) return null;
-
-  // Every step but the profile is a fact the database attests.
-  // `create` names the shell's creation sheet a step opens while it is still to do; once done, the row links to the list.
-  const steps: Array<{ id: string; href: string; create?: "contact" | "lease"; title: string; sub: string; attested: boolean | null }> = [
-    { id: "profile", href: "/app/reglages", title: kind === "owner" ? d.onboarding.stepProfileOwner : d.onboarding.stepProfile, sub: d.onboarding.stepProfileSub, attested: null },
-    { id: "property", href: "/app/biens/nouveau", title: d.onboarding.stepProperty, sub: d.onboarding.stepPropertySub, attested: progress.property },
-    { id: "contact", href: "/app/contacts", create: "contact", title: d.onboarding.stepContact, sub: d.onboarding.stepContactSub, attested: progress.contact },
-    { id: "lease", href: "/app/baux", create: "lease", title: d.onboarding.stepLease, sub: d.onboarding.stepLeaseSub, attested: progress.lease },
-    { id: "bank", href: "/app/banque", title: d.onboarding.stepBank, sub: d.onboarding.stepBankSub, attested: progress.bank },
-    { id: "rent", href: "/app/loyers", title: d.onboarding.stepRent, sub: d.onboarding.stepRentSub, attested: progress.rent },
-  ];
-  const isDone = (s: (typeof steps)[number]) => (s.attested === null ? state.done.includes(s.id) : s.attested);
-  const pct = Math.round((100 * steps.filter(isDone).length) / steps.length);
-
+  const p = setupProgress(setup.facts);
   const update = (next: Stored) => {
     setState(next);
     save(next);
   };
-  const toggle = (id: string) =>
-    update({
-      ...state,
-      done: state.done.includes(id) ? state.done.filter((x) => x !== id) : [...state.done, id],
-    });
 
+  if (placement === "home") {
+    // Rendered on the server too, so the card holds its place before the browser's memory is read.
+    if (p.complete && (state === null || state.doneHidden)) return null;
+    return (
+      <section data-setup-card aria-label={p.complete ? d.onboarding.done : d.onboarding.title} className={"setup-card mb-6 rounded-[1.25rem] bg-white p-4 shadow-[0_1px_2px_rgb(6_34_41/0.06),0_8px_24px_-12px_rgb(6_34_41/0.18)] sm:p-5" + (p.complete ? "" : " setup-glow")}>
+        <SetupPanel d={d} locale={locale} p={p} hrefs={setup.hrefs} onHide={state ? () => update({ ...state, doneHidden: true }) : undefined} />
+      </section>
+    );
+  }
+
+  if (!state || p.complete) return null;
   return (
     // Steps aside while a conversation fills a phone's screen (Messages sets the attribute on the document),
     // and while a phone's keyboard is up, rather than floating over the field being typed in.
@@ -96,125 +224,41 @@ export default function GettingStarted({ d, progress, kind }: { d: Dict; progres
         {state.collapsed ? (
           <motion.button
             key="pill"
+            type="button"
             onClick={() => update({ ...state, collapsed: false })}
-            className="tactile flex min-h-11 items-center gap-2 rounded-full border border-sand-200 bg-white py-2 pl-3 pr-4 text-sm font-semibold text-ink shadow-pop"
+            className="setup-glow tactile flex min-h-11 items-center gap-2 rounded-full bg-white py-1.5 pl-1.5 pr-4 text-sm font-semibold text-ink shadow-pop"
             initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
             animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
             exit={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
-            transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 380, damping: 32 }}
-            aria-label={d.onboarding.reopen}
+            transition={{ duration: reduced ? 0.15 : 0.3, ease: [0.22, 1, 0.36, 1] }}
+            aria-expanded={false}
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-[10px] font-bold text-white tabular-nums">
-              {pct}%
-            </span>
+            <Ring count={p.count} total={p.total} complete={false} size={32} label={fmt(d.onboarding.count, { count: p.count, total: p.total })} />
             {d.onboarding.title}
           </motion.button>
         ) : (
           <motion.section
             key="card"
             aria-label={d.onboarding.title}
-            className="w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-pop"
+            className="setup-glow w-[26rem] max-w-[calc(100vw-2rem)] rounded-[1.25rem] bg-white p-4 shadow-pop"
             initial={reduced ? { opacity: 0 } : { opacity: 0, y: 16 }}
             animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
             exit={reduced ? { opacity: 0 } : { opacity: 0, y: 16 }}
-            transition={reduced ? { duration: 0.15 } : { type: "spring", stiffness: 340, damping: 32 }}
+            transition={{ duration: reduced ? 0.15 : 0.3, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="flex items-center gap-3 bg-brand-700 px-4 py-3 text-white">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-sm font-bold">{d.onboarding.title}</p>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/25">
-                    <div
-                      className="h-full rounded-full bg-white transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-[11px] font-bold tabular-nums">{pct}%</span>
-                </div>
-              </div>
-              <button
-                onClick={() => update({ ...state, collapsed: true })}
-                className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
-                aria-label={d.onboarding.collapse}
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-                </svg>
-              </button>
+            <div className="max-h-[60dvh] overflow-y-auto">
+              <SetupPanel d={d} locale={locale} p={p} hrefs={setup.hrefs} />
             </div>
-
-            <ul className="max-h-[50dvh] divide-y divide-sand-100 overflow-y-auto">
-              {steps.map((s) => {
-                const done = isDone(s);
-                return (
-                  <li key={s.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <button
-                      onClick={() => (s.attested === null ? toggle(s.id) : undefined)}
-                      role="checkbox"
-                      aria-checked={done}
-                      aria-disabled={s.attested !== null}
-                      aria-label={done ? d.onboarding.stepDone : d.onboarding.stepTodo}
-                      className={"tactile group -my-3 -ml-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full" + (s.attested === null ? "" : " cursor-default")}
-                    >
-                      {/* The mark a thumb can hit: the circle is 20px, the button around it 44px. */}
-                      <span
-                        className={
-                          "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors " +
-                          (done ? "border-brand-600 bg-brand-600 text-white" : "border-sand-300 bg-white text-transparent") +
-                          (s.attested === null ? " group-hover:border-brand-400" : "")
-                        }
-                        aria-hidden
-                      >
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3" aria-hidden>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                        </svg>
-                      </span>
-                    </button>
-                    {s.create && !done ? (
-                      <button type="button" onClick={() => window.dispatchEvent(new CustomEvent(CREATE_EVENT, { detail: s.create }))} className="group min-w-0 flex-1 text-left">
-                        <span className="block truncate text-sm font-semibold text-ink group-hover:text-brand-700">{s.title}</span>
-                        <span className="block truncate text-xs text-ink-soft">{s.sub}</span>
-                      </button>
-                    ) : (
-                      <Link href={s.href} className="group min-w-0 flex-1">
-                        <p
-                          className={
-                            "truncate text-sm font-semibold group-hover:text-brand-700 " +
-                            (done ? "text-ink-soft line-through decoration-sand-300" : "text-ink")
-                          }
-                        >
-                          {s.title}
-                        </p>
-                        {!done && <p className="truncate text-xs text-ink-soft">{s.sub}</p>}
-                      </Link>
-                    )}
-                    <svg
-                      className="h-4 w-4 shrink-0 text-ink-soft"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" />
-                    </svg>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="flex items-center justify-between border-t border-sand-100 px-4 py-2.5">
-              {/* The team's address: there is no help centre to send anyone to. */}
-              <a href={`mailto:${TEAM_EMAIL}`} className="inline-flex min-h-9 items-center text-xs font-semibold text-brand-700 hover:underline">
-                {d.onboarding.help}
-              </a>
-              <button
-                onClick={() => update({ ...state, hidden: true })}
-                className="inline-flex min-h-9 items-center rounded-lg px-2 text-xs font-medium text-ink-soft hover:text-ink"
-              >
-                {d.onboarding.ignore}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => update({ ...state, collapsed: true })}
+              className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 hover:text-ink"
+              aria-label={d.onboarding.collapse}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
           </motion.section>
         )}
       </AnimatePresence>

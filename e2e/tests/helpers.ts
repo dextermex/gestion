@@ -29,10 +29,15 @@ export interface Person {
 /**
  * Create an account. Account creation in the product is phone-first
  * (/inscription), and this local stack has no SMS provider; the phone funnel
- * has its own suite (e2e/signup). So the account is registered through
- * GoTrue's public signup endpoint with the publishable key (no service role,
- * the same metadata the email registration always wrote), then signed in on
- * the real door and landed where `next` says.
+ * has its own suite (e2e/signup: the account, the questions saved in the
+ * iPhone app's keys, the offer's outcome, the space). So the account is
+ * registered through GoTrue's public signup endpoint with the publishable key
+ * (no service role, the same metadata the email registration always wrote),
+ * then signed in on the real door and landed where `next` says. It carries no
+ * `morada_signup`, like every account from the email registration:
+ * `resumeStep` reads it as finished, so the door opens its space with no
+ * question, no trial screen and, on a deployment without Stripe (CI), no
+ * payment step.
  */
 export async function createAccount(person: Person): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -73,7 +78,25 @@ export function speakAsThePage(page: Page): void {
 }
 
 /** Sign in on the door, leaving whatever account the browser still holds. */
+/**
+ * The guided tour dims the page on a first arrival and after each setup step
+ * (src/components/gestion/onboarding/SetupTour.tsx). Every spec but its own
+ * starts with it off on its browser: `signIn` does it, and a spec that signs
+ * in by its own steps calls this first. guided-setup.spec.ts turns it back on
+ * for its tab (`sessionStorage["e2e.tour"] = "on"`), which this respects.
+ */
+export async function quietTour(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      if (sessionStorage.getItem("e2e.tour") !== "on") localStorage.setItem("morada.tour.seen", "off");
+    } catch {
+      /* storage refused: the tour's own first-paint check then decides */
+    }
+  });
+}
+
 export async function signIn(page: Page, email: string, next = "/app"): Promise<void> {
+  await quietTour(page);
   await page.goto(`/connexion?next=${encodeURIComponent(next)}`);
   speakAsThePage(page);
   await leaveSignedInAccountIfAny(page);
@@ -257,7 +280,7 @@ export async function unfold(target: Locator): Promise<void> {
 }
 
 export async function foldGettingStarted(page: Page): Promise<void> {
-  const card = page.getByRole("region", { name: "Bien démarrer avec Morada Gestion" });
+  const card = page.getByRole("region", { name: "Terminez votre installation" });
   const fold = card.getByRole("button", { name: "Réduire", exact: true });
   if (await fold.isVisible().catch(() => false)) {
     await fold.click();

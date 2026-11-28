@@ -6,7 +6,7 @@ import PropertyWizard from "@/components/gestion/PropertyWizard";
 import { Field, Input } from "@/components/pro/ui";
 import { fr } from "@/lib/i18n/fr";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("motion/react", () => ({
   useReducedMotion: () => true,
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
