@@ -5,7 +5,7 @@ import { quote } from "@/domain/billing/pricing";
 import type { BillingRow } from "@/domain/billing/trial";
 import { offerQuote } from "@/lib/signup/offer";
 import {
-  META, PRODUCT, WINBACK_COUPON, checkoutBelongs, checkoutReturn, chooseRhythm, createCheckout, customerFacts, ensureSnapshot, findCustomer,
+  META, PRODUCT, WINBACK_COUPON, checkoutBelongs, checkoutBranding, checkoutReturn, chooseRhythm, createCheckout, customerFacts, ensureSnapshot, findCustomer,
   nextQuote, pickSubscription, portalUrl, snapshotOf, stepLoyalty, subscriptionView, syncPrice, type BillingSnapshot, type CheckoutInput,
 } from "@/lib/billing/service";
 import { decideAccess, recordedRows, type AccessDeps } from "@/lib/billing/access";
@@ -229,6 +229,20 @@ describe("Checkout", () => {
     expect(f.get("custom_text[submit][message]")).toBe("Rien n'est prélevé aujourd'hui.");
     expect(f.get("success_url")).toBe("https://app.morada.lu/api/abonnement/retour?session_id={CHECKOUT_SESSION_ID}");
     expect(f.get("cancel_url")).toBe("https://app.morada.lu/app/abonnement");
+  });
+  it("gives Stripe's payment page Morada's name, icon, colours and shapes, on this page only", async () => {
+    const { stripe, calls } = standIn(priced);
+    await createCheckout(stripe, input());
+    const f = form(calls);
+    expect(f.get("branding_settings[display_name]")).toBe("Morada");
+    expect(f.get("branding_settings[button_color]")).toBe("#10505c");
+    expect(f.get("branding_settings[background_color]")).toBe("#faf7f2");
+    expect(f.get("branding_settings[border_style]")).toBe("pill");
+    expect(f.get("branding_settings[font_family]")).toBe("inter");
+    expect(f.get("branding_settings[icon][url]")).toBe("https://app.morada.lu/icons/icon-512.png");
+    // Stripe fetches the icon itself: a machine it cannot reach sends none.
+    expect(checkoutBranding("http://localhost:3000")).not.toHaveProperty("icon");
+    expect(checkoutBranding("https://localhost:3000")).not.toHaveProperty("icon");
   });
 
   it("charges at once a workspace that had a subscription before: the free days are promised once", async () => {
